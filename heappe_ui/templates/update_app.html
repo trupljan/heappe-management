@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Update Application</title>
+</head>
+<body>
+    <h1>Update Application</h1>
+    <form id="updateForm">
+        {% csrf_token %}
+        <label for="username">Username:</label>
+        <input type="text" id="username" name="username" required><br><br>
+        <label for="password">Password:</label>
+        <input type="password" id="password" name="password" required><br><br>
+        <button type="button" onclick="updateApp()">Update Application</button>
+    </form>
+
+    <script>
+        async function updateApp() {
+            if (confirm("Are you sure you want to update the application? This may cause a temporary service interruption.")) {
+                try {
+                    const username = document.getElementById('username').value;
+                    const password = document.getElementById('password').value;
+
+                    // Validate inputs
+                    if (!username || !password) {
+                        alert('Please enter both username and password.');
+                        return;
+                    }
+
+                    const response = await fetch('/update-app/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            username: username,
+                            password: password
+                        })
+                    });
+
+                    const result = await response.json();
+                    alert(result.message);
+                } catch (error) {
+                    alert('Error during update: ' + error);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
