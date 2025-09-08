@@ -38,7 +38,7 @@ class HeappeSessionMiddleware:
     def __call__(self, request):
         request.api_instance = self._init_api()
         request.session_code = self._get_session_code()
-        print(f"Session code obtained: {request.session_code}")
+        print(f"session code obtained: {request.session_code}, beta")
 
         response = self.get_response(request)
         return response
