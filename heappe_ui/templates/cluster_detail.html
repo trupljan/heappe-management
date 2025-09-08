@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}{{ cluster.name }}{% endblock %}
+
+{% block content %}
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
+  <div class="container justify-content-center">
+    <ul class="nav nav-pills">
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Cluster Detail</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'queues' %}active{% endif %}" href="?tab=queues">Queues</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'projects' %}active{% endif %}" href="?tab=projects">Projects</a>
+      </li>
+    </ul>
+  </div>
+</nav>
+
+<h1 class="mb-4 text-center">{{ cluster.name }}</h1>
+
+<div class="container">
+  {% if active_tab == 'detail' %}
+    <!-- Cluster Detail Form -->
+    <div class="card mb-4 w-75 mx-auto shadow-sm">
+      <div class="card-header d-flex align-items-center">
+          <strong>Cluster Information</strong>
+          <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
+      </div>
+      <div class="card-body">
+          <form method="post">
+              {% csrf_token %}
+              <div class="row g-3">
+                  <div class="col-md-3">
+                      <label class="form-label">Id</label>
+                      <input type="number" class="form-control" name="Id" value="{{ cluster.id }}" readonly disabled>
+                  </div>
+
+                  <div class="col-md-9">
+                      <label class="form-label">Name</label>
+                      <input type="text" class="form-control" name="Name" value="{{ cluster.name }}">
+                  </div>
+
+                  <div class="col-md-6">
+                      <label class="form-label">Description</label>
+                      <input type="text" class="form-control" name="Description" value="{{ cluster.description }}">
+                  </div>
+
+                  <div class="col-md-6">
+                      <label class="form-label">Master Node Name</label>
+                      <input type="text" class="form-control" name="MasterNodeName" value="{{ cluster.master_node_name }}">
+                  </div>
+
+                  <div class="col-md-6">
+                      <label class="form-label">Scheduler Type</label>
+                      <select class="form-select" name="SchedulerType">
+                          <option value="1" {% if cluster.scheduler_type == 1 %}selected{% endif %}>LinuxLocal</option>
+                          <option value="2" {% if cluster.scheduler_type == 2 %}selected{% endif %}>PbsPro</option>
+                          <option value="4" {% if cluster.scheduler_type == 4 %}selected{% endif %}>Slurm</option>
+                          <option value="8" {% if cluster.scheduler_type == 8 %}selected{% endif %}>HyperQueue</option>
+                      </select>
+                  </div>
+
+                  <div class="col-md-6">
+                      <label class="form-label">Connection Protocol</label>
+                      <select class="form-select" name="ConnectionProtocol">
+                          <option value="1" {% if cluster.connection_protocol == 1 %}selected{% endif %}>MicrosoftHpcApi</option>
+                          <option value="2" {% if cluster.connection_protocol == 2 %}selected{% endif %}>Ssh</option>
+                          <option value="4" {% if cluster.connection_protocol == 4 %}selected{% endif %}>SshInteractive</option>
+                      </select>
+                  </div>
+
+                  <div class="col-md-4">
+                      <label class="form-label">Time Zone</label>
+                      <input type="text" class="form-control" name="TimeZone" value="{{ cluster.time_zone }}">
+                  </div>
+
+                  <div class="col-md-4">
+                      <label class="form-label">Port</label>
+                      <input type="number" class="form-control" name="Port" value="{{ cluster.port }}">
+                  </div>
+
+                  <div class="col-md-4 d-flex align-items-center">
+                      <div class="form-check mt-2">
+                          <input class="form-check-input" type="checkbox" name="UpdateJobStateByServiceAccount" {% if cluster.update_job_state_by_service_account %}checked{% endif %}>
+                          <label class="form-check-label">Update Job State By Service Account</label>
+                      </div>
+                  </div>
+
+                  <div class="col-md-6">
+                      <label class="form-label">Domain Name</label>
+                      <input type="text" class="form-control" name="DomainName" value="{{ cluster.domain_name }}">
+                  </div>
+
+                  <div class="col-md-6">
+                      <label class="form-label">Proxy Connection Id</label>
+                      <input type="number" class="form-control" name="ProxyConnectionId" value="{{ cluster.proxy_connection }}">
+                  </div>
+              </div>
+
+              <div class="mt-4 d-flex justify-content-between">
+                  <button type="submit" class="btn btn-primary">Save</button>
+                  <a href="{% url 'cluster_list' %}" class="btn btn-secondary">Back</a>
+              </div>
+          </form>
+      </div>
+    </div>
+
+  {% elif active_tab == 'queues' %}
+    <!-- Queues Content -->
+<div class="card mb-4 w-75 mx-auto shadow-sm">
+   <div class="card-header d-flex align-items-center">
+        <strong>Queues</strong>
+        <div class="ms-auto">
+            <a href="{% url 'queue_create' %}" class="btn btn-sm btn-primary me-2">Add New</a>
+            <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        {% if queues %}
+        <div class="table-responsive">
+            <table class="table table-striped mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Nodes</th>
+                        <th scope="col">Cores per Node</th>
+                        <th scope="col">Max Walltime (s)</th>
+                        <th scope="col">File Transfer Method</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for queue in queues %}
+                    <tr>
+                        <td>{{ queue.id }}</td>
+                        <td>{{ queue.name }}</td>
+                        <td>{{ queue.description }}</td>
+                        <td>{{ queue.number_of_nodes }}</td>
+                        <td>{{ queue.cores_per_node }}</td>
+                        <td>{{ queue.max_walltime }}</td>
+                        <td>{{ queue.file_transfer_method_id }}</td>
+                        <td>
+                            <a href="{% url 'queue_detail' queue.id %}" class="btn btn-sm btn-primary">Detail</a>
+                            <form action="{% url 'queue_delete' queue.id %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this queue?');">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="p-3 mb-0">No queues available.</p>
+        {% endif %}
+    </div>
+</div>
+
+
+  {% elif active_tab == 'projects' %}
+    <div class="card mb-4 w-75 mx-auto shadow-sm">
+      <div class="card-header d-flex align-items-center">
+          <strong>Projects</strong>
+            <!-- reference project (projct assignment to cluster) modal -->
+             <div class="ms-auto">
+                <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#assignProjectModal">Assign Project</button>
+                <!-- new project button -->
+                <a href="{% url 'project_create' %}" class="btn btn-sm btn-success me-2">New Project</a>
+                <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
+             </div>
+      </div>
+
+      <div class="card-body">
+       {% if projects %}
+        <div class="table-responsive">
+            <table class="table table-striped mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">PI Email</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Accounting String</th>
+                        <th scope="col">Start Date</th>
+                        <th scope="col">End Date</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                    {% for project in projects %}
+                    <!-- table row for each project -->
+                    <tr>
+                        <td>{{ project.id }}</td>
+                        <td>{{ project.name }}</td>
+                        <td>{{ project.PIEmail }}</td>
+                        <td>{{ project.description }}</td>
+                        <td>{{ project.accounting_string }}</td>
+                        <td>{{ project.start_date }}</td>
+                        <td>{{ project.end_date }}</td>
+                        <td>
+                            <a href="{% url 'project_detail' project.id %}" class="btn btn-sm btn-primary">Detail</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </thead>
+            </table>
+      </div>
+        {% else %}
+            <p class="mb-0">No projects available.</p>
+        {% endif %}
+    </div>
+  {% endif %}
+</div>
+
+
+
+<!-- Assign Project Modal -->
+    <!-- Modal for assigning a project to the cluster -->
+<div class="modal fade" id="assignProjectModal" tabindex="-1" aria-labelledby="assignProjectModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="assignProjectModalLabel">Assign Project to Cluster</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+       <form method="post" action="{% url 'project_assign_to_cluster' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="assign_cluster">
+          <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+          <div class="mb-3">
+            <label for="projectSelect" class="form-label">Select Project</label>
+            <select class="form-select" id="projectSelect" name="ProjectId" required>
+              <option value="" disabled selected>Select a project</option>
+              {% for project in projectsForCurrentUser %}
+                <option value="{{ project.id }}">{{ project.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label for="localBasepath" class="form-label">Local Basepath</label>
+            <input type="text" class="form-control" id="localBasepath" name="LocalBasepath" placeholder="Enter local basepath">
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="submit" class="btn btn-primary">Assign Project</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+
+
+

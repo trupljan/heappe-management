@@ -1,0 +1,6 @@
+<h1>Jobs</h1>
+<ul>
+{% for job in jobs %}
+    <li>{{ job.JobId }} - {{ job.Name }}</li>
+{% endfor %}
+</ul>

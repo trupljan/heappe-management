@@ -1,0 +1,24 @@
+{% if data.items %}
+<ul class="list-group ms-3 mt-2">
+    {% for key, value in data.items %}
+        <li class="list-group-item">
+            <strong>{{ key }}:</strong>
+            {% if value.items or value.0 is not None %}
+                {% render_json value %}
+            {% else %}
+                {{ value }}
+            {% endif %}
+        </li>
+    {% endfor %}
+</ul>
+{% elif data.0 is not None %}
+<ul class="list-group ms-3 mt-2">
+    {% for item in data %}
+        <li class="list-group-item">
+            {% render_json item %}
+        </li>
+    {% endfor %}
+</ul>
+{% else %}
+    {{ data }}
+{% endif %}

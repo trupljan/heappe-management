@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>HEAppE Admin – Rozcestník</title>
+</head>
+<body>
+    <h1>HEAppE Admin – Rozcestník</h1>
+    <ul>
+    {% for link in links %}
+        <li><a href="{{ link.url }}">{{ link.name }}</a></li>
+    {% endfor %}
+    </ul>
+</body>
+</html>
+

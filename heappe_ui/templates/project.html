@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block title %}{% if project %}{{ project.Name }}{% else %}New Project{% endif %}{% endblock %}
+
+{% block content %}
+
+<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
+  <div class="container justify-content-center">
+    <ul class="nav nav-pills">
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Cluster Detail</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'commandtemplates' %}active{% endif %}" href="?tab=commandtemplates">Command Templates</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'sshaccounts' %}active{% endif %}" href="?tab=sshaccounts">SSH Accounts</a>
+      </li>
+    </ul>
+  </div>
+</nav>
+
+
+<div class="container">
+  {% if active_tab == 'detail' %}
+
+
+<h1 class="mb-4 text-center">
+    {% if project %}{{ project.Name }}{% else %}Create Project{% endif %}
+</h1>
+
+<!-- Main Project Form -->
+<div class="card mb-4 w-75 mx-auto shadow-sm">
+    <div class="card-header d-flex align-items-center">
+        <strong>Project Information</strong>
+        {% if project %}
+        <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{% if project %}project_update{% else %}project_create{% endif %}">
+
+            <div class="row g-3">
+                {% if project %}
+                <div class="col-md-3">
+                    <label class="form-label">Id</label>
+                    <input type="number" class="form-control" value="{{ project.id }}" readonly disabled>
+                </div>
+                {% endif %}
+
+                <div class="col-md-6">
+                    <label class="form-label">Name</label>
+                    <input type="text" class="form-control" name="Name" value="{{ project.name|default:'' }}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">PI Email</label>
+                    <input type="email" class="form-control" name="PIEmail" value="{{ project.PIEmail|default:'' }}"
+                           {% if project %}readonly disabled{% endif %}>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-control" name="Description" rows="3">{{ project.description|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Accounting String</label>
+                    <input type="text" class="form-control" name="AccountingString"
+                           value="{{ project.accounting_string|default:'' }}"
+                           {% if project %}readonly disabled{% endif %}>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Start Date</label>
+                    <input type="datetime-local" class="form-control" name="StartDate"
+                           value="{{ project.start_date }}">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">End Date</label>
+                    <input type="datetime-local" class="form-control" name="EndDate"
+                           value="{{ project.end_date }}">
+                </div>
+
+                <div class="col	md-3">
+                    <label class="form-label" for="UsageType">Usage Type</label>
+                    <select class="form-select" id="UsageType" name="UsageType">
+                        <option value="" disabled selected>Select usage type</option>
+                        <option value="1" {% if project.usage_type == 1 %}selected{% endif %}>CoreHours</option>
+                        <option value="2" {% if project.usage_type == 2 %}selected{% endif %}>NodeHours</option>
+                    </select>
+                </div>
+
+                <div class="col-md-6 d-flex align-items-center mt-4">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="useAccStr" name="UseAccountingStringForScheduler"
+                               {% if project.use_accounting_string_for_scheduler %}checked{% endif %}>
+                        <label for="useAccStr" class="form-check-label">Use Accounting String For Scheduler</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex justify-content-between">
+                {% if project %}
+                    <button type="submit" class="btn btn-primary" name="action" value="update_project">Update Project</button>
+                {% else %}
+                    <button type="submit" class="btn btn-success" name="action" value="create_project">Create Project</button>
+                {% endif %}
+                <button type="button" class="btn btn-secondary" onclick="history.back()">Back</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Cluster Assignment Form and Assigned Clusters Table -->
+{% if project %}
+<div class="row g-4 w-75 mx-auto">
+    <!-- Cluster Assignment Form -->
+    <div class="col-md-6">
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header">
+                <strong>Assign Project to Cluster</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="project_assign_to_cluster">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="ClusterId">Select Cluster</label>
+                            <select class="form-select" id="ClusterId" name="ClusterId" required>
+                                <option value="" disabled selected>Select a cluster</option>
+                                {% for cluster in clusters %}
+                                    <option value="{{ cluster.id }}">{{ cluster.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="LocalBasepath">Local Basepath</label>
+                            <input type="text" class="form-control" id="LocalBasepath" name="LocalBasepath" value="" placeholder="Enter local basepath">
+                        </div>
+                        <div class="col-12">
+                            <button type="submit"  class="btn btn-primary mt-2">Assign Cluster</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- List Existing Cluster Assignments -->
+    {% if project_assignments %}
+    <div class="col-md-6">
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header">
+                <strong>Assigned Clusters</strong>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">Cluster Name</th>
+                                <th scope="col">Local Basepath</th>
+                                <th scope="col">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for assignment in project_assignments %}
+                            <tr>
+                                <td>{{ assignment.cluster_name }}</td>
+                                <td>{{ assignment.local_basepath }}</td>
+                                <td>
+                                    <form method="post" style="display:inline;">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="delete_assignment">
+                                        <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
+                                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to remove this assignment?')">Remove</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+</div>
+      {% elif active_tab == 'commandtemplates' %}
+
+      <div class="container">
+        <div class="card mb-4 w-90 mx-auto shadow-sm">
+              <div class="card-header d-flex align-items-center">
+              <strong>Command Templates</strong>
+                  <div class="ms-auto">
+                      <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-primary me-2">Add New</a>
+                      <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
+                  </div>
+         </div>
+
+
+        <!-- Command Templates Content table here -->
+        <div class="card-body">
+              {% if command_templates %}
+                <div class="table-responsive">
+                  <table class="table table-striped mb-0">
+                    <thead class="table-light">
+                      <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Executable File</th>
+                        <th scope="col">Enabled</th>
+                        <th scope="col">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for template in command_templates %}
+                      <tr>
+                        <td>{{ template.id }}</td>
+                        <td>{{ template.name }}</td>
+                        <td>{{ template.description }}</td>
+                        <td>{{ template.executable_file }}</td>
+                        <td>
+                          {% if template.is_enabled %}
+                            ✅
+                          {% else %}
+                            ❌
+                          {% endif %}
+                        </td>
+                        <td>
+                          <a href="{% url 'command_template_detail' template.id %}" class="btn btn-sm btn-primary">Detail</a>
+                          <a href="" class="btn btn-sm btn-danger">Delete</a>
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              {% else %}
+                <p class="mb-0">No command templates available.</p>
+              {% endif %}
+            </div>
+
+      </div>
+        </div>
+
+      {% elif active_tab == 'sshaccounts' %}
+        <div class="container">
+        <h2 class="mb-4 text-center">SSH Accounts: {{ project.Name }}</h2>
+        <!-- SSH Keys Content Here -->
+        <div class="card-body">
+  {% if project_accounts %}
+    <div class="table-responsive">
+      <table class="table table-striped mb-0">
+        <thead class="table-light">
+          <tr>
+            <th scope="col">Username</th>
+            <th scope="col">Key Type</th>
+            <th scope="col">Public Key (OpenSSH)</th>
+            <th scope="col">Public Key (PEM)</th>
+            <th scope="col">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for account in project_accounts %}
+          <tr>
+            <td>{{ account.username }}</td>
+            <td>{{ account.key_type }}</td>
+            <td>
+              <code>{{ account.public_key_open_ssh|truncatechars:40 }}</code>
+            </td>
+            <td>
+              <code>{{ account.public_key_pem|truncatechars:40 }}</code>
+            </td>
+            <td>
+              <a href="" class="btn btn-sm btn-primary">Detail</a>
+              <a href="" class="btn btn-sm btn-danger">Delete</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="mb-0">No SSH accounts available.</p>
+  {% endif %}
+</div>
+
+      </div>
+        {% endif %}
+
+
+{% endblock %}
