@@ -12,6 +12,18 @@
     </div>
 
     <div class="card-body">
+
+    {% if not filetransfer_methods %}
+    <div class="d-flex justify-content-center">
+                  <div class="alert alert-warning text-center w-75" role="alert">
+                    You need to add FileTransfer Method in the cluster detail management screen before managing queue.
+                  </div>
+                </div>
+    {% endif %}
+
+        {% if filetransfer_methods %}
+
+
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="action" value="update_queue">
@@ -47,16 +59,13 @@
                     <input type="number" class="form-control" name="MaxWalltime" value="{{ node_type.max_walltime }}">
                 </div>
 
+                {% if cluster %}
                 <div class="col-md-5">
                     <label class="form-label">Cluster</label>
-                    <select class="form-select" name="ClusterId">
-                        {% for c in clusters %}
-                            <option value="{{ c.id }}" {% if c.id == cluster.id %}selected{% endif %}>
-                                {{ c.name }}
-                            </option>
-                        {% endfor %}
-                    </select>
+                    <input type="hidden" class="form-control" name="ClusterId" value="{{ cluster.id }}" readonly disabled>
+                    <input type="text" class="form-control" name="Cluster" value="{{ cluster.name }}" readonly disabled>
                 </div>
+                {% endif %}
 
                 <div class="col-md-4">
                     <label class="form-label">Queue</label>
@@ -73,7 +82,18 @@
                     <input type="text" class="form-control" name="ClusterAllocationName" value="{{ node_type.cluster_allocation_name }}">
                 </div>
 
-                {% if node_type %}
+                <!-- filetransfer_methods select -->
+                <div class="col-md-4">
+                    <label for="fileTransferSelect" class="form-label">File Transfer Method</label>
+                    <select id="fileTransferSelect" name="FileTransferMethodId" class="form-select">
+                        <option value="" disabled>Select File Transfer Method</option>
+                        {% for ft in filetransfer_methods %}
+                            <option value="{{ ft.id }}" {% if node_type.file_transfer_method_id == ft.id %}selected{% endif %}>{{ ft.server_hostname }}{% if ft.port %}:{{ ft.port }}{% endif %} ({{ ft.protocol_name }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                {% if false %}
                     <div class="col-md-6">
                   <label class="form-label">File Transfer Method Details</label>
                   <div class="card p-3">
@@ -103,7 +123,7 @@
                 </div>
                 {% endif %}
 
-
+                {% if false %}
                 <div class="col-md-6">
                       <label class="form-label">Accounting Aggregation</label>
 
@@ -148,6 +168,7 @@
                         </div>
                       </div>
                     </div>
+                {% endif %}
             </div>
 
             <div class="mt-4 d-flex justify-content-between">
@@ -158,6 +179,7 @@
                 {% else %}
                     <button type="submit" class="btn btn-success">Create Queue</button>
                 {% endif %}
+                    {% endif %}
                 <button type="button" class="btn btn-secondary" onclick="history.back()">Back</button>
             </div>
         </form>

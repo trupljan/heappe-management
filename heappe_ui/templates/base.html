@@ -1,14 +1,180 @@
+{% load static %}
+
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{% block title %}HEAppE Admin{% endblock %}</title>
+    <title>{% block title %}HEAppE Admin Panel{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .navbar-brand {
+            font-size: 1.4rem;
+        }
+        .nav-link {
+            font-weight: 500;
+            color: #fff !important;
+        }
+        .nav-link:hover {
+            color: #ffc107 !important;
+        }
+        .dropdown-menu {
+            border: none;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        }
+    </style>
 </head>
 <body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+        <div class="container-fluid">
+            <!-- Left: app name with icon -->
+            <a class="navbar-brand fw-bold d-flex align-items-center" href="{% url 'home' %}">
+                <img src="{% static 'images/HEAppE_logo.png' %}" alt="Logo" class="me-2" style="height: 30px;">
+                HEAppE Admin Panel
+            </a>
+
+            <!-- Toggle for mobile -->
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <!-- Navbar content -->
+            <div class="collapse navbar-collapse" id="navbarContent">
+                <!-- Center: main menu -->
+                <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'home' %}">
+                            <i class="bi bi-house me-1"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="infrastructureDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-hdd-stack me-1"></i> Infrastructure
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="infrastructureDropdown">
+                            <li><a class="dropdown-item" href="{% url 'cluster_list' %}">
+                                <i class="bi bi-server me-2"></i> Clusters
+                            </a></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-cpu me-2"></i> Compute Nodes
+                            </a></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-diagram-3 me-2"></i> Node Groups
+                            </a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="jobsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-play-circle me-1"></i> Jobs
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="jobsDropdown">
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-list-task me-2"></i> All Jobs
+                            </a></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-hourglass-split me-2"></i> Running Jobs
+                            </a></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-clock-history me-2"></i> Job History
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-gear me-2"></i> Job Templates
+                            </a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="usersDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-people me-1"></i> Users
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="usersDropdown">
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-person-lines-fill me-2"></i> User Management
+                            </a></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-shield-check me-2"></i> Permissions
+                            </a></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-graph-up me-2"></i> Usage Statistics
+                            </a></li>
+                        </ul>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="monitoringDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-graph-up me-1"></i> Monitoring
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="monitoringDropdown">
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-speedometer2 me-2"></i> System Status
+                            </a></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-bar-chart me-2"></i> Resource Usage
+                            </a></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-exclamation-triangle me-2"></i> Alerts
+                            </a></li>
+                            <li><a class="dropdown-item" href="#">
+                                <i class="bi bi-file-text me-2"></i> Logs
+                            </a></li>
+                        </ul>
+                    </li>
+                </ul>
+
+                <!-- Right: user menu -->
+                <ul class="navbar-nav">
+                    {% if user.is_authenticated %}
+                        <!-- Quick actions -->
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" title="Notifications">
+                                <i class="bi bi-bell"></i>
+                                <span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.6em;">3</span>
+                            </a>
+                        </li>
+
+                        <!-- User dropdown -->
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-person-circle me-1"></i>
+                                <span class="d-none d-md-inline">{{ user.username }}</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                                <li><h6 class="dropdown-header">{{ user.get_full_name|default:user.username }}</h6></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#">
+                                    <i class="bi bi-person me-2"></i> Profile
+                                </a></li>
+                                <li><a class="dropdown-item" href="#">
+                                    <i class="bi bi-gear me-2"></i> Settings
+                                </a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <form method="post" action="{% url 'logout' %}" class="px-3 py-1">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-danger w-100">
+                                            <i class="bi bi-box-arrow-right me-1"></i> Logout
+                                        </button>
+                                    </form>
+                                </li>
+                            </ul>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link btn btn-outline-light px-3" href="{% url 'login' %}">
+                                <i class="bi bi-box-arrow-in-right me-1"></i> Login
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Messages -->
     {% if messages %}
         <div class="container mt-3">
             {% for message in messages %}
                 <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+                    <i class="bi bi-{% if message.tags == 'error' %}exclamation-circle{% elif message.tags == 'success' %}check-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
                     {{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
@@ -16,9 +182,21 @@
         </div>
     {% endif %}
 
-    <main class="container mt-4">
+    <!-- Main content -->
+    <main class="container-fluid mt-4">
         {% block content %}{% endblock %}
     </main>
+
+    <!-- Footer -->
+    <footer class="bg-light mt-5 py-4">
+        <div class="container text-center text-muted">
+            <small>
+                HEAppE Admin Panel &copy; {% now "Y" %} |
+                <a href="#" class="text-muted">Documentation</a> |
+                <a href="#" class="text-muted">Support</a>
+            </small>
+        </div>
+    </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>

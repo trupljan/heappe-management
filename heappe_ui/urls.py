@@ -5,15 +5,18 @@ urlpatterns = [
     # Index
     path('', views.index, name='index'),
 
+    path('home/', views.home, name='home'),
+    path('login/', views.login_view, name='login'),
     # Clusters
     path('clusters/', views.cluster_list, name='cluster_list'),
     path('clusters/<int:cluster_id>/', views.cluster_detail, name='cluster_detail'),
     path('clusters/<int:cluster_id>/<int:tab>', views.cluster_detail, name='cluster_detail'),
     path('clusters/<int:cluster_id>/delete/', views.cluster_delete, name='cluster_delete'),
+    path('clusters/new/', views.cluster_create, name='cluster_create'),
 
     # Queues
     path('queues/', views.queue_list, name='queue_list'),  # pokud budeš mít seznam
-    path('queues/new/', views.queue_create, name='queue_create'),
+    path('queues/new/<int:cluster_id>', views.queue_create, name='queue_create'),
     path('queues/<int:queue_id>/', views.queue_detail, name='queue_detail'),
     path('queues/<int:queue_id>/delete/', views.queue_delete, name='queue_delete'),
 
@@ -27,6 +30,7 @@ urlpatterns = [
     path('projects/new/', views.project_create, name='project_create'),
     path('projects/<int:project_id>/', views.project_detail, name='project_detail'),
     path('projects/assign/', views.project_assign_to_cluster, name='project_assign_to_cluster'),
+    path('projects/unassign/<int:project_id>', views.delete_assignment, name='delete_assignment'),
 
     # Command Templates
     path('command-templates/<int:project_id>/new/', views.command_template_create, name='command_template_create'),

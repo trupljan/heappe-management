@@ -7,6 +7,7 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
         Id=command_template_id, SessionCode=request.session_code
     ).to_dict()
 
+
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "update_command_template":
@@ -18,10 +19,30 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
         if action == "delete_parameter":
             return delete_parameter_from_command_template(request, command_template_id)
 
+    clusters = [c.to_dict() for c in controller.heappe_management_clusters_get(SessionCode=request.session_code)]
+    project_assignments = []
+    if command_template['project_id'] is not 0:
+        response = controller.heappe_management_project_assignment_to_clusters_get(
+            ProjectId=command_template['project_id'], SessionCode=request.session_code
+        )
+        project_assignments = [pa.to_dict() for pa in response]
+        # add cluster details fror project assignments
+        for assignment in project_assignments:
+            for cluster in clusters:
+                if cluster['id'] == assignment['cluster_id']:
+                    assignment['cluster_name'] = cluster['name']
+                    break
 
+    cluster_node_types = []
+    for assignment in project_assignments:
+        cluster = controller.heappe_management_cluster_get(Id=assignment['cluster_id'],
+                                                           SessionCode=request.session_code)
+        node_types = cluster.node_types
+        cluster_node_types.extend([ntype.to_dict() for ntype in node_types])
 
     return render(request, "command_template.html", {
-        "command_template": command_template
+        "command_template": command_template,
+        "node_types": cluster_node_types,
     })
 
 
@@ -93,7 +114,30 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
         )
         if result:
             return redirect("command_template_detail", command_template_id=result['Id'])
-    return render(request, 'command_template.html')
+
+    controller = hp.ManagementApi(request.api_instance)
+    # get project to cluster references from
+    clusters = [c.to_dict() for c in controller.heappe_management_clusters_get(SessionCode=request.session_code)]
+    response = controller.heappe_management_project_assignment_to_clusters_get(
+        ProjectId=project_id, SessionCode=request.session_code
+    )
+    project_assignments = [pa.to_dict() for pa in response]
+    # add cluster details fror project assignments
+    for assignment in project_assignments:
+        for cluster in clusters:
+            if cluster['id'] == assignment['cluster_id']:
+                assignment['cluster_name'] = cluster['name']
+                break
+
+
+
+    cluster_node_types = []
+    for assignment in project_assignments:
+        cluster = controller.heappe_management_cluster_get(Id=assignment['cluster_id'], SessionCode=request.session_code)
+        node_types = cluster.node_types
+        cluster_node_types.extend([ntype.to_dict() for ntype in node_types])
+
+    return render(request, 'command_template.html', {'node_types': cluster_node_types, 'project_id': project_id})
 
 def add_parameter_to_command_template(request: HttpRequest, command_template_id: int) -> HttpResponse:
 

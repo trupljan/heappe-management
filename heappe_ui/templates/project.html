@@ -1,9 +1,27 @@
+<style>
+  .copy-btn {
+    transition: all 0.2s ease-in-out;
+  }
+  .copy-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  .copy-badge {
+    animation: fadeIn 0.3s ease-in;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+</style>
+
 {% extends "base.html" %}
 
 {% block title %}{% if project %}{{ project.Name }}{% else %}New Project{% endif %}{% endblock %}
 
 {% block content %}
 
+    {% if project %}
 <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
   <div class="container justify-content-center">
     <ul class="nav nav-pills">
@@ -14,11 +32,12 @@
         <a class="nav-link {% if active_tab == 'commandtemplates' %}active{% endif %}" href="?tab=commandtemplates">Command Templates</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'sshaccounts' %}active{% endif %}" href="?tab=sshaccounts">SSH Accounts</a>
+        <a class="nav-link {% if active_tab == 'sshaccounts' %}active{% endif %}" href="?tab=accounts">SSH Accounts</a>
       </li>
     </ul>
   </div>
 </nav>
+{% endif %}
 
 
 <div class="container">
@@ -41,7 +60,6 @@
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="action" value="{% if project %}project_update{% else %}project_create{% endif %}">
-
             <div class="row g-3">
                 {% if project %}
                 <div class="col-md-3">
@@ -178,6 +196,7 @@
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="delete_assignment">
                                         <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
+                                        <input type="hidden" name="redirectTo" value="project_detail">
                                         <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to remove this assignment?')">Remove</button>
                                     </form>
                                 </td>
@@ -196,67 +215,97 @@
 </div>
       {% elif active_tab == 'commandtemplates' %}
 
-      <div class="container">
+   <div class="container">
+    <div class="card mb-4 w-90 mx-auto shadow-sm">
+        <div class="card-header d-flex align-items-center">
+            <strong>Command Templates</strong>
+            <div class="ms-auto d-flex align-items-center">
+                <form method="get" class="me-2">
+                <input type="hidden" name="tab" value="commandtemplates">
+                    <select name="project_filter" class="form-select form-select-sm me-2" onchange="this.form.submit()">
+
+                        <option value="all" {% if request.GET.project_filter == "all" %}selected{% endif %}>All Projects</option>
+                        <option value="shared" {% if request.GET.project_filter == "shared" %}selected{% endif %}>Shared</option>
+                        <option value="own" {% if not request.GET.project_filter or request.GET.project_filter == "own" %}selected{% endif %}>Own</option>
+                    </select>
+                </form>
+                <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-primary me-2">Add New</a>
+                <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
+            </div>
+        </div>
+
+        <div class="card-body">
+            {% if command_templates %}
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">ID</th>
+                                <th scope="col">Name</th>
+                                <th scope="col">Description</th>
+                                <th scope="col">Executable File</th>
+                                <th scope="col">Queue</th>
+                                <th scope="col">Enabled</th>
+                                <th scope="col">Project</th>
+                                <th scope="col">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for template in command_templates %}
+                                <tr>
+                                    <td>{{ template.id }}</td>
+                                    <td>{{ template.name }}</td>
+                                    <td>{{ template.description }}</td>
+                                    <td>{{ template.executable_file }}</td>
+                                    <td>
+                                        {% for ntype in node_types %}
+                                            {% if ntype.id == template.cluster_node_type_id %}
+                                                {{ ntype.name }}
+                                            {% endif %}
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        {% if template.is_enabled %}
+                                            ✅
+                                        {% else %}
+                                            ❌
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if template.project_id == 0 %}
+                                            Shared
+                                        {% else %}
+                                            {{ template.project_id }}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'command_template_detail' template.id %}" class="btn btn-sm btn-primary">Detail</a>
+                                        <a href="" class="btn btn-sm btn-danger">Delete</a>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="mb-0">No command templates available.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+
+      {% elif active_tab == 'accounts' %}
+
+        <div class="container">
         <div class="card mb-4 w-90 mx-auto shadow-sm">
               <div class="card-header d-flex align-items-center">
-              <strong>Command Templates</strong>
+              <strong>HPC Acccounts</strong>
                   <div class="ms-auto">
-                      <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-primary me-2">Add New</a>
+                      <button type="button" class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addHpcAccountModal">Add New</button>
                       <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
                   </div>
          </div>
-
-
-        <!-- Command Templates Content table here -->
-        <div class="card-body">
-              {% if command_templates %}
-                <div class="table-responsive">
-                  <table class="table table-striped mb-0">
-                    <thead class="table-light">
-                      <tr>
-                        <th scope="col">ID</th>
-                        <th scope="col">Name</th>
-                        <th scope="col">Description</th>
-                        <th scope="col">Executable File</th>
-                        <th scope="col">Enabled</th>
-                        <th scope="col">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for template in command_templates %}
-                      <tr>
-                        <td>{{ template.id }}</td>
-                        <td>{{ template.name }}</td>
-                        <td>{{ template.description }}</td>
-                        <td>{{ template.executable_file }}</td>
-                        <td>
-                          {% if template.is_enabled %}
-                            ✅
-                          {% else %}
-                            ❌
-                          {% endif %}
-                        </td>
-                        <td>
-                          <a href="{% url 'command_template_detail' template.id %}" class="btn btn-sm btn-primary">Detail</a>
-                          <a href="" class="btn btn-sm btn-danger">Delete</a>
-                        </td>
-                      </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
-                </div>
-              {% else %}
-                <p class="mb-0">No command templates available.</p>
-              {% endif %}
-            </div>
-
-      </div>
-        </div>
-
-      {% elif active_tab == 'sshaccounts' %}
-        <div class="container">
-        <h2 class="mb-4 text-center">SSH Accounts: {{ project.Name }}</h2>
-        <!-- SSH Keys Content Here -->
         <div class="card-body">
   {% if project_accounts %}
     <div class="table-responsive">
@@ -274,16 +323,50 @@
           {% for account in project_accounts %}
           <tr>
             <td>{{ account.username }}</td>
-            <td>{{ account.key_type }}</td>
-            <td>
-              <code>{{ account.public_key_open_ssh|truncatechars:40 }}</code>
-            </td>
-            <td>
-              <code>{{ account.public_key_pem|truncatechars:40 }}</code>
-            </td>
-            <td>
-              <a href="" class="btn btn-sm btn-primary">Detail</a>
-              <a href="" class="btn btn-sm btn-danger">Delete</a>
+            <td>{{ account.key_type_name }}</td>
+<td>
+      <div class="d-flex align-items-center">
+        <code class="d-inline-block text-truncate me-3" style="max-width: 200px;">{{ account.public_key_open_ssh|slice:":10" }}...{{ account.public_key_open_ssh|slice:"-10:" }}</code>
+        <button class="btn btn-outline-primary btn-sm copy-btn" onclick="copyToClipboard('{{ account.public_key_open_ssh|escapejs }}', 'open_ssh_feedback')">
+          <i class="bi bi-clipboard me-1"></i> Copy
+        </button>
+        <span id="open_ssh_feedback" class="badge bg-success ms-2 d-none copy-badge">Copied!</span>
+      </div>
+    </td>
+    <td>
+      <div class="d-flex align-items-center">
+        <code class="d-inline-block text-truncate me-3" style="max-width: 200px;">{{ account.public_key_pem|slice:":10" }}...{{ account.public_key_pem|slice:"-10:" }}</code>
+        <button class="btn btn-outline-primary btn-sm copy-btn" onclick="copyToClipboard('{{ account.public_key_pem|escapejs }}', 'pem_feedback')">
+          <i class="bi bi-clipboard me-1"></i> Copy
+        </button>
+        <span id="pem_feedback" class="badge bg-success ms-2 d-none copy-badge">Copied!</span>
+      </div>
+    </td>            <td>
+              <form method="post" style="display:inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="test_hpc_access">
+                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                    <input type="hidden" name="username" id="username" value="{{ account.username }}">
+                  <button type="submit" class="btn btn-sm btn-info" name="test_hpc_access" value="test_hpc_access">Test HPC Access</button>
+                  <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#regenerateSshKeyModal" onclick="setUsernameInModal('{{ account.username }}')">Regenerate SSH Key</button>
+              </form>
+               <form method="post" style="display:inline;" id="delete-hpc-account-form">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-danger" name="delete_hpc_account" value="delete_hpc_account">Delete</button>
+                    <input type="hidden" name="action" value="delete_hpc_account">
+                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                    <input type="hidden" name="username" value="{{ account.username }}">
+                </form>
+
+                    <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        document.getElementById('delete-hpc-account-form').addEventListener('submit', function(event) {
+                            if (!confirm('Are you sure you want to delete this HPC account?')) {
+                                event.preventDefault();
+                            }
+                        });
+                    });
+                    </script>
             </td>
           </tr>
           {% endfor %}
@@ -293,9 +376,146 @@
   {% else %}
     <p class="mb-0">No SSH accounts available.</p>
   {% endif %}
+
+        <!-- Modal for Adding New HPC Account -->
+  <div class="modal fade" id="addHpcAccountModal" tabindex="-1" aria-labelledby="addHpcAccountModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="addHpcAccountModalLabel">Add New HPC Account</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create_new_hpc_account">
+    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+    <div class="mb-3">
+        <label for="username" class="form-label">Username</label>
+        <input type="text" class="form-control" id="username" name="username" required>
+    </div>
+    <div class="mb-3">
+        <button type="button" class="btn btn-secondary" onclick="togglePasswordField()"
+                data-bs-toggle="tooltip" data-bs-placement="top"
+                title="The password is optional and only required if the HPC center mandates both SSH key and password authentication. This is not the same as an SSH key passphrase.">
+            Show Password Field
+        </button>
+        <div id="password-field" style="display: none;" class="mt-2">
+            <label for="password" class="form-label">Password (Optional)</label>
+            <input type="password" class="form-control" id="password" name="password">
+        </div>
+    </div>
+    <button type="submit" class="btn btn-primary">Create Account</button>
+</form>
+<script>
+function togglePasswordField() {
+    var passwordField = document.getElementById('password-field');
+    var button = event.target;
+    if (passwordField.style.display === 'none') {
+        passwordField.style.display = 'block';
+        button.textContent = 'Hide Password Field';
+    } else {
+        passwordField.style.display = 'none';
+        button.textContent = 'Show Password Field';
+    }
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function () {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 </div>
 
       </div>
+
+
+      <!-- Modal for Regenerating SSH Key -->
+<div class="modal fade" id="regenerateSshKeyModal" tabindex="-1" aria-labelledby="regenerateSshKeyModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="regenerateSshKeyModalLabel">Regenerate SSH Key</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="regenerate_ssh_key">
+          <input type="hidden" name="ProjectId" value="{{ project.id }}">
+            <input type="hidden" name="username" id="modal-username" value="">
+
+          <div class="mb-3">
+            <button type="button" class="btn btn-secondary" onclick="toggleRegeneratePasswordField()"
+                    data-bs-toggle="tooltip" data-bs-placement="top"
+                    title="The password is optional and only required if the HPC center mandates both SSH key and password authentication. This is not the same as an SSH key passphrase.">
+                Show Password Field
+            </button>
+            <div id="regenerate-password-field" style="display: none;" class="mt-2">
+              <label for="password" class="form-label">Password (Optional)</label>
+              <input type="password" class="form-control" id="password" name="password">
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary">Regenerate Key</button>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleRegeneratePasswordField() {
+    var passwordField = document.getElementById('regenerate-password-field');
+    var button = event.target;
+    if (passwordField.style.display === 'none') {
+        passwordField.style.display = 'block';
+        button.textContent = 'Hide Password Field';
+    } else {
+        passwordField.style.display = 'none';
+        button.textContent = 'Show Password Field';
+    }
+}
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function () {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+
+function setUsernameInModal(username) {
+    document.getElementById('modal-username').value = username;
+}
+
+function copyToClipboard(text, feedbackId) {
+  navigator.clipboard.writeText(text).then(() => {
+    const feedbackElement = document.getElementById(feedbackId);
+    feedbackElement.classList.remove('d-none');
+    setTimeout(() => {
+      feedbackElement.classList.add('d-none');
+    }, 1000);
+  }).catch(err => {
+    console.error('Failed to copy: ', err);
+  });
+}
+</script>
+
         {% endif %}
 
 

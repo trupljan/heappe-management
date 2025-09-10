@@ -8,7 +8,11 @@ from heappe_ui.view.project import *
 from heappe_ui.view.command_template import *
 
 
+def home(request: HttpRequest) -> HttpResponse:
+    return cluster_list(request)
 
+def login_view(request: HttpRequest) -> HttpResponse:
+    return render(request, "clusters.html")
 
 
 
@@ -120,7 +124,7 @@ def update_app(request):
             commands = [
                 ['git', 'pull', auth_remote_url],  # Pull with authenticated URL
                 ['pip', 'install', '-r', 'requirements.txt'],  # Updates dependencies
-                ['python', 'manage.py', 'migrate'],  # Runs database migrations
+                ['python3', 'manage.py', 'migrate'],  # Runs database migrations
             ]
 
             # Execute commands
