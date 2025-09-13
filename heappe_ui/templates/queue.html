@@ -93,83 +93,20 @@
                     </select>
                 </div>
 
-                {% if false %}
-                    <div class="col-md-6">
-                  <label class="form-label">File Transfer Method Details</label>
-                  <div class="card p-3">
-                    <div class="mb-2 d-flex justify-content-between align-items-center">
-                      <span class="fw-semibold">ID:</span>
-                      <span>{{ filetransfer_method.id }}</span>
-                    </div>
-                    <div class="mb-2 d-flex justify-content-between align-items-center">
-                      <span class="fw-semibold">Server Hostname:</span>
-                      <span>{{ filetransfer_method.server_hostname }}</span>
-                    </div>
-                    <div class="mb-2 d-flex justify-content-between align-items-center">
-                      <span class="fw-semibold">Protocol:</span>
-                      <span>{{ filetransfer_method.protocol }}</span>
-                    </div>
-                    <div class="mb-3 d-flex justify-content-between align-items-center">
-                      <span class="fw-semibold">Port:</span>
-                      <span>{{ filetransfer_method.port }}</span>
-                    </div>
-                    <input type="hidden" name="FileTransferMethodId" value="{{ node_type.file_transfer_method_id }}">
-                    <div class="d-flex justify-content-between mt-3">
-                      <button type="button" class="btn btn-primary flex-fill me-2" data-bs-toggle="modal" data-bs-target="#updateFileTransferModal">Update</button>
-                      <button type="button" class="btn btn-success flex-fill me-2" data-bs-toggle="modal" data-bs-target="#createFileTransferModal">Create new</button>
-                      <button type="button" class="btn btn-danger flex-fill" onclick="confirmDeleteFileTransfer()">Delete</button>
-                    </div>
-                  </div>
-                </div>
-                {% endif %}
 
-                {% if false %}
-                <div class="col-md-6">
-                      <label class="form-label">Accounting Aggregation</label>
 
-                     <label for="aggregationSelect" class="form-label">Select Aggregation</label>
-                          <select id="aggregationSelect" name="aggregation">
-                            <option value="">-- Select Aggregation --</option>
-                            {% for agg in all_aggregations %}
-                              <option value="{{ agg.id }}">{{ agg.name }}</option>
-                            {% endfor %}
-                          </select>
-
-                      <div id="aggregationDetails" class="card p-3">
-                        <div class="mb-2 d-flex justify-content-between align-items-center">
-                          <span class="fw-semibold">ID:</span>
-                          <span id="aggregation_id_span">{{ clusternodetypeaggregation.id }}</span>
-                        </div>
-                                          <div class="mb-2 d-flex justify-content-between align-items-center">
-                          <span class="fw-semibold">Name:</span>
-                          <span id="aggregation_name_span">{{ clusternodetypeaggregation.name }}</span>
-                        </div>
-                        <div class="mb-2 d-flex justify-content-between align-items-center">
-                          <span class="fw-semibold">Description:</span>
-                          <span id="aggregation_description_span">{{ clusternodetypeaggregation.description }}</span>
-                        </div>
-                        <div class="mb-2 d-flex justify-content-between align-items-center">
-                          <span class="fw-semibold">Allocation Type:</span>
-                          <span id="aggregation_allocation_type_span">{{ clusternodetypeaggregation.allocation_type }}</span>
-                        </div>
-                        <div class="mb-2 d-flex justify-content-between align-items-center">
-                          <span class="fw-semibold">Validity From:</span>
-                          <span id="aggregation_validity_from_span">{{ clusternodetypeaggregation.validity_from }}</span>
-                        </div>
-                        <div class="mb-2 d-flex justify-content-between align-items-center">
-                          <span class="fw-semibold">Validity To:</span>
-                          <span id="aggregation_validity_to_span">{{ clusternodetypeaggregation.validity_to }}</span>
-                        </div>
-                          <input id="aggregation_ClusterNodeTypeAggregationId" type="hidden" name="ClusterNodeTypeAggregationId" value="{{ node_type.cluster_node_type_aggregation.id }}">
-                        <div class="d-flex justify-content-between mt-3">
-                          <button type="button" class="btn btn-primary flex-fill me-2" data-bs-toggle="modal" data-bs-target="#updateAggregationModal">Update</button>
-                          <button type="button" class="btn btn-success flex-fill me-2" data-bs-toggle="modal" data-bs-target="#createAggregationModal">Create new</button>
-                          <button type="button" class="btn btn-danger flex-fill" onclick="confirmDeleteAggregation()">Delete</button>
-                        </div>
+                {% if True %}
+                <div class="col-md-4">
+                      <label class="form-label">Queue Group</label>
+                        <select id="groupId" name="ClusterNodeTypeAggregationId" class="form-select">
+                                <option value="" disabled>Select Queue Group</option>
+                                {% for group in queue_groups %}
+                                    <option value="{{ group.id }}" {% if node_type.cluster_node_type_aggregation.id == group.id %}selected{% endif %}>{{ group.name }}</option>
+                                {% endfor %}
+                            </select>
                       </div>
                     </div>
                 {% endif %}
-            </div>
 
             <div class="mt-4 d-flex justify-content-between">
                 <input type="hidden" name="action" value="{% if node_type %}update_queue{% else %}create_queue{% endif %}">

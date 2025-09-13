@@ -7,6 +7,9 @@ urlpatterns = [
 
     path('home/', views.home, name='home'),
     path('login/', views.login_view, name='login'),
+    path('logout', views.logout_view, name='logout'),
+    path('profile/', views.profile_view, name='profile_view'),
+    path('dashboard/', views.dashboard_view, name='dashboard_view'),
     # Clusters
     path('clusters/', views.cluster_list, name='cluster_list'),
     path('clusters/<int:cluster_id>/', views.cluster_detail, name='cluster_detail'),
@@ -15,10 +18,15 @@ urlpatterns = [
     path('clusters/new/', views.cluster_create, name='cluster_create'),
 
     # Queues
-    path('queues/', views.queue_list, name='queue_list'),  # pokud budeš mít seznam
+    path('queues/', views.queues_view, name='queues_view'),
     path('queues/new/<int:cluster_id>', views.queue_create, name='queue_create'),
     path('queues/<int:queue_id>/', views.queue_detail, name='queue_detail'),
     path('queues/<int:queue_id>/delete/', views.queue_delete, name='queue_delete'),
+    path('queue-groups/', views.queue_groups, name='queue_groups'),
+    path('queue-groups/<int:group_id>/', views.queue_group_detail, name='queue_group_detail'),
+    path('queue-groups/<int:group_id>/modify/', views.queue_group_modify, name='queue_group_modify'),
+    path('queue-groups/new/', views.queue_group_create, name='queue_group_create'),
+    path('accounting/<int:project_id>', views.accounting_view, name='accounting'),
 
     # File transfer methods
     path('file-transfer-methods/new/', views.file_transfer_method_create, name='file_transfer_method_create'),
@@ -31,6 +39,7 @@ urlpatterns = [
     path('projects/<int:project_id>/', views.project_detail, name='project_detail'),
     path('projects/assign/', views.project_assign_to_cluster, name='project_assign_to_cluster'),
     path('projects/unassign/<int:project_id>', views.delete_assignment, name='delete_assignment'),
+    path('projects/', views.project_list, name='project_list'),
 
     # Command Templates
     path('command-templates/<int:project_id>/new/', views.command_template_create, name='command_template_create'),

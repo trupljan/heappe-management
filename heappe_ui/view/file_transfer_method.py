@@ -1,5 +1,7 @@
 from .imports import *
+from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_required
 
+@login_required(login_url="/login/")
 def file_transfer_method_create(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         controller = hp.ManagementApi(request.api_instance)

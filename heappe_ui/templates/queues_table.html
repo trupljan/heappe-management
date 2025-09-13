@@ -1,0 +1,58 @@
+<div class="card mb-4 w-75 mx-auto shadow-sm">
+   <div class="card-header d-flex align-items-center">
+        <strong>Queues</strong>
+        <div class="ms-auto">
+            {% if cluster.id %}
+            <a href="{% url 'queue_create' cluster.id %}" class="btn btn-sm btn-primary me-2">Add New</a>
+            {% endif %}
+            <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
+        </div>
+    </div>
+
+    <div class="card-body p-0">
+        {% if queues %}
+        <div class="table-responsive">
+            <table class="table table-striped mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Name</th>
+                        <th scope="col">Description</th>
+                        <th scope="col">Nodes</th>
+                        <th scope="col">Cores per Node</th>
+                        <th scope="col">Max Walltime (s)</th>
+                        <th scope="col">File Transfer Method</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for queue in queues %}
+                    <tr>
+                        <td>{{ queue.id }}</td>
+                        <td>{{ queue.name }}</td>
+                        <td>{{ queue.description }}</td>
+                        <td>{{ queue.number_of_nodes }}</td>
+                        <td>{{ queue.cores_per_node }}</td>
+                        <td>{{ queue.max_walltime }}</td>
+                        <td>{{ queue.fileTransferMethodName }}</td>
+
+                        <td>
+                            <a href="{% url 'queue_detail' queue.id %}" class="btn btn-sm btn-primary">Detail</a>
+                            <form action="{% url 'queue_delete' queue.id %}" method="post" style="display:inline;">
+                                {% csrf_token %}
+                                <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+                                {% if cluster.id %}
+                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this queue?');">Delete</button>
+                                {% endif %}
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="p-3 mb-0">No queues available.</p>
+        {% endif %}
+    </div>
+</div>

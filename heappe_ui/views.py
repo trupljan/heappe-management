@@ -1,21 +1,38 @@
+from heappe_ui.auth_backend import HeappeAuthBackend
 from heappe_ui.view.imports import *
-from heappe_ui.view.index import index
 from heappe_ui.view.utils import *
 from heappe_ui.view.clusters import *
 from heappe_ui.view.queue import *
 from heappe_ui.view.file_transfer_method import *
 from heappe_ui.view.project import *
+from heappe_ui.view.accounting import *
 from heappe_ui.view.command_template import *
+from django.contrib.auth.decorators import login_required
+
+from django.shortcuts import render
+import datetime
 
 
+@login_required(login_url="/login/")
+def index(request: HttpRequest) -> HttpResponse:
+    return dashboard_view(request)
+
+@login_required(login_url="/login/")
 def home(request: HttpRequest) -> HttpResponse:
-    return cluster_list(request)
-
-def login_view(request: HttpRequest) -> HttpResponse:
-    return render(request, "clusters.html")
+    return dashboard_view(request)
 
 
 
+@login_required(login_url="/login/")
+def logout_view(request):
+    from django.contrib.auth import logout
+    HeappeAuthBackend.api_instance = None
+    HeappeAuthBackend.session_code = None
+    request.session.flush()
+    logout(request)
+    return redirect("login")
+
+@login_required(login_url="/login/")
 def aggregation_create(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         controller = hp.ManagementApi(request.api_instance)
@@ -38,7 +55,7 @@ def aggregation_create(request: HttpRequest) -> HttpResponse:
 
 
 
-
+@login_required(login_url="/login/")
 def assign_project_to_cluster(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         controller = hp.ManagementApi(request.api_instance)
@@ -59,7 +76,7 @@ def assign_project_to_cluster(request: HttpRequest) -> HttpResponse:
             )
     return render(request, "assign_project_to_cluster.html")
 
-
+@login_required(login_url="/login/")
 def list_jobs(request: HttpRequest) -> HttpResponse:
     # Placeholder for listing jobs
     return HttpResponse(status=204)
@@ -85,6 +102,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.conf import settings
 
+@login_required(login_url="/login/")
 def update_app(request):
     if request.method == 'POST':
         try:
@@ -153,3 +171,68 @@ def update_app(request):
             return JsonResponse({'message': f'Unexpected error: {str(e)}'}, status=500)
 
     return render(request, "update_app.html")
+
+
+@login_required(login_url="/login/")
+def profile_view(request):
+    last_auth_ts = request.session.get("heappe_last_auth")
+
+    if last_auth_ts:
+        last_auth = datetime.datetime.fromtimestamp(float(last_auth_ts))
+    else:
+        last_auth = None
+
+    return render(request, "user_profile.html", {"user": request.user,  "last_auth": last_auth})
+
+
+@login_required(login_url="/login/")
+def dashboard_view(request):
+    context = {}
+    #get version information
+    controller = hp.ManagementApi(request.api_instance)
+    try:
+        result = controller.heappe_management_version_information_get(SessionCode=request.session_code)
+        context["heappe"] = result
+    except Exception as e:
+        print(f"Error fetching version information: {e}")
+
+    #get cluster information
+    try:
+        clusters = controller.heappe_management_clusters_get(SessionCode=request.session_code)
+        context["clusters"] = clusters
+    except Exception as e:
+        print(f"Error fetching clusters: {e}")
+
+    #get project information
+    try:
+        projects = controller.heappe_management_projects_get(SessionCode=request.session_code)
+        context["projects"] = projects
+    except Exception as e:
+        print(f"Error fetching projects: {e}")
+
+    try:
+        queues = [c.to_dict() for c in
+                  controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
+        context['queues'] = queues
+    except Exception as e:
+        print(f"Error fetching projects: {e}")
+
+    # get job stats JobsStateAgregationReport
+    try:
+        jrController = hp.JobReportingApi(request.api_instance)
+        job_stats = jrController.heappe_job_reporting_jobs_state_agregation_report_get(SessionCode=request.session_code)
+        all_states = [
+            'Configuring', 'Submitted', 'Queued', 'Running', 'Finished',
+            'Failed', 'Canceled', 'WaitingForServiceAccount', 'Deleted'
+        ]
+
+        # převedeme job_stats na dict {state_name: count}
+        job_counts = {s: 0 for s in all_states}
+        for js in job_stats:
+            job_counts[js.job_state_name] = js.count
+        context["job_counts"] = job_counts
+    except Exception as e:
+        print(f"Error fetching job stats: {e}")
+
+
+    return render(request, "dashboard.html", context)

@@ -26,13 +26,13 @@
   <div class="container justify-content-center">
     <ul class="nav nav-pills">
       <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Cluster Detail</a>
+        <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Project Detail</a>
       </li>
       <li class="nav-item">
         <a class="nav-link {% if active_tab == 'commandtemplates' %}active{% endif %}" href="?tab=commandtemplates">Command Templates</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'sshaccounts' %}active{% endif %}" href="?tab=accounts">SSH Accounts</a>
+        <a class="nav-link {% if active_tab == 'accounts' %}active{% endif %}" href="?tab=accounts">SSH Accounts</a>
       </li>
     </ul>
   </div>
@@ -107,8 +107,8 @@
                     <label class="form-label" for="UsageType">Usage Type</label>
                     <select class="form-select" id="UsageType" name="UsageType">
                         <option value="" disabled selected>Select usage type</option>
-                        <option value="1" {% if project.usage_type == 1 %}selected{% endif %}>CoreHours</option>
-                        <option value="2" {% if project.usage_type == 2 %}selected{% endif %}>NodeHours</option>
+                        <option value="1" {% if project.usage_type == 1 %}selected{% endif %}>NodeHours</option>
+                        <option value="2" {% if project.usage_type == 2 %}selected{% endif %}>CoreHours</option>
                     </select>
                 </div>
 
@@ -151,7 +151,7 @@
                             <label class="form-label" for="ClusterId">Select Cluster</label>
                             <select class="form-select" id="ClusterId" name="ClusterId" required>
                                 <option value="" disabled selected>Select a cluster</option>
-                                {% for cluster in clusters %}
+                                {% for cluster in not_assigned_clusters %}
                                     <option value="{{ cluster.id }}">{{ cluster.name }}</option>
                                 {% endfor %}
                             </select>
@@ -349,6 +349,13 @@
                     <input type="hidden" name="username" id="username" value="{{ account.username }}">
                   <button type="submit" class="btn btn-sm btn-info" name="test_hpc_access" value="test_hpc_access">Test HPC Access</button>
                   <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#regenerateSshKeyModal" onclick="setUsernameInModal('{{ account.username }}')">Regenerate SSH Key</button>
+              </form>
+              <form method="post" style="display:inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="initialize_hpc_account">
+                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                    <input type="hidden" name="Username" id="Username" value="{{ account.username }}">
+                  <button type="submit" class="btn btn-sm btn-secondary" name="initialize_hpc_account" value="initialize_hpc_account">Initialize HPC Account</button>
               </form>
                <form method="post" style="display:inline;" id="delete-hpc-account-form">
                     {% csrf_token %}

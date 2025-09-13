@@ -12,7 +12,9 @@
         }
         .nav-link {
             font-weight: 500;
-            color: #fff !important;
+        }
+        .nav-white {
+            color: #ffffff !important;
         }
         .nav-link:hover {
             color: #ffc107 !important;
@@ -28,7 +30,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
         <div class="container-fluid">
             <!-- Left: app name with icon -->
-            <a class="navbar-brand fw-bold d-flex align-items-center" href="{% url 'home' %}">
+            <a class="navbar-brand fw-bold d-flex align-items-center" href="{% url 'dashboard_view' %}">
                 <img src="{% static 'images/HEAppE_logo.png' %}" alt="Logo" class="me-2" style="height: 30px;">
                 HEAppE Admin Panel
             </a>
@@ -43,28 +45,28 @@
                 <!-- Center: main menu -->
                 <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'home' %}">
+                        <a class="nav-link nav-white" href="{% url 'dashboard_view' %}">
                             <i class="bi bi-house me-1"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="infrastructureDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link nav-white dropdown-toggle" href="#" id="infrastructureDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-hdd-stack me-1"></i> Infrastructure
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="infrastructureDropdown">
                             <li><a class="dropdown-item" href="{% url 'cluster_list' %}">
                                 <i class="bi bi-server me-2"></i> Clusters
                             </a></li>
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-cpu me-2"></i> Compute Nodes
+                            <li><a class="dropdown-item" href="{% url 'queues_view' %}">
+                                <i class="bi bi-cpu me-2"></i> Queues
                             </a></li>
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-diagram-3 me-2"></i> Node Groups
+                            <li><a class="dropdown-item" href="{% url 'queue_groups' %}">
+                                <i class="bi bi-diagram-3 me-2"></i> Queue Groups
                             </a></li>
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="jobsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link nav-white dropdown-toggle" href="#" id="jobsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-play-circle me-1"></i> Jobs
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="jobsDropdown">
@@ -79,12 +81,12 @@
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-gear me-2"></i> Job Templates
+                                <i class="bi bi-gear me-2"></i> Command Templates
                             </a></li>
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="usersDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link nav-white dropdown-toggle" href="#" id="usersDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-people me-1"></i> Users
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="usersDropdown">
@@ -100,7 +102,7 @@
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="monitoringDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link nav-white dropdown-toggle" href="#" id="monitoringDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-graph-up me-1"></i> Monitoring
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="monitoringDropdown">
@@ -125,7 +127,7 @@
                     {% if user.is_authenticated %}
                         <!-- Quick actions -->
                         <li class="nav-item">
-                            <a class="nav-link" href="#" title="Notifications">
+                            <a class="nav-link nav-white" href="#" title="Notifications">
                                 <i class="bi bi-bell"></i>
                                 <span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.6em;">3</span>
                             </a>
@@ -133,14 +135,14 @@
 
                         <!-- User dropdown -->
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="bi bi-person-circle me-1"></i>
                                 <span class="d-none d-md-inline">{{ user.username }}</span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
                                 <li><h6 class="dropdown-header">{{ user.get_full_name|default:user.username }}</h6></li>
                                 <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="#">
+                                <li><a class="dropdown-item" href="{% url 'profile_view' %}">
                                     <i class="bi bi-person me-2"></i> Profile
                                 </a></li>
                                 <li><a class="dropdown-item" href="#">
@@ -159,7 +161,7 @@
                         </li>
                     {% else %}
                         <li class="nav-item">
-                            <a class="nav-link btn btn-outline-light px-3" href="{% url 'login' %}">
+                            <a class="nav-link nav-white btn btn-outline-light px-3" href="{% url 'login' %}">
                                 <i class="bi bi-box-arrow-in-right me-1"></i> Login
                             </a>
                         </li>

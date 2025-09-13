@@ -1,6 +1,7 @@
 from .imports import *
-from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, SCHEDULER_CHOICES, CONNECTION_PROTOCOL_CHOICES
+from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, SCHEDULER_CHOICES, CONNECTION_PROTOCOL_CHOICES, login_view, login_required
 
+@login_required(login_url="/login/")
 def cluster_list(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     clusters = controller.heappe_management_clusters_get(SessionCode=request.session_code)
@@ -18,7 +19,7 @@ def cluster_list(request: HttpRequest) -> HttpResponse:
                           })
 
 
-
+@login_required(login_url="/login/")
 def cluster_create(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
         return render(request, "cluster_detail.html", {
@@ -52,6 +53,7 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
             # cluster_detail
             return redirect("cluster_detail", cluster_id=result["Id"])
 
+@login_required(login_url="/login/")
 def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     tab = request.GET.get('tab', 'detail')
@@ -132,21 +134,26 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
             item.project for item in projects_for_user
             if item.project.id not in seen_ids
         ]
+        context['queues'] = cluster.to_dict()['node_types']
 
     return render(request, "cluster_detail.html", context)
 
-
+@login_required(login_url="/login/")
 def cluster_delete(request: HttpRequest, cluster_id: int) -> HttpResponse:
-    controller = hp.ClusterInformationApi(request.api_instance)
-    return _handle_api_call(
+    controller = hp.ManagementApi(request.api_instance)
+    payload_data = {
+        "Id": cluster_id
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
         request,
-        lambda: controller.heappe_cluster_information_delete_cluster_delete(cluster_id, request.session_code),
+        lambda: controller.heappe_management_cluster_delete(**payload),
         "Cluster deleted successfully!",
-        "Failed to delete cluster",
-        redirect_url='cluster_list'
+        "Failed to delete cluster"
     )
+    return redirect("cluster_list")
 
-
+@login_required(login_url="/login/")
 def create_or_edit_filetransfer_method(request: HttpRequest, cluster_id: int) -> HttpResponse:
     server_hostname = request.POST.get("ServerHostname")
     port = int(request.POST.get("Port")) if request.POST.get("Port") else None
@@ -191,6 +198,7 @@ def create_or_edit_filetransfer_method(request: HttpRequest, cluster_id: int) ->
         )
     return redirect("cluster_detail", cluster_id=cluster_id)
 
+@login_required(login_url="/login/")
 def delete_filetransfer_method(request: HttpRequest, cluster_id: int, filetransfer_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     payload_data = {

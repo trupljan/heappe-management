@@ -1,20 +1,22 @@
 from .imports import *
-
-
-from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES
-
+from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_view, login_required, ACCOUNTING_OPERATORS, ACCOUNTING_TIMES, ACCOUNTING_NUMBERS
 
 
 
-def queue_list(request: HttpRequest) -> HttpResponse:
+
+
+@login_required(login_url="/login/")
+def queues_view(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
-    clusters = [c.to_dict() for c in controller.heappe_management_clusters_get(SessionCode=request.session_code)]
-    return render(request, "queue_list.html", {"clusters": clusters})
+    queues = [c.to_dict() for c in controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
+    return render(request, "queues.html", {"queues": queues})
 
-
+@login_required(login_url="/login/")
 def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     node_type = controller.heappe_management_cluster_node_type_get(Id=queue_id, SessionCode=request.session_code).to_dict()
+    queue_groups = [g.to_dict() for g in
+                    controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code)]
 
     cluster = None
     if node_type['cluster_id']:
@@ -75,10 +77,11 @@ def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
         "filetransfer_method": filetransfer_method,
         "clusternodetypeaggregation": clusternodetypeaggregation,
         "cluster": cluster,
-        "filetransfer_methods": cluster_filetransfer_methods
+        "filetransfer_methods": cluster_filetransfer_methods,
+        "queue_groups": queue_groups
     })
 
-
+@login_required(login_url="/login/")
 def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
 
@@ -122,7 +125,7 @@ def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
 
     return render(request, "queue.html")
 
-
+@login_required(login_url="/login/")
 def queue_delete(request: HttpRequest, queue_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     cluster_id = request.POST.get("ClusterId")
@@ -134,3 +137,304 @@ def queue_delete(request: HttpRequest, queue_id: int) -> HttpResponse:
         "Failed to delete Queue"
     )
     return redirect(f"/clusters/{cluster_id}/?tab=queues")
+
+
+@login_required(login_url="/login/")
+def queue_groups(request: HttpRequest) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    queue_groups = [g.to_dict() for g in controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code)]
+    return render(request, "queue_groups.html", {"queue_groups": queue_groups})
+
+
+@login_required(login_url="/login/")
+def queue_group_detail(request: HttpRequest, group_id: int) -> HttpResponse:
+    tab = request.GET.get('tab', 'detail')
+    controller = hp.ManagementApi(request.api_instance)
+    queue_group = controller.heappe_management_cluster_node_type_aggregation_get(Id=group_id, SessionCode=request.session_code).to_dict()
+    context = {"queue_group": queue_group}
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "queue_group_modify":
+            return queue_group_modify(request, group_id)
+        if action == "assign_formula":
+            return assign_formula(request, group_id)
+        if action == "unassign_formula":
+            return unassign_formula(request, group_id)
+        if action == "add_formula":
+            return add_formula(request, group_id)
+        if action == "edit_formula":
+            return edit_formula(request, group_id)
+        if action == "assign_project_to_group":
+            return assign_project_to_group(request, group_id)
+        if action == "unassign_project_to_group":
+            return unassign_project_to_group(request, group_id)
+
+
+    if request.method == "GET":
+        if tab == "detail":
+            tab = "detail"
+        elif tab == "queues":
+            all_queues = controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code) or []
+            queues = []
+            for queue in all_queues:
+                if queue.cluster_node_type_aggregation and queue.cluster_node_type_aggregation.id == group_id:
+                    queues.append(queue)
+            context['queues'] = queues
+        elif tab == "projects":
+            all_projects = controller.heappe_management_projects_get(SessionCode=request.session_code) or []
+            project_aggregations = controller.heappe_management_project_cluster_node_type_aggregations_get(
+                SessionCode=request.session_code
+            ) or []
+
+            projects = []
+            assigned_project_ids = set()
+
+            for group in project_aggregations:
+                if group.cluster_node_type_aggregation_id == group_id:
+                    for project in all_projects:
+                        if project.id == group.project_id:
+                            projects.append(project)
+                            assigned_project_ids.add(project.id)
+
+            not_assigned_projects = [p for p in all_projects if p.id not in assigned_project_ids]
+
+            context['projects'] = projects
+            context['not_assigned_projects'] = not_assigned_projects
+
+        elif tab == "formulas":
+            accountings = controller.heappe_management_accountings_get(SessionCode=request.session_code) or []
+            mappings = controller.heappe_management_cluster_node_type_aggregation_accountings_get(
+                SessionCode=request.session_code
+            ) or []
+            formulas = []
+            for mapping in mappings:
+                if mapping.cluster_node_type_aggregation_id == group_id:
+                    for accounting in accountings:
+                        if accounting.id == mapping.accounting_id:
+                            formulas.append(accounting)
+            context['formulas'] = formulas
+            context['all_formulas'] = [a for a in accountings if a not in formulas]
+            context['ACCOUNTING_OPERATORS'] = ACCOUNTING_OPERATORS
+            context['ACCOUNTING_TIMES'] = ACCOUNTING_TIMES
+            context['ACCOUNTING_NUMBERS'] = ACCOUNTING_NUMBERS
+
+
+
+
+
+
+
+    context['active_tab'] = tab
+    return render(request, "queue_group.html", context)
+
+@login_required(login_url="/login/")
+def queue_group_create(request: HttpRequest) -> HttpResponse:
+    tab = request.GET.get('tab', 'detail')
+    if request.method == "POST":
+        controller = hp.ManagementApi(request.api_instance)
+        allocation_type = request.POST.get("AllocationType")
+        if allocation_type == "optional":
+            allocation_type = request.POST.get("AllocationTypeCustom")
+
+        payload_data = {
+            "Name": request.POST.get("Name"),
+            "Description": request.POST.get("Description"),
+            "AllocationType": allocation_type,
+            "ValidityFrom": None if request.POST.get("ValidityFrom") == "" else request.POST.get("ValidityFrom"),
+            "ValidityTo": None if request.POST.get("ValidityTo") == "" else request.POST.get("ValidityTo"),
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result =  _handle_api_call(
+            request,
+            lambda: controller.heappe_management_cluster_node_type_aggregation_post(**payload),
+            "Queue Group created successfully!",
+            "Failed to create Queue Group"
+        )
+        if result:
+            return redirect(f"/queue-groups/{result['Id']}/")
+
+    return render(request, 'queue_group.html', {"active_tab": tab})
+
+@login_required(login_url="/login/")
+def queue_group_modify(request: HttpRequest, group_id: int) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    queue_group = controller.heappe_management_cluster_node_type_aggregation_get(Id=group_id, SessionCode=request.session_code).to_dict()
+
+    if request.method == "POST":
+        allocation_type = request.POST.get("AllocationType")
+        if allocation_type == "optional":
+            allocation_type = request.POST.get("AllocationTypeCustom")
+
+        payload_data = {
+            "Id": group_id,
+            "Name": request.POST.get("Name"),
+            "Description": request.POST.get("Description"),
+            "AllocationType": allocation_type,
+            "ValidityFrom": None if request.POST.get("ValidityFrom") == "" else request.POST.get("ValidityFrom"),
+            "ValidityTo": None if request.POST.get("ValidityTo") == "" else request.POST.get("ValidityTo"),
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result =  _handle_api_call(
+            request,
+            lambda: controller.heappe_management_cluster_node_type_aggregation_put(**payload),
+            "Queue Group updated successfully!",
+            "Failed to update Queue Group"
+        )
+        if result:
+            return redirect(f"/queue-groups/{group_id}/")
+
+    return redirect(f"/queue-groups/{group_id}/")
+
+@login_required(login_url="/login/")
+def assign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
+    # ClusterNodeTypeAggregationAccounting
+    controller = hp.ManagementApi(request.api_instance)
+
+    if request.method == "POST":
+        formulaId = request.POST.get("FormulaId")
+
+        payload_data = {
+            "ClusterNodeTypeAggregationId": group_id,
+            "AccountingId": formulaId
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_cluster_node_type_aggregation_accounting_post(**payload),
+            "Formula assigned successfully to Queue Group!",
+            "Failed to assign formula to Queue Group"
+        )
+        if result:
+            return redirect(f"/queue-groups/{group_id}/?tab=formulas")
+
+    return redirect(f"/queue-groups/{group_id}/?tab=formulas")
+
+@login_required(login_url="/login/")
+def unassign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
+    # ClusterNodeTypeAggregationAccounting
+    controller = hp.ManagementApi(request.api_instance)
+
+    if request.method == "POST":
+        formulaId = request.POST.get("FormulaId")
+
+        payload_data = {
+            "ClusterNodeTypeAggregationId": group_id,
+            "AccountingId": formulaId
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_cluster_node_type_aggregation_accounting_delete(**payload),
+            "Formula unassigned successfully to Queue Group!",
+            "Failed to unassign formula to Queue Group"
+        )
+        if result:
+            return redirect(f"/queue-groups/{group_id}/?tab=formulas")
+
+    return redirect(f"/queue-groups/{group_id}/?tab=formulas")
+
+@login_required(login_url="/login/")
+def add_formula(request: HttpRequest, group_id: int) -> HttpResponse:
+    # ClusterNodeTypeAggregationAccounting
+    controller = hp.ManagementApi(request.api_instance)
+
+    if request.method == "POST":
+        formula = request.POST.get("Formula")
+        validityFrom = request.POST.get("ValidityFrom")
+        validityTo = request.POST.get("ValidityTo")
+
+        payload_data = {
+            "Formula": formula,
+            "ValidityFrom": None if validityFrom == "" else validityFrom,
+            "ValidityTo": None if validityTo == "" else validityTo,
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_accounting_post(**payload),
+            "Formula created successfully!",
+            "Failed to create formula"
+        )
+        if result:
+            return redirect(f"/queue-groups/{group_id}/?tab=formulas")
+
+    return redirect(f"/queue-groups/{group_id}/?tab=formulas")
+
+@login_required(login_url="/login/")
+def edit_formula(request: HttpRequest, group_id: int) -> HttpResponse:
+    # ClusterNodeTypeAggregationAccounting
+    controller = hp.ManagementApi(request.api_instance)
+
+    if request.method == "POST":
+        formulaId = int(request.POST.get("FormulaId"))
+        formula = request.POST.get("Formula")
+        validityFrom = request.POST.get("ValidityFrom")
+        validityTo = request.POST.get("ValidityTo")
+
+        payload_data = {
+            "Id": formulaId,
+            "Formula": formula,
+            "ValidityFrom": None if validityFrom == "" else validityFrom,
+            "ValidityTo": None if validityTo == "" else validityTo,
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_accounting_put(**payload),
+            "Formula created successfully!",
+            "Failed to create formula"
+        )
+        if result:
+            return redirect(f"/queue-groups/{group_id}/?tab=formulas")
+
+    return redirect(f"/queue-groups/{group_id}/?tab=formulas")
+
+@login_required(login_url="/login/")
+def assign_project_to_group(request: HttpRequest, group_id: int) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    project_id = 0
+    if request.method == "POST":
+        project_id = int(request.POST.get("ProjectId"))
+        aggregation_id = group_id
+        allocation_amount = int(request.POST.get("AllocationAmount", 0))
+
+        payload_data = {
+            "ProjectId": project_id,
+            "ClusterNodeTypeAggregationId": aggregation_id,
+            "AllocationAmount": allocation_amount,
+        }
+        payload = _create_payload(request.session_code, payload_data)
+
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_project_cluster_node_type_aggregation_post(**payload),
+            "Project assigned successfully!",
+            "Failed to assign Project"
+        )
+    if result:
+            return redirect(f"/queue-groups/{group_id}/?tab=projects")
+
+    return redirect(f"/queue-groups/{group_id}/?tab=projects")
+
+@login_required(login_url="/login/")
+def unassign_project_to_group(request: HttpRequest, group_id: int) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    project_id = int(request.POST.get("ProjectId"))
+    group_id = group_id
+    payload = _create_payload(request.session_code,
+                              {
+                                  "ClusterNodeTypeAggregationId": group_id,
+                                  "ProjectId": project_id
+                              })
+
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_project_cluster_node_type_aggregation_delete(**payload),
+        "Queue Group unassigned successfully!",
+        "Failed to unassign Queue Group"
+    )
+    if result:
+            return redirect(f"/queue-groups/{group_id}/?tab=projects")
+
+    return redirect(f"/queue-groups/{group_id}/?tab=projects")
+

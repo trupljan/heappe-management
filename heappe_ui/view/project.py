@@ -1,5 +1,5 @@
 from .imports import *
-from .utils import _create_payload, _handle_api_call
+from .utils import _create_payload, _handle_api_call, login_view, login_required
 
 
 KEY_TYPE_CHOICES = {
@@ -10,6 +10,8 @@ KEY_TYPE_CHOICES = {
     5: "nistP521",
     6: "Ed25519",
 }
+
+@login_required(login_url="/login/")
 def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> HttpResponse:
     filter_type = request.GET.get("project_filter", "own")
     controller = hp.ManagementApi(request.api_instance)
@@ -19,6 +21,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
         tab = request.GET.get("tab", "detail")
 
     clusters = [c.to_dict() for c in controller.heappe_management_clusters_get(SessionCode=request.session_code)]
+    not_assigned_clusters = clusters.copy()
     command_templates, project_accounts, project_data, project_assignments = [], [], None, []
 
     #if post
@@ -32,12 +35,15 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
             return delete_assignment(request, project_id)
         if action == "test_hpc_access":
             return test_cluster_authentication_credential_HPC_access(request)
+        if action == "initialize_hpc_account":
+            return initialize_hpc_account(request)
         if action == "create_new_hpc_account":
             return create_new_hpc_account(request)
         if action == "regenerate_ssh_key":
             return regenerate_ssh_key(request)
         if action == "delete_hpc_account":
             return delete_hpc_account(request)
+
 
     if project_id:
         project_data = controller.heappe_management_project_get(
@@ -72,6 +78,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
             for cluster in clusters:
                 if cluster['id'] == assignment['cluster_id']:
                     assignment['cluster_name'] = cluster['name']
+                    not_assigned_clusters.remove(cluster)
                     break
 
     if filter_type == "shared":
@@ -86,6 +93,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
     return render(request, "project.html", {
         "project": project_data,
         "clusters": clusters,
+        "not_assigned_clusters": not_assigned_clusters,
         "project_assignments": project_assignments,
         "active_tab": tab,
         "command_templates": command_templates,
@@ -93,7 +101,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
         "node_types": list(dict_ntypes.values()),
     })
 
-
+@login_required(login_url="/login/")
 def project_create(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
         return render(request, "project.html", {
@@ -122,6 +130,32 @@ def project_create(request: HttpRequest) -> HttpResponse:
             return redirect("project_detail", project_id=result['Id'])
 
 
+@login_required(login_url="/login/")
+def project_list(request: HttpRequest) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    projects = [p.to_dict() for p in controller.heappe_management_projects_get(SessionCode=request.session_code)]
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "delete_project":
+            project_id = int(request.POST.get("ProjectId"))
+            payload_data = {
+                "Id": project_id,
+            }
+            payload = _create_payload(request.session_code, payload_data)
+            _handle_api_call(
+                request,
+                lambda: controller.heappe_management_project_delete(**payload),
+                "Project deleted successfully!",
+                "Failed to delete Project"
+            )
+            return redirect("project_list")
+
+    return render(request, "projects.html", {
+        "projects": projects
+    })
+
+
 def project_update(request: HttpRequest, project_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     payload_data = {
@@ -143,6 +177,8 @@ def project_update(request: HttpRequest, project_id: int) -> HttpResponse:
     return redirect("project_detail", project_id=project_id)
 
 from django.urls import reverse
+
+@login_required(login_url="/login/")
 def project_assign_to_cluster(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
@@ -181,7 +217,7 @@ def project_assign_to_cluster_with_project_id(request: HttpRequest, project_id) 
     return redirect("project_detail", project_id=project_id)
 
 
-
+@login_required(login_url="/login/")
 def delete_assignment(request: HttpRequest, project_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     cluster_id = int(request.POST.get("ClusterId"))
@@ -203,7 +239,7 @@ def delete_assignment(request: HttpRequest, project_id: int) -> HttpResponse:
     else:
         return redirect(f"{reverse('cluster_detail', kwargs={'cluster_id': cluster_id})}?tab=projects")
 
-
+@login_required(login_url="/login/")
 def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
@@ -212,6 +248,26 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
         lambda: controller.heappe_management_test_cluster_access_for_account_get(ProjectId=project_id, Username=request.POST.get("username"), SessionCode=request.session_code),
         "Cluster authentication credential has access to HPC.",
         "Cluster authentication credential does not have access to HPC."
+    )
+    reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
+    return redirect(reload_url)
+
+@login_required(login_url="/login/")
+def initialize_hpc_account(request: HttpRequest):
+    controller = hp.ManagementApi(request.api_instance)
+    project_id = int(request.POST.get("ProjectId"))
+    username = request.POST.get("Username")
+    payload_data = {
+        "ProjectId": project_id,
+        "OverwriteExistingProjectRootDirectory": True,
+        "Username": username
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_initialize_cluster_script_directory_post(**payload),
+        "Cluster authentication credential has been initialized.",
+        "Cluster authentication credential initialization failed."
     )
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
@@ -235,6 +291,7 @@ def create_new_hpc_account(request: HttpRequest) -> HttpResponse:
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
 
+@login_required(login_url="/login/")
 def regenerate_ssh_key(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
@@ -255,6 +312,7 @@ def regenerate_ssh_key(request: HttpRequest) -> HttpResponse:
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
 
+@login_required(login_url="/login/")
 def delete_hpc_account(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))

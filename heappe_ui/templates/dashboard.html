@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container">
+
+    <!-- HEAppE Info Cards -->
+    <div class="row g-4 mb-4">
+
+      <div class="col-md-4">
+            <div class="card shadow-sm p-3 ">
+                <h5 class="card-title"><i class="bi bi-info-circle me-2"></i>HEAppE Info</h5>
+                <hr>
+                <p class="mb-1"><strong>Name:</strong> {{ heappe.name|default:"N/A" }}</p>
+                <p class="mb-1"><strong>Description:</strong> {{ heappe.description|default:"N/A" }}</p>
+                <p class="mb-0"><strong>Version:</strong> {{ heappe.version|default:"N/A" }}</p>
+            </div>
+        </div>
+
+
+      <div class="col-md-2">
+    <div class="card shadow-sm p-3 text-center">
+        <h5 class="card-title"><i class="bi bi-server me-2"></i>Total Clusters</h5>
+        <p class="display-4 fw-bold mb-3">{{ clusters|length }}</p>
+        <a href="{% url 'cluster_list' %}" class="btn btn-secondary btn-sm">Manage</a>
+    </div>
+</div>
+
+            <div class="col-md-2">
+    <div class="card shadow-sm p-3 text-center">
+        <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Queues</h5>
+        <p class="display-4 fw-bold mb-3">{{ queues|length|default:"0" }}</p>
+        <a href="{% url 'queues_view' %}" class="btn btn-secondary btn-sm">Manage</a>
+    </div>
+</div>
+
+
+    <div class="col-md-2">
+    <div class="card shadow-sm p-3 text-center">
+        <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Projects</h5>
+        <p class="display-4 fw-bold mb-3">{{ projects|length|default:"0" }}</p>
+        <a href="{% url 'project_list' %}" class="btn btn-secondary btn-sm">Manage</a>
+    </div>
+</div>
+
+
+
+
+<div class="col-md-4">
+    <div class="card shadow-sm p-3">
+        <h5 class="card-title d-flex align-items-center">
+            <i class="bi bi-bar-chart-line me-2"></i> Jobs Summary
+        </h5>
+        <div class="card-body p-0">
+<ul class="list-group list-group-flush">
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        Configuring
+        <span class="badge bg-secondary rounded-pill">{{ job_counts.Configuring }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        Submitted
+        <span class="badge bg-info rounded-pill">{{ job_counts.Submitted }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        Queued
+        <span class="badge bg-primary rounded-pill">{{ job_counts.Queued }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        Running
+        <span class="badge bg-warning rounded-pill">{{ job_counts.Running }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        Finished
+        <span class="badge bg-success rounded-pill">{{ job_counts.Finished }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        Failed
+        <span class="badge bg-danger rounded-pill">{{ job_counts.Failed }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        Canceled
+        <span class="badge bg-dark rounded-pill">{{ job_counts.Canceled }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        Waiting For Service Account
+        <span class="badge bg-secondary rounded-pill">{{ job_counts.WaitingForServiceAccount }}</span>
+    </li>
+    <li class="list-group-item d-flex justify-content-between align-items-center">
+        Deleted
+        <span class="badge bg-secondary rounded-pill">{{ job_counts.Deleted }}</span>
+    </li>
+</ul>
+        </div>
+    </div>
+</div>
+
+
+    </div>
+
+    <!-- Additional Statistics -->
+
+
+</div>
+
+{% endblock %}
