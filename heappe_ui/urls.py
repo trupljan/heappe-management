@@ -10,6 +10,8 @@ urlpatterns = [
     path('logout', views.logout_view, name='logout'),
     path('profile/', views.profile_view, name='profile_view'),
     path('dashboard/', views.dashboard_view, name='dashboard_view'),
+    path("logs/", views.logs_view, name="logs"),
+
     # Clusters
     path('clusters/', views.cluster_list, name='cluster_list'),
     path('clusters/<int:cluster_id>/', views.cluster_detail, name='cluster_detail'),

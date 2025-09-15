@@ -178,7 +178,7 @@ def profile_view(request):
     last_auth_ts = request.session.get("heappe_last_auth")
 
     if last_auth_ts:
-        last_auth = datetime.datetime.fromtimestamp(float(last_auth_ts))
+        last_auth = datetime.fromtimestamp(float(last_auth_ts))
     else:
         last_auth = None
 
@@ -236,3 +236,242 @@ def dashboard_view(request):
 
 
     return render(request, "dashboard.html", context)
+
+
+class DatabaseSettingsError(Exception):
+    pass
+
+from django.db import connections
+from django.shortcuts import render
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
+from collections import Counter
+from datetime import datetime
+import pymssql
+
+
+from django.shortcuts import render, redirect
+from .models import LogDatabaseCredentials
+
+from .models import LogDatabaseCredentials
+
+
+def save_log_credentials(heappe_host, heappe_login,
+                         log_db_host, log_db_port,
+                         log_db_user, log_db_password,
+                         log_db_database):
+    obj, created = LogDatabaseCredentials.objects.update_or_create(
+        heappe_host=heappe_host,
+        heappe_login=heappe_login,
+        defaults={
+            'log_db_host': log_db_host,
+            'log_db_port': log_db_port,
+            'log_db_user': log_db_user,
+            'log_db_password': log_db_password,
+            'log_db_database': log_db_database,
+        }
+    )
+    return obj, created
+
+
+def get_log_credentials(heappe_host, heappe_login):
+    try:
+        return LogDatabaseCredentials.objects.get(
+            heappe_host=heappe_host,
+            heappe_login=heappe_login
+        )
+    except LogDatabaseCredentials.DoesNotExist:
+        return None
+
+@login_required(login_url="/login/")
+def logs_view(request):
+    context = {}
+
+    # Handle database configuration form submission
+    if request.method == 'POST' and request.POST.get('config_submit'):
+        save_log_credentials(
+            heappe_host=request.session["heappe_host"],
+            heappe_login=request.session["heappe_username"],
+            log_db_host=request.POST.get('server'),
+            log_db_port=request.POST.get('port'),
+            log_db_user=request.POST.get('user'),
+            log_db_password=request.POST.get('password'),
+            log_db_database=request.POST.get('database'))
+
+
+    credentials = get_log_credentials(heappe_host = request.session["heappe_host"],
+    heappe_login = request.session["heappe_username"])
+    db_settings = {}
+    if credentials:
+        db_settings = {
+            'server': credentials.log_db_host,
+            'port': credentials.log_db_port,
+            'user': credentials.log_db_user,
+            'password': credentials.log_db_password,
+            'database': credentials.log_db_database,
+            'tds_version': '8.0',
+        }
+
+    if db_settings:
+        # Pass current database settings to template
+        context['db_server'] = db_settings['server']
+        context['db_port'] = db_settings['port']
+        context['db_user'] = db_settings['user']
+        context['db_password'] = db_settings['password']
+        context['db_database'] = db_settings['database']
+
+    # Initialize default context values to prevent template errors
+    context['levels'] = []
+    context['logs'] = []
+    context['summary_levels'] = Counter()
+    context['summary_classes'] = []
+    context['chart_dates'] = []
+    context['chart_errors'] = []
+    context['chart_warnings'] = []
+    context['chart_info'] = []
+    context['chart_debug'] = []
+    context['chart_critical'] = []
+    context['error_count'] = 0
+    context['warning_count'] = 0
+    context['info_count'] = 0
+    context['debug_count'] = 0
+    context['critical_count'] = 0
+
+    # Attempt database connection
+    try:
+        if db_settings:
+            required_fields = ['server', 'port', 'user', 'password', 'database']
+            missing_fields = [field for field in required_fields if db_settings[field] is None or db_settings[field] == '']
+            if missing_fields:
+                raise DatabaseSettingsError(f"Missing required database settings: {', '.join(missing_fields)}")
+        else:
+            raise DatabaseSettingsError(f"Please configure Log Database.")
+        conn = pymssql.connect(**db_settings)
+        cursor = conn.cursor(as_dict=True)
+        cursor.execute("SELECT * FROM LoggingLevelType")
+        rows = cursor.fetchall()
+        LoggingLevelType = {row['Id']: row['Name'] for row in rows}
+        context['levels'] = [{'Id': k, 'Name': v} for k, v in LoggingLevelType.items()]
+        cursor.close()
+
+        # Filtry z GET parametrů
+        date_from = request.GET.get('date_from')
+        if date_from is not None:
+            date_from = date_from.replace('T', ' ')
+        date_to = request.GET.get('date_to')
+        if date_to is not None:
+            date_to = date_to.replace('T', ' ')
+        level_filter = request.GET.get('level')
+        search = request.GET.get('search', '').lower()
+
+        # SQL dotaz s podmínkami
+        query = "SELECT * FROM Log WHERE 1=1"
+        params = []
+
+        if date_from:
+            query += " AND Date >= %s"
+            params.append(date_from)
+        if date_to:
+            query += " AND Date <= %s"
+            params.append(date_to)
+        if level_filter:
+            query += " AND LevelId = %s"
+            params.append(level_filter)
+        if search:
+            query += " AND (LOWER(Message) LIKE %s OR LOWER(Class) LIKE %s)"
+            params.extend([f"%{search}%", f"%{search}%"])
+
+        query += " ORDER BY Date DESC"
+
+        cursor = conn.cursor(as_dict=True)
+        cursor.execute(query, params)
+        logs = cursor.fetchall()
+        for log in logs:
+            log_date = log['Date']
+            if isinstance(log_date, str):
+                log['Date'] = datetime.strptime(log_date[:26], "%Y-%m-%d %H:%M:%S.%f")
+            log['LevelName'] = LoggingLevelType.get(log['LevelId'], 'Unknown')
+
+        cursor.close()
+        conn.close()
+
+        # Pagination
+        paginator = Paginator(logs, 10)  # Show 10 logs per page
+        page_number = request.GET.get('page')
+        try:
+            logs_page = paginator.page(page_number)
+        except PageNotAnInteger:
+            logs_page = paginator.page(1)  # Default to page 1 if page is not an integer
+        except EmptyPage:
+            logs_page = paginator.page(paginator.num_pages)  # Show last page if page is out of range
+
+        context['logs'] = logs_page  # Pass paginated logs to template
+
+        # Souhrny a grafy (calculated on full logs, not paginated)
+        level_counts = Counter([log['LevelName'] for log in logs])
+        context['summary_levels'] = level_counts
+        context['summary_classes'] = Counter([log['Class'] for log in logs]).most_common(10)
+        dates = sorted({log['Date'].date() for log in logs})
+        context['chart_dates'] = [d.strftime("%Y-%m-%d") for d in dates]
+
+        def counts_per_day(level=None):
+            return [
+                sum(1 for log in logs if (level is None or log['LevelName'] == level) and log['Date'].date() == d)
+                for d in dates
+            ]
+
+        context['chart_errors'] = counts_per_day('Error')
+        context['chart_warnings'] = counts_per_day('Warning')
+        context['chart_info'] = counts_per_day('Information')
+        context['chart_debug'] = counts_per_day('Debug')
+        context['chart_critical'] = counts_per_day('Critical')
+
+        context['error_count'] = level_counts.get('Error', 0)
+        context['warning_count'] = level_counts.get('Warning', 0)
+        context['info_count'] = level_counts.get('Information', 0)
+        context['debug_count'] = level_counts.get('Debug', 0)
+        context['critical_count'] = level_counts.get('Critical', 0)
+
+    except DatabaseSettingsError as e:
+        context['error'] = f"Database connection failed: {str(e)}"
+    except pymssql.Error as e:
+        context['error'] = f"Database connection failed: {str(e)}"
+
+    return render(request, "logs.html", context)
+    # Pagination
+    paginator = Paginator(logs, 10)  # Show 10 logs per page
+    page_number = request.GET.get('page')
+    try:
+        logs_page = paginator.page(page_number)
+    except PageNotAnInteger:
+        logs_page = paginator.page(1)  # Default to page 1 if page is not an integer
+    except EmptyPage:
+        logs_page = paginator.page(paginator.num_pages)  # Show last page if page is out of range
+
+    context['logs'] = logs_page  # Pass paginated logs to template
+
+    # Souhrny a grafy (calculated on full logs, not paginated)
+    level_counts = Counter([log['LevelName'] for log in logs])
+    context['summary_levels'] = level_counts
+    context['summary_classes'] = Counter([log['Class'] for log in logs]).most_common(10)
+    dates = sorted({log['Date'].date() for log in logs})
+    context['chart_dates'] = [d.strftime("%Y-%m-%d") for d in dates]
+
+    def counts_per_day(level=None):
+        return [
+            sum(1 for log in logs if (level is None or log['LevelName'] == level) and log['Date'].date() == d)
+            for d in dates
+        ]
+
+    context['chart_errors'] = counts_per_day('Error')
+    context['chart_warnings'] = counts_per_day('Warning')
+    context['chart_info'] = counts_per_day('Information')
+    context['chart_debug'] = counts_per_day('Debug')
+    context['chart_critical'] = counts_per_day('Critical')
+
+    context['error_count'] = level_counts.get('Error', 0)
+    context['warning_count'] = level_counts.get('Warning', 0)
+    context['info_count'] = level_counts.get('Information', 0)
+    context['debug_count'] = level_counts.get('Debug', 0)
+    context['critical_count'] = level_counts.get('Critical', 0)
+
+    return render(request, "logs.html", context)

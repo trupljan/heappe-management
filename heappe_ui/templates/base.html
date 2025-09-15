@@ -65,6 +65,7 @@
                             </a></li>
                         </ul>
                     </li>
+                    {% if False %}
                     <li class="nav-item dropdown">
                         <a class="nav-link nav-white dropdown-toggle" href="#" id="jobsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-play-circle me-1"></i> Jobs
@@ -101,11 +102,15 @@
                             </a></li>
                         </ul>
                     </li>
+                    {% endif %}
                     <li class="nav-item dropdown">
                         <a class="nav-link nav-white dropdown-toggle" href="#" id="monitoringDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-graph-up me-1"></i> Monitoring
                         </a>
+
+
                         <ul class="dropdown-menu" aria-labelledby="monitoringDropdown">
+                            {% if False %}
                             <li><a class="dropdown-item" href="#">
                                 <i class="bi bi-speedometer2 me-2"></i> System Status
                             </a></li>
@@ -115,7 +120,8 @@
                             <li><a class="dropdown-item" href="#">
                                 <i class="bi bi-exclamation-triangle me-2"></i> Alerts
                             </a></li>
-                            <li><a class="dropdown-item" href="#">
+                            {% endif %}
+                            <li><a class="dropdown-item" href="{% url 'logs' %}">
                                 <i class="bi bi-file-text me-2"></i> Logs
                             </a></li>
                         </ul>
@@ -126,12 +132,14 @@
                 <ul class="navbar-nav">
                     {% if user.is_authenticated %}
                         <!-- Quick actions -->
+                        {% if False %}
                         <li class="nav-item">
                             <a class="nav-link nav-white" href="#" title="Notifications">
                                 <i class="bi bi-bell"></i>
                                 <span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.6em;">3</span>
                             </a>
                         </li>
+                        {% endif %}
 
                         <!-- User dropdown -->
                         <li class="nav-item dropdown">
@@ -145,10 +153,12 @@
                                 <li><a class="dropdown-item" href="{% url 'profile_view' %}">
                                     <i class="bi bi-person me-2"></i> Profile
                                 </a></li>
+                                {% if False %}
                                 <li><a class="dropdown-item" href="#">
                                     <i class="bi bi-gear me-2"></i> Settings
                                 </a></li>
                                 <li><hr class="dropdown-divider"></li>
+                                    {% endif %}
                                 <li>
                                     <form method="post" action="{% url 'logout' %}" class="px-3 py-1">
                                         {% csrf_token %}

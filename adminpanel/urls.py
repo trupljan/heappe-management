@@ -21,6 +21,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', include('heappe_ui.urls')),  # <-- tady je důležité
+    path('', include('heappe_ui.urls')),
 ]
 
