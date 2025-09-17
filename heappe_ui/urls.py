@@ -42,6 +42,8 @@ urlpatterns = [
     path('projects/assign/', views.project_assign_to_cluster, name='project_assign_to_cluster'),
     path('projects/unassign/<int:project_id>', views.delete_assignment, name='delete_assignment'),
     path('projects/', views.project_list, name='project_list'),
+    path('submit-test-job/<int:command_template_id>', views.submit_job_view, name="submit_job_view"),
+    path('job-status/<int:job_id>', views.job_status_view, name="job_status_view"),
 
     # Command Templates
     path('command-templates/<int:project_id>/new/', views.command_template_create, name='command_template_create'),

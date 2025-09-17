@@ -280,6 +280,9 @@
                                     </td>
                                     <td>
                                         <a href="{% url 'command_template_detail' template.id %}" class="btn btn-sm btn-primary">Detail</a>
+                                        {% if template.project_id != 0  %}
+                                            <a href="{% url 'submit_job_view' template.id %}" class="btn btn-sm btn-secondary">Submit Test Job</a>
+                                        {% endif %}
                                         <a href="" class="btn btn-sm btn-danger">Delete</a>
                                     </td>
                                 </tr>
@@ -316,6 +319,7 @@
             <th scope="col">Key Type</th>
             <th scope="col">Public Key (OpenSSH)</th>
             <th scope="col">Public Key (PEM)</th>
+            <th scope="col">Is Initialized</th>
             <th scope="col">Actions</th>
           </tr>
         </thead>
@@ -341,7 +345,20 @@
         </button>
         <span id="pem_feedback" class="badge bg-success ms-2 d-none copy-badge">Copied!</span>
       </div>
-    </td>            <td>
+    </td>
+  <td>
+    {% if account.is_initialized %}
+      <span class="text-success">●</span>
+    {% else %}
+      <span class="text-danger">●</span>
+    {% endif %}
+  </td>
+
+
+
+
+
+              <td>
               <form method="post" style="display:inline;">
                   {% csrf_token %}
                   <input type="hidden" name="action" value="test_hpc_access">

@@ -3,9 +3,11 @@ import sys
 import time
 from django.contrib.auth.models import User
 
+from py4heappe.heappe_v6_0_0.core import AuthenticateUserPasswordModel, PasswordCredentialsExt
+
 # přidání knihovny py4heappe
 sys.path.insert(1, './py4heappe')
-import heappe_v5_1_0.core as hp
+import heappe_v6_0_0.core as hp
 
 
 class HeappeAuthBackend:

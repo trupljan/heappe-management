@@ -13,8 +13,8 @@ PROTOCOL_CHOICES = [
 SCHEDULER_CHOICES = [
     (1, "Local Simulator"),
     (2, "PBS Pro"),
-    (3, "Slurm"),
-    (4, "HyperQueue")
+    (4, "Slurm"),
+    (8, "HyperQueue")
 ]
 
 CONNECTION_PROTOCOL_CHOICES = [
@@ -64,18 +64,21 @@ def _handle_api_call(
     api_call: callable,
     success_message: str,
     error_message: str,
+    silent: bool=False,
     redirect_url: Optional[str] = None
 ) -> HttpResponse:
     """Handle API call with error handling and messaging."""
     try:
         result = api_call()
-        messages.success(request, success_message)
+        if silent is False:
+            messages.success(request, success_message)
         try:
             return result.json()
         except Exception as e:
             return result
     except Exception as e:
-        messages.error(request, f"{error_message}: {str(e)}")
+        if silent is False:
+            messages.error(request, f"{error_message}: {str(e)}")
         print(f"Error: {error_message}: {e}")
 
 

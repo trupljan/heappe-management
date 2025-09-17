@@ -68,6 +68,42 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
 
         for pa in project_accounts:
             pa['key_type_name'] = KEY_TYPE_CHOICES.get(pa.get('key_type'), 'Unknown')
+            try:
+                #result = test_cluster_authentication_credential_HPC_access_manual(request, project_id, pa['username'])
+                #if result is None:
+                #    pa['has_access']  = False
+                #else:
+                #    pa['has_access'] = True
+
+                controller = hp.ManagementApi(request.api_instance)
+                result = _handle_api_call(
+                    request,
+                    lambda: controller.heappe_management_cluster_account_status_get(ProjectId=project_id,
+                                                                                             Username=pa['username'],
+                                                                                             SessionCode=request.session_code),
+                    "Cluster account is initialized",
+                    "Cluster account is not initialized",
+                    silent=True
+                )
+                init_fail = 0
+                init_ok = 0
+                for status in result:
+                    if status.is_initialized:
+                        init_ok = init_ok + 1
+                    else:
+                        init_fail = init_fail + 1
+
+                if init_fail == 0 and init_ok > 0:
+                    pa['is_initialized'] = True
+                else:
+                    pa['is_initialized'] = False
+
+            except Exception as e:
+                print(e)
+
+
+
+
 
         response = controller.heappe_management_project_assignment_to_clusters_get(
             ProjectId=project_id, SessionCode=request.session_code
@@ -100,6 +136,146 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
         "project_accounts": project_accounts,
         "node_types": list(dict_ntypes.values()),
     })
+
+
+
+@login_required(login_url="/login/")
+def submit_job_view(request, command_template_id:int):
+    controller = hp.ManagementApi(request.api_instance)
+
+    all_clusters = [c.to_dict() for c in controller.heappe_management_clusters_get(SessionCode=request.session_code)]
+
+
+    command_template = controller.heappe_management_command_template_get(
+        Id=command_template_id, SessionCode=request.session_code
+    ).to_dict()
+
+
+    project = controller.heappe_management_project_get(
+        Id=command_template['project_id'], SessionCode=request.session_code
+    ).to_dict()
+
+    node_type = controller.heappe_management_cluster_node_type_get(
+        Id=command_template['cluster_node_type_id'], SessionCode=request.session_code
+    ).to_dict()
+
+    cluster = controller.heappe_management_cluster_get(
+        Id=node_type['cluster_id'], SessionCode=request.session_code
+    ).to_dict()
+
+    if request.method == "POST":
+        if request.POST.get("action") == "submit_job":
+            # Job-level data
+            job_name = request.POST.get("JobName")
+            project_id = request.POST.get("ProjectId")
+            cluster_id = request.POST.get("ClusterId")
+            notify_email = request.POST.get("NotificationEmail")
+            notify_start = request.POST.get("NotifyOnStart") == "true"
+            notify_finish = request.POST.get("NotifyOnFinish") == "true"
+            notify_abort = request.POST.get("NotifyOnAbort") == "true"
+
+            # Task-level data
+            task_name = request.POST.get("TaskName")
+            min_cores = int(request.POST.get("MinCores") or 1)
+            max_cores = int(request.POST.get("MaxCores") or 1)
+            walltime = int(request.POST.get("WalltimeLimit") or 600)
+            node_type_id = request.POST.get("ClusterNodeTypeId")
+            command_template_id = request.POST.get("CommandTemplateId")
+            is_exclusive = request.POST.get("IsExclusive") == "true"
+            is_rerunnable = request.POST.get("IsRerunnable") == "true"
+
+            # Extract TemplateParameters from POST data
+            template_parameters = []
+            for key, value in request.POST.items():
+                if key.startswith("TemplateParameters["):
+                    # Extract the identifier from the key (e.g., TemplateParameters[param1] -> param1)
+                    identifier = key[len("TemplateParameters["):-1]
+                    if value:  # Only include non-empty values
+                        template_parameters.append({
+                            "CommandParameterIdentifier": identifier,
+                            "ParameterValue": value
+                        })
+
+            # Build JSON payload
+            payload_data = {
+                "JobSpecification": {
+                    "Name": job_name,
+                    "ProjectId": int(project_id),
+                    "NotificationEmail": notify_email,
+                    "NotifyOnStart": notify_start,
+                    "NotifyOnFinish": notify_finish,
+                    "NotifyOnAbort": notify_abort,
+                    "ClusterId": int(cluster_id),
+                    "FileTransferMethodId": node_type['file_transfer_method_id'],
+                    "Tasks": [
+                        {
+                            "Name": task_name,
+                            "MinCores": min_cores,
+                            "MaxCores": max_cores,
+                            "WalltimeLimit": walltime,
+                            "StandardOutputFile": "stdout",
+                            "StandardErrorFile": "stderr",
+                            "ProgressFile": "stdprog",
+                            "LogFile": "log.txt",
+                            "ClusterNodeTypeId": int(node_type_id) if node_type_id else 0,
+                            "CommandTemplateId": int(command_template_id) if command_template_id else 0,
+                            "IsExclusive": is_exclusive,
+                            "IsRerunnable": is_rerunnable,
+                            "TemplateParameterValues": template_parameters
+                        }
+                    ],
+                    "ProjectId": project['id']
+                }
+            }
+
+            controller = hp.JobManagementApi(request.api_instance)
+            payload = _create_payload(request.session_code, payload_data)
+            result = _handle_api_call(
+                request,
+                lambda: controller.heappe_job_management_create_job_post(**payload),
+                "Job created successfully!",
+                "Job failed to create"
+            )
+            if result:
+                payload_data = {
+                      "CreatedJobInfoId": result['Id']
+                    }
+                payload = _create_payload(request.session_code, payload_data)
+                result = _handle_api_call(
+                    request,
+                    lambda: controller.heappe_job_management_submit_job_put(**payload),
+                    "Job submitted successfully!",
+                    "Job failed to submit"
+                )
+                if result:
+                    return redirect("job_status_view", job_id=result['Id'])
+
+    context = {
+        "project": project,
+        "cluster": cluster,
+        "node_type": node_type,
+        "command_template": command_template,
+    }
+    return render(request, "submit_test_job.html", context)
+
+
+@login_required(login_url="/login/")
+def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
+    controller = hp.JobManagementApi(request.api_instance)
+
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_job_management_current_info_for_job_get(SubmittedJobInfoId=job_id, SessionCode=request.session_code),
+        "OK",
+        "FAIL"
+    )
+
+    context = {
+        "job": result
+    }
+    return render(request, "job_status.html", context)
+
+
 
 @login_required(login_url="/login/")
 def project_create(request: HttpRequest) -> HttpResponse:
@@ -239,10 +415,25 @@ def delete_assignment(request: HttpRequest, project_id: int) -> HttpResponse:
     else:
         return redirect(f"{reverse('cluster_detail', kwargs={'cluster_id': cluster_id})}?tab=projects")
 
+def test_cluster_authentication_credential_HPC_access_manual(request: HttpRequest, project_id: int, username: str):
+    controller = hp.ManagementApi(request.api_instance)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_test_cluster_access_for_account_get(ProjectId=project_id,
+                                                                                 Username=username,
+                                                                                 SessionCode=request.session_code),
+        "Cluster authentication credential has access to HPC.",
+        "Cluster authentication credential does not have access to HPC.",
+        silent=True
+    )
+    return result
+
 @login_required(login_url="/login/")
 def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
+    username = request.POST.get("username")
+
     result = _handle_api_call(
         request,
         lambda: controller.heappe_management_test_cluster_access_for_account_get(ProjectId=project_id, Username=request.POST.get("username"), SessionCode=request.session_code),
