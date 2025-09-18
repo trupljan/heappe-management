@@ -31,6 +31,7 @@ class HeappeSessionMiddleware:
                     return self.get_response(request)
 
             configuration = hp.Configuration()
+            configuration.verify_ssl = False
             configuration.host = host
             request.api_instance = hp.ApiClient(configuration)
             request.session_code = session_code

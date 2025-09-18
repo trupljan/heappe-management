@@ -53,7 +53,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'heappe_ui.middleware.HeappeSessionMiddleware',
+    'heappe_ui.middleware.'
+    'HeappeSessionMiddleware',
 ]
 
 ROOT_URLCONF = 'adminpanel.urls'

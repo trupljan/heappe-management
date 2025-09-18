@@ -18,8 +18,10 @@ class HeappeAuthBackend:
     def authenticate(self, request, host=None, username=None, password=None, reauthenticate=False, **kwargs):
         configuration = hp.Configuration()
         configuration.host = host
+        configuration.verify_ssl = False
         self.api_instance = hp.ApiClient(configuration)
         self.session_code = None
+
 
         ulm = hp.UserAndLimitationManagementApi(self.api_instance)
         cred = {
