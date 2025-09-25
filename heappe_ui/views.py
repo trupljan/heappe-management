@@ -6,11 +6,13 @@ from heappe_ui.view.queue import *
 from heappe_ui.view.file_transfer_method import *
 from heappe_ui.view.project import *
 from heappe_ui.view.accounting import *
+from heappe_ui.view.deploy import *
 from heappe_ui.view.command_template import *
 from django.contrib.auth.decorators import login_required
-
-from django.shortcuts import render
+from django.http import HttpResponse
 import datetime
+
+from .DeployService import get_instance_settings
 
 
 @login_required(login_url="/login/")
@@ -20,6 +22,10 @@ def index(request: HttpRequest) -> HttpResponse:
 @login_required(login_url="/login/")
 def home(request: HttpRequest) -> HttpResponse:
     return dashboard_view(request)
+
+
+
+
 
 
 
@@ -186,8 +192,23 @@ def profile_view(request):
 
 
 @login_required(login_url="/login/")
+def chose_instance_view(request):
+    if request.method == "POST":
+        instance_name = request.POST.get("InstanceName")
+        if instance_name:
+            request.session["chosen_instance"] = instance_name
+            return redirect("dashboard_view")
+
+    instances = InstanceCredentials.objects.all()
+    return render(request, "chose_instances.html", {"instances": instances})
+
+
+@login_required(login_url="/login/")
 def dashboard_view(request):
     context = {}
+
+    if request.session.get("chosen_instance") is None:
+        return redirect("chose_instance_view")
     #get version information
     controller = hp.ManagementApi(request.api_instance)
     try:
@@ -250,37 +271,7 @@ import pymssql
 
 
 from django.shortcuts import render, redirect
-from .models import LogDatabaseCredentials
-
-from .models import LogDatabaseCredentials
-
-
-def save_log_credentials(heappe_host, heappe_login,
-                         log_db_host, log_db_port,
-                         log_db_user, log_db_password,
-                         log_db_database):
-    obj, created = LogDatabaseCredentials.objects.update_or_create(
-        heappe_host=heappe_host,
-        heappe_login=heappe_login,
-        defaults={
-            'log_db_host': log_db_host,
-            'log_db_port': log_db_port,
-            'log_db_user': log_db_user,
-            'log_db_password': log_db_password,
-            'log_db_database': log_db_database,
-        }
-    )
-    return obj, created
-
-
-def get_log_credentials(heappe_host, heappe_login):
-    try:
-        return LogDatabaseCredentials.objects.get(
-            heappe_host=heappe_host,
-            heappe_login=heappe_login
-        )
-    except LogDatabaseCredentials.DoesNotExist:
-        return None
+from .models import InstanceCredentials
 
 @login_required(login_url="/login/")
 def logs_view(request):
@@ -288,18 +279,20 @@ def logs_view(request):
 
     # Handle database configuration form submission
     if request.method == 'POST' and request.POST.get('config_submit'):
-        save_log_credentials(
-            heappe_host=request.session["heappe_host"],
-            heappe_login=request.session["heappe_username"],
-            log_db_host=request.POST.get('server'),
-            log_db_port=request.POST.get('port'),
-            log_db_user=request.POST.get('user'),
-            log_db_password=request.POST.get('password'),
-            log_db_database=request.POST.get('database'))
+        InstanceCredentials.objects.update_or_create(
+            instance_name=request.session['chosen_instance'],
+            defaults={
+                "heappe_host": request.session["heappe_host"],
+                "heappe_login": request.session["heappe_username"],
+                "log_db_host": request.POST.get('server'),
+                "log_db_port": request.POST.get('port'),
+                "log_db_user": request.POST.get('user'),
+                "log_db_password": request.POST.get('password'),
+                "log_db_database": request.POST.get('database'),
+            }
+        )
 
-
-    credentials = get_log_credentials(heappe_host = request.session["heappe_host"],
-    heappe_login = request.session["heappe_username"])
+    credentials = get_instance_settings(instance_name=request.session['chosen_instance'])
     db_settings = {}
     if credentials:
         db_settings = {

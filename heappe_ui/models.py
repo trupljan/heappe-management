@@ -1,8 +1,11 @@
 from django.db import models
 
-class LogDatabaseCredentials(models.Model):
+class InstanceCredentials(models.Model):
+    instance_name = models.CharField(max_length=255, unique=True)
     heappe_host = models.CharField(max_length=255)
     heappe_login = models.CharField(max_length=255)
+    heappe_password = models.CharField(max_length=255)
+    heappe_port = models.CharField(max_length=10)
 
     log_db_host = models.CharField(max_length=255)
     log_db_port = models.CharField(max_length=10)
@@ -18,7 +21,7 @@ class LogDatabaseCredentials(models.Model):
         verbose_name_plural = "Database Credentials"
         constraints = [
             models.UniqueConstraint(
-                fields=['heappe_host', 'heappe_login'],
-                name='unique_heappe_host_login'
+                fields=['instance_name'],
+                name='unique_instance_name'
             )
         ]

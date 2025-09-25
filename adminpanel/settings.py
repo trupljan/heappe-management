@@ -28,7 +28,7 @@ DEBUG = True
 ALLOWED_HOSTS = []
 
 AUTHENTICATION_BACKENDS = [
-    "heappe_ui.auth_backend.HeappeAuthBackend",
+    #"heappe_ui.auth_backend.HeappeAuthBackend",
     "django.contrib.auth.backends.ModelBackend",  # fallback
 ]
 

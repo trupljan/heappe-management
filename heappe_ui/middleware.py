@@ -12,30 +12,12 @@ class HeappeSessionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.user.is_authenticated:
-            session_code = request.session.get("heappe_session_code")
-            host = request.session.get("heappe_host")
-            username = request.session.get("heappe_username")
-            password = request.session.get("heappe_password")
-            last_auth = request.session.get("heappe_last_auth", 0)
+        auth_backend = HeappeAuthBackend()
+        user = auth_backend.re_authenticate(request)
+        request.session["heappe_last_auth"] = time.time()
+        request.api_instance = hp.ApiClient(HeappeAuthBackend.configuration)
+        session_code = request.session.get("heappe_session_code")
+        host = request.session.get("heappe_host")
+        request.session_code = session_code
 
-            if not session_code or (time.time() - last_auth) > 600:
-                auth_backend = HeappeAuthBackend()
-                user = auth_backend.re_authenticate(request)
-                if user:
-                    request.session["heappe_last_auth"] = time.time()
-                    session_code = request.session.get("heappe_session_code")
-                    host = request.session.get("heappe_host")
-                else:
-                    request.session.flush()
-                    return self.get_response(request)
-
-            configuration = hp.Configuration()
-            configuration.verify_ssl = False
-            configuration.host = host
-            request.api_instance = hp.ApiClient(configuration)
-            request.session_code = session_code
-        else:
-            request.api_instance = None
-            request.session_code = None
         return self.get_response(request)

@@ -9,6 +9,9 @@ charset-normalizer==3.4.3
 click==8.2.1
 cryptography==45.0.6
 Django==5.2.5
+docker==7.1.0
+gitdb==4.0.12
+GitPython==3.1.45
 idna==3.10
 lazy_imports==1.0.1
 markdown-it-py==4.0.0
@@ -31,10 +34,13 @@ python-dotenv==1.0.1
 pytz==2025.2
 requests==2.32.5
 rich==14.1.0
+salt==3007.8
 scp==0.15.0
 shellingham==1.5.4
 six==1.16.0
+smmap==5.0.2
 sqlparse==0.5.3
+tornado==6.5.2
 typer==0.13.1
 typing-inspection==0.4.1
 typing_extensions==4.15.0

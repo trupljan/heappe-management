@@ -1,0 +1,408 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-5">
+    <!-- Dynamic Action Feedback -->
+    <div id="action-feedback"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 9999; display: none; justify-content: center; align-items: center;">
+        <div class="spinner-border text-light" style="width: 3rem; height: 3rem;" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Deploy Button -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-3">Deploy Instance</h2>
+            <form id="deploy-form" class="mb-3">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="instance-name" class="form-label">Instance Name</label>
+                    <input type="text" id="instance-name" name="InstanceName" class="form-control" 
+                           value="{{ instance_name }}" placeholder="Enter instance name" required>
+                </div>
+                <input type="hidden" name="action" value="deploy">
+                <button type="submit" class="btn btn-primary">Deploy</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Global Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h3 class="mb-3">Global Actions</h3>
+            <form id="start-all-form" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                           value="{{ instance_name }}">
+                <input type="hidden" name="action" value="start_all">
+                <button type="submit" class="btn btn-sm btn-success">Start All</button>
+            </form>
+            <form id="restart-all-form" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                           value="{{ instance_name }}">
+                <input type="hidden" name="action" value="restart_all">
+                <button type="submit" class="btn btn-sm btn-info">Restart All</button>
+            </form>
+            <form id="down-all-form" class="d-inline">
+                {% csrf_token %}
+                <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                           value="{{ instance_name }}">
+                <input type="hidden" name="action" value="stop_all">
+                <button type="submit" class="btn btn-sm btn-danger">Stop All</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Containers List for Specific Project -->
+    <div class="row">
+        <div class="col-12">
+            <h2 class="mb-3">Containers in Project: {{ instance_name }}</h2>
+            <div id="containers-list">
+                {% if containers %}
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="containers-grid">
+                    {% for item in containers %}
+                    {% with container=item.container ports=item.ports %}
+                    <div class="col">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">{{ container.name }}</h5>
+                                <p class="card-text">
+                                    <strong>ID:</strong> {{ container.short_id }}<br>
+                                    <strong>Status:</strong> <span class="badge {% if container.status == 'running' %}bg-success{% elif container.status == 'exited' %}bg-danger{% else %}bg-warning{% endif %}" id="status-{{ container.id }}">{{ container.status|title }}</span><br>
+                                    <strong>Image:</strong> {{ container.image.tags|join:", " }}<br>
+                                    <strong>Service:</strong> {{ container.labels.com.docker.compose.service }}<br>
+                                    <strong>Ports:</strong> {% if ports %} {{ ports|join:", " }} {% else %} None {% endif %}<br>
+                                    <strong>Created:</strong> {{ container.attrs.Created|slice:":19" }}<br>
+                                    <strong>Last Started:</strong> <span id="started-at-{{ container.id }}">{{ container.attrs.State.StartedAt|default:'N/A'|slice:":19" }}</span>
+                                </p>
+                            </div>
+                            <div class="card-footer">
+                                <form id="start-form-{{ container.id }}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                           value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-primary" {% if container.status == 'running' %}disabled{% endif %}>Start</button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                           value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %}>Stop</button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                           value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %}>Restart</button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}">View Logs</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endwith %}
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-warning" role="alert">
+                    No containers found for project {{ instance_name }}.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div class="modal fade" id="logsModal" tabindex="-1" aria-labelledby="logsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content" style="max-height: 90vh;">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="logsModalLabel">Container Logs</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-2">
+                    <pre id="logs-content" class="mb-0" style="max-height: 70vh; overflow-y: auto; white-space: pre-wrap; font-size: 14px;"></pre>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% block extra_scripts %}
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Store CSRF token for dynamic forms
+    const csrfToken = $('input[name=csrfmiddlewaretoken]').val();
+    let logsInterval = null;
+
+    // Ensure loading overlay is hidden on page load
+    $('#loading-overlay').css('display', 'none');
+
+    // Function to show loading overlay and disable buttons
+    function showLoading() {
+        $('#loading-overlay').css({
+            'display': 'flex',
+            'justify-content': 'center',
+            'align-items': 'center'
+        });
+        //$('button').prop('disabled', true);
+    }
+
+    // Function to hide loading overlay and re-enable buttons based on state
+    function hideLoading() {
+        $('#loading-overlay').css('display', 'none');
+        // Re-enable buttons based on container status
+        $('form[id^="start-form-"]').each(function() {
+            const containerId = $(this).find('input[name=container_id]').val();
+            const status = $(`#status-${containerId}`).text().toLowerCase();
+            $(this).find('button').prop('disabled', status === 'running');
+        });
+        $('form[id^="stop-form-"]').each(function() {
+            const containerId = $(this).find('input[name=container_id]').val();
+            const status = $(`#status-${containerId}`).text().toLowerCase();
+            $(this).find('button').prop('disabled', status !== 'running');
+        });
+        $('form[id^="restart-form-"]').each(function() {
+            const containerId = $(this).find('input[name=container_id]').val();
+            const status = $(`#status-${containerId}`).text().toLowerCase();
+            $(this).find('button').prop('disabled', status !== 'running');
+        });
+        // Re-enable global action and deploy buttons
+        $('#deploy-form button, #start-all-form button, #restart-all-form button, #down-all-form button').prop('disabled', false);
+        // Re-enable View Logs buttons
+        $('button[data-container-id]').prop('disabled', false);
+    }
+
+    // Handle deploy form submission
+    $('#deploy-form').on('submit', function(e) {
+        e.preventDefault();
+        showLoading();
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: $(this).serialize(),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            success: function(response) {
+                $('#action-feedback').html(`
+                    <div class="alert alert-${response.status} alert-dismissible fade show" role="alert">
+                        ${response.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `);
+                // Update containers list
+                let containersHtml = '';
+                if (response.containers.length > 0) {
+                    containersHtml = '<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="containers-grid">';
+                    response.containers.forEach(c => {
+                        const statusClass = c.status === 'running' ? 'bg-success' : c.status === 'exited' ? 'bg-danger' : 'bg-warning';
+                        containersHtml += `
+                            <div class="col">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h5 class="card-title">${c.name}</h5>
+                                        <p class="card-text">
+                                            <strong>ID:</strong> ${c.id.substring(0, 12)}<br>
+                                            <strong>Status:</strong> <span class="badge ${statusClass}" id="status-${c.id}">${c.status.charAt(0).toUpperCase() + c.status.slice(1)}</span><br>
+                                            <strong>Image:</strong> ${c.image || 'N/A'}<br>
+                                            <strong>Service:</strong> ${c.service || 'N/A'}<br>
+                                            <strong>Ports:</strong> ${c.ports && c.ports.length > 0 ? c.ports.join(', ') : 'None'}<br>
+                                            <strong>Created:</strong> ${c.created.substring(0, 19)}<br>
+                                            <strong>Last Started:</strong> <span id="started-at-${c.id}">${c.started_at ? c.started_at.substring(0, 19) : 'N/A'}</span>
+                                        </p>
+                                    </div>
+                                    <div class="card-footer">
+                                        <form id="start-form-${c.id}" class="d-inline">
+                                            <input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken}">
+                                            <input type="hidden" name="container_id" value="${c.id}">
+                                            <input type="hidden" name="action" value="start">
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" ${c.status === 'running' ? 'disabled' : ''}>Start</button>
+                                        </form>
+                                        <form id="stop-form-${c.id}" class="d-inline">
+                                            <input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken}">
+                                            <input type="hidden" name="container_id" value="${c.id}">
+                                            <input type="hidden" name="action" value="stop">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning" ${c.status !== 'running' ? 'disabled' : ''}>Stop</button>
+                                        </form>
+                                        <form id="restart-form-${c.id}" class="d-inline">
+                                            <input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken}">
+                                            <input type="hidden" name="container_id" value="${c.id}">
+                                            <input type="hidden" name="action" value="restart">
+                                            <button type="submit" class="btn btn-sm btn-outline-info" ${c.status !== 'running' ? 'disabled' : ''}>Restart</button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="${c.id}">View Logs</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    containersHtml += '</div>';
+                } else {
+                    containersHtml = `
+                        <div class="alert alert-warning" role="alert">
+                            No containers found for project ${response.instance_name}.
+                        </div>
+                    `;
+                }
+                $('#containers-list').html(containersHtml);
+                hideLoading();
+            },
+            error: function(xhr, status, error) {
+                $('#action-feedback').html(`
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        Error: ${xhr.responseJSON?.message || error}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `);
+                hideLoading();
+            }
+        });
+    });
+
+    // Handle container and global action forms (start, stop, restart, start_all, restart_all, down_all)
+    $(document).on('submit', 'form[id^="start-form-"], form[id^="stop-form-"], form[id^="restart-form-"], #start-all-form, #restart-all-form, #down-all-form', function(e) {
+        e.preventDefault();
+        showLoading();
+        const form = $(this);
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: form.serialize(),
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            success: function(response) {
+                $('#action-feedback').html(`
+                    <div class="alert alert-${response.status} alert-dismissible fade show" role="alert">
+                        ${response.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `);
+                // Update containers list
+                let containersHtml = '';
+                if (response.containers.length > 0) {
+                    containersHtml = '<div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4" id="containers-grid">';
+                    response.containers.forEach(c => {
+                        const statusClass = c.status === 'running' ? 'bg-success' : c.status === 'exited' ? 'bg-danger' : 'bg-warning';
+                        containersHtml += `
+                            <div class="col">
+                                <div class="card h-100">
+                                    <div class="card-body">
+                                        <h5 class="card-title">${c.name}</h5>
+                                        <p class="card-text">
+                                            <strong>ID:</strong> ${c.id.substring(0, 12)}<br>
+                                            <strong>Status:</strong> <span class="badge ${statusClass}" id="status-${c.id}">${c.status.charAt(0).toUpperCase() + c.status.slice(1)}</span><br>
+                                            <strong>Image:</strong> ${c.image || 'N/A'}<br>
+                                            <strong>Service:</strong> ${c.service || 'N/A'}<br>
+                                            <strong>Ports:</strong> ${c.ports && c.ports.length > 0 ? c.ports.join(', ') : 'None'}<br>
+                                            <strong>Created:</strong> ${c.created.substring(0, 19)}<br>
+                                            <strong>Last Started:</strong> <span id="started-at-${c.id}">${c.started_at ? c.started_at.substring(0, 19) : 'N/A'}</span>
+                                        </p>
+                                    </div>
+                                    <div class="card-footer">
+                                        <form id="start-form-${c.id}" class="d-inline">
+                                            <input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken}">
+                                            <input type="hidden" name="container_id" value="${c.id}">
+                                            <input type="hidden" name="action" value="start">
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" ${c.status === 'running' ? 'disabled' : ''}>Start</button>
+                                        </form>
+                                        <form id="stop-form-${c.id}" class="d-inline">
+                                            <input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken}">
+                                            <input type="hidden" name="container_id" value="${c.id}">
+                                            <input type="hidden" name="action" value="stop">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning" ${c.status !== 'running' ? 'disabled' : ''}>Stop</button>
+                                        </form>
+                                        <form id="restart-form-${c.id}" class="d-inline">
+                                            <input type="hidden" name="csrfmiddlewaretoken" value="${csrfToken}">
+                                            <input type="hidden" name="container_id" value="${c.id}">
+                                            <input type="hidden" name="action" value="restart">
+                                            <button type="submit" class="btn btn-sm btn-outline-info" ${c.status !== 'running' ? 'disabled' : ''}>Restart</button>
+                                        </form>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="${c.id}">View Logs</button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    containersHtml += '</div>';
+                } else {
+                    containersHtml = `
+                        <div class="alert alert-warning" role="alert">
+                            No containers found for project ${response.instance_name}.
+                        </div>
+                    `;
+                }
+                $('#containers-list').html(containersHtml);
+                hideLoading();
+            },
+            error: function(xhr, status, error) {
+                $('#action-feedback').html(`
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        Error: ${xhr.responseJSON?.message || error}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `);
+                hideLoading();
+            }
+        });
+    });
+
+    // Handle logs button click
+    $(document).on('click', '[data-container-id]', function() {
+        const containerId = $(this).data('container-id');
+        $('#logsModalLabel').text(`Logs for Container ${containerId.substring(0, 12)}`);
+        $('#logs-content').text('Loading logs...');
+        showLoading();
+        // Function to fetch logs and scroll to bottom
+        function fetchLogs() {
+            $.ajax({
+                url: '/logs/' + containerId + '/',
+                type: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                success: function(response) {
+                    if (response.status === 'success') {
+                        $('#logs-content').text(response.logs || 'No logs available.');
+                        // Scroll to bottom of logs
+                        const logsContent = document.getElementById('logs-content');
+                        logsContent.scrollTop = logsContent.scrollHeight;
+                    } else {
+                        $('#logs-content').text(`Error: ${response.message}`);
+                    }
+                    hideLoading();
+                },
+                error: function(xhr, status, error) {
+                    $('#logs-content').text(`Error fetching logs: ${xhr.responseJSON?.message || error}`);
+                    hideLoading();
+                    // Stop polling on error
+                    if (logsInterval) {
+                        clearInterval(logsInterval);
+                        logsInterval = null;
+                    }
+                }
+            });
+        }
+        // Start polling logs every 2 seconds
+        fetchLogs();
+        logsInterval = setInterval(fetchLogs, 2000);
+        // Stop polling when modal is closed
+        $('#logsModal').one('hidden.bs.modal', function() {
+            if (logsInterval) {
+                clearInterval(logsInterval);
+                logsInterval = null;
+            }
+            hideLoading();
+        });
+    });
+});
+</script>
+{% endblock %}
+{% endblock %}

@@ -3,6 +3,8 @@ import sys
 import time
 from django.contrib.auth.models import User
 
+from heappe_ui import DeployService
+from heappe_ui.DeployService import get_instance_settings
 from py4heappe.heappe_v6_0_0.core import AuthenticateUserPasswordModel, PasswordCredentialsExt
 
 # přidání knihovny py4heappe
@@ -14,12 +16,12 @@ class HeappeAuthBackend:
     """
     Django authentication backend pro ověření uživatele přes HEAppE API.
     """
-
+    configuration = hp.Configuration()
     def authenticate(self, request, host=None, username=None, password=None, reauthenticate=False, **kwargs):
-        configuration = hp.Configuration()
-        configuration.host = host
-        configuration.verify_ssl = False
-        self.api_instance = hp.ApiClient(configuration)
+
+        self.configuration.host = 'http://' + host if not host.startswith('http') else host
+        self.configuration.verify_ssl = True
+        self.api_instance = hp.ApiClient(self.configuration)
         self.session_code = None
 
 
@@ -45,7 +47,8 @@ class HeappeAuthBackend:
 
         if reauthenticate:
             try:
-                user = User.objects.get(username=username)
+                #user = User.objects.get(username=username)
+                print(f"[auth_backend] Reauthenticated existing user {username}.")
             except User.DoesNotExist:
                 print(f"[auth_backend] User {username} not found during reauth.")
                 return None
@@ -63,7 +66,7 @@ class HeappeAuthBackend:
             request.session["heappe_password"] = password
             print(f"[auth_backend] Session updated with host: {host}")
 
-        return user
+        return
 
     def get_user(self, user_id):
         try:
@@ -72,13 +75,22 @@ class HeappeAuthBackend:
             return None
 
     def re_authenticate(self, request):
-        host = request.POST.get('host') or request.GET.get('host') if request else None  # Podpora override
+        if request.session.get("chosen_instance") is None:
+            print("[auth_backend] No chosen_instance in session for reauth.")
+            return None
+        chosen_instance_name = request.session["chosen_instance"]
+
+        settings = get_instance_settings(instance_name=chosen_instance_name)
+        if settings is None:
+            return None
+        host = settings.heappe_host
         if not host:
-            host = request.session.get("heappe_host")
-        username = request.session.get("heappe_username")
-        password = request.session.get("heappe_password")
+            host = settings.heappe_host
+        username = settings.heappe_login
+        password = settings.heappe_password
+        port = settings.heappe_port
         if not all([host, username, password]):
             print("[auth_backend] Missing host/username/password in session for reauth.")
             return None
-        user = self.authenticate(request, host=host, username=username, password=password, reauthenticate=True)
+        user = self.authenticate(request, host=f'{host}:{port}', username=username, password=password, reauthenticate=True)
         return user
