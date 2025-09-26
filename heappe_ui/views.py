@@ -197,11 +197,16 @@ def chose_instance_view(request):
         instance_name = request.POST.get("InstanceName")
         if instance_name:
             request.session["chosen_instance"] = instance_name
+            request.session["force_reauth"] = True
             return redirect("dashboard_view")
 
     instances = InstanceCredentials.objects.all()
     return render(request, "chose_instances.html", {"instances": instances})
 
+
+from django.core.paginator import Paginator
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
 
 @login_required(login_url="/login/")
 def dashboard_view(request):
@@ -209,54 +214,81 @@ def dashboard_view(request):
 
     if request.session.get("chosen_instance") is None:
         return redirect("chose_instance_view")
-    #get version information
+
+    # Initialize controller
     controller = hp.ManagementApi(request.api_instance)
+    jr_controller = hp.JobReportingApi(request.api_instance)
+
+    # Get version information
     try:
         result = controller.heappe_management_version_information_get(SessionCode=request.session_code)
         context["heappe"] = result
     except Exception as e:
         print(f"Error fetching version information: {e}")
 
-    #get cluster information
+    # Get cluster information
     try:
         clusters = controller.heappe_management_clusters_get(SessionCode=request.session_code)
         context["clusters"] = clusters
     except Exception as e:
         print(f"Error fetching clusters: {e}")
 
-    #get project information
+    # Get project information
     try:
         projects = controller.heappe_management_projects_get(SessionCode=request.session_code)
         context["projects"] = projects
     except Exception as e:
         print(f"Error fetching projects: {e}")
 
+    # Get queue information
     try:
-        queues = [c.to_dict() for c in
-                  controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
+        queues = [c.to_dict() for c in controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
         context['queues'] = queues
     except Exception as e:
-        print(f"Error fetching projects: {e}")
+        print(f"Error fetching queues: {e}")
 
-    # get job stats JobsStateAgregationReport
+    # Get job stats
     try:
-        jrController = hp.JobReportingApi(request.api_instance)
-        job_stats = jrController.heappe_job_reporting_jobs_state_agregation_report_get(SessionCode=request.session_code)
+        job_stats = jr_controller.heappe_job_reporting_jobs_state_agregation_report_get(SessionCode=request.session_code)
         all_states = [
             'Configuring', 'Submitted', 'Queued', 'Running', 'Finished',
             'Failed', 'Canceled', 'WaitingForServiceAccount', 'Deleted'
         ]
-
-        # převedeme job_stats na dict {state_name: count}
         job_counts = {s: 0 for s in all_states}
         for js in job_stats:
             job_counts[js.job_state_name] = js.count
         context["job_counts"] = job_counts
+        context["total_jobs"] = sum(job_counts.values())
     except Exception as e:
         print(f"Error fetching job stats: {e}")
 
+    # Get detailed job report
+    try:
+        # Získat job_details z API
+        job_details_raw = jr_controller.heappe_job_reporting_jobs_detailed_report_get(SessionCode=request.session_code)
+
+        # Rozbalit všechny job_itemy do jednoho seznamu
+        all_jobs = []
+        for job in job_details_raw:
+            for cluster in job.clusters:
+                for node_type in cluster.cluster_node_types:
+                    all_jobs.extend(node_type.jobs)
+        all_jobs.sort(key=lambda x: x.id or 0, reverse=True)
+
+
+
+        # Paginator
+        paginator = Paginator(all_jobs, 6)  # 5 jobs per page
+        page_number = request.GET.get('page', 1)
+        page_obj = paginator.get_page(page_number)
+
+        context["job_details"] = page_obj.object_list  # teď obsahuje jen job_itemy, které se zobrazí
+        context["page_obj"] = page_obj
+    except Exception as e:
+        print(f"Error fetching job details: {e}")
 
     return render(request, "dashboard.html", context)
+
 
 
 class DatabaseSettingsError(Exception):

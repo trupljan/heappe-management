@@ -22,6 +22,7 @@ class HEAppEConfig:
     """Configuration for HEAppE deployment."""
     base_path: str = "/opt/heappe/"
     repo_url: str = "https://github.com/It4innovations/HEAppE.git"
+    repo_branch: str = "master"
     target_dir: str = "heappe-core"
     default_version: str = "v6.0.0"
     default_ip: str = "127.0.0.1"
@@ -95,7 +96,7 @@ class HEAppEDeployService:
         try:
             os.makedirs(clone_path, exist_ok=True)
             subprocess.run(
-                ["git", "clone", self.config.repo_url, clone_path],
+                ["git", "clone", "--branch", self.config.repo_branch, self.config.repo_url, clone_path],
                 check=True,
                 capture_output=True,
                 text=True

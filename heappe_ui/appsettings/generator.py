@@ -64,7 +64,8 @@ def generate_appsettings_v6_0_0(
                 "FileTransferKeyRemovalCheck": 10800
             },
             "BusinessLogicSettings": {
-                "SharedAccountsPoolMode": False,
+                "SharedAccountsPoolMode": True,
+                "AutomaticClusterAccountInitialization": True,
                 "GeneratedFileTransferKeyLimitPerJob": 5,
                 "ValidityOfTemporaryTransferKeysInHours": 24,
                 "SessionExpirationInSeconds": 900,

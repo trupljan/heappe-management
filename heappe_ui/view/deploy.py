@@ -15,19 +15,34 @@ def get_free_port_safe():
     port = s.getsockname()[1]
     return port, s
 
-def execute_docker_compose(command, compose_dir):
-    """Execute a Docker Compose command and return the result."""
+import subprocess
+
+def execute_docker_compose(command, compose_dir, timeout=300):
+    """Execute a Docker Compose command safely under Gunicorn."""
     try:
         result = subprocess.run(
             command,
             cwd=compose_dir,
             check=False,
             capture_output=True,
-            text=True
+            text=True,
+            timeout=timeout  # ukončí proces po x sekundách
         )
         return result
+    except subprocess.TimeoutExpired as e:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=1,
+            stdout=e.stdout,
+            stderr=f"Command timed out after {timeout} seconds."
+        )
     except Exception as e:
-        return subprocess.CompletedProcess(args=command, returncode=1, stderr=str(e))
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=1,
+            stderr=str(e)
+        )
+
 
 def get_container_details(container):
     """Extract detailed information from a Docker container."""
@@ -68,6 +83,19 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             deployed_ip='localhost'
         )
 
+        build_command = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "-p", instance_name,
+            "build",  "--no-cache"
+        ]
+        build_result = execute_docker_compose(build_command, compose_dir)
+        print(f"Docker Compose build result: {build_result.stdout}, {build_result.stderr}")
         up_command = [
             "docker", "compose",
             "--profile", "db",
@@ -80,6 +108,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "up", "-d"
         ]
         up_result = execute_docker_compose(up_command, compose_dir)
+        print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
 
         # Initialize the database with retries
         run_with_retries(instance_name, ports)
@@ -100,6 +129,9 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             return restart_result, "Deployment completed successfully.", 'success' if restart_result.returncode == 0 else 'danger'
         return up_result, f"Deployment failed: {up_result.stderr}", 'danger'
 
+    except Exception as e:
+        print(f"Deployment error: {str(e)}")
+        return None, f"Deployment error: {str(e)}", 'danger'
     finally:
         for s in [s1, s2, s3, s4]:
             if 's' in locals(): s.close()
@@ -331,13 +363,29 @@ def run_with_retries(instance_name, ports):
         print("Max attempts reached. Database initialization failed.")
         raise Exception("Failed to initialize database after maximum retries.")
 
+def get_remote_branches(repo_url: str) -> list[str]:
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", "--heads", repo_url],
+            capture_output=True, text=True, check=True
+        )
+        branches = []
+        for line in result.stdout.splitlines():
+            if "refs/heads/" in line:
+                branches.append(line.split("refs/heads/")[1])
+        return branches
+    except subprocess.CalledProcessError:
+        return []
 
 @login_required(login_url="/login/")
 def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse:
     base_path = "/opt/heappe-deployment/"
-    repo_url = "https://github.com/It4innovations/HEAppE.git"
+    #repo_url = "https://github.com/It4innovations/HEAppE.git"
+    repo_url = "https://code.it4i.cz/ADAS-Private/HEAppE/heappe-core.git"
+    repo_branch = "develop"
     version = "v6.0.0"
     ip = "localhost"
+    branches = get_remote_branches(repo_url)
 
     ports = {}
     action_message = None
@@ -349,6 +397,8 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
         if request.method == 'POST':
             action = request.POST.get('action')
             instance_name = request.POST.get('InstanceName', 'heappe-instance')
+            repo_url = request.POST.get('Repository',"https://github.com/It4innovations/HEAppE.git")
+            repo_branch = request.POST.get('RepositoryBranch',"master")
             compose_dir = os.path.join(base_path, instance_name, "heappe-core")
 
             if action == 'deploy':
@@ -363,7 +413,7 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
                     "local_port": local_port
                 }
                 result, action_message, action_status = handle_deployment_action(
-                    HEAppEConfig(base_path=base_path, repo_url=repo_url, default_version=version, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
+                    HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=version, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
                     instance_name, ports, s1, s2, s3, s4
                 )
 
@@ -406,6 +456,9 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
         "ports": ports,
         "instance_name": instance_name,
         "action_message": action_message,
-        "action_status": action_status
+        "action_status": action_status,
+        "repo_url": repo_url,
+        "repo_branch": branches[0] if branches else "main",
+        "branches": branches,
     }
     return render(request, "deploy.html", context)

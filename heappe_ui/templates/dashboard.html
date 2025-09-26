@@ -1,14 +1,13 @@
 {% extends "base.html" %}
 
 {% block content %}
-
 <div class="container">
 
     <!-- HEAppE Info Cards -->
     <div class="row g-4 mb-4">
 
-      <div class="col-md-4">
-            <div class="card shadow-sm p-3 ">
+        <div class="col-md-4">
+            <div class="card shadow-sm p-3">
                 <h5 class="card-title"><i class="bi bi-info-circle me-2"></i>HEAppE Info</h5>
                 <hr>
                 <p class="mb-1"><strong>Name:</strong> {{ heappe.name|default:"N/A" }}</p>
@@ -17,89 +16,176 @@
             </div>
         </div>
 
+        <div class="col-md-2">
+            <div class="card shadow-sm p-3 text-center">
+                <h5 class="card-title"><i class="bi bi-server me-2"></i>Total Clusters</h5>
+                <p class="display-4 fw-bold mb-3">{{ clusters|length }}</p>
+                <a href="{% url 'cluster_list' %}" class="btn btn-secondary btn-sm">Manage</a>
+            </div>
+        </div>
 
-      <div class="col-md-2">
-    <div class="card shadow-sm p-3 text-center">
-        <h5 class="card-title"><i class="bi bi-server me-2"></i>Total Clusters</h5>
-        <p class="display-4 fw-bold mb-3">{{ clusters|length }}</p>
-        <a href="{% url 'cluster_list' %}" class="btn btn-secondary btn-sm">Manage</a>
-    </div>
-</div>
+        <div class="col-md-2">
+            <div class="card shadow-sm p-3 text-center">
+                <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Queues</h5>
+                <p class="display-4 fw-bold mb-3">{{ queues|length|default:"0" }}</p>
+                <a href="{% url 'queues_view' %}" class="btn btn-secondary btn-sm">Manage</a>
+            </div>
+        </div>
 
-            <div class="col-md-2">
-    <div class="card shadow-sm p-3 text-center">
-        <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Queues</h5>
-        <p class="display-4 fw-bold mb-3">{{ queues|length|default:"0" }}</p>
-        <a href="{% url 'queues_view' %}" class="btn btn-secondary btn-sm">Manage</a>
-    </div>
-</div>
+        <div class="col-md-2">
+            <div class="card shadow-sm p-3 text-center">
+                <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Projects</h5>
+                <p class="display-4 fw-bold mb-3">{{ projects|length|default:"0" }}</p>
+                <a href="{% url 'project_list' %}" class="btn btn-secondary btn-sm">Manage</a>
+            </div>
+        </div>
 
+        <div class="col-md-2">
+            <div class="card shadow-sm p-3 text-center">
+                <h5 class="card-title"><i class="bi bi-journal-text me-2"></i>Total Jobs</h5>
+                <p class="display-4 fw-bold mb-3">{{ total_jobs|default:"0" }}</p>
+                <button href="" class="btn btn-secondary btn-sm" disabled>Manage</button>
+            </div>
+        </div>
 
-    <div class="col-md-2">
-    <div class="card shadow-sm p-3 text-center">
-        <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Projects</h5>
-        <p class="display-4 fw-bold mb-3">{{ projects|length|default:"0" }}</p>
-        <a href="{% url 'project_list' %}" class="btn btn-secondary btn-sm">Manage</a>
-    </div>
-</div>
+<div class="col-md-4"> <div class="card shadow-sm p-3"> <h5 class="card-title d-flex align-items-center"> <i class="bi bi-bar-chart-line me-2"></i> Jobs Summary </h5> <div class="card-body p-0"> <ul class="list-group list-group-flush"> <li class="list-group-item d-flex justify-content-between align-items-center"> Configuring <span class="badge rounded-pill" style="background-color: #6c757d; color: white;">{{ job_counts.Configuring }}</span> </li> <li class="list-group-item d-flex justify-content-between align-items-center"> Submitted <span class="badge rounded-pill" style="background-color: #0dcaf0; color: white;">{{ job_counts.Submitted }}</span> </li> <li class="list-group-item d-flex justify-content-between align-items-center"> Queued <span class="badge rounded-pill" style="background-color: #0d6efd; color: white;">{{ job_counts.Queued }}</span> </li> <li class="list-group-item d-flex justify-content-between align-items-center"> Running <span class="badge rounded-pill" style="background-color: #ffc107; color: black;">{{ job_counts.Running }}</span> </li> <li class="list-group-item d-flex justify-content-between align-items-center"> Finished <span class="badge rounded-pill" style="background-color: #198754; color: white;">{{ job_counts.Finished }}</span> </li> <li class="list-group-item d-flex justify-content-between align-items-center"> Failed <span class="badge rounded-pill" style="background-color: #dc3545; color: white;">{{ job_counts.Failed }}</span> </li> <li class="list-group-item d-flex justify-content-between align-items-center"> Canceled <span class="badge rounded-pill" style="background-color: #343a40; color: white;">{{ job_counts.Canceled }}</span> </li> <li class="list-group-item d-flex justify-content-between align-items-center"> Waiting For Service Account <span class="badge rounded-pill" style="background-color: #6c757d; color: white;">{{ job_counts.WaitingForServiceAccount }}</span> </li> <li class="list-group-item d-flex justify-content-between align-items-center"> Deleted <span class="badge rounded-pill" style="background-color: #6c757d; color: white;">{{ job_counts.Deleted }}</span> </li> </ul> </div> </div> </div>
 
+        <!-- Job List with Pagination and Popup -->
+        <div class="col-md-8">
+            <div class="card shadow-sm p-3">
+                <h5 class="card-title d-flex align-items-center">
+                    <i class="bi bi-list-task me-2"></i> Submitted Jobs
+                </h5>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        {% for job_item in job_details %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                {{ job_item.name }} (ID: {{ job_item.id }})
+                                {% if job_item.state == 1 %}
+                                    <span class="badge rounded-pill bg-secondary text-white">Configuring</span>
+                                {% elif job_item.state == 2 %}
+                                    <span class="badge rounded-pill bg-info text-white">Submitted</span>
+                                {% elif job_item.state == 4 %}
+                                    <span class="badge rounded-pill bg-primary text-white">Queued</span>
+                                {% elif job_item.state == 8 %}
+                                    <span class="badge rounded-pill bg-warning text-dark">Running</span>
+                                {% elif job_item.state == 16 %}
+                                    <span class="badge rounded-pill bg-success text-white">Finished</span>
+                                {% elif job_item.state == 32 %}
+                                    <span class="badge rounded-pill bg-danger text-white">Failed</span>
+                                {% elif job_item.state == 64 %}
+                                    <span class="badge rounded-pill bg-dark text-white">Canceled</span>
+                                {% elif job_item.state == 128 %}
+                                    <span class="badge rounded-pill bg-secondary text-white">Waiting For Service Account</span>
+                                {% elif job_item.state == 256 %}
+                                    <span class="badge rounded-pill bg-secondary text-white">Deleted</span>
+                                {% endif %}
+                                <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}">
+                                    Details
+                                </button>
+                            </li>
 
+                            <!-- Modal -->
+<div class="modal fade" id="jobModal{{ job_item.id }}" tabindex="-1" aria-labelledby="jobModalLabel{{ job_item.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-primary shadow">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="jobModalLabel{{ job_item.id }}">
+                    Job: {{ job_item.name }} (ID: {{ job_item.id }})
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <p><strong>State:</strong>
+                            <span class="badge
+                                {% if job_item.state == 1 %}bg-secondary
+                                {% elif job_item.state == 2 %}bg-info text-white
+                                {% elif job_item.state == 4 %}bg-primary text-white
+                                {% elif job_item.state == 8 %}bg-warning text-dark
+                                {% elif job_item.state == 16 %}bg-success
+                                {% elif job_item.state == 32 %}bg-danger
+                                {% elif job_item.state == 64 %}bg-dark
+                                {% else %}bg-secondary{% endif %}">
+                                {% if job_item.state == 1 %}Configuring
+                                {% elif job_item.state == 2 %}Submitted
+                                {% elif job_item.state == 4 %}Queued
+                                {% elif job_item.state == 8 %}Running
+                                {% elif job_item.state == 16 %}Finished
+                                {% elif job_item.state == 32 %}Failed
+                                {% elif job_item.state == 64 %}Canceled
+                                {% elif job_item.state == 128 %}Waiting For Service Account
+                                {% elif job_item.state == 256 %}Deleted
+                                {% endif %}
+                            </span>
+                        </p>
+                        <p><strong>Submitter:</strong> {{ job_item.submitter|default:"N/A" }}</p>
+                        <p><strong>Creation Time:</strong> {{ job_item.creation_time|default:"N/A" }}</p>
+                        <p><strong>Submit Time:</strong> {{ job_item.submit_time|default:"N/A" }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Start Time:</strong> {{ job_item.start_time|default:"N/A" }}</p>
+                        <p><strong>End Time:</strong> {{ job_item.end_time|default:"N/A" }}</p>
+                        <p><strong>Total Tasks:</strong> {{ job_item.tasks|length }}</p>
+                    </div>
+                </div>
 
-
-<div class="col-md-4">
-    <div class="card shadow-sm p-3">
-        <h5 class="card-title d-flex align-items-center">
-            <i class="bi bi-bar-chart-line me-2"></i> Jobs Summary
-        </h5>
-        <div class="card-body p-0">
-<ul class="list-group list-group-flush">
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-        Configuring
-        <span class="badge bg-secondary rounded-pill">{{ job_counts.Configuring }}</span>
-    </li>
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-        Submitted
-        <span class="badge bg-info rounded-pill">{{ job_counts.Submitted }}</span>
-    </li>
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-        Queued
-        <span class="badge bg-primary rounded-pill">{{ job_counts.Queued }}</span>
-    </li>
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-        Running
-        <span class="badge bg-warning rounded-pill">{{ job_counts.Running }}</span>
-    </li>
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-        Finished
-        <span class="badge bg-success rounded-pill">{{ job_counts.Finished }}</span>
-    </li>
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-        Failed
-        <span class="badge bg-danger rounded-pill">{{ job_counts.Failed }}</span>
-    </li>
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-        Canceled
-        <span class="badge bg-dark rounded-pill">{{ job_counts.Canceled }}</span>
-    </li>
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-        Waiting For Service Account
-        <span class="badge bg-secondary rounded-pill">{{ job_counts.WaitingForServiceAccount }}</span>
-    </li>
-    <li class="list-group-item d-flex justify-content-between align-items-center">
-        Deleted
-        <span class="badge bg-secondary rounded-pill">{{ job_counts.Deleted }}</span>
-    </li>
-</ul>
+                <hr>
+                <h6 class="text-primary">Tasks</h6>
+                <div class="list-group">
+                    {% for task in job_item.tasks %}
+                        <div class="list-group-item list-group-item-action mb-2 shadow-sm rounded">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <strong>{{ task.name }}</strong> (ID: {{ task.id }})
+                                <span class="badge
+                                    {% if task.state == 1 %}bg-secondary
+                                    {% elif task.state == 2 %}bg-info text-white
+                                    {% elif task.state == 4 %}bg-primary text-white
+                                    {% elif task.state == 8 %}bg-warning text-dark
+                                    {% elif task.state == 16 %}bg-success
+                                    {% elif task.state == 32 %}bg-danger
+                                    {% elif task.state == 64 %}bg-dark
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ task.state }}
+                                </span>
+                            </div>
+                            <small>
+                                Start: {{ task.start_time|default:"N/A" }} |
+                                End: {{ task.end_time|default:"N/A" }} |
+                                Usage: {{ task.usage|default:"N/A" }}
+                            </small>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
 
+                        {% empty %}
+                            <li class="list-group-item">No jobs available.</li>
+                        {% endfor %}
+                    </ul>
+
+                    <!-- Numeric Pagination -->
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination justify-content-center mt-3">
+                            {% for num in page_obj.paginator.page_range %}
+                                <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                                    <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
 
     </div>
 
-    <!-- Additional Statistics -->
-
-
 </div>
-
 {% endblock %}

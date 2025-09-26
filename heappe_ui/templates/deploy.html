@@ -12,21 +12,38 @@
     </div>
 
     <!-- Deploy Button -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <h2 class="mb-3">Deploy Instance</h2>
-            <form id="deploy-form" class="mb-3">
-                {% csrf_token %}
-                <div class="mb-3">
-                    <label for="instance-name" class="form-label">Instance Name</label>
-                    <input type="text" id="instance-name" name="InstanceName" class="form-control" 
-                           value="{{ instance_name }}" placeholder="Enter instance name" required>
-                </div>
-                <input type="hidden" name="action" value="deploy">
-                <button type="submit" class="btn btn-primary">Deploy</button>
-            </form>
-        </div>
+<div class="row mb-4">
+    <div class="col-12">
+        <h2 class="mb-3">Deploy Instance</h2>
+        <form id="deploy-form" class="mb-3">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label for="instance-name" class="form-label">Instance Name</label>
+                <input type="text" id="instance-name" name="InstanceName" class="form-control"
+                       value="{{ instance_name }}" placeholder="Enter instance name" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="repository" class="form-label">Repository</label>
+                <input type="text" id="repository" name="Repository" class="form-control"
+                       value="{{ repo_url }}" placeholder="Enter Repository URL" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="repository-branch" class="form-label">Repository Branch</label>
+                <select id="repository-branch" name="RepositoryBranch" class="form-select" required>
+                    {% for branch in branches %}
+                        <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <input type="hidden" name="action" value="deploy">
+            <button type="submit" class="btn btn-primary">Deploy</button>
+        </form>
     </div>
+</div>
+
 
     <!-- Global Actions -->
     <div class="row mb-4">
@@ -34,21 +51,21 @@
             <h3 class="mb-3">Global Actions</h3>
             <form id="start-all-form" class="d-inline">
                 {% csrf_token %}
-                <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                <input type="hidden" id="instance-name" name="InstanceName" class="form-control"
                            value="{{ instance_name }}">
                 <input type="hidden" name="action" value="start_all">
                 <button type="submit" class="btn btn-sm btn-success">Start All</button>
             </form>
             <form id="restart-all-form" class="d-inline">
                 {% csrf_token %}
-                <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                <input type="hidden" id="instance-name" name="InstanceName" class="form-control"
                            value="{{ instance_name }}">
                 <input type="hidden" name="action" value="restart_all">
                 <button type="submit" class="btn btn-sm btn-info">Restart All</button>
             </form>
             <form id="down-all-form" class="d-inline">
                 {% csrf_token %}
-                <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                <input type="hidden" id="instance-name" name="InstanceName" class="form-control"
                            value="{{ instance_name }}">
                 <input type="hidden" name="action" value="stop_all">
                 <button type="submit" class="btn btn-sm btn-danger">Stop All</button>
@@ -82,7 +99,7 @@
                             <div class="card-footer">
                                 <form id="start-form-{{ container.id }}" class="d-inline">
                                     {% csrf_token %}
-                                    <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                                    <input type="hidden" id="instance-name" name="InstanceName" class="form-control"
                            value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="start">
@@ -90,7 +107,7 @@
                                 </form>
                                 <form id="stop-form-{{ container.id }}" class="d-inline">
                                     {% csrf_token %}
-                                    <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                                    <input type="hidden" id="instance-name" name="InstanceName" class="form-control"
                            value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="stop">
@@ -98,7 +115,7 @@
                                 </form>
                                 <form id="restart-form-{{ container.id }}" class="d-inline">
                                     {% csrf_token %}
-                                    <input type="hidden" id="instance-name" name="InstanceName" class="form-control" 
+                                    <input type="hidden" id="instance-name" name="InstanceName" class="form-control"
                            value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="restart">
