@@ -148,6 +148,8 @@ HOST_DATA_STAGING_CONTAINER_MAP_FOLD_PATH=/opt/heappe
 # Only for Local Cluster mode
 HOST_LOCAL_NAME=localhpc-{instance_name}
 HOST_LOCAL_PORT={ports['local_port']}
+
+PWD={self.config.base_path}{instance_name}/heappe-core
 """
         output_dir = os.path.join(self.config.base_path, instance_name, self.config.target_dir)
         output_path = os.path.join(output_dir, ".env")
