@@ -66,12 +66,31 @@ def get_container_details(container):
         'started_at': container.attrs['State']['StartedAt'][:19] if container.attrs['State']['StartedAt'] else 'N/A'
     }
 
+
+import secrets
+import string
+
+
+def generate_secure_password(length=12):
+    if length < 8:
+        raise ValueError("Password length should be at least 8 characters.")
+
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    while True:
+        password = ''.join(secrets.choice(alphabet) for _ in range(length))
+        if (any(c.islower() for c in password)
+                and any(c.isupper() for c in password)
+                and any(c.isdigit() for c in password)
+                and any(c in string.punctuation for c in password)):
+            return password
+
 def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
     """Handle the deployment process and return the result."""
     service = HEAppEDeployService(config)
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
 
     try:
+
         service.deploy_init(
             instance_name=instance_name,
             username="admin",

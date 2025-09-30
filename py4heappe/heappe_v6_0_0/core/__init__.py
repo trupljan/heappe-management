@@ -91,6 +91,7 @@ from py4heappe.heappe_v6_0_0.core.models.create_secure_shell_key_model import Cr
 from py4heappe.heappe_v6_0_0.core.models.create_secure_shell_key_model_obsolete import CreateSecureShellKeyModelObsolete
 from py4heappe.heappe_v6_0_0.core.models.create_sub_project_model import CreateSubProjectModel
 from py4heappe.heappe_v6_0_0.core.models.data_transfer_method_ext import DataTransferMethodExt
+from py4heappe.heappe_v6_0_0.core.models.database_ import Database_
 from py4heappe.heappe_v6_0_0.core.models.delete_job_model import DeleteJobModel
 from py4heappe.heappe_v6_0_0.core.models.deployment_type_ext import DeploymentTypeExt
 from py4heappe.heappe_v6_0_0.core.models.digital_signature_credentials_ext import DigitalSignatureCredentialsExt
@@ -114,6 +115,8 @@ from py4heappe.heappe_v6_0_0.core.models.get_command_template_parameters_name_mo
 from py4heappe.heappe_v6_0_0.core.models.get_data_transfer_method_model import GetDataTransferMethodModel
 from py4heappe.heappe_v6_0_0.core.models.get_file_transfer_method_model import GetFileTransferMethodModel
 from py4heappe.heappe_v6_0_0.core.models.http_header_ext import HTTPHeaderExt
+from py4heappe.heappe_v6_0_0.core.models.health_component_ import HealthComponent_
+from py4heappe.heappe_v6_0_0.core.models.health_ext import HealthExt
 from py4heappe.heappe_v6_0_0.core.models.http_get_to_job_node_model import HttpGetToJobNodeModel
 from py4heappe.heappe_v6_0_0.core.models.http_post_to_job_node_model import HttpPostToJobNodeModel
 from py4heappe.heappe_v6_0_0.core.models.initialize_cluster_script_directory_model import InitializeClusterScriptDirectoryModel
@@ -196,4 +199,6 @@ from py4heappe.heappe_v6_0_0.core.models.test_cluster_access_for_account_model_o
 from py4heappe.heappe_v6_0_0.core.models.unauthorized_result import UnauthorizedResult
 from py4heappe.heappe_v6_0_0.core.models.usage_type_ext import UsageTypeExt
 from py4heappe.heappe_v6_0_0.core.models.user_group_list_report_ext import UserGroupListReportExt
+from py4heappe.heappe_v6_0_0.core.models.vault_info_ import VaultInfo_
+from py4heappe.heappe_v6_0_0.core.models.vault_ import Vault_
 from py4heappe.heappe_v6_0_0.core.models.version_information_ext import VersionInformationExt

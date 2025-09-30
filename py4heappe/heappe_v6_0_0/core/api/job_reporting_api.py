@@ -139,8 +139,10 @@ class JobReportingApi(object):
         >>> result = thread.get()
 
         :param async_req bool
-        :param list[str] SubProjects: SubProjects
-        :param str SessionCode: Session code
+        :param list[str] SubProjects: 
+        :param datetime TimeFrom: 
+        :param datetime TimeTo: 
+        :param str SessionCode: 
         :return: list[ProjectDetailedReportExt]
                  If the method is called asynchronously,
                  returns the request thread.
@@ -161,14 +163,16 @@ class JobReportingApi(object):
         >>> result = thread.get()
 
         :param async_req bool
-        :param list[str] SubProjects: SubProjects
-        :param str SessionCode: Session code
+        :param list[str] SubProjects: 
+        :param datetime TimeFrom: 
+        :param datetime TimeTo: 
+        :param str SessionCode: 
         :return: list[ProjectDetailedReportExt]
                  If the method is called asynchronously,
                  returns the request thread.
         """
 
-        all_params = ['SubProjects', 'SessionCode']  # noqa: E501
+        all_params = ['SubProjects', 'TimeFrom', 'TimeTo', 'SessionCode']  # noqa: E501
         all_params.append('async_req')
         all_params.append('_return_http_data_only')
         all_params.append('_preload_content')
@@ -192,6 +196,10 @@ class JobReportingApi(object):
         if 'SubProjects' in params:
             query_params.append(('SubProjects', params['SubProjects']))  # noqa: E501
             collection_formats['SubProjects'] = 'multi'  # noqa: E501
+        if 'TimeFrom' in params:
+            query_params.append(('TimeFrom', params['TimeFrom']))  # noqa: E501
+        if 'TimeTo' in params:
+            query_params.append(('TimeTo', params['TimeTo']))  # noqa: E501
         if 'SessionCode' in params:
             query_params.append(('SessionCode', params['SessionCode']))  # noqa: E501
 

@@ -15,6 +15,7 @@ urlpatterns = [
     path("deploy/<str:instance_name>/", views.deploy_view, name="deploy_view"),
     path('logs/<str:container_id>/', views.container_logs_view, name='container_logs'),
     path('chose-instance/', views.chose_instance_view, name='chose_instance_view'),
+    path('recconectt/', views.reconnect_view, name='reconnect_view'),
 
     # Clusters
     path('clusters/', views.cluster_list, name='cluster_list'),

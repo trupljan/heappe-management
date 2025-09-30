@@ -14,7 +14,6 @@ import datetime
 
 from .DeployService import get_instance_settings
 
-
 @login_required(login_url="/login/")
 def index(request: HttpRequest) -> HttpResponse:
     return dashboard_view(request)
@@ -190,6 +189,12 @@ def profile_view(request):
 
     return render(request, "user_profile.html", {"user": request.user,  "last_auth": last_auth})
 
+@login_required(login_url="/login/")
+def reconnect_view(request):
+    request.session["force_reauth"] = True
+    # reload
+    return redirect(request.META.get('HTTP_REFERER', '/'))  # Redirect back to the previous page or home if no referrer
+
 
 @login_required(login_url="/login/")
 def chose_instance_view(request):
@@ -204,20 +209,35 @@ def chose_instance_view(request):
     return render(request, "chose_instances.html", {"instances": instances})
 
 
+
 from django.core.paginator import Paginator
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
+from datetime import datetime, timedelta
 
 @login_required(login_url="/login/")
 def dashboard_view(request):
     context = {}
-
     if request.session.get("chosen_instance") is None:
         return redirect("chose_instance_view")
 
     # Initialize controller
     controller = hp.ManagementApi(request.api_instance)
     jr_controller = hp.JobReportingApi(request.api_instance)
+    health_controller = hp.HealthApi(request.api_instance)
+
+    # Get HEAppE Health Info
+    try:
+        health_info = health_controller.heappe_health_get()
+        # Převést na dict, pokud má objekt metodu to_dict()
+        health = health_info.to_dict() if hasattr(health_info, "to_dict") else health_info
+        context["health"] = health
+    except Exception as e:
+        print(f"Error fetching health info: {e}")
+        context["health"] = {
+            "IsHealthy": False,
+            "Error": str(e)
+        }
 
     # Get version information
     try:
@@ -264,8 +284,28 @@ def dashboard_view(request):
 
     # Get detailed job report
     try:
-        # Získat job_details z API
-        job_details_raw = jr_controller.heappe_job_reporting_jobs_detailed_report_get(SessionCode=request.session_code)
+        # Set default time range: TimeTo=Now, TimeFrom=Now-1day
+        time_to = request.GET.get('time_to', datetime.now().isoformat())
+        time_from = request.GET.get('time_from', (datetime.now() - timedelta(days=1)).isoformat())
+
+        # Convert string dates to datetime if needed by API
+        try:
+            time_to = datetime.fromisoformat(time_to)
+            time_from = datetime.fromisoformat(time_from)
+        except ValueError:
+            time_to = datetime.now()
+            time_from = datetime.now() - timedelta(days=1)
+
+        # Store for template
+        context["time_to"] = time_to.strftime('%Y-%m-%dT%H:%M')
+        context["time_from"] = time_from.strftime('%Y-%m-%dT%H:%M')
+
+        # Get job details from API with date filters
+        job_details_raw = jr_controller.heappe_job_reporting_jobs_detailed_report_get(
+            SessionCode=request.session_code,
+            TimeFrom=time_from,
+            TimeTo=time_to
+        )
 
         # Rozbalit všechny job_itemy do jednoho seznamu
         all_jobs = []
@@ -278,7 +318,7 @@ def dashboard_view(request):
 
 
         # Paginator
-        paginator = Paginator(all_jobs, 6)  # 5 jobs per page
+        paginator = Paginator(all_jobs, 10)  # 10 jobs per page
         page_number = request.GET.get('page', 1)
         page_obj = paginator.get_page(page_number)
 
@@ -304,11 +344,12 @@ import pymssql
 
 from django.shortcuts import render, redirect
 from .models import InstanceCredentials
+from django.utils import timezone
 
 @login_required(login_url="/login/")
 def logs_view(request):
     context = {}
-
+    context['default_date_from'] = (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")
     # Handle database configuration form submission
     if request.method == 'POST' and request.POST.get('config_submit'):
         InstanceCredentials.objects.update_or_create(

@@ -12,38 +12,27 @@
     </div>
 
     <!-- Deploy Button -->
-<div class="row mb-4">
-    <div class="col-12">
-        <h2 class="mb-3">Deploy Instance</h2>
-        <form id="deploy-form" class="mb-3">
-            {% csrf_token %}
-            <div class="mb-3">
-                <label for="instance-name" class="form-label">Instance Name</label>
-                <input type="text" id="instance-name" name="InstanceName" class="form-control"
-                       value="{{ instance_name }}" placeholder="Enter instance name" required>
-            </div>
-
-            <div class="mb-3">
-                <label for="repository" class="form-label">Repository</label>
-                <input type="text" id="repository" name="Repository" class="form-control"
-                       value="{{ repo_url }}" placeholder="Enter Repository URL" required>
-            </div>
-
-            <div class="mb-3">
-                <label for="repository-branch" class="form-label">Repository Branch</label>
-                <select id="repository-branch" name="RepositoryBranch" class="form-select" required>
-                    {% for branch in branches %}
-                        <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <input type="hidden" name="action" value="deploy">
-            <button type="submit" class="btn btn-primary">Deploy</button>
-        </form>
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-3">Deploy Instance</h2>
+            <form id="deploy-form" class="mb-3">
+                {% csrf_token %}
+                <div class="mb-3">
+                    <label for="instance-name" class="form-label">Instance Name</label>
+                    <input type="text" id="instance-name" name="InstanceName" class="form-control"
+                           value="{{ instance_name }}" placeholder="Enter instance name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="instance-name" class="form-label">Repository</label>
+                    <input type="text" id="repository" name="Repository" class="form-control"
+                           value="{{ repo_url }}" placeholder="Enter Repository url" required>
+                </div>
+                <div class="mb-3"> <label for="repository-branch" class="form-label">Repository Branch</label> <select id="repository-branch" name="RepositoryBranch" class="form-select" required> {% for branch in branches %} <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option> {% endfor %} </select> </div>
+                <input type="hidden" name="action" value="deploy">
+                <button type="submit" class="btn btn-primary">Deploy</button>
+            </form>
+        </div>
     </div>
-</div>
-
 
     <!-- Global Actions -->
     <div class="row mb-4">

@@ -38,7 +38,7 @@ def generate_appsettings_v6_0_0(
                     "DeployedIPAddress": deployed_ip,
                     "Port": str(port),
                     "Host": f"http://{deployed_ip}:{port}",
-                    "HostPostfix": "",
+                    "HostPostfix": f"{instance_name}",
                     "DeploymentEnvironmentType": "Docker",
                     "ResourceAllocationInfrastructureTypes": [
                         "HPC"
@@ -98,7 +98,7 @@ def generate_appsettings_v6_0_0(
                 "ScriptsSettings": {
                     "ClusterScriptsRepository": "https://github.com/It4innovations/HEAppE-scripts.git",
                     "KeyScriptsDirectoryInRepository": "HEAppE-scripts/HPC/.key_scripts/",
-                    "InstanceIdentifierPath": "Identifier",
+                    "InstanceIdentifierPath": f"{instance_name}",
                     "SubExecutionsPath": "HEAppE/Executions",
                     "JobLogArchiveSubPath": "HEAppE/Jobs",
                     "SubScriptsPath": "HEAppE/Scripts",
