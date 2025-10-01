@@ -7,8 +7,6 @@ import subprocess
 import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
-import socket
-
 def get_free_port_safe():
     """Helper function to safely allocate a free port (placeholder implementation)."""
     import socket
@@ -17,21 +15,18 @@ def get_free_port_safe():
     port = s.getsockname()[1]
     return port, s
 
+import subprocess
+
 def execute_docker_compose(command, compose_dir, timeout=300):
-    """Run docker compose safely under Gunicorn."""
-    env = os.environ.copy()
-    env['PATH'] = "/usr/local/bin:" + env.get('PATH', '')
+    """Execute a Docker Compose command safely under Gunicorn."""
     try:
         result = subprocess.run(
             command,
             cwd=compose_dir,
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            capture_output=True,
             text=True,
             timeout=timeout,
-            env=env,
-            preexec_fn=os.setsid
+            check=True
         )
         return result
     except subprocess.TimeoutExpired as e:
@@ -47,7 +42,6 @@ def execute_docker_compose(command, compose_dir, timeout=300):
             returncode=1,
             stderr=str(e)
         )
-
 
 
 def get_container_details(container):
@@ -90,25 +84,13 @@ def generate_secure_password(length=12):
                 and any(c in string.punctuation for c in password)):
             return password
 
-def wait_for_container(instance_name, timeout=300):
-    start = time.time()
-    while time.time() - start < timeout:
-        result = subprocess.run(
-            ["docker", "compose", "-p", instance_name, "ps", "--services", "--filter", "health=starting"],
-            capture_output=True, text=True
-        )
-        if not result.stdout.strip():  # No services still starting
-            print("All containers are ready!")
-            return True
-        time.sleep(2)
-    raise TimeoutError("Containers did not become healthy in time")
-
 def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
-    """Non-blocking deployment with proper logging."""
+    """Handle the deployment process and return the result."""
     service = HEAppEDeployService(config)
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
 
     try:
+
         service.deploy_init(
             instance_name=instance_name,
             username="admin",
@@ -129,13 +111,10 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "--profile", "vaultagent",
             "--profile", "sshagent",
             "-p", instance_name,
-            "build", "--no-cache"
+            "build",  "--no-cache"
         ]
-        build_proc = subprocess.Popen(build_command, cwd=compose_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = build_proc.communicate()
-        print(f"Build stdout: {stdout.decode()}")
-        print(f"Build stderr: {stderr.decode()}")
-
+        build_result = execute_docker_compose(build_command, compose_dir)
+        print(f"Docker Compose build result: {build_result.stdout}, {build_result.stderr}")
         up_command = [
             "docker", "compose",
             "--profile", "db",
@@ -147,30 +126,31 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "-p", instance_name,
             "up", "-d"
         ]
-        up_proc = subprocess.Popen(up_command, cwd=compose_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = up_proc.communicate()
-        print(f"Up stdout: {stdout.decode()}")
-        print(f"Up stderr: {stderr.decode()}")
+        up_result = execute_docker_compose(up_command, compose_dir)
+        print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
 
-        # Zkontrolujeme stav kritických kontejnerů
-        client = docker.from_env()
-        for c in ['vault', 'vaultagent', 'mssql', 'heappe']:
-            try:
-                container = client.containers.get(f"{instance_name}_{c}")
-                if container.status != 'running':
-                    logs = container.logs(tail=20).decode()
-                    print(f"Container {c} failed to start:\n{logs}")
-            except docker.errors.NotFound:
-                print(f"Container {c} not found")
-
-        # Inicializace DB (retry) – jen pokud MSSQL běží
+        # Initialize the database with retries
         run_with_retries(instance_name, ports)
 
-        return True, "Deployment started successfully.", 'success'
+        if up_result.returncode == 0:
+            restart_command = [
+                "docker", "compose",
+                "--profile", "db",
+                "--profile", "heappe",
+                "--profile", "initVault",
+                "--profile", "vault",
+                "--profile", "vaultagent",
+                "--profile", "sshagent",
+                "-p", instance_name,
+                "restart"
+            ]
+            restart_result = execute_docker_compose(restart_command, compose_dir)
+            return restart_result, "Deployment completed successfully.", 'success' if restart_result.returncode == 0 else 'danger'
+        return up_result, f"Deployment failed: {up_result.stderr}", 'danger'
 
     except Exception as e:
-        print(f"Deployment error: {e}")
-        return False, f"Deployment error: {e}", 'danger'
+        print(f"Deployment error: {str(e)}")
+        return None, f"Deployment error: {str(e)}", 'danger'
     finally:
         for s in [s1, s2, s3, s4]:
             if 's' in locals(): s.close()
