@@ -16,6 +16,40 @@ def get_free_port_safe():
     return port, s
 
 import subprocess
+def execute_docker_compose_detached(command, compose_dir, timeout=600):
+    """Run docker compose safely from Gunicorn without being killed on worker reload."""
+    try:
+        proc = subprocess.Popen(
+            command,
+            cwd=compose_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True  # <-- detaches from Gunicorn
+        )
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=proc.returncode,
+            stdout=stdout,
+            stderr=stderr
+        )
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        stdout, stderr = proc.communicate()
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=1,
+            stdout=stdout,
+            stderr=f"Command timed out after {timeout}s.\n{stderr}"
+        )
+    except Exception as e:
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=1,
+            stdout="",
+            stderr=str(e)
+        )
 
 def execute_docker_compose(command, compose_dir, timeout=300):
     """Execute a Docker Compose command safely under Gunicorn."""
@@ -113,7 +147,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "-p", instance_name,
             "build",  "--no-cache"
         ]
-        build_result = execute_docker_compose(build_command, compose_dir)
+        build_result = execute_docker_compose_detached(build_command, compose_dir)
         print(f"Docker Compose build result: {build_result.stdout}, {build_result.stderr}")
         up_command = [
             "docker", "compose",
@@ -126,7 +160,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "-p", instance_name,
             "up", "-d"
         ]
-        up_result = execute_docker_compose(up_command, compose_dir)
+        up_result = execute_docker_compose_detached(up_command, compose_dir)
         print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
 
         # Initialize the database with retries
