@@ -143,8 +143,8 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "-p", instance_name,
             "build",  "--no-cache"
         ]
-        build_result = execute_docker_compose(build_command, compose_dir)
-        print(f"Docker Compose build result: {build_result.stdout}, {build_result.stderr}")
+        #build_result = execute_docker_compose(build_command, compose_dir)
+        #print(f"Docker Compose build result: {build_result.stdout}, {build_result.stderr}")
         up_command = [
             "docker", "compose",
             "--profile", "db",
