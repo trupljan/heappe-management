@@ -10,12 +10,12 @@ from ..DeployService import HEAppEDeployService, HEAppEConfig
 import socket
 
 def get_free_port_safe():
-    """Allocate a free port and close the socket immediately to avoid holding it."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    """Helper function to safely allocate a free port (placeholder implementation)."""
+    import socket
+    s = socket.socket()
     s.bind(('', 0))
     port = s.getsockname()[1]
-    s.close()
-    return port
+    return port, s
 
 def execute_docker_compose(command, compose_dir, timeout=300):
     """Run docker compose safely under Gunicorn."""
