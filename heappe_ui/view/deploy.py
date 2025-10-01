@@ -139,26 +139,18 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         build_command = [
             "docker", "compose",
             "--profile", "db",
-            "--profile", "heappe",
-            "--profile", "initVault",
-            "--profile", "vault",
-            "--profile", "vaultagent",
-            "--profile", "sshagent",
+            "--profile", "initVault"
             "-p", instance_name,
-            "build",  "--no-cache"
+            "build"
         ]
         build_result = execute_docker_compose(build_command, compose_dir)
         print(f"Docker Compose build result: {build_result.stdout}, {build_result.stderr}")
         up_command = [
             "docker", "compose",
             "--profile", "db",
-            "--profile", "heappe",
-            "--profile", "initVault",
-            "--profile", "vault",
-            "--profile", "vaultagent",
-            "--profile", "sshagent",
+            "--profile", "initVault"
             "-p", instance_name,
-            "up"
+            "up", "-d"
         ]
         up_result = execute_docker_compose(up_command, compose_dir)
         print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
