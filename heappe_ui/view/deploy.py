@@ -90,6 +90,19 @@ def generate_secure_password(length=12):
                 and any(c in string.punctuation for c in password)):
             return password
 
+def wait_for_container(instance_name, timeout=300):
+    start = time.time()
+    while time.time() - start < timeout:
+        result = subprocess.run(
+            ["docker", "compose", "-p", instance_name, "ps", "--services", "--filter", "health=starting"],
+            capture_output=True, text=True
+        )
+        if not result.stdout.strip():  # No services still starting
+            print("All containers are ready!")
+            return True
+        time.sleep(2)
+    raise TimeoutError("Containers did not become healthy in time")
+
 def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
     """Handle the deployment process and return the result."""
     service = HEAppEDeployService(config)
@@ -135,6 +148,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         up_result = execute_docker_compose(up_command, compose_dir)
         print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
 
+        wait_for_container(instance_name, timeout=300)
         # Initialize the database with retries
         run_with_retries(instance_name, ports)
 
