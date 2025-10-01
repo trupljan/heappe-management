@@ -118,6 +118,26 @@ def generate_secure_password(length=12):
                 and any(c in string.punctuation for c in password)):
             return password
 
+def wait_for_container_running(container_name, timeout=60, interval=5):
+    """Wait until a Docker container is in 'running' state using Docker SDK."""
+    client = docker.from_env()
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            container = client.containers.get(container_name)
+            container.reload()  # Refresh status
+            status = container.status
+            print(f"Container {container_name} status: {status}")
+            if status == "running":
+                print(f"Container {container_name} is running.")
+                return True
+        except docker.errors.NotFound:
+            print(f"Container {container_name} not found yet.")
+        time.sleep(interval)
+
+    raise TimeoutError(f"Container {container_name} did not reach 'running' state in {timeout} seconds.")
+
 def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
     """Handle the deployment process and return the result."""
     service = HEAppEDeployService(config)
@@ -157,19 +177,14 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         ]
         up_result = execute_docker_compose(up_command, compose_dir)
         print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
-
+        wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
         # Initialize the database with retries
         run_with_retries(instance_name, ports)
 
         if up_result.returncode == 0:
             restart_command = [
-                "docker", "compose",
                 "--profile", "db",
-                "--profile", "heappe",
                 "--profile", "initVault",
-                "--profile", "vault",
-                "--profile", "vaultagent",
-                "--profile", "sshagent",
                 "-p", instance_name,
                 "restart"
             ]
