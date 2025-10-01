@@ -177,19 +177,19 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         ]
         up_result = execute_docker_compose(up_command, compose_dir)
         print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
-        wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
+        #wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
         # Initialize the database with retries
         run_with_retries(instance_name, ports)
 
-        if up_result.returncode == 0:
-            restart_command = [
-                "--profile", "db",
-                "--profile", "initVault",
-                "-p", instance_name,
-                "restart"
-            ]
-            restart_result = execute_docker_compose(restart_command, compose_dir)
-            return restart_result, "Deployment completed successfully.", 'success' if restart_result.returncode == 0 else 'danger'
+
+        restart_command = [
+            "--profile", "db",
+            "--profile", "initVault",
+            "-p", instance_name,
+            "restart"
+        ]
+        restart_result = execute_docker_compose(restart_command, compose_dir)
+        return restart_result, "Deployment completed successfully.", 'success' if restart_result.returncode == 0 else 'danger'
         return up_result, f"Deployment failed: {up_result.stderr}", 'danger'
 
     except Exception as e:
