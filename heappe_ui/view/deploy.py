@@ -147,7 +147,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "-p", instance_name,
             "build",  "--no-cache"
         ]
-        build_result = execute_docker_compose_detached(build_command, compose_dir)
+        build_result = execute_docker_compose(build_command, compose_dir)
         print(f"Docker Compose build result: {build_result.stdout}, {build_result.stderr}")
         up_command = [
             "docker", "compose",
@@ -160,7 +160,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "-p", instance_name,
             "up", "-d"
         ]
-        up_result = execute_docker_compose_detached(up_command, compose_dir)
+        up_result = execute_docker_compose(up_command, compose_dir)
         print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
 
         # Initialize the database with retries
