@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-)%+r0j4kegpuo4bn4a898y8-me-h9@88123&@f*yxq!z)y@g-k
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 AUTHENTICATION_BACKENDS = [
     #"heappe_ui.auth_backend.HeappeAuthBackend",
