@@ -5,51 +5,17 @@ from django.shortcuts import render
 import docker
 import subprocess
 import os
+import time
+import pymssql
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
 def get_free_port_safe():
-    """Helper function to safely allocate a free port (placeholder implementation)."""
+    """Helper function to safely allocate a free port."""
     import socket
     s = socket.socket()
     s.bind(('', 0))
     port = s.getsockname()[1]
     return port, s
-
-import subprocess
-def execute_docker_compose_detached(command, compose_dir, timeout=600):
-    """Run docker compose safely from Gunicorn without being killed on worker reload."""
-    try:
-        proc = subprocess.Popen(
-            command,
-            cwd=compose_dir,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            start_new_session=True  # <-- detaches from Gunicorn
-        )
-        stdout, stderr = proc.communicate(timeout=timeout)
-        return subprocess.CompletedProcess(
-            args=command,
-            returncode=proc.returncode,
-            stdout=stdout,
-            stderr=stderr
-        )
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        stdout, stderr = proc.communicate()
-        return subprocess.CompletedProcess(
-            args=command,
-            returncode=1,
-            stdout=stdout,
-            stderr=f"Command timed out after {timeout}s.\n{stderr}"
-        )
-    except Exception as e:
-        return subprocess.CompletedProcess(
-            args=command,
-            returncode=1,
-            stdout="",
-            stderr=str(e)
-        )
 
 def execute_docker_compose(command, compose_dir, timeout=300):
     """Execute a Docker Compose command safely under Gunicorn."""
@@ -77,7 +43,6 @@ def execute_docker_compose(command, compose_dir, timeout=300):
             stderr=str(e)
         )
 
-
 def get_container_details(container):
     """Extract detailed information from a Docker container."""
     port_mappings = container.attrs['NetworkSettings']['Ports']
@@ -100,15 +65,12 @@ def get_container_details(container):
         'started_at': container.attrs['State']['StartedAt'][:19] if container.attrs['State']['StartedAt'] else 'N/A'
     }
 
-
-import secrets
-import string
-
-
 def generate_secure_password(length=12):
+    """Generate a secure password."""
+    import secrets
+    import string
     if length < 8:
         raise ValueError("Password length should be at least 8 characters.")
-
     alphabet = string.ascii_letters + string.digits + string.punctuation
     while True:
         password = ''.join(secrets.choice(alphabet) for _ in range(length))
@@ -124,7 +86,6 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
 
     try:
-
         service.deploy_init(
             instance_name=instance_name,
             username="admin",
@@ -136,43 +97,160 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             deployed_ip='localhost'
         )
 
-        build_command = [
-            "docker", "compose",
-            "--profile", "db",
-            "--profile", "initVault",
-            "-p", instance_name,
-            "build",  "--no-cache"
+        # Define the startup script content
+        startup_script_content = """#!/bin/bash
+
+# Startup script for HEAppE deployment
+# Ensures MSSQL and vault_init services are ready before proceeding
+
+# Configuration variables (passed as arguments or sourced from environment)
+INSTANCE_NAME="$1"
+COMPOSE_DIR="$2"
+MSSQL_PORT="$3"
+MSSQL_SA_PASSWORD="$4"
+VAULT_ADDR="http://localhost:8200"
+MAX_ATTEMPTS=30
+SLEEP_INTERVAL=5
+
+# Check if required arguments are provided
+if [ -z "$INSTANCE_NAME" ] || [ -z "$COMPOSE_DIR" ] || [ -z "$MSSQL_PORT" ] || [ -z "$MSSQL_SA_PASSWORD" ]; then
+    echo "Error: Missing required arguments."
+    echo "Usage: $0 <instance_name> <compose_dir> <mssql_port> <mssql_sa_password>"
+    exit 1
+fi
+
+# Change to the compose directory
+cd "$COMPOSE_DIR" || { echo "Error: Cannot change to directory $COMPOSE_DIR"; exit 1; }
+
+# Run docker compose up -d
+echo "Starting Docker Compose with profiles db and initVault..."
+docker compose --profile db --profile initVault -p "$INSTANCE_NAME" up -d
+if [ $? -ne 0 ]; then
+    echo "Error: Docker Compose up failed."
+    exit 1
+fi
+
+# Check MSSQL readiness
+echo "Checking MSSQL container ${INSTANCE_NAME}_mssql..."
+for ((i=1; i<=MAX_ATTEMPTS; i++)); do
+    # Check if container is running
+    if docker ps -q -f name="${INSTANCE_NAME}_mssql" | grep -q .; then
+        # Attempt to connect to MSSQL
+        if docker exec "${INSTANCE_NAME}_mssql" /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$MSSQL_SA_PASSWORD" -Q "SELECT 1" > /dev/null 2>&1; then
+            echo "MSSQL is ready."
+            break
+        else
+            echo "MSSQL not ready on attempt $i/$MAX_ATTEMPTS. Retrying in $SLEEP_INTERVAL seconds..."
+            sleep $SLEEP_INTERVAL
+        fi
+    else
+        echo "MSSQL container not running on attempt $i/$MAX_ATTEMPTS. Retrying in $SLEEP_INTERVAL seconds..."
+        sleep $SLEEP_INTERVAL
+    fi
+    if [ $i -eq $MAX_ATTEMPTS ]; then
+        echo "Error: MSSQL container ${INSTANCE_NAME}_mssql failed to become ready after $MAX_ATTEMPTS attempts."
+        exit 1
+    fi
+done
+
+# Check vault_init completion
+echo "Checking vault_init container ${INSTANCE_NAME}_vault_init-1..."
+for ((i=1; i<=MAX_ATTEMPTS; i++)); do
+    status=$(docker inspect "${INSTANCE_NAME}_vault_init-1" --format '{{.State.Status}}' 2>/dev/null)
+    exit_code=$(docker inspect "${INSTANCE_NAME}_vault_init-1" --format '{{.State.ExitCode}}' 2>/dev/null)
+    if [ "$status" = "exited" ] && [ "$exit_code" = "0" ]; then
+        echo "vault_init completed successfully."
+        break
+    else
+        echo "vault_init is in state $status with exit code $exit_code on attempt $i/$MAX_ATTEMPTS. Retrying in $SLEEP_INTERVAL seconds..."
+        sleep $SLEEP_INTERVAL
+    fi
+    if [ $i -eq $MAX_ATTEMPTS ]; then
+        echo "Error: vault_init container ${INSTANCE_NAME}_vault_init-1 failed to complete after $MAX_ATTEMPTS attempts."
+        exit 1
+    fi
+done
+
+# Optionally check Vault service
+echo "Checking Vault container ${INSTANCE_NAME}_vault..."
+for ((i=1; i<=MAX_ATTEMPTS; i++)); do
+    if docker ps -q -f name="${INSTANCE_NAME}_vault" | grep -q .; then
+        if docker exec "${INSTANCE_NAME}_vault" vault status > /dev/null 2>&1; then
+            echo "Vault is ready."
+            break
+        else
+            echo "Vault not ready on attempt $i/$MAX_ATTEMPTS. Retrying in $SLEEP_INTERVAL seconds..."
+            sleep $SLEEP_INTERVAL
+        fi
+    else
+        echo "Vault container not running on attempt $i/$MAX_ATTEMPTS. Retrying in $SLEEP_INTERVAL seconds..."
+        sleep $SLEEP_INTERVAL
+    fi
+    if [ $i -eq $MAX_ATTEMPTS ]; then
+        echo "Error: Vault container ${INSTANCE_NAME}_vault failed to become ready after $MAX_ATTEMPTS attempts."
+        exit 1
+    fi
+done
+
+echo "All services are ready."
+exit 0
+"""
+
+        # Create the startup script file
+        script_dir = os.path.join("scripts")
+        os.makedirs(script_dir, exist_ok=True)  # Create scripts directory if it doesn't exist
+        script_path = os.path.join(script_dir, "start_heappe.sh")
+
+        # Write the script to the file
+        with open(script_path, "w") as f:
+            f.write(startup_script_content)
+        print(f"Created startup script at {script_path}")
+
+        # Set executable permissions
+        os.chmod(script_path, 0o755)
+        print(f"Set executable permissions on {script_path}")
+
+        # Call the startup script
+        startup_command = [
+            script_path,
+            instance_name,
+            compose_dir,
+            str(ports['mssql_port']),
+            "Passw0rd"  # MSSQL SA password
         ]
-        #build_result = execute_docker_compose(build_command, compose_dir)
-        #print(f"Docker Compose build result: {build_result.stdout}, {build_result.stderr}")
-        up_command = [
-            "docker", "compose",
-            "--profile", "db",
-            "--profile", "initVault",
-            "-p", instance_name,
-            "up", "-d"
-        ]
-        up_result = execute_docker_compose(up_command, compose_dir)
-        print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
+        startup_result = subprocess.run(
+            startup_command,
+            capture_output=True,
+            text=True,
+            timeout=600  # Increased timeout for startup script
+        )
+        print(f"Startup script result: {startup_result.stdout}, {startup_result.stderr}")
+
+        if startup_result.returncode != 0:
+            return subprocess.CompletedProcess(
+                args=startup_command,
+                returncode=startup_result.returncode,
+                stdout=startup_result.stdout,
+                stderr=startup_result.stderr
+            ), f"Startup script failed: {startup_result.stderr}", 'danger'
 
         # Initialize the database with retries
         run_with_retries(instance_name, ports)
 
-        if up_result.returncode == 0:
-            restart_command = [
-                "docker", "compose",
-                "--profile", "db",
-                "--profile", "heappe",
-                "--profile", "initVault",
-                "--profile", "vault",
-                "--profile", "vaultagent",
-                "--profile", "sshagent",
-                "-p", instance_name,
-                "restart"
-            ]
-            restart_result = execute_docker_compose(restart_command, compose_dir)
-            return restart_result, "Deployment completed successfully.", 'success' if restart_result.returncode == 0 else 'danger'
-        return up_result, f"Deployment failed: {up_result.stderr}", 'danger'
+        # Restart all services to ensure consistency
+        restart_command = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "-p", instance_name,
+            "restart"
+        ]
+        restart_result = execute_docker_compose(restart_command, compose_dir)
+        return restart_result, "Deployment completed successfully.", 'success' if restart_result.returncode == 0 else 'danger'
 
     except Exception as e:
         print(f"Deployment error: {str(e)}")
@@ -200,7 +278,7 @@ def handle_container_action(client, instance_name, action, container_id):
     except docker.errors.NotFound:
         return f"Container {container_id} not found.", 'danger'
     except docker.errors.APIError as e:
-        return f"Error performing {action} on container {container_id}: {ogastring(e)}", 'danger'
+        return f"Error performing {action} on container {container_id}: {str(e)}", 'danger'
 
 def handle_global_action(compose_dir, instance_name, action):
     """Handle global actions for all containers in the project."""
@@ -253,20 +331,6 @@ def container_logs_view(request, container_id):
             'status': 'danger',
             'message': f"Error fetching logs: {str(e)}"
         }, status=500)
-
-import pyodbc
-import time
-
-import pymssql
-import time
-
-import pymssql
-
-import pymssql
-
-import pymssql
-
-import pymssql
 
 def initialize_database(
     server,
@@ -380,8 +444,6 @@ def initialize_database(
         print(f"Unexpected error: {e}")
         return False
 
-
-# Retry logic
 def run_with_retries(instance_name, ports):
     max_attempts = 10
     attempt = 1
@@ -425,7 +487,6 @@ def get_remote_branches(repo_url: str) -> list[str]:
 @login_required(login_url="/login/")
 def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse:
     base_path = "/opt/heappe-deployment/"
-    #repo_url = "https://github.com/It4innovations/HEAppE.git"
     repo_url = "https://code.it4i.cz/ADAS-Private/HEAppE/heappe-core.git"
     repo_branch = "develop"
     version = "v6.0.0"
@@ -442,8 +503,8 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
         if request.method == 'POST':
             action = request.POST.get('action')
             instance_name = request.POST.get('InstanceName', 'heappe-instance')
-            repo_url = request.POST.get('Repository',"https://github.com/It4innovations/HEAppE.git")
-            repo_branch = request.POST.get('RepositoryBranch',"master")
+            repo_url = request.POST.get('Repository', "https://github.com/It4innovations/HEAppE.git")
+            repo_branch = request.POST.get('RepositoryBranch', "master")
             compose_dir = os.path.join(base_path, instance_name, "heappe-core")
 
             if action == 'deploy':
