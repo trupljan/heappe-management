@@ -7,26 +7,31 @@ import subprocess
 import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
+import socket
+
 def get_free_port_safe():
-    """Helper function to safely allocate a free port (placeholder implementation)."""
-    import socket
-    s = socket.socket()
+    """Allocate a free port and close the socket immediately to avoid holding it."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(('', 0))
     port = s.getsockname()[1]
-    return port, s
-
-import subprocess
+    s.close()
+    return port
 
 def execute_docker_compose(command, compose_dir, timeout=300):
-    """Execute a Docker Compose command safely under Gunicorn."""
+    """Run docker compose safely under Gunicorn."""
+    env = os.environ.copy()
+    env['PATH'] = "/usr/local/bin:" + env.get('PATH', '')
     try:
         result = subprocess.run(
             command,
             cwd=compose_dir,
             check=False,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout  # ukončí proces po x sekundách
+            timeout=timeout,
+            env=env,
+            preexec_fn=os.setsid
         )
         return result
     except subprocess.TimeoutExpired as e:
@@ -42,6 +47,7 @@ def execute_docker_compose(command, compose_dir, timeout=300):
             returncode=1,
             stderr=str(e)
         )
+
 
 
 def get_container_details(container):
