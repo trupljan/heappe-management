@@ -173,7 +173,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "--profile", "db",
             "--profile", "initVault",
             "-p", instance_name,
-            "up"
+            "up", "-d"
         ]
         up_result = execute_docker_compose(up_command, compose_dir)
         print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
