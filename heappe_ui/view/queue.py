@@ -5,13 +5,13 @@ from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_vi
 
 
 
-@login_required(login_url="/login/")
+@login_required
 def queues_view(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     queues = [c.to_dict() for c in controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
     return render(request, "queues.html", {"queues": queues})
 
-@login_required(login_url="/login/")
+@login_required
 def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     node_type = controller.heappe_management_cluster_node_type_get(Id=queue_id, SessionCode=request.session_code).to_dict()
@@ -81,7 +81,7 @@ def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
         "queue_groups": queue_groups
     })
 
-@login_required(login_url="/login/")
+@login_required
 def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
 
@@ -125,7 +125,7 @@ def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
 
     return render(request, "queue.html")
 
-@login_required(login_url="/login/")
+@login_required
 def queue_delete(request: HttpRequest, queue_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     cluster_id = request.POST.get("ClusterId")
@@ -139,14 +139,14 @@ def queue_delete(request: HttpRequest, queue_id: int) -> HttpResponse:
     return redirect(f"/clusters/{cluster_id}/?tab=queues")
 
 
-@login_required(login_url="/login/")
+@login_required
 def queue_groups(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     queue_groups = [g.to_dict() for g in controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code)]
     return render(request, "queue_groups.html", {"queue_groups": queue_groups})
 
 
-@login_required(login_url="/login/")
+@login_required
 def queue_group_detail(request: HttpRequest, group_id: int) -> HttpResponse:
     tab = request.GET.get('tab', 'detail')
     controller = hp.ManagementApi(request.api_instance)
@@ -227,7 +227,7 @@ def queue_group_detail(request: HttpRequest, group_id: int) -> HttpResponse:
     context['active_tab'] = tab
     return render(request, "queue_group.html", context)
 
-@login_required(login_url="/login/")
+@login_required
 def queue_group_create(request: HttpRequest) -> HttpResponse:
     tab = request.GET.get('tab', 'detail')
     if request.method == "POST":
@@ -255,7 +255,7 @@ def queue_group_create(request: HttpRequest) -> HttpResponse:
 
     return render(request, 'queue_group.html', {"active_tab": tab})
 
-@login_required(login_url="/login/")
+@login_required
 def queue_group_modify(request: HttpRequest, group_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     queue_group = controller.heappe_management_cluster_node_type_aggregation_get(Id=group_id, SessionCode=request.session_code).to_dict()
@@ -285,7 +285,7 @@ def queue_group_modify(request: HttpRequest, group_id: int) -> HttpResponse:
 
     return redirect(f"/queue-groups/{group_id}/")
 
-@login_required(login_url="/login/")
+@login_required
 def assign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
     # ClusterNodeTypeAggregationAccounting
     controller = hp.ManagementApi(request.api_instance)
@@ -309,7 +309,7 @@ def assign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
 
     return redirect(f"/queue-groups/{group_id}/?tab=formulas")
 
-@login_required(login_url="/login/")
+@login_required
 def unassign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
     # ClusterNodeTypeAggregationAccounting
     controller = hp.ManagementApi(request.api_instance)
@@ -333,7 +333,7 @@ def unassign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
 
     return redirect(f"/queue-groups/{group_id}/?tab=formulas")
 
-@login_required(login_url="/login/")
+@login_required
 def add_formula(request: HttpRequest, group_id: int) -> HttpResponse:
     # ClusterNodeTypeAggregationAccounting
     controller = hp.ManagementApi(request.api_instance)
@@ -360,7 +360,7 @@ def add_formula(request: HttpRequest, group_id: int) -> HttpResponse:
 
     return redirect(f"/queue-groups/{group_id}/?tab=formulas")
 
-@login_required(login_url="/login/")
+@login_required
 def edit_formula(request: HttpRequest, group_id: int) -> HttpResponse:
     # ClusterNodeTypeAggregationAccounting
     controller = hp.ManagementApi(request.api_instance)
@@ -389,7 +389,7 @@ def edit_formula(request: HttpRequest, group_id: int) -> HttpResponse:
 
     return redirect(f"/queue-groups/{group_id}/?tab=formulas")
 
-@login_required(login_url="/login/")
+@login_required
 def assign_project_to_group(request: HttpRequest, group_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = 0
@@ -416,7 +416,7 @@ def assign_project_to_group(request: HttpRequest, group_id: int) -> HttpResponse
 
     return redirect(f"/queue-groups/{group_id}/?tab=projects")
 
-@login_required(login_url="/login/")
+@login_required
 def unassign_project_to_group(request: HttpRequest, group_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))

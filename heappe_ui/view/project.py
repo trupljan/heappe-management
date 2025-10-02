@@ -11,7 +11,7 @@ KEY_TYPE_CHOICES = {
     6: "Ed25519",
 }
 
-@login_required(login_url="/login/")
+@login_required
 def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> HttpResponse:
     filter_type = request.GET.get("project_filter", "own")
     controller = hp.ManagementApi(request.api_instance)
@@ -139,7 +139,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
 
 
 
-@login_required(login_url="/login/")
+@login_required
 def submit_job_view(request, command_template_id:int):
     controller = hp.ManagementApi(request.api_instance)
 
@@ -259,7 +259,7 @@ def submit_job_view(request, command_template_id:int):
     return render(request, "submit_test_job.html", context)
 
 
-@login_required(login_url="/login/")
+@login_required
 def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
     controller = hp.JobManagementApi(request.api_instance)
 
@@ -277,7 +277,7 @@ def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
 
 
 
-@login_required(login_url="/login/")
+@login_required
 def project_create(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
         return render(request, "project.html", {
@@ -306,7 +306,7 @@ def project_create(request: HttpRequest) -> HttpResponse:
             return redirect("project_detail", project_id=result['Id'])
 
 
-@login_required(login_url="/login/")
+@login_required
 def project_list(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     projects = [p.to_dict() for p in controller.heappe_management_projects_get(SessionCode=request.session_code)]
@@ -354,7 +354,7 @@ def project_update(request: HttpRequest, project_id: int) -> HttpResponse:
 
 from django.urls import reverse
 
-@login_required(login_url="/login/")
+@login_required
 def project_assign_to_cluster(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
@@ -393,7 +393,7 @@ def project_assign_to_cluster_with_project_id(request: HttpRequest, project_id) 
     return redirect("project_detail", project_id=project_id)
 
 
-@login_required(login_url="/login/")
+@login_required
 def delete_assignment(request: HttpRequest, project_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     cluster_id = int(request.POST.get("ClusterId"))
@@ -428,7 +428,7 @@ def test_cluster_authentication_credential_HPC_access_manual(request: HttpReques
     )
     return result
 
-@login_required(login_url="/login/")
+@login_required
 def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
@@ -443,7 +443,7 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
 
-@login_required(login_url="/login/")
+@login_required
 def initialize_hpc_account(request: HttpRequest):
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
@@ -482,7 +482,7 @@ def create_new_hpc_account(request: HttpRequest) -> HttpResponse:
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
 
-@login_required(login_url="/login/")
+@login_required
 def regenerate_ssh_key(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
@@ -503,7 +503,7 @@ def regenerate_ssh_key(request: HttpRequest) -> HttpResponse:
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
 
-@login_required(login_url="/login/")
+@login_required
 def delete_hpc_account(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
