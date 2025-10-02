@@ -1,7 +1,7 @@
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
 
-@login_required(login_url="/login/")
+@login_required
 def command_template_detail(request: HttpRequest, command_template_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     command_template = controller.heappe_management_command_template_get(
@@ -46,7 +46,7 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
         "node_types": cluster_node_types,
     })
 
-@login_required(login_url="/login/")
+@login_required
 def command_template_create(request: HttpRequest, project_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
 
@@ -71,7 +71,7 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
         "project_id": project_id,
     })
 
-@login_required(login_url="/login/")
+@login_required
 def command_template_modify(request: HttpRequest, command_template_id: int) -> HttpResponse:
     payload_data = {
         "Id": command_template_id,
@@ -93,7 +93,7 @@ def command_template_modify(request: HttpRequest, command_template_id: int) -> H
     )
     return redirect("command_template_detail", command_template_id=command_template_id)
 
-@login_required(login_url="/login/")
+@login_required
 def command_template_create(request: HttpRequest, project_id: int) -> HttpResponse:
     if request.method == "POST":
         controller = hp.ManagementApi(request.api_instance)
@@ -142,7 +142,7 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
 
     return render(request, 'command_template.html', {'node_types': cluster_node_types, 'project_id': project_id})
 
-@login_required(login_url="/login/")
+@login_required
 def add_parameter_to_command_template(request: HttpRequest, command_template_id: int) -> HttpResponse:
 
     controller = hp.ManagementApi(request.api_instance)

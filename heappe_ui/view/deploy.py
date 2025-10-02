@@ -438,7 +438,7 @@ def get_remote_branches(repo_url: str) -> list[str]:
     except subprocess.CalledProcessError:
         return []
 
-@login_required(login_url="/login/")
+@login_required
 def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse:
     base_path = "/opt/heappe-deployment/"
     #repo_url = "https://github.com/It4innovations/HEAppE.git"

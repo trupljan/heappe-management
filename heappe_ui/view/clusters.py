@@ -1,7 +1,7 @@
 from .imports import *
 from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, SCHEDULER_CHOICES, CONNECTION_PROTOCOL_CHOICES, login_view, login_required
 
-@login_required(login_url="/login/")
+@login_required
 def cluster_list(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     clusters = controller.heappe_management_clusters_get(SessionCode=request.session_code)
@@ -19,7 +19,7 @@ def cluster_list(request: HttpRequest) -> HttpResponse:
                           })
 
 
-@login_required(login_url="/login/")
+@login_required
 def cluster_create(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
         return render(request, "cluster_detail.html", {
@@ -53,7 +53,7 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
             # cluster_detail
             return redirect("cluster_detail", cluster_id=result["Id"])
 
-@login_required(login_url="/login/")
+@login_required
 def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     tab = request.GET.get('tab', 'detail')
@@ -138,7 +138,7 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
 
     return render(request, "cluster_detail.html", context)
 
-@login_required(login_url="/login/")
+@login_required
 def cluster_delete(request: HttpRequest, cluster_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     payload_data = {
@@ -153,7 +153,7 @@ def cluster_delete(request: HttpRequest, cluster_id: int) -> HttpResponse:
     )
     return redirect("cluster_list")
 
-@login_required(login_url="/login/")
+@login_required
 def create_or_edit_filetransfer_method(request: HttpRequest, cluster_id: int) -> HttpResponse:
     server_hostname = request.POST.get("ServerHostname")
     port = int(request.POST.get("Port")) if request.POST.get("Port") else None
@@ -198,7 +198,7 @@ def create_or_edit_filetransfer_method(request: HttpRequest, cluster_id: int) ->
         )
     return redirect("cluster_detail", cluster_id=cluster_id)
 
-@login_required(login_url="/login/")
+@login_required
 def delete_filetransfer_method(request: HttpRequest, cluster_id: int, filetransfer_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     payload_data = {

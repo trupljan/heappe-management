@@ -14,11 +14,11 @@ import datetime
 
 from .DeployService import get_instance_settings
 
-@login_required(login_url="/login/")
+@login_required
 def index(request: HttpRequest) -> HttpResponse:
     return dashboard_view(request)
 
-@login_required(login_url="/login/")
+@login_required
 def home(request: HttpRequest) -> HttpResponse:
     return dashboard_view(request)
 
@@ -28,7 +28,7 @@ def home(request: HttpRequest) -> HttpResponse:
 
 
 
-@login_required(login_url="/login/")
+@login_required
 def logout_view(request):
     from django.contrib.auth import logout
     HeappeAuthBackend.api_instance = None
@@ -37,7 +37,7 @@ def logout_view(request):
     logout(request)
     return redirect("login")
 
-@login_required(login_url="/login/")
+@login_required
 def aggregation_create(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         controller = hp.ManagementApi(request.api_instance)
@@ -60,7 +60,7 @@ def aggregation_create(request: HttpRequest) -> HttpResponse:
 
 
 
-@login_required(login_url="/login/")
+@login_required
 def assign_project_to_cluster(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         controller = hp.ManagementApi(request.api_instance)
@@ -81,7 +81,7 @@ def assign_project_to_cluster(request: HttpRequest) -> HttpResponse:
             )
     return render(request, "assign_project_to_cluster.html")
 
-@login_required(login_url="/login/")
+@login_required
 def list_jobs(request: HttpRequest) -> HttpResponse:
     # Placeholder for listing jobs
     return HttpResponse(status=204)
@@ -107,7 +107,7 @@ from django.http import JsonResponse
 from django.shortcuts import render
 from django.conf import settings
 
-@login_required(login_url="/login/")
+@login_required
 def update_app(request):
     if request.method == 'POST':
         try:
@@ -178,7 +178,7 @@ def update_app(request):
     return render(request, "update_app.html")
 
 
-@login_required(login_url="/login/")
+@login_required
 def profile_view(request):
     last_auth_ts = request.session.get("heappe_last_auth")
 
@@ -189,14 +189,14 @@ def profile_view(request):
 
     return render(request, "user_profile.html", {"user": request.user,  "last_auth": last_auth})
 
-@login_required(login_url="/login/")
+@login_required
 def reconnect_view(request):
     request.session["force_reauth"] = True
     # reload
     return redirect(request.META.get('HTTP_REFERER', '/'))  # Redirect back to the previous page or home if no referrer
 
 
-@login_required(login_url="/login/")
+@login_required
 def chose_instance_view(request):
     if request.method == "POST":
         instance_name = request.POST.get("InstanceName")
@@ -215,7 +215,7 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from datetime import datetime, timedelta
 
-@login_required(login_url="/login/")
+@login_required
 def dashboard_view(request):
     context = {}
     if request.session.get("chosen_instance") is None:
@@ -346,7 +346,7 @@ from django.shortcuts import render, redirect
 from .models import InstanceCredentials
 from django.utils import timezone
 
-@login_required(login_url="/login/")
+@login_required
 def logs_view(request):
     context = {}
     context['default_date_from'] = (timezone.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M")

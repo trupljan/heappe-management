@@ -3,7 +3,7 @@ from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_vi
 from django.shortcuts import render
 from datetime import datetime, date
 
-@login_required(login_url="/login/")
+@login_required
 def accounting_view(request, project_id:int):
     context = {}
     controller = hp.ManagementApi(request.api_instance)
@@ -103,7 +103,7 @@ def accounting_view(request, project_id:int):
     return render(request, "accounting.html", context)
 
 
-@login_required(login_url="/login/")
+@login_required
 def assign_queue_group_to_project(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = 0
@@ -132,7 +132,7 @@ def assign_queue_group_to_project(request: HttpRequest) -> HttpResponse:
     return redirect("accounting", project_id=project_id)
 
 
-@login_required(login_url="/login/")
+@login_required
 def unassign_queue_group_from_project(request: HttpRequest) -> HttpResponse:
     """mapping_id je Id záznamu ProjectClusterNodeTypeAggregation"""
     controller = hp.ManagementApi(request.api_instance)
