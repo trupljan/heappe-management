@@ -56,4 +56,11 @@ urlpatterns = [
     path('command-templates/<int:command_template_id>/modify/', views.command_template_modify, name='command_template_modify'),
 
     path('update-app/', views.update_app, name='update_app'),
+
+    path('instances/', views.instance_credentials_list, name='instance_credentials_list'),
+    path('instances/<int:pk>/choose/', views.instance_credentials_list, name='instance_credentials_list'),
+    path('instances/create/', views.instance_credentials_create, name='instance_credentials_create'),
+    path('instances/<int:pk>/edit/', views.instance_credentials_edit, name='instance_credentials_edit'),
+    path('instances/<int:pk>/delete/', views.instance_credentials_delete, name='instance_credentials_delete'),
+    path('instances/choose/', views.chose_instance_view, name='chose_instance_view'),
 ]
