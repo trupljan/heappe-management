@@ -179,6 +179,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         print(f"Docker Compose up done: {up_result.returncode} {up_result.stdout} {up_result.stderr}")
         #wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
         # Initialize the database with retries
+
         run_with_retries(instance_name, ports)
 
         restart_command = [
@@ -488,6 +489,7 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
                 action_message, action_status = handle_global_action(compose_dir, instance_name, action)
 
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                print("AJAX request detected, returning JSON response.")
                 updated_containers = [get_container_details(c) for c in client.containers.list(all=True)
                                     if c.labels.get('com.docker.compose.project') == instance_name]
                 return JsonResponse({
