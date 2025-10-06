@@ -60,7 +60,7 @@ def execute_docker_compose(command, compose_dir, timeout=300):
             capture_output=False,
             text=True,
             timeout=timeout,
-            check=True
+            check=False
         )
         return result
     except subprocess.TimeoutExpired as e:
