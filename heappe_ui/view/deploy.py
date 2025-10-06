@@ -475,6 +475,13 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
                     HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=version, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
                     instance_name, ports, s1, s2, s3, s4
                 )
+                # set message based on result
+                if result and result.returncode == 0:
+                    action_message = "Deployment succeeded."
+                    action_status = 'success'
+                else:
+                    action_message = f"Deployment failed: {result.stderr if result else 'Unknown error'}"
+                    action_status = 'danger'
 
             elif action in ['start', 'stop', 'restart']:
                 action_message, action_status = handle_container_action(
