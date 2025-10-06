@@ -57,7 +57,7 @@ def execute_docker_compose(command, compose_dir, timeout=300):
         result = subprocess.run(
             command,
             cwd=compose_dir,
-            capture_output=True,
+            capture_output=False,
             text=True,
             timeout=timeout,
             check=True
