@@ -249,7 +249,7 @@ $(document).ready(function(){
         }
     });
 
-  $(document).on('submit', 'form[id^="start-form-"], form[id^="stop-form-"], form[id^="restart-form-"], #start-all-form, #restart-all-form, #down-all-form', function(e) {
+  $(document).on('submit', '#update-form, form[id^="start-form-"], form[id^="stop-form-"], form[id^="restart-form-"], #start-all-form, #restart-all-form, #down-all-form', function(e) {
     e.preventDefault();
     showLoading();
     const form = $(this);
@@ -281,7 +281,7 @@ $(document).ready(function(){
     });
 });
 
-$(document).on('submit', '#deploy-form, #update-form', function(e) {
+$(document).on('submit', '#deploy-form', function(e) {
     e.preventDefault();
     showLoading();
     const form = $(this);
@@ -302,15 +302,21 @@ $(document).on('submit', '#deploy-form, #update-form', function(e) {
             $('#deployUpdateModal').modal('hide');
 
             setTimeout(function() {
-                let redirectUrl = '/deploy';
+                let currentUrl = new URL(window.location.href);
+                let redirectPath = currentUrl.pathname;
+                const urlParams = currentUrl.searchParams;
+            
+                urlParams.set('t', new Date().getTime());
+            
                 if (form.attr('id') === 'deploy-form') {
                     const instanceName = form.find('input[name="InstanceName"]').val();
                     if (instanceName) {
-                        redirectUrl = `/deploy/${encodeURIComponent(instanceName)}`;
+                        if (!redirectPath.endsWith('/')) redirectPath += '/';
+                        redirectPath += encodeURIComponent(instanceName);
                     }
                 }
-                redirectUrl += `?t=${new Date().getTime()}`;
-                window.location.replace(redirectUrl);
+            
+                window.location.replace(`${redirectPath}?${urlParams.toString()}`);
             }, 2500);
         },
         error: function(xhr, status, error) {
