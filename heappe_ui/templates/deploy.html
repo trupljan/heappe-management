@@ -241,7 +241,7 @@ $(document).ready(function(){
         }
     });
 
-  $(document).on('submit', form[id^="start-form-"], form[id^="stop-form-"], form[id^="restart-form-"], #start-all-form, #restart-all-form, #down-all-form', function(e) {
+  $(document).on('submit', 'form[id^="start-form-"], form[id^="stop-form-"], form[id^="restart-form-"], #start-all-form, #restart-all-form, #down-all-form', function(e) {
     e.preventDefault();
     showLoading();
     const form = $(this);
@@ -253,19 +253,27 @@ $(document).ready(function(){
         data: form.serialize(),
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         success: function(response) {
-            $('#action-feedback').html(`<div class="alert alert-${response.status} alert-dismissible fade show" role="alert">${response.message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`);
+            $('#action-feedback').html(`
+                <div class="alert alert-${response.status} alert-dismissible fade show" role="alert">
+                    ${response.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>`);
             hideLoading();
             $('#deployUpdateModal').modal('hide');
         },
         error: function(xhr, status, error) {
-            $('#action-feedback').html(`<div class="alert alert-danger alert-dismissible fade show" role="alert">Error: ${xhr.responseJSON?.message || error}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`);
+            $('#action-feedback').html(`
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    Error: ${xhr.responseJSON?.message || error}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>`);
             hideLoading();
             form.find('button[type=submit]').prop('disabled', false);
         }
     });
 });
 
-    $(document).on('submit', '#deploy-form', '#update-form', function(e) {
+$(document).on('submit', '#deploy-form, #update-form', function(e) {
     e.preventDefault();
     showLoading();
     const form = $(this);
@@ -277,30 +285,38 @@ $(document).ready(function(){
         data: form.serialize(),
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         success: function(response) {
-            $('#action-feedback').html(`<div class="alert alert-${response.status} alert-dismissible fade show" role="alert">${response.message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`);
+            $('#action-feedback').html(`
+                <div class="alert alert-${response.status} alert-dismissible fade show" role="alert">
+                    ${response.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>`);
             hideLoading();
             $('#deployUpdateModal').modal('hide');
-            // Redirect logic with 1-second delay
+            
             setTimeout(function() {
-                let redirectUrl = '/deploy'; // Default redirect for non-deploy-form submissions
+                let redirectUrl = '/deploy';
                 if (form.attr('id') === 'deploy-form') {
                     const instanceName = form.find('input[name="InstanceName"]').val();
                     if (instanceName) {
-                        redirectUrl = `/deploy/${encodeURIComponent(instanceName)}`; // Append InstanceName to /deploy
+                        redirectUrl = `/deploy/${encodeURIComponent(instanceName)}`;
                     }
                 }
-                // Add cache-busting query parameter to force fresh request
                 redirectUrl += `?t=${new Date().getTime()}`;
-                window.location.replace(redirectUrl); // Use replace to avoid adding to history
-            }, 2500); // 1000ms = 1 second delay
+                window.location.replace(redirectUrl);
+            }, 2500);
         },
         error: function(xhr, status, error) {
-            $('#action-feedback').html(`<div class="alert alert-danger alert-dismissible fade show" role="alert">Error: ${xhr.responseJSON?.message || error}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`);
+            $('#action-feedback').html(`
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    Error: ${xhr.responseJSON?.message || error}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>`);
             hideLoading();
             form.find('button[type=submit]').prop('disabled', false);
         }
     });
 });
+
     // Logs modal
     let logsInterval = null;
     $(document).on('click','[data-container-id]',function(){
