@@ -241,7 +241,7 @@ $(document).ready(function(){
         }
     });
 
-  $(document).on('submit', '#deploy-form, #update-form, form[id^="start-form-"], form[id^="stop-form-"], form[id^="restart-form-"], #start-all-form, #restart-all-form, #down-all-form', function(e) {
+  $(document).on('submit', form[id^="start-form-"], form[id^="stop-form-"], form[id^="restart-form-"], #start-all-form, #restart-all-form, #down-all-form', function(e) {
     e.preventDefault();
     showLoading();
     const form = $(this);
@@ -256,7 +256,30 @@ $(document).ready(function(){
             $('#action-feedback').html(`<div class="alert alert-${response.status} alert-dismissible fade show" role="alert">${response.message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`);
             hideLoading();
             $('#deployUpdateModal').modal('hide');
+        },
+        error: function(xhr, status, error) {
+            $('#action-feedback').html(`<div class="alert alert-danger alert-dismissible fade show" role="alert">Error: ${xhr.responseJSON?.message || error}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`);
+            hideLoading();
+            form.find('button[type=submit]').prop('disabled', false);
+        }
+    });
+});
 
+    $(document).on('submit', '#deploy-form', '#update-form', function(e) {
+    e.preventDefault();
+    showLoading();
+    const form = $(this);
+    form.find('button[type=submit]').prop('disabled', true);
+
+    $.ajax({
+        url: window.location.href,
+        type: 'POST',
+        data: form.serialize(),
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        success: function(response) {
+            $('#action-feedback').html(`<div class="alert alert-${response.status} alert-dismissible fade show" role="alert">${response.message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button></div>`);
+            hideLoading();
+            $('#deployUpdateModal').modal('hide');
             // Redirect logic with 1-second delay
             setTimeout(function() {
                 let redirectUrl = '/deploy'; // Default redirect for non-deploy-form submissions

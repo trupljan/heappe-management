@@ -534,10 +534,14 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     'status': action_status,
                     'message': action_message,
                     'instance_name': instance_name,
+                    'deployment_status': {
+                        'returncode': None,
+                    'deployment_message': {
+                        'stdout':  '',
+                        'stderr':  ''
+                    } if 'result' in locals() else None },
                     'ports': ports if action == 'deploy' else {},
-                    'containers': updated_containers,
-                    "instance_service": instance_service,
-                    "is_deployed": instance_service.is_deployed if instance_service else False
+                    'containers': updated_containers
                 })
 
         containers = [{'container': c, 'ports': get_container_details(c)['ports']}
