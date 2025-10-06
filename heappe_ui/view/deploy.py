@@ -190,6 +190,8 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         ]
         restart_result = execute_docker_compose(restart_command, compose_dir)
         print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
+        if restart_result.returncode != 0:
+            return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
         return restart_result, "Deployment completed successfully.", 'success'
     except Exception as e:
         print(f"Deployment error: {str(e)}")
