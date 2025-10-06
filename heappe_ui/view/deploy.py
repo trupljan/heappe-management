@@ -189,6 +189,10 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "-p", instance_name,
             "restart"
         ]
+
+        wait_for_container_running(f"{instance_name}_heappe", timeout=300, interval=10)
+        wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
+
         restart_result = execute_docker_compose(restart_command, compose_dir)
         print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
         if restart_result.returncode != 0:
@@ -440,6 +444,14 @@ def get_remote_branches(repo_url: str) -> list[str]:
     except subprocess.CalledProcessError:
         return []
 
+import threading
+def deploy_background(config, instance_name, ports, s1, s2, s3, s4):
+    thread = threading.Thread(
+        target=handle_deployment_action,
+        args=(config, instance_name, ports, s1, s2, s3, s4),
+        daemon=True
+    )
+    thread.start()
 @login_required
 def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse:
     base_path = "/opt/heappe-deployment/"
@@ -479,6 +491,7 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
                     HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=version, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
                     instance_name, ports, s1, s2, s3, s4
                 )
+
 
             elif action in ['start', 'stop', 'restart']:
                 action_message, action_status = handle_container_action(
