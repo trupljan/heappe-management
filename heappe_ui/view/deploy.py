@@ -57,7 +57,7 @@ def execute_docker_compose(command, compose_dir, timeout=300):
         result = subprocess.run(
             command,
             cwd=compose_dir,
-            capture_output=False,
+            capture_output=True,
             text=True,
             timeout=timeout,
             check=False
@@ -167,7 +167,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "build",  "--no-cache"
         ]
         build_result = execute_docker_compose(build_command, compose_dir)
-        print(f"Docker Compose build result: {build_result.stdout}, {build_result.stderr}")
+        print(f"Docker Compose build result done")
         up_command = [
             "docker", "compose",
             "--profile", "db",
@@ -176,11 +176,10 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "up", "-d"
         ]
         up_result = execute_docker_compose(up_command, compose_dir)
-        print(f"Docker Compose up result: {up_result.stdout}, {up_result.stderr}")
+        print(f"Docker Compose up done")
         #wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
         # Initialize the database with retries
         run_with_retries(instance_name, ports)
-
 
         restart_command = [
             "--profile", "db",
@@ -189,6 +188,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "restart"
         ]
         restart_result = execute_docker_compose(restart_command, compose_dir)
+        print(f"Docker Compose restart done")
         return restart_result, "Deployment completed successfully.", 'success'
     except Exception as e:
         print(f"Deployment error: {str(e)}")
