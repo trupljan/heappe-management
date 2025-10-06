@@ -88,12 +88,16 @@ def get_container_details(container):
                 ports_info.append(f"{host_port['HostIp']}:{host_port['HostPort']} -> {container_port}")
         else:
             ports_info.append(f"{container_port} (no host mapping)")
+    try:
+        image_tags = ', '.join(container.image.tags) if container.image.tags else 'N/A'
+    except docker.errors.ImageNotFound:
+        image_tags = 'N/A'
     return {
         'id': container.id,
         'short_id': container.short_id,
         'name': container.name,
         'status': container.status,
-        'image': ', '.join(container.image.tags) if container.image.tags else 'N/A',
+        'image': image_tags,
         'service': container.labels.get('com.docker.compose.service', 'N/A'),
         'ports': ports_info,
         'created': container.attrs['Created'][:19] if 'Created' in container.attrs else 'N/A',
@@ -148,7 +152,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         for s in [s1, s2, s3, s4]:
             if 's' in locals(): s.close()
 
-        service.deploy_init(
+        instance_settings = service.deploy_init(
             instance_name=instance_name,
             username="admin",
             password="admin",
@@ -157,7 +161,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             ports=ports,
             overwrite_existing=True,
             deployed_ip='localhost'
-        )
+        )['instance_settings']
 
         build_command = [
             "docker", "compose",
@@ -197,6 +201,11 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
         if restart_result.returncode != 0:
             return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
+
+        #set the instance as deployed in the database
+        from ..models import InstanceCredentials
+        instance_settings.is_deployed = True
+        instance_settings.save()
         return restart_result, "Deployment completed successfully.", 'success'
     except Exception as e:
         print(f"Deployment error: {str(e)}")
@@ -452,8 +461,10 @@ def deploy_background(config, instance_name, ports, s1, s2, s3, s4):
         daemon=True
     )
     thread.start()
+
+from django.utils import timezone
 @login_required
-def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse:
+def deploy_view(request, instance_name: str = '') -> HttpResponse:
     base_path = "/opt/heappe-deployment/"
     #repo_url = "https://github.com/It4innovations/HEAppE.git"
     repo_url = "https://code.it4i.cz/ADAS-Private/HEAppE/heappe-core.git"
@@ -466,6 +477,16 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
     action_message = None
     action_status = None
     containers = []
+
+    #get instance from db
+    from ..models import InstanceCredentials
+    try:
+        instance_service = InstanceCredentials.objects.get(instance_name=instance_name)
+    except InstanceCredentials.DoesNotExist:
+        instance_service = None
+
+
+
     try:
         client = docker.from_env()
 
@@ -487,10 +508,14 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
                     "data_staging_port": data_staging_port,
                     "local_port": local_port
                 }
-                result, action_message, action_status = handle_deployment_action(
-                    HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=version, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
+
+                deploy_background(HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=version, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
                     instance_name, ports, s1, s2, s3, s4
                 )
+                action_message = "Deployment started in the background. This may take several minutes."
+                action_status = 'info'
+
+
 
 
             elif action in ['start', 'stop', 'restart']:
@@ -509,13 +534,10 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
                     'status': action_status,
                     'message': action_message,
                     'instance_name': instance_name,
-                    'deployment_status': {'returncode': result.returncode if result else None} if 'result' in locals() else None,
-                    'deployment_message': {
-                        'stdout': result.stdout if result and hasattr(result, 'stdout') else '',
-                        'stderr': result.stderr if result and hasattr(result, 'stderr') else ''
-                    } if 'result' in locals() else None,
                     'ports': ports if action == 'deploy' else {},
-                    'containers': updated_containers
+                    'containers': updated_containers,
+                    "instance_service": instance_service,
+                    "is_deployed": instance_service.is_deployed if instance_service else False
                 })
 
         containers = [{'container': c, 'ports': get_container_details(c)['ports']}
@@ -537,5 +559,7 @@ def deploy_view(request, instance_name: str = 'heappe-instance') -> HttpResponse
         "repo_url": repo_url,
         "repo_branch": branches[0] if branches else "main",
         "branches": branches,
+        "instance_service": instance_service,
+        "is_deployed": instance_service.is_deployed if instance_service else False
     }
     return render(request, "deploy.html", context)

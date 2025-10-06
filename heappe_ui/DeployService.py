@@ -72,11 +72,11 @@ class HEAppEDeployService:
 
         for folder in structure:
             path = os.path.join(self.config.base_path, folder)
-            print(f"vytvarim cestu: {path}")
+            print(f"Creating path: {path}")
             if overwrite_existing and os.path.exists(path):
                 shutil.rmtree(path, ignore_errors=True)
             os.makedirs(path, exist_ok=True)
-            print(f"cesta vytvorena: {path}")
+            print(f"Path created: {path}")
 
     def clone_repository(self, instance_name: str, overwrite_existing: bool = False) -> None:
         """Clone HEAppE repository into the project directory."""
@@ -299,7 +299,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
     def save_instance_settings(self, instance_name, heappe_host, heappe_port, heappe_login, heappe_password,
                              log_db_host, log_db_port,
                              log_db_user, log_db_password,
-                             log_db_database):
+                             log_db_database, is_deployed):
         obj, created = InstanceCredentials.objects.update_or_create(
             instance_name=instance_name,
             defaults={
@@ -312,6 +312,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 "log_db_user": log_db_user,
                 "log_db_password": log_db_password,
                 "log_db_database": log_db_database,
+                "is_deployed": is_deployed,
+                "deployment_date_time": datetime.now()
             }
         )
         return obj, created
@@ -362,13 +364,16 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                                         log_db_port=str(ports.get("mssql_port") if ports else 6000),
                                         log_db_user="SA",
                                         log_db_password=sa_password,
-                                        log_db_database="heappe-monitoring")
+                                        log_db_database="heappe-monitoring",
+                                        is_deployed=False
+                                        )
 
             return {
                 "status": "success",
                 "env_path": env_path,
                 "seed_data": seed_data,
-                "appsettings": appsettings
+                "appsettings": appsettings,
+                "instance_settings": get_instance_settings(instance_name)
             }
         except Exception as e:
             self.logger.error(f"Deployment initialization failed: {e}")
