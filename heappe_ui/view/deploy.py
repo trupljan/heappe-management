@@ -176,7 +176,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "up", "-d"
         ]
         up_result = execute_docker_compose(up_command, compose_dir)
-        print(f"Docker Compose up done")
+        print(f"Docker Compose up done: {up_result.returncode} {up_result.stdout} {up_result.stderr}")
         #wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
         # Initialize the database with retries
         run_with_retries(instance_name, ports)
@@ -188,7 +188,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "restart"
         ]
         restart_result = execute_docker_compose(restart_command, compose_dir)
-        print(f"Docker Compose restart done")
+        print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
         return restart_result, "Deployment completed successfully.", 'success'
     except Exception as e:
         print(f"Deployment error: {str(e)}")
