@@ -157,9 +157,14 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label" for="ScratchStoragePath">Local Basepath</label>
+                            <label class="form-label" for="ScratchStoragePath">Scratch Storage Path</label>
                             <input type="text" class="form-control" id="ScratchStoragePath" name="ScratchStoragePath" value="" placeholder="Enter Scratch Storage Path">
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="PermanentStoragePath">Permanent Storage Path</label>
+                            <input type="text" class="form-control" id="PermanentStoragePath" name="PermanentStoragePath" value="" placeholder="Enter Permanent Storage Path">
+                        </div>
+
                         <div class="col-12">
                             <button type="submit"  class="btn btn-primary mt-2">Assign Cluster</button>
                         </div>
@@ -182,7 +187,8 @@
                         <thead class="table-light">
                             <tr>
                                 <th scope="col">Cluster Name</th>
-                                <th scope="col">Local Basepath</th>
+                                <th scope="col">Scratch Storage Path</th>
+                                <th scope="col">Permanent Storage Path</th>
                                 <th scope="col">Action</th>
                             </tr>
                         </thead>
@@ -190,7 +196,8 @@
                             {% for assignment in project_assignments %}
                             <tr>
                                 <td>{{ assignment.cluster_name }}</td>
-                                <td>{{ assignment.local_basepath }}</td>
+                                <td>{{ assignment.scratch_storage_path }}</td>
+                                <td>{{ assignment.permanent_storage_path }}</td>
                                 <td>
                                     <form method="post" style="display:inline;">
                                         {% csrf_token %}
