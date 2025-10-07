@@ -35,7 +35,8 @@ class ClusterProjectExt(object):
     swagger_types = {
         'cluster_id': 'int',
         'project_id': 'int',
-        'local_basepath': 'str',
+        'scratch_storage_path': 'str',
+        'permanent_storage_path': 'str',
         'created_at': 'datetime',
         'modified_at': 'datetime'
     }
@@ -43,12 +44,13 @@ class ClusterProjectExt(object):
     attribute_map = {
         'cluster_id': 'ClusterId',
         'project_id': 'ProjectId',
-        'local_basepath': 'LocalBasepath',
+        'scratch_storage_path': 'ScratchStoragePath',
+        'permanent_storage_path': 'PermanentStoragePath',
         'created_at': 'CreatedAt',
         'modified_at': 'ModifiedAt'
     }
 
-    def __init__(self, cluster_id=None, project_id=None, local_basepath=None, created_at=None, modified_at=None, _configuration=None):  # noqa: E501
+    def __init__(self, cluster_id=None, project_id=None, scratch_storage_path=None, permanent_storage_path=None, created_at=None, modified_at=None, _configuration=None):  # noqa: E501
         """ClusterProjectExt - a model defined in Swagger"""  # noqa: E501
         if _configuration is None:
             _configuration = Configuration()
@@ -56,7 +58,8 @@ class ClusterProjectExt(object):
 
         self._cluster_id = None
         self._project_id = None
-        self._local_basepath = None
+        self._scratch_storage_path = None
+        self._permanent_storage_path = None
         self._created_at = None
         self._modified_at = None
         self.discriminator = None
@@ -65,8 +68,10 @@ class ClusterProjectExt(object):
             self.cluster_id = cluster_id
         if project_id is not None:
             self.project_id = project_id
-        if local_basepath is not None:
-            self.local_basepath = local_basepath
+        if scratch_storage_path is not None:
+            self.scratch_storage_path = scratch_storage_path
+        if permanent_storage_path is not None:
+            self.permanent_storage_path = permanent_storage_path
         if created_at is not None:
             self.created_at = created_at
         if modified_at is not None:
@@ -119,33 +124,62 @@ class ClusterProjectExt(object):
         self._project_id = project_id
 
     @property
-    def local_basepath(self):
-        """Gets the local_basepath of this ClusterProjectExt.  # noqa: E501
+    def scratch_storage_path(self):
+        """Gets the scratch_storage_path of this ClusterProjectExt.  # noqa: E501
 
-        Local base path  # noqa: E501
+        Scratch Storage Path  # noqa: E501
 
-        :return: The local_basepath of this ClusterProjectExt.  # noqa: E501
+        :return: The scratch_storage_path of this ClusterProjectExt.  # noqa: E501
         :rtype: str
         """
-        return self._local_basepath
+        return self._scratch_storage_path
 
-    @local_basepath.setter
-    def local_basepath(self, local_basepath):
-        """Sets the local_basepath of this ClusterProjectExt.
+    @scratch_storage_path.setter
+    def scratch_storage_path(self, scratch_storage_path):
+        """Sets the scratch_storage_path of this ClusterProjectExt.
 
-        Local base path  # noqa: E501
+        Scratch Storage Path  # noqa: E501
 
-        :param local_basepath: The local_basepath of this ClusterProjectExt.  # noqa: E501
+        :param scratch_storage_path: The scratch_storage_path of this ClusterProjectExt.  # noqa: E501
         :type: str
         """
         if (self._configuration.client_side_validation and
-                local_basepath is not None and len(local_basepath) > 100):
-            raise ValueError("Invalid value for `local_basepath`, length must be less than or equal to `100`")  # noqa: E501
+                scratch_storage_path is not None and len(scratch_storage_path) > 100):
+            raise ValueError("Invalid value for `scratch_storage_path`, length must be less than or equal to `100`")  # noqa: E501
         if (self._configuration.client_side_validation and
-                local_basepath is not None and len(local_basepath) < 0):
-            raise ValueError("Invalid value for `local_basepath`, length must be greater than or equal to `0`")  # noqa: E501
+                scratch_storage_path is not None and len(scratch_storage_path) < 0):
+            raise ValueError("Invalid value for `scratch_storage_path`, length must be greater than or equal to `0`")  # noqa: E501
 
-        self._local_basepath = local_basepath
+        self._scratch_storage_path = scratch_storage_path
+
+    @property
+    def permanent_storage_path(self):
+        """Gets the permanent_storage_path of this ClusterProjectExt.  # noqa: E501
+
+        Permanent Storage Path  # noqa: E501
+
+        :return: The permanent_storage_path of this ClusterProjectExt.  # noqa: E501
+        :rtype: str
+        """
+        return self._permanent_storage_path
+
+    @permanent_storage_path.setter
+    def permanent_storage_path(self, permanent_storage_path):
+        """Sets the permanent_storage_path of this ClusterProjectExt.
+
+        Permanent Storage Path  # noqa: E501
+
+        :param permanent_storage_path: The permanent_storage_path of this ClusterProjectExt.  # noqa: E501
+        :type: str
+        """
+        if (self._configuration.client_side_validation and
+                permanent_storage_path is not None and len(permanent_storage_path) > 100):
+            raise ValueError("Invalid value for `permanent_storage_path`, length must be less than or equal to `100`")  # noqa: E501
+        if (self._configuration.client_side_validation and
+                permanent_storage_path is not None and len(permanent_storage_path) < 0):
+            raise ValueError("Invalid value for `permanent_storage_path`, length must be greater than or equal to `0`")  # noqa: E501
+
+        self._permanent_storage_path = permanent_storage_path
 
     @property
     def created_at(self):
