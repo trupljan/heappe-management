@@ -339,8 +339,9 @@ $(document).on('submit', '#deploy-form', function(e) {
         $('#logs-content').text('Loading logs...');
         showBlueAlert();
         function fetchLogs(){
+            const basePath = window.location.pathname.split('/').includes('management') ? '/management' : '';
             $.ajax({
-                url: window.location.pathname.replace(/\/$/, '') + '/logs/' + containerId + '/',
+                url: `${basePath}/logs/${containerId}/`,
                 type:'GET',
                 headers:{'X-Requested-With':'XMLHttpRequest'},
                 success:function(response){
