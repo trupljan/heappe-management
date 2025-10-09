@@ -6,7 +6,7 @@ class InstanceCredentialsForm(forms.ModelForm):
         model = InstanceCredentials
         fields = [
             'instance_name', 'heappe_host', 'heappe_login', 'heappe_password', 'heappe_port',
-            'log_db_host', 'log_db_port', 'log_db_user', 'log_db_password', 'log_db_database'
+            'log_db_host', 'log_db_port', 'log_db_user', 'log_db_password', 'log_db_database', 'deployment_date_time', 'is_deployed'
         ]
         widgets = {
             'heappe_password': forms.PasswordInput(),
