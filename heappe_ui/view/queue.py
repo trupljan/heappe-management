@@ -287,7 +287,7 @@ def queue_group_modify(request: HttpRequest, group_id: int) -> HttpResponse:
             "Failed to update Queue Group"
         )
         if result:
-            return queue_group_detail(request, group_id)
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id})")
 
     return queue_group_detail(request, group_id)
 
@@ -311,7 +311,6 @@ def assign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
             "Failed to assign formula to Queue Group"
         )
         if result:
-
             return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=formulas")
 
 
