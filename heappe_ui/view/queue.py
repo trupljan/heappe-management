@@ -39,7 +39,7 @@ def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
             "Failed to update Queue"
         )
         if result:
-            node_type = result
+            node_type = controller.heappe_management_cluster_node_type_get(Id=queue_id, SessionCode=request.session_code).to_dict()
 
     queue_groups = [g.to_dict() for g in
                     controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code)]
