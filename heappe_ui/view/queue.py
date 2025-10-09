@@ -257,7 +257,7 @@ def queue_group_create(request: HttpRequest) -> HttpResponse:
             "Failed to create Queue Group"
         )
         if result:
-            return queue_group_detail(request, result['Id'])
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{result['Id']})")
 
     return render(request, 'queue_group.html', {"active_tab": tab})
 
@@ -289,7 +289,7 @@ def queue_group_modify(request: HttpRequest, group_id: int) -> HttpResponse:
         if result:
             return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id})")
 
-    return queue_group_detail(request, group_id)
+    return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id})")
 
 @login_required
 def assign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
