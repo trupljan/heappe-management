@@ -15,6 +15,32 @@ def queues_view(request: HttpRequest) -> HttpResponse:
 def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     node_type = controller.heappe_management_cluster_node_type_get(Id=queue_id, SessionCode=request.session_code).to_dict()
+    if request.method == "POST":
+        # update queue
+        payload_data = {
+            "Id": queue_id,
+            "Name": request.POST.get("Name"),
+            "Description": request.POST.get("Description"),
+            "NumberOfNodes": int(request.POST.get("NumberOfNodes")) if request.POST.get("NumberOfNodes") else None,
+            "CoresPerNode": int(request.POST.get("CoresPerNode")) if request.POST.get("CoresPerNode") else None,
+            "Queue": request.POST.get("Queue"),
+            "QualityOfService": request.POST.get("QualityOfService"),
+            "MaxWalltime": int(request.POST.get("MaxWalltime")) if request.POST.get("MaxWalltime") else None,
+            "ClusterAllocationName": request.POST.get("ClusterAllocationName"),
+            "ClusterId": node_type["cluster_id"],
+            "FileTransferMethodId": int(request.POST.get("FileTransferMethodId")) if request.POST.get("FileTransferMethodId") else None,
+            "ClusterNodeTypeAggregationId": int(request.POST.get("ClusterNodeTypeAggregationId")) if request.POST.get("ClusterNodeTypeAggregationId") else None,
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result =  _handle_api_call(
+            request,
+            lambda: controller.heappe_management_cluster_node_type_put(**payload),
+            "Queue updated successfully!",
+            "Failed to update Queue"
+        )
+        if result:
+            node_type = result
+
     queue_groups = [g.to_dict() for g in
                     controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code)]
 
@@ -46,31 +72,9 @@ def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
         for ftm in cluster_filetransfer_methods:
             ftm['protocol_name'] = dict(PROTOCOL_CHOICES).get(ftm['protocol'], "Unknown")
 
-    if request.method == "POST":
-        # update queue
-        payload_data = {
-            "Id": queue_id,
-            "Name": request.POST.get("Name"),
-            "Description": request.POST.get("Description"),
-            "NumberOfNodes": int(request.POST.get("NumberOfNodes")) if request.POST.get("NumberOfNodes") else None,
-            "CoresPerNode": int(request.POST.get("CoresPerNode")) if request.POST.get("CoresPerNode") else None,
-            "Queue": request.POST.get("Queue"),
-            "QualityOfService": request.POST.get("QualityOfService"),
-            "MaxWalltime": int(request.POST.get("MaxWalltime")) if request.POST.get("MaxWalltime") else None,
-            "ClusterAllocationName": request.POST.get("ClusterAllocationName"),
-            "ClusterId": node_type["cluster_id"],
-            "FileTransferMethodId": int(request.POST.get("FileTransferMethodId")) if request.POST.get("FileTransferMethodId") else None,
-            "ClusterNodeTypeAggregationId": int(request.POST.get("ClusterNodeTypeAggregationId")) if request.POST.get("ClusterNodeTypeAggregationId") else None,
-        }
-        payload = _create_payload(request.session_code, payload_data)
-        result =  _handle_api_call(
-            request,
-            lambda: controller.heappe_management_cluster_node_type_put(**payload),
-            "Queue updated successfully!",
-            "Failed to update Queue"
-        )
-        if result:
-            return redirect(f"/queues/{queue_id}/")
+
+
+
 
     return render(request, "queue.html", {
         "node_type": node_type,
