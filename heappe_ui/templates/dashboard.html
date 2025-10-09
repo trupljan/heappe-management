@@ -2,6 +2,101 @@
 
 {% block content %}
 {% load static %}
+    
+    
+    <style>
+/* General mobile adjustments */
+@media (max-width: 768px) {
+    /* Stack columns on mobile */
+    .col-md-4, .col-md-2 {
+        margin-bottom: 1.5rem;
+    }
+
+    /* Reduce card padding and font sizes */
+    .card {
+        padding: 0.75rem !important;
+    }
+    .card-title {
+        font-size: 1.1rem;
+    }
+    .card-body p, .card-body li {
+        font-size: 0.9rem;
+    }
+    .display-4 {
+        font-size: 2rem;
+    }
+
+    /* Form inputs and buttons */
+    .form-control-sm {
+        font-size: 0.85rem;
+        padding: 0.5rem;
+    }
+    .btn-sm {
+        font-size: 0.85rem;
+        padding: 0.5rem 1rem;
+    }
+
+    /* Modal adjustments */
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: 100%;
+    }
+    .modal-body {
+        padding: 1rem;
+    }
+    .modal-title {
+        font-size: 1.25rem;
+    }
+    .modal-body p, .modal-body small {
+        font-size: 0.85rem;
+    }
+
+    /* Chart adjustments */
+    #jobsStateChart {
+        max-height: 250px;
+    }
+
+    /* Pagination adjustments */
+    .pagination .page-link {
+        font-size: 0.9rem;
+        padding: 0.5rem 0.75rem;
+    }
+}
+
+/* Ensure badges are readable on mobile */
+.badge {
+    font-size: 0.75rem;
+    padding: 0.4em 0.6em;
+}
+
+/* Adjust list-group items for better spacing */
+.list-group-item {
+    padding: 0.75rem;
+}
+
+/* Ensure health check and vault info are compact */
+.list-group-flush .list-group-item {
+    padding: 0.5rem 0;
+}
+
+/* Touch-friendly buttons */
+.btn {
+    min-height: 38px;
+    touch-action: manipulation;
+}
+
+/* Ensure chart is responsive */
+canvas#jobsStateChart {
+    width: 100% !important;
+    max-height: 300px;
+}
+
+/* Improve modal scrolling on mobile */
+.modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+</style>
 
 {# Define a mapping for job states to reduce repeated conditionals #}
 {% with job_states=job_item.state %}
