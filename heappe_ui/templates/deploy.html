@@ -340,7 +340,7 @@ $(document).on('submit', '#deploy-form', function(e) {
         showBlueAlert();
         function fetchLogs(){
             $.ajax({
-                url:'/logs/'+containerId+'/',
+                url: window.location.pathname.replace(/\/$/, '') + '/logs/' + containerId + '/',
                 type:'GET',
                 headers:{'X-Requested-With':'XMLHttpRequest'},
                 success:function(response){
