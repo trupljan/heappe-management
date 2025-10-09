@@ -125,7 +125,7 @@ def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
             "Failed to create Queue"
         )
         if result:
-            return redirect(f"/queues/{result['Id']}/")
+            return queue_detail(request, result['Id'])
 
     return render(request, "queue.html")
 
