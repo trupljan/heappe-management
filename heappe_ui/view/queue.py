@@ -287,10 +287,9 @@ def queue_group_modify(request: HttpRequest, group_id: int) -> HttpResponse:
             "Failed to update Queue Group"
         )
         if result:
-            print(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id})")
-            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id})")
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id})")
 
-    return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id})")
+    return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id})")
 
 @login_required
 def assign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
@@ -312,10 +311,10 @@ def assign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
             "Failed to assign formula to Queue Group"
         )
         if result:
-            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=formulas")
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=formulas")
 
 
-    return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=formulas")
+    return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=formulas")
 
 @login_required
 def unassign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
@@ -337,9 +336,9 @@ def unassign_formula(request: HttpRequest, group_id: int) -> HttpResponse:
             "Failed to unassign formula to Queue Group"
         )
         if result:
-            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=formulas")
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=formulas")
 
-    return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=formulas")
+    return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=formulas")
 
 @login_required
 def add_formula(request: HttpRequest, group_id: int) -> HttpResponse:
@@ -364,9 +363,9 @@ def add_formula(request: HttpRequest, group_id: int) -> HttpResponse:
             "Failed to create formula"
         )
         if result:
-            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=formulas")
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=formulas")
 
-    return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=formulas")
+    return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=formulas")
 
 @login_required
 def edit_formula(request: HttpRequest, group_id: int) -> HttpResponse:
@@ -394,9 +393,9 @@ def edit_formula(request: HttpRequest, group_id: int) -> HttpResponse:
         )
         if result:
 
-            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=formulas")
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=formulas")
 
-    return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=formulas")
+    return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=formulas")
 
 @login_required
 def assign_project_to_group(request: HttpRequest, group_id: int) -> HttpResponse:
@@ -421,9 +420,9 @@ def assign_project_to_group(request: HttpRequest, group_id: int) -> HttpResponse
             "Failed to assign Project"
         )
     if result:
-            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=projects")
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=projects")
 
-    return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=projects")
+    return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=projects")
 
 @login_required
 def unassign_project_to_group(request: HttpRequest, group_id: int) -> HttpResponse:
@@ -443,7 +442,7 @@ def unassign_project_to_group(request: HttpRequest, group_id: int) -> HttpRespon
         "Failed to unassign Queue Group"
     )
     if result:
-            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=projects")
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=projects")
 
-    return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id}/?tab=projects")
+    return redirect(f"{settings.FORCE_SCRIPT_NAME}/queue-groups/{group_id}/?tab=projects")
 
