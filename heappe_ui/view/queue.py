@@ -257,7 +257,7 @@ def queue_group_create(request: HttpRequest) -> HttpResponse:
             "Failed to create Queue Group"
         )
         if result:
-            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{result['Id']})")
+            return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{result['Id']}")
 
     return render(request, 'queue_group.html', {"active_tab": tab})
 
