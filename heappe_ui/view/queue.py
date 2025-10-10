@@ -287,6 +287,7 @@ def queue_group_modify(request: HttpRequest, group_id: int) -> HttpResponse:
             "Failed to update Queue Group"
         )
         if result:
+            print(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id})")
             return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id})")
 
     return redirect(f"{settings.FORCE_SCRIPT_NAME}queue-groups/{group_id})")
