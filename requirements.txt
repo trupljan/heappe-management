@@ -36,7 +36,6 @@ python-dotenv==1.0.1
 pytz==2025.2
 requests==2.32.5
 rich==14.1.0
-salt==3007.8
 scp==0.15.0
 shellingham==1.5.4
 six==1.16.0
