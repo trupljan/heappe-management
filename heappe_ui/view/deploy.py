@@ -142,6 +142,23 @@ def wait_for_container_running(container_name, timeout=60, interval=5):
 
     raise TimeoutError(f"Container {container_name} did not reach 'running' state in {timeout} seconds.")
 
+
+import secrets
+import string
+
+def generate_secure_password(length=16):
+    alphabet = string.ascii_letters + string.digits + string.punctuation
+    password = secrets.choice(string.digits)
+    password += secrets.choice(string.punctuation)
+    password += secrets.choice(string.ascii_uppercase)
+    password += secrets.choice(string.ascii_lowercase)
+    for _ in range(length - 4):
+        password += secrets.choice(alphabet)
+    password_list = list(password)
+    secrets.SystemRandom().shuffle(password_list)
+    return ''.join(password_list)
+
+
 def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
     """Handle the deployment process and return the result."""
     service = HEAppEDeployService(config)
@@ -152,12 +169,16 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         for s in [s1, s2, s3, s4]:
             if 's' in locals(): s.close()
 
+        admin_password = generate_secure_password()
+        vault_password = generate_secure_password()
+        sa_password = generate_secure_password()
+
         instance_settings = service.deploy_init(
             instance_name=instance_name,
             username="admin",
-            password="admin",
-            vault_password="Password",
-            sa_password="Passw0rd",
+            password=admin_password,
+            vault_password=vault_password,
+            sa_password=sa_password,
             ports=ports,
             overwrite_existing=True,
             deployed_ip='localhost'
@@ -184,7 +205,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         #wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
         # Initialize the database with retries
 
-        run_with_retries(instance_name, ports)
+        run_with_retries(instance_name, ports, sa_password)
 
         restart_command = [
             "docker", "compose",
@@ -413,7 +434,7 @@ def initialize_database(
 
 
 # Retry logic
-def run_with_retries(instance_name, ports):
+def run_with_retries(instance_name, ports, password):
     max_attempts = 10
     attempt = 1
     retry_delay = 5  # seconds
@@ -425,7 +446,7 @@ def run_with_retries(instance_name, ports):
             port=ports['mssql_port'],
             db_name='heappe-monitoring',
             db_user='SA',
-            db_password='Passw0rd'
+            db_password=password
         )
         if success:
             print("Database initialization succeeded!")
