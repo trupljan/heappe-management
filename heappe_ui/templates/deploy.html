@@ -498,9 +498,19 @@ $(document).on('submit', '#deploy-form', function(e) {
     });
 });
 // File Manager
-// File Manager
 let currentContainerId = null;
 let currentPath = '/opt/heappe/confs/'; // Default path inside container
+let selectedFilePath = null; // Pro editovaný soubor
+
+// Feedback v modalu
+function showFmFeedback(message, type = 'danger') {
+    $('#fm-feedback').html(`
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `);
+}
 
 // Aktualizace breadcrumb cesty
 function updateBreadcrumb() {
@@ -508,23 +518,23 @@ function updateBreadcrumb() {
     breadcrumb.empty();
 
     const parts = currentPath.split('/').filter(Boolean);
-    let pathAccumulator = '';
+    let pathAccumulator = '/'; // Start s root
+
+    if (parts.length === 0) {
+        breadcrumb.append('<li class="breadcrumb-item active" aria-current="page">/</li>');
+        return;
+    }
 
     parts.forEach((part, index) => {
-        pathAccumulator += '/' + part;
+        pathAccumulator += part + (index < parts.length - 1 ? '/' : '');
         const isLast = index === parts.length - 1;
 
         if (isLast) {
-            breadcrumb.append(`<li class="breadcrumb-item active" aria-current="page">${part}</li>`);
+            breadcrumb.append(`<li class="breadcrumb-item active" aria-current="page">${part || '/'}</li>`);
         } else {
             breadcrumb.append(`<li class="breadcrumb-item"><a href="#" class="breadcrumb-link" data-path="${pathAccumulator}">${part}</a></li>`);
         }
     });
-
-    // Pokud není nic (root), zobrazíme "/"
-    if (parts.length === 0) {
-        breadcrumb.append('<li class="breadcrumb-item active" aria-current="page">/</li>');
-    }
 }
 
 // Funkce pro načtení obsahu složky
@@ -554,133 +564,218 @@ function loadFileList() {
                             data-file="${file.name}"
                             data-type="${file.type}">
                             <span><i class="bi ${icon} me-2"></i>${file.name}</span>
-                            ${file.type === 'file' ? '<span class="badge bg-primary rounded-pill">Edit</span>' : ''}
+                            ${file.type === 'file' ? '<span class="badge bg-primary rounded-pill cursor-pointer">Edit</span>' : ''}
                         </li>
                     `);
                 });
             }
 
             updateBreadcrumb();
+            $('#search-files').off('keyup').on('keyup', filterFiles); // Reset search
         },
         error: function(xhr, status, error) {
-            $('#file-list').html(`<li class="list-group-item text-danger">Error loading files: ${error}</li>`);
+            showFmFeedback(`Error loading files: ${xhr.responseJSON?.message || error}`);
         }
     });
 }
 
-// Navigace ve filemanageru
+// Filtrace souborů (clientside search)
+function filterFiles() {
+    const query = $(this).val().toLowerCase();
+    $('.file-item').each(function() {
+        const name = $(this).data('file').toLowerCase();
+        $(this).toggle(name.includes(query));
+    });
+}
+
+// Navigace ve filemanageru - klik na item
 $(document).on('click', '.file-item', function() {
     const fileName = $(this).data('file');
     const type = $(this).data('type');
+    selectedFilePath = currentPath.replace(/\/$/, '') + '/' + fileName;
 
     if (type === 'directory') {
-        currentPath = currentPath.replace(/\/$/, '') + '/' + fileName + '/';
+        currentPath = selectedFilePath + '/';
         loadFileList();
-    } else {
-        $('#edit-file-name').text(fileName);
-        // sem doplníš načítání obsahu souboru
+    } else if (type === 'file') {
+        // Přepni na editor tab a načti obsah
+        $('#editor-tab').tab('show');
+        $('#edit-file-name').text(selectedFilePath);
+        $('#editor-pane').show();
+        $('#download-btn').prop('disabled', false);
+        $('#file-content').val('Loading...');
+        showFmFeedback('Loading file content...', 'info');
+
+        $.ajax({
+            url: `/container/${currentContainerId}/file/read/`,
+            type: 'POST',
+            data: { path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            success: function(response) {
+                $('#file-content').val(response.content || '');
+                showFmFeedback('File loaded successfully.', 'success');
+            },
+            error: function(xhr) {
+                $('#file-content').val('');
+                showFmFeedback(`Error reading file: ${xhr.responseJSON?.message || 'Unknown'}`, 'danger');
+            }
+        });
     }
 });
 
 // Breadcrumb kliknutí
 $(document).on('click', '.breadcrumb-link', function(e) {
     e.preventDefault();
-    currentPath = $(this).data('path') + '/';
+    currentPath = $(this).data('path');
+    if (!currentPath.endsWith('/')) currentPath += '/';
     loadFileList();
 });
 
 // Tlačítko "Go Up"
 $('#fm-go-up').on('click', function() {
     const parts = currentPath.split('/').filter(Boolean);
-    if (parts.length > 1) {
+    if (parts.length > 0) {  // Pro root nelze jít výš
         parts.pop();
-        currentPath = '/' + parts.join('/') + '/';
+        currentPath = '/' + parts.join('/') + (parts.length > 0 ? '/' : '');
         loadFileList();
     }
 });
 
-// Když se otevře modal, nastavíme kontejner a načteme výchozí cestu
+// Otevření modalu
 $('#fileManagerModal').on('show.bs.modal', function (event) {
     const button = $(event.relatedTarget);
     currentContainerId = button.data('container-id');
     $('#fm-container-name').text(button.data('container-name'));
     currentPath = '/opt/heappe/confs/';
+    selectedFilePath = null;
+    $('#editor-pane').hide();
+    $('#download-btn').prop('disabled', true);
+    $('#fm-feedback').empty();
     loadFileList();
+
+    // Reset tabs
+    $('#upload-tab').tab('show'); // Default tab na upload nebo editor
 });
 
+// Reset při zavření
+$('#fileManagerModal').on('hidden.bs.modal', function () {
+    $('#file-list').empty();
+    $('#file-content').val('');
+    selectedFilePath = null;
+});
 
-function readFile(path) {
-    $.ajax({
-        url: `${basePath}/container/${currentContainerId}/file/read/`,
-        type: 'POST',
-        data: { path: path, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
-        success: function(response) {
-            $('#edit-file-name').text(path);
-            $('#file-content').val(response.content);
-            $('#file-editor').show();
-            $('#file-download').show();
-        }
-    });
-}
-
+// Save file
 $('#save-file').on('click', function() {
-    const path = $('#edit-file-name').text();
+    if (!selectedFilePath) return;
     const content = $('#file-content').val();
     $.ajax({
-        url: `${basePath}/container/${currentContainerId}/file/write/`,
+        url: `/container/${currentContainerId}/file/write/`,
         type: 'POST',
-        data: { path: path, content: content, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
-        success: function() { alert('Saved'); $('#file-editor').hide(); loadFileList(); }
+        data: { path: selectedFilePath, content: content, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        success: function() {
+            showFmFeedback('File saved successfully.', 'success');
+            $('#editor-pane').hide();
+            loadFileList();
+        },
+        error: function(xhr) {
+            showFmFeedback(`Error saving: ${xhr.responseJSON?.message || 'Unknown'}`, 'danger');
+        }
     });
 });
 
-$('#cancel-edit').on('click', function() { $('#file-editor').hide(); });
-
-$('#delete-file').on('click', function() {
-    if (confirm('Delete?')) {
-        const path = $('#edit-file-name').text();
-        $.ajax({
-            url: `${basePath}/container/${currentContainerId}/file/delete/`,
-            type: 'POST',
-            data: { path: path, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
-            success: function() { $('#file-editor').hide(); loadFileList(); }
-        });
-    }
+// Cancel edit
+$('#cancel-edit').on('click', function() {
+    $('#editor-pane').hide();
+    $('#file-content').val('');
+    selectedFilePath = null;
+    showFmFeedback('');
 });
 
+// Delete file - otevře confirm, pak delete
+let fileToDelete = null;
+$('#delete-file').on('click', function() {
+    if (!selectedFilePath) return;
+    fileToDelete = selectedFilePath;
+    $('#confirm-delete-modal').modal('show');
+});
+
+$('#confirm-delete-btn').on('click', function() {
+    if (!fileToDelete) return;
+    $.ajax({
+        url: `/container/${currentContainerId}/file/delete/`,
+        type: 'POST',
+        data: { path: fileToDelete, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        success: function() {
+            showFmFeedback('File deleted.', 'success');
+            $('#editor-pane').hide();
+            loadFileList();
+            $('#confirm-delete-modal').modal('hide');
+            fileToDelete = null;
+        },
+        error: function(xhr) {
+            showFmFeedback(`Error deleting: ${xhr.responseJSON?.message || 'Unknown'}`, 'danger');
+        }
+    });
+});
+
+// Upload (podpora multiple + progress)
 $('#upload-btn').on('click', function() {
-    const fileInput = $('#upload-input')[0];
-    if (fileInput.files[0]) {
+    const files = $('#upload-input')[0].files;
+    if (files.length === 0) return showFmFeedback('No file selected.', 'warning');
+
+    $('.progress').show();
+    let uploaded = 0;
+    Array.from(files).forEach(file => {
         const reader = new FileReader();
         reader.onload = function(e) {
             const base64data = e.target.result.split(',')[1];
             $.ajax({
-                url: `${basePath}/container/${currentContainerId}/file/upload/`,
+                url: `/container/${currentContainerId}/file/upload/`,
                 type: 'POST',
-                data: { path: currentPath, filename: fileInput.files[0].name, file_data: base64data, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
-                success: function() { loadFileList(); }
+                data: { path: currentPath, filename: file.name, file_data: base64data, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+                success: function() {
+                    uploaded++;
+                    $('.progress-bar').css('width', `${(uploaded / files.length) * 100}%`);
+                    if (uploaded === files.length) {
+                        showFmFeedback('Upload complete.', 'success');
+                        loadFileList();
+                        $('.progress').hide();
+                        $('.progress-bar').css('width', '0%');
+                    }
+                },
+                error: function() {
+                    showFmFeedback('Upload failed for ' + file.name, 'danger');
+                }
             });
         };
-        reader.readAsDataURL(fileInput.files[0]);
-    }
+        reader.readAsDataURL(file);
+    });
 });
 
+// Download
 $('#download-btn').on('click', function() {
-    const path = $('#edit-file-name').text();
+    if (!selectedFilePath) return;
     $.ajax({
-        url: `${basePath}/container/${currentContainerId}/file/download/`,
+        url: `/container/${currentContainerId}/file/download/`,
         type: 'POST',
-        data: { path: path, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+        data: { path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
         success: function(response) {
             const blob = new Blob([Uint8Array.from(atob(response.data), c => c.charCodeAt(0))], {type: 'application/octet-stream'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = response.filename;
+            a.download = response.filename || selectedFilePath.split('/').pop();
             a.click();
+            URL.revokeObjectURL(url);
+            showFmFeedback('Download started.', 'info');
+        },
+        error: function(xhr) {
+            showFmFeedback(`Error downloading: ${xhr.responseJSON?.message || 'Unknown'}`, 'danger');
         }
     });
 });
-
 </script>
 {% endblock content %}
