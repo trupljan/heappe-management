@@ -637,16 +637,15 @@ def handle_file_action(request, container_id, action):
 
         elif action == 'write':
             content = request.POST.get('content', '')
-            write_cmd = f"sh -c \"mkdir -p $(dirname '{path}') && cat > '{path}' <<'EOF'\n{content}\nEOF\""
-            exec_result = container.exec_run(write_cmd)
+            write_script = f"mkdir -p $(dirname '{path}') && cat > '{path}' <<'EOF'\n{content}\nEOF\n"
+            exec_result = container.exec_run(['bash', '-c', write_script])
             return JsonResponse({
                 'status': 'success' if exec_result.exit_code == 0 else 'danger',
                 'message': exec_result.output.decode('utf-8', errors='ignore')
             })
-
         elif action == 'delete':
-            exec_result = container.exec_run(f"rm -f {path}")
-            return JsonResponse({'status': 'success' if exec_result.exit_code == 0 else 'danger', 'message': exec_result.output.decode('utf-8')})
+                    exec_result = container.exec_run(f"rm -f {path}")
+                    return JsonResponse({'status': 'success' if exec_result.exit_code == 0 else 'danger', 'message': exec_result.output.decode('utf-8')})
 
         elif action == 'download':
             exec_result = container.exec_run(f"tar -cz {path}")
