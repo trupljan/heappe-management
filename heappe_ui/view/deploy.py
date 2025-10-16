@@ -625,9 +625,7 @@ def handle_file_action(request, container_id, action):
 
         if action == 'list':
             exec_result = container.exec_run(f"ls -la {path}")
-            print(exec_result)
             files = exec_result.output.decode('utf-8').strip().split('\n')
-            print(files)
             return JsonResponse({'status': 'success', 'files': files})
 
         elif action == 'read':
