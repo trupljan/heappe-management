@@ -410,7 +410,7 @@ $(document).on('submit', '#deploy-form', function(e) {
 });
 // File Manager
 let currentContainerId = null;
-let currentPath = '/';
+let currentPath = '/opt/heappe/confs/';  // Default path inside container
 
 $(document).on('click', '[data-bs-target="#fileManagerModal"]', function() {
     currentContainerId = $(this).data('container-id');
