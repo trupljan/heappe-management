@@ -256,7 +256,7 @@ def handle_container_action(client, instance_name, action, container_id):
     except docker.errors.NotFound:
         return f"Container {container_id} not found.", 'danger'
     except docker.errors.APIError as e:
-        return f"Error performing {action} on container {container_id}: {ogastring(e)}", 'danger'
+        return f"Error performing {action} on container {container_id}: {(e)}", 'danger'
 
 def handle_global_action(compose_dir, instance_name, action):
     """Handle global actions for all containers in the project."""
