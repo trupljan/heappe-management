@@ -82,7 +82,6 @@ def execute_docker_compose(command, compose_dir, timeout=300):
             stderr=str(e)
         )
 
-@login_required
 def get_container_details(container):
     """Extract detailed information from a Docker container."""
     port_mappings = container.attrs['NetworkSettings']['Ports']
