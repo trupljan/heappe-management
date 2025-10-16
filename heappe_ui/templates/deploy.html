@@ -557,6 +557,7 @@ function loadFileList() {
             if (files.length === 0) {
                 list.append('<li class="list-group-item text-muted">No files found.</li>');
             } else {
+                console.log(files);
                 files.forEach(file => {
                     const icon = file.type === 'directory' ? 'bi-folder' : 'bi-file-text';
                     list.append(`
