@@ -498,47 +498,116 @@ $(document).on('submit', '#deploy-form', function(e) {
     });
 });
 // File Manager
+// File Manager
 let currentContainerId = null;
-let currentPath = '/opt/heappe/confs/';  // Default path inside container
+let currentPath = '/opt/heappe/confs/'; // Default path inside container
 
-$(document).on('click', '[data-bs-target="#fileManagerModal"]', function() {
-    currentContainerId = $(this).data('container-id');
-    $('#fm-container-name').text($(this).data('container-name'));
-    currentPath = '/';  // Start v rootu kontejneru, nebo '/app'
-    loadFileList();
-});
+// Aktualizace breadcrumb cesty
+function updateBreadcrumb() {
+    const breadcrumb = $('#breadcrumb-path');
+    breadcrumb.empty();
 
+    const parts = currentPath.split('/').filter(Boolean);
+    let pathAccumulator = '';
+
+    parts.forEach((part, index) => {
+        pathAccumulator += '/' + part;
+        const isLast = index === parts.length - 1;
+
+        if (isLast) {
+            breadcrumb.append(`<li class="breadcrumb-item active" aria-current="page">${part}</li>`);
+        } else {
+            breadcrumb.append(`<li class="breadcrumb-item"><a href="#" class="breadcrumb-link" data-path="${pathAccumulator}">${part}</a></li>`);
+        }
+    });
+
+    // Pokud není nic (root), zobrazíme "/"
+    if (parts.length === 0) {
+        breadcrumb.append('<li class="breadcrumb-item active" aria-current="page">/</li>');
+    }
+}
+
+// Funkce pro načtení obsahu složky
 function loadFileList() {
+    $('#file-list').html('<li class="list-group-item text-center text-muted">Loading...</li>');
     $.ajax({
-        url: `${basePath}/container/${currentContainerId}/file/list/`,
+        url: `/container/${currentContainerId}/file/list/`,
         type: 'POST',
-        data: { path: currentPath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+        data: {
+            path: currentPath,
+            instance_name: '{{ instance_name }}',
+            csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+        },
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         success: function(response) {
-            $('#current-path').text(currentPath);
+            const files = response.files || [];
             const list = $('#file-list');
             list.empty();
-            response.files.forEach(file => {
-                const item = $('<li class="list-group-item"></li>').text(file);
-                item.on('click', function() {
-                    if (file.includes('drw')) {  // Dir
-                        currentPath = `${currentPath}/${file.split(' ').pop()}`.replace('//', '/');
-                        loadFileList();
-                    } else {  // File
-                        readFile(`${currentPath}/${file.split(' ').pop()}`.replace('//', '/'));
-                    }
+
+            if (files.length === 0) {
+                list.append('<li class="list-group-item text-muted">No files found.</li>');
+            } else {
+                files.forEach(file => {
+                    const icon = file.type === 'directory' ? 'bi-folder' : 'bi-file-text';
+                    list.append(`
+                        <li class="list-group-item d-flex justify-content-between align-items-center file-item"
+                            data-file="${file.name}"
+                            data-type="${file.type}">
+                            <span><i class="bi ${icon} me-2"></i>${file.name}</span>
+                            ${file.type === 'file' ? '<span class="badge bg-primary rounded-pill">Edit</span>' : ''}
+                        </li>
+                    `);
                 });
-                list.append(item);
-            });
+            }
+
+            updateBreadcrumb();
         },
-        error: function() { alert('Error loading files'); }
+        error: function(xhr, status, error) {
+            $('#file-list').html(`<li class="list-group-item text-danger">Error loading files: ${error}</li>`);
+        }
     });
 }
 
-$('#fm-go-up').on('click', function() {
-    currentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+// Navigace ve filemanageru
+$(document).on('click', '.file-item', function() {
+    const fileName = $(this).data('file');
+    const type = $(this).data('type');
+
+    if (type === 'directory') {
+        currentPath = currentPath.replace(/\/$/, '') + '/' + fileName + '/';
+        loadFileList();
+    } else {
+        $('#edit-file-name').text(fileName);
+        // sem doplníš načítání obsahu souboru
+    }
+});
+
+// Breadcrumb kliknutí
+$(document).on('click', '.breadcrumb-link', function(e) {
+    e.preventDefault();
+    currentPath = $(this).data('path') + '/';
     loadFileList();
 });
+
+// Tlačítko "Go Up"
+$('#fm-go-up').on('click', function() {
+    const parts = currentPath.split('/').filter(Boolean);
+    if (parts.length > 1) {
+        parts.pop();
+        currentPath = '/' + parts.join('/') + '/';
+        loadFileList();
+    }
+});
+
+// Když se otevře modal, nastavíme kontejner a načteme výchozí cestu
+$('#fileManagerModal').on('show.bs.modal', function (event) {
+    const button = $(event.relatedTarget);
+    currentContainerId = button.data('container-id');
+    $('#fm-container-name').text(button.data('container-name'));
+    currentPath = '/opt/heappe/confs/';
+    loadFileList();
+});
+
 
 function readFile(path) {
     $.ajax({
