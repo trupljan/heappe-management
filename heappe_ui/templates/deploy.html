@@ -541,7 +541,7 @@ function updateBreadcrumb() {
 function loadFileList() {
     $('#file-list').html('<li class="list-group-item text-center text-muted">Loading...</li>');
     $.ajax({
-        url: `/container/${currentContainerId}/file/list/`,
+        url: `${basePath}/container/${currentContainerId}/file/list/`,
         type: 'POST',
         data: {
             path: currentPath,
@@ -607,7 +607,7 @@ $(document).on('click', '.file-item', function() {
         showFmFeedback('Loading file content...', 'info');
 
         $.ajax({
-            url: `/container/${currentContainerId}/file/read/`,
+            url: `${basePath}/container/${currentContainerId}/file/read/`,
             type: 'POST',
             data: { path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -669,7 +669,7 @@ $('#save-file').on('click', function() {
     if (!selectedFilePath) return;
     const content = $('#file-content').val();
     $.ajax({
-        url: `/container/${currentContainerId}/file/write/`,
+        url: `${basePath}/container/${currentContainerId}/file/write/`,
         type: 'POST',
         data: { path: selectedFilePath, content: content, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -703,7 +703,7 @@ $('#delete-file').on('click', function() {
 $('#confirm-delete-btn').on('click', function() {
     if (!fileToDelete) return;
     $.ajax({
-        url: `/container/${currentContainerId}/file/delete/`,
+        url: `${basePath}/container/${currentContainerId}/file/delete/`,
         type: 'POST',
         data: { path: fileToDelete, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -732,7 +732,7 @@ $('#upload-btn').on('click', function() {
         reader.onload = function(e) {
             const base64data = e.target.result.split(',')[1];
             $.ajax({
-                url: `/container/${currentContainerId}/file/upload/`,
+                url: `${basePath}/container/${currentContainerId}/file/upload/`,
                 type: 'POST',
                 data: { path: currentPath, filename: file.name, file_data: base64data, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
                 success: function() {
@@ -758,7 +758,7 @@ $('#upload-btn').on('click', function() {
 $('#download-btn').on('click', function() {
     if (!selectedFilePath) return;
     $.ajax({
-        url: `/container/${currentContainerId}/file/download/`,
+        url: `${basePath}/container/${currentContainerId}/file/download/`,
         type: 'POST',
         data: { path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
