@@ -373,6 +373,7 @@ $(document).on('submit', '#deploy-form', function(e) {
     });
 });
 
+    const basePath = window.location.pathname.split('/').includes('management') ? '/management' : '';
     // Logs modal
     let logsInterval = null;
     $(document).on('click','[data-container-id]',function(){
@@ -381,7 +382,7 @@ $(document).on('submit', '#deploy-form', function(e) {
         $('#logs-content').text('Loading logs...');
         showBlueAlert();
         function fetchLogs(){
-            const basePath = window.location.pathname.split('/').includes('management') ? '/management' : '';
+
             $.ajax({
                 url: `${basePath}/logs/${containerId}/`,
                 type:'GET',
@@ -420,7 +421,7 @@ $(document).on('click', '[data-bs-target="#fileManagerModal"]', function() {
 
 function loadFileList() {
     $.ajax({
-        url: `/container/${currentContainerId}/file/list/`,  // Uprav URL
+        url: `${basePath}/container/${currentContainerId}/file/list/`,
         type: 'POST',
         data: { path: currentPath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -452,7 +453,7 @@ $('#fm-go-up').on('click', function() {
 
 function readFile(path) {
     $.ajax({
-        url: `/container/${currentContainerId}/file/read/`,
+        url: `${basePath}/container/${currentContainerId}/file/read/`,
         type: 'POST',
         data: { path: path, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
         success: function(response) {
@@ -468,7 +469,7 @@ $('#save-file').on('click', function() {
     const path = $('#edit-file-name').text();
     const content = $('#file-content').val();
     $.ajax({
-        url: `/container/${currentContainerId}/file/write/`,
+        url: `${basePath}/container/${currentContainerId}/file/write/`,
         type: 'POST',
         data: { path: path, content: content, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
         success: function() { alert('Saved'); $('#file-editor').hide(); loadFileList(); }
@@ -481,7 +482,7 @@ $('#delete-file').on('click', function() {
     if (confirm('Delete?')) {
         const path = $('#edit-file-name').text();
         $.ajax({
-            url: `/container/${currentContainerId}/file/delete/`,
+            url: `${basePath}/container/${currentContainerId}/file/delete/`,
             type: 'POST',
             data: { path: path, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
             success: function() { $('#file-editor').hide(); loadFileList(); }
@@ -496,7 +497,7 @@ $('#upload-btn').on('click', function() {
         reader.onload = function(e) {
             const base64data = e.target.result.split(',')[1];
             $.ajax({
-                url: `/container/${currentContainerId}/file/upload/`,
+                url: `${basePath}/container/${currentContainerId}/file/upload/`,
                 type: 'POST',
                 data: { path: currentPath, filename: fileInput.files[0].name, file_data: base64data, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
                 success: function() { loadFileList(); }
@@ -509,7 +510,7 @@ $('#upload-btn').on('click', function() {
 $('#download-btn').on('click', function() {
     const path = $('#edit-file-name').text();
     $.ajax({
-        url: `/container/${currentContainerId}/file/download/`,
+        url: `${basePath}/container/${currentContainerId}/file/download/`,
         type: 'POST',
         data: { path: path, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
         success: function(response) {
