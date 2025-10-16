@@ -550,10 +550,22 @@ function loadFileList() {
         },
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         success: function(response) {
-            const files = response.files || [];
+            let files = response.files || [];
             const list = $('#file-list');
             list.empty();
-
+            
+            if (files.length > 0 && typeof files[0] === 'string') {
+                files = files
+                    .filter(line => !line.startsWith('total'))
+                    .map(line => {
+                        const parts = line.trim().split(/\s+/);
+                        const perms = parts[0];
+                        const name = parts.slice(8).join(' ');
+                        const type = perms.startsWith('d') ? 'directory' : 'file';
+                        return { name, type };
+                    });
+            }
+            
             if (files.length === 0) {
                 list.append('<li class="list-group-item text-muted">No files found.</li>');
             } else {
@@ -570,6 +582,7 @@ function loadFileList() {
                     `);
                 });
             }
+
 
             updateBreadcrumb();
             $('#search-files').off('keyup').on('keyup', filterFiles); // Reset search
