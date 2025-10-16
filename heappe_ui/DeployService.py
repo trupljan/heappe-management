@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from django.http import HttpResponse
 from django.shortcuts import render
 
-from heappe_ui.appsettings.generator import generate_appsettings_v6_0_0
+from heappe_ui.appsettings.generator import generate_appsettings_v6_0_0, generate_appsettings_data_staging_v6_0_0
 from heappe_ui.models import InstanceCredentials
 
 logger = logging.getLogger(__name__)
@@ -252,49 +252,83 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             self.logger.error(f"Failed to generate seed.njson file: {e}")
             raise RuntimeError(f"seed.njson file generation failed: {e}")
 
-    def generate_appsettings_file(
+    def generate_appsettings_files(
             self,
             instance_name: str,
             sa_password: str,
-            port: int = 5000,
+            port_app: int = 5000,
+            port_staging: int = 5001,
+            data_staging_token: str = "changeme",
             automigrate: bool = True,
             version: str = None,
             deployed_ip: str = None,
             overwrite_existing: bool = False
     ) -> Dict[str, Any]:
-        """Generate appsettings.json file for HEAppE instance."""
+        """Generate appsettings.json and appsettings-data.json files for HEAppE instance."""
         version = version or self.config.default_version
         deployed_ip = deployed_ip or self.config.default_ip
 
         appsettings = generate_appsettings_v6_0_0(
             instance_name=instance_name,
             sa_password=sa_password,
-            port=port,
+            port=port_app,
             automigrate=automigrate,
             version=version,
             deployed_ip=deployed_ip
         )
 
+        appsettings_data_staging = generate_appsettings_data_staging_v6_0_0(
+            instance_name=instance_name,
+            sa_password=sa_password,
+            data_staging_token=data_staging_token,
+            port=port_staging,
+            version=version
+        )
+
         output_dir = os.path.join(self.config.base_path, instance_name, "app", "confs")
-        output_path = os.path.join(output_dir, "appsettings.json")
+        output_path_app = os.path.join(output_dir, "appsettings.json")
+        output_path_staging = os.path.join(output_dir, "appsettings-data.json")
 
+        os.makedirs(output_dir, exist_ok=True)
+
+        results = {}
+
+        # Handle appsettings.json
         try:
-            if os.path.exists(output_path) and not overwrite_existing:
-                self.logger.info(f"appsettings.json file already exists at {output_path}, skipping generation")
-                return appsettings
+            if os.path.exists(output_path_app) and not overwrite_existing:
+                self.logger.info(f"appsettings.json file already exists at {output_path_app}, skipping generation")
+            else:
+                if os.path.exists(output_path_app) and overwrite_existing:
+                    os.remove(output_path_app)
+                    self.logger.info(f"Removed existing appsettings.json file: {output_path_app}")
 
-            if os.path.exists(output_path) and overwrite_existing:
-                os.remove(output_path)
-                self.logger.info(f"Removed existing appsettings.json file: {output_path}")
-
-            os.makedirs(output_dir, exist_ok=True)
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(appsettings, f, indent=3)
-            self.logger.info(f"Appsettings file generated at: {output_path}")
-            return appsettings
+                with open(output_path_app, "w", encoding="utf-8") as f:
+                    json.dump(appsettings, f, indent=3)
+                self.logger.info(f"Appsettings file generated at: {output_path_app}")
+            results['appsettings'] = appsettings
         except OSError as e:
             self.logger.error(f"Failed to generate appsettings.json file: {e}")
             raise RuntimeError(f"appsettings.json file generation failed: {e}")
+
+        # Handle appsettings-data.json
+        try:
+            if os.path.exists(output_path_staging) and not overwrite_existing:
+                self.logger.info(
+                    f"appsettings-data.json file already exists at {output_path_staging}, skipping generation")
+            else:
+                if os.path.exists(output_path_staging) and overwrite_existing:
+                    os.remove(output_path_staging)
+                    self.logger.info(f"Removed existing appsettings-data.json file: {output_path_staging}")
+
+                with open(output_path_staging, "w", encoding="utf-8") as f:
+                    json.dump(appsettings_data_staging, f, indent=3)
+                self.logger.info(f"Appsettings-data file generated at: {output_path_staging}")
+            results['appsettings_data_staging'] = appsettings_data_staging
+        except OSError as e:
+            self.logger.error(f"Failed to generate appsettings-data.json file: {e}")
+            raise RuntimeError(f"appsettings-data.json file generation failed: {e}")
+
+        return results
 
     def save_instance_settings(self, instance_name, heappe_host, heappe_port, heappe_login, heappe_password,
                              log_db_host, log_db_port,
@@ -325,6 +359,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             password: str,
             vault_password: str,
             sa_password: str,
+            data_staging_token: str,
             overwrite_existing: bool = False,
             ports: Optional[Dict[str, int]] = None,
             version: Optional[str] = None,
@@ -344,12 +379,14 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             # Generate configuration files
             env_path = self.generate_env_file(instance_name, vault_password, sa_password, ports, overwrite_existing)
             seed_data = self.generate_seed_file(username, password, instance_name, overwrite_existing)
-            appsettings = self.generate_appsettings_file(
+            appsettings = self.generate_appsettings_files(
                 instance_name=instance_name,
-                port=ports.get("app_port") if ports else 5000,
+                port_app=ports.get("app_port") if ports else 5000,
+                port_staging=ports.get("data_staging_port") if ports else 5001,
                 version=version,
                 deployed_ip=deployed_ip,
                 sa_password=sa_password,
+                data_staging_token=data_staging_token,
                 automigrate=True,
                 overwrite_existing=overwrite_existing
             )
@@ -372,7 +409,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 "status": "success",
                 "env_path": env_path,
                 "seed_data": seed_data,
-                "appsettings": appsettings,
+                "appsettings": appsettings["appsettings"],
+                "appsettings_data_staging": appsettings["appsettings_data_staging"],
                 "instance_settings": get_instance_settings(instance_name)
             }
         except Exception as e:

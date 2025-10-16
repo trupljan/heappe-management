@@ -191,3 +191,84 @@ def generate_appsettings_v6_0_0(
             }
         }
     return appsettings
+
+
+def generate_appsettings_data_staging_v6_0_0(instance_name: str,
+            sa_password: str,
+            data_staging_token: str,
+            port: int = 5001,
+            version: str = None):
+    appsettings = {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft": "Warning",
+          "Microsoft.AspNetCore": "Warning",
+          "Microsoft.Hosting.Lifetime": "Information"
+        }
+      },
+        "ConnectionStrings": build_connection_strings_from_container(f"{instance_name}_mssql", sa_password),
+        "IpRateLimiting": {
+        "EnableEndpointRateLimiting": True,
+        "StackBlockedRequests": False,
+        "RealIpHeader": "X-Real-IP",
+        "ClientIdHeader": "X-ClientId",
+        "HttpStatusCode": 429,
+        "EndpointWhitelist": [
+          "get:/swagger/*"
+        ],
+        "ClientWhitelist": [
+          "127.0.0.1"
+        ],
+        "DisableRateLimitHeaders": False,
+        "GeneralRules": [
+          {
+            "Endpoint": "*:/api/DataStaging/*",
+            "Period": "1h",
+            "Limit": 2000
+          }
+        ]
+      },
+      "IpRateLimitPolicies": {
+        "IpRules": [
+          {
+            "Ip": "127.0.0.1",
+            "Rules": [
+              {
+                "Endpoint": "*:/api/DataStaging/*",
+                "Period": "1h",
+                "Limit": 5000
+              }
+            ]
+          }
+        ]
+      },
+      "ApplicationAPIConfiguration": {
+        "AllowedHosts": [
+          f"http://localhost:{port}",
+        ],
+        "AuthenticationParamHeaderName": "AuthKey",
+        "AuthenticationToken": data_staging_token,
+        "DeploymentConfiguration": {
+          "Name": f"{instance_name} data staging",
+          "Description": f"Data Staging API for instance {instance_name}",
+          "Version": version,
+          "DeployedIPAddress": "127.0.0.1"
+        },
+        "SwaggerConfiguration": {
+          "Version": "v1.0.0",
+          "Title": "Data-Staging API",
+          "Description": "Data-Staging API",
+          "Host": f"http://localhost:{port}",
+          "HostPostfix": "",
+          "PrefixDocPath": "swagger",
+          "TermOfUsageUrl": "https://twitter.com/it4innovations",
+          "License": "GNU General Public License v3.0",
+          "LicenseUrl": "https://www.gnu.org/licenses/gpl-3.0.html",
+          "ContactName": "IT4Innovations",
+          "ContactEmail": "support.heappe@it4i.cz",
+          "ContactUrl": "https://twitter.com/it4innovations"
+        }
+      }
+    }
+    return appsettings

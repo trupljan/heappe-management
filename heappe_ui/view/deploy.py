@@ -172,6 +172,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         admin_password = generate_secure_password()
         vault_password = generate_secure_password()
         sa_password = generate_secure_password()
+        data_staging_token = generate_secure_password()
 
         instance_settings = service.deploy_init(
             instance_name=instance_name,
@@ -179,6 +180,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             password=admin_password,
             vault_password=vault_password,
             sa_password=sa_password,
+            data_staging_token=data_staging_token,
             ports=ports,
             overwrite_existing=True,
             deployed_ip='localhost'
@@ -188,6 +190,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "docker", "compose",
             "--profile", "db",
             "--profile", "initVault",
+            "--profile", "staging",
             "-p", instance_name,
             "build",  "--no-cache"
         ]
@@ -197,6 +200,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "docker", "compose",
             "--profile", "db",
             "--profile", "initVault",
+            "--profile", "staging",
             "-p", instance_name,
             "up", "-d"
         ]
@@ -264,6 +268,7 @@ def handle_global_action(compose_dir, instance_name, action):
         "--profile", "vault",
         "--profile", "vaultagent",
         "--profile", "sshagent",
+        "--profile", "staging",
         "-p", instance_name
     ]
     if action == 'start_all':
