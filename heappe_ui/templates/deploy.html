@@ -188,6 +188,7 @@
                                     <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} data-bs-toggle="tooltip" title="Restart this container">Restart</button>
                                 </form>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" data-bs-toggle="tooltip" title="View logs">Logs</button>
+                                <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#fileManagerModal" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="Manage Files">Files</button>   
                             </div>
                         </div>
                     </div>
@@ -221,6 +222,47 @@
         </div>
     </div>
     {% endif %}
+</div>
+    
+    <!-- File Manager Modal -->
+<div class="modal fade" id="fileManagerModal" tabindex="-1" aria-labelledby="fileManagerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content" style="max-height:90vh;">
+            <div class="modal-header">
+                <h5 class="modal-title" id="fileManagerModalLabel">File Manager: <span id="fm-container-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-2">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h6>Directory: <span id="current-path">/</span></h6>
+                        <button id="fm-go-up" class="btn btn-sm btn-secondary mb-2">Go Up</button>
+                        <ul id="file-list" class="list-group overflow-auto" style="max-height:60vh;"></ul>
+                    </div>
+                    <div class="col-md-8">
+                        <div id="file-editor" style="display:none;">
+                            <h6>Editing: <span id="edit-file-name"></span></h6>
+                            <textarea id="file-content" class="form-control" rows="20"></textarea>
+                            <button id="save-file" class="btn btn-primary mt-2">Save</button>
+                            <button id="cancel-edit" class="btn btn-secondary mt-2">Cancel</button>
+                            <button id="delete-file" class="btn btn-danger mt-2">Delete</button>
+                        </div>
+                        <div id="file-upload" class="mt-3">
+                            <h6>Upload to current dir</h6>
+                            <input type="file" id="upload-input" class="form-control">
+                            <button id="upload-btn" class="btn btn-success mt-2">Upload</button>
+                        </div>
+                        <div id="file-download" style="display:none;" class="mt-3">
+                            <button id="download-btn" class="btn btn-info">Download</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -365,5 +407,121 @@ $(document).on('submit', '#deploy-form', function(e) {
         });
     });
 });
+// File Manager
+let currentContainerId = null;
+let currentPath = '/';
+
+$(document).on('click', '[data-bs-target="#fileManagerModal"]', function() {
+    currentContainerId = $(this).data('container-id');
+    $('#fm-container-name').text($(this).data('container-name'));
+    currentPath = '/';  // Start v rootu kontejneru, nebo '/app'
+    loadFileList();
+});
+
+function loadFileList() {
+    $.ajax({
+        url: `/container/${currentContainerId}/file/list/`,  // Uprav URL
+        type: 'POST',
+        data: { path: currentPath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        success: function(response) {
+            $('#current-path').text(currentPath);
+            const list = $('#file-list');
+            list.empty();
+            response.files.forEach(file => {
+                const item = $('<li class="list-group-item"></li>').text(file);
+                item.on('click', function() {
+                    if (file.includes('drw')) {  // Dir
+                        currentPath = `${currentPath}/${file.split(' ').pop()}`.replace('//', '/');
+                        loadFileList();
+                    } else {  // File
+                        readFile(`${currentPath}/${file.split(' ').pop()}`.replace('//', '/'));
+                    }
+                });
+                list.append(item);
+            });
+        },
+        error: function() { alert('Error loading files'); }
+    });
+}
+
+$('#fm-go-up').on('click', function() {
+    currentPath = currentPath.split('/').slice(0, -1).join('/') || '/';
+    loadFileList();
+});
+
+function readFile(path) {
+    $.ajax({
+        url: `/container/${currentContainerId}/file/read/`,
+        type: 'POST',
+        data: { path: path, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+        success: function(response) {
+            $('#edit-file-name').text(path);
+            $('#file-content').val(response.content);
+            $('#file-editor').show();
+            $('#file-download').show();
+        }
+    });
+}
+
+$('#save-file').on('click', function() {
+    const path = $('#edit-file-name').text();
+    const content = $('#file-content').val();
+    $.ajax({
+        url: `/container/${currentContainerId}/file/write/`,
+        type: 'POST',
+        data: { path: path, content: content, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+        success: function() { alert('Saved'); $('#file-editor').hide(); loadFileList(); }
+    });
+});
+
+$('#cancel-edit').on('click', function() { $('#file-editor').hide(); });
+
+$('#delete-file').on('click', function() {
+    if (confirm('Delete?')) {
+        const path = $('#edit-file-name').text();
+        $.ajax({
+            url: `/container/${currentContainerId}/file/delete/`,
+            type: 'POST',
+            data: { path: path, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+            success: function() { $('#file-editor').hide(); loadFileList(); }
+        });
+    }
+});
+
+$('#upload-btn').on('click', function() {
+    const fileInput = $('#upload-input')[0];
+    if (fileInput.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const base64data = e.target.result.split(',')[1];
+            $.ajax({
+                url: `/container/${currentContainerId}/file/upload/`,
+                type: 'POST',
+                data: { path: currentPath, filename: fileInput.files[0].name, file_data: base64data, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+                success: function() { loadFileList(); }
+            });
+        };
+        reader.readAsDataURL(fileInput.files[0]);
+    }
+});
+
+$('#download-btn').on('click', function() {
+    const path = $('#edit-file-name').text();
+    $.ajax({
+        url: `/container/${currentContainerId}/file/download/`,
+        type: 'POST',
+        data: { path: path, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val() },
+        success: function(response) {
+            const blob = new Blob([Uint8Array.from(atob(response.data), c => c.charCodeAt(0))], {type: 'application/octet-stream'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = response.filename;
+            a.click();
+        }
+    });
+});
+
 </script>
 {% endblock content %}

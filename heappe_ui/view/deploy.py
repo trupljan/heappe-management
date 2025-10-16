@@ -593,3 +593,62 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
         "is_deployed": instance_service.is_deployed if instance_service else False
     }
     return render(request, "deploy.html", context)
+
+
+import base64
+import json
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import docker
+
+client = docker.from_env()
+
+def handle_file_action(request, container_id, action):
+    """Handle file operations in container."""
+    try:
+        container = client.containers.get(container_id)
+        if container.labels.get('com.docker.compose.project') != request.POST.get('instance_name'):
+            return JsonResponse({'status': 'danger', 'message': 'Unauthorized access.'}, status=403)
+
+        path = request.POST.get('path', '/')
+        if not path.startswith('/app'):
+            return JsonResponse({'status': 'danger', 'message': 'Access denied to path.'}, status=403)
+
+        if action == 'list':
+            exec_result = container.exec_run(f"ls -la {path}")
+            files = exec_result.output.decode('utf-8').strip().split('\n')
+            return JsonResponse({'status': 'success', 'files': files})
+
+        elif action == 'read':
+            exec_result = container.exec_run(f"cat {path}")
+            content = exec_result.output.decode('utf-8')
+            return JsonResponse({'status': 'success', 'content': content})
+
+        elif action == 'write':
+            content = request.POST.get('content')
+            write_cmd = f"sh -c \"echo '{content.replace(chr(34), chr(92)+chr(34))}' > {path}\""
+            exec_result = container.exec_run(write_cmd)
+            return JsonResponse({'status': 'success' if exec_result.exit_code == 0 else 'danger', 'message': exec_result.output.decode('utf-8')})
+
+        elif action == 'delete':
+            exec_result = container.exec_run(f"rm -f {path}")
+            return JsonResponse({'status': 'success' if exec_result.exit_code == 0 else 'danger', 'message': exec_result.output.decode('utf-8')})
+
+        elif action == 'download':
+            exec_result = container.exec_run(f"tar -cz {path}")
+            if exec_result.exit_code == 0:
+                tar_data = base64.b64encode(exec_result.output).decode('utf-8')
+                return JsonResponse({'status': 'success', 'data': tar_data, 'filename': os.path.basename(path)})
+            return JsonResponse({'status': 'danger', 'message': 'Download failed.'})
+
+        elif action == 'upload':
+            file_data = base64.b64decode(request.POST.get('file_data'))
+            filename = request.POST.get('filename')
+            upload_path = f"{path}/{filename}"
+            container.exec_run(f"mkdir -p {path}")
+            tar_stream = io.BytesIO(file_data)
+            container.put_archive(path=path, data=tar_stream.read())  # Předpokládá tar input pro upload
+            return JsonResponse({'status': 'success', 'message': 'Uploaded.'})
+
+    except Exception as e:
+        return JsonResponse({'status': 'danger', 'message': str(e)}, status=500)
