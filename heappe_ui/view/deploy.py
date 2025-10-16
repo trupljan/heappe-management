@@ -1,3 +1,5 @@
+import io
+
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
 from django.http import HttpResponse, JsonResponse
@@ -7,6 +9,7 @@ import subprocess
 import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
+@login_required
 def get_free_port_safe():
     """Helper function to safely allocate a free port (placeholder implementation)."""
     import socket
@@ -16,6 +19,7 @@ def get_free_port_safe():
     return port, s
 
 import subprocess
+@login_required
 def execute_docker_compose_detached(command, compose_dir, timeout=600):
     """Run docker compose safely from Gunicorn without being killed on worker reload."""
     try:
@@ -51,6 +55,7 @@ def execute_docker_compose_detached(command, compose_dir, timeout=600):
             stderr=str(e)
         )
 
+@login_required
 def execute_docker_compose(command, compose_dir, timeout=300):
     """Execute a Docker Compose command safely under Gunicorn."""
     try:
@@ -77,7 +82,7 @@ def execute_docker_compose(command, compose_dir, timeout=300):
             stderr=str(e)
         )
 
-
+@login_required
 def get_container_details(container):
     """Extract detailed information from a Docker container."""
     port_mappings = container.attrs['NetworkSettings']['Ports']
@@ -108,7 +113,7 @@ def get_container_details(container):
 import secrets
 import string
 
-
+@login_required
 def generate_secure_password(length=12):
     if length < 8:
         raise ValueError("Password length should be at least 8 characters.")
@@ -122,6 +127,7 @@ def generate_secure_password(length=12):
                 and any(c in string.punctuation for c in password)):
             return password
 
+@login_required
 def wait_for_container_running(container_name, timeout=60, interval=5):
     """Wait until a Docker container is in 'running' state using Docker SDK."""
     client = docker.from_env()
@@ -146,6 +152,7 @@ def wait_for_container_running(container_name, timeout=60, interval=5):
 import secrets
 import string
 
+@login_required
 def generate_secure_password(length=16):
     alphabet = string.ascii_letters + string.digits + string.punctuation
     password = secrets.choice(string.digits)
@@ -158,7 +165,7 @@ def generate_secure_password(length=16):
     secrets.SystemRandom().shuffle(password_list)
     return ''.join(password_list)
 
-
+@login_required
 def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
     """Handle the deployment process and return the result."""
     service = HEAppEDeployService(config)
@@ -236,7 +243,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         print(f"Deployment error: {str(e)}")
         return None, f"Deployment error: {str(e)}", 'danger'
 
-
+@login_required
 def handle_container_action(client, instance_name, action, container_id):
     """Handle individual container actions."""
     try:
@@ -257,7 +264,7 @@ def handle_container_action(client, instance_name, action, container_id):
         return f"Container {container_id} not found.", 'danger'
     except docker.errors.APIError as e:
         return f"Error performing {action} on container {container_id}: {(e)}", 'danger'
-
+@login_required
 def handle_global_action(compose_dir, instance_name, action):
     """Handle global actions for all containers in the project."""
     command = [
@@ -324,7 +331,7 @@ import pymssql
 import pymssql
 
 import pymssql
-
+@login_required
 def initialize_database(
     server,
     port,
@@ -437,7 +444,7 @@ def initialize_database(
         print(f"Unexpected error: {e}")
         return False
 
-
+@login_required
 # Retry logic
 def run_with_retries(instance_name, ports, password):
     max_attempts = 10
@@ -465,6 +472,7 @@ def run_with_retries(instance_name, ports, password):
         print("Max attempts reached. Database initialization failed.")
         raise Exception("Failed to initialize database after maximum retries.")
 
+@login_required
 def get_remote_branches(repo_url: str) -> list[str]:
     try:
         result = subprocess.run(
@@ -480,6 +488,7 @@ def get_remote_branches(repo_url: str) -> list[str]:
         return []
 
 import threading
+@login_required
 def deploy_background(config, instance_name, ports, s1, s2, s3, s4):
     thread = threading.Thread(
         target=handle_deployment_action,
@@ -603,6 +612,7 @@ import docker
 
 client = docker.from_env()
 
+@login_required
 def handle_file_action(request, container_id, action):
     """Handle file operations in container."""
     try:
@@ -616,7 +626,9 @@ def handle_file_action(request, container_id, action):
 
         if action == 'list':
             exec_result = container.exec_run(f"ls -la {path}")
+            print(exec_result)
             files = exec_result.output.decode('utf-8').strip().split('\n')
+            print(files)
             return JsonResponse({'status': 'success', 'files': files})
 
         elif action == 'read':
