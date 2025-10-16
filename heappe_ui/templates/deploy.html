@@ -188,7 +188,7 @@
                                     <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} data-bs-toggle="tooltip" title="Restart this container">Restart</button>
                                 </form>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" data-bs-toggle="tooltip" title="View logs">Logs</button>
-                                <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#fileManagerModal" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="Manage Files">Files</button>   
+                                <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#fileManagerModal" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="Manage Files">Files</button>
                             </div>
                         </div>
                     </div>
@@ -223,7 +223,7 @@
     </div>
     {% endif %}
 </div>
-    
+
     <!-- File Manager Modal -->
 <div class="modal fade" id="fileManagerModal" tabindex="-1" aria-labelledby="fileManagerModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-xl">

@@ -611,8 +611,8 @@ def handle_file_action(request, container_id, action):
             return JsonResponse({'status': 'danger', 'message': 'Unauthorized access.'}, status=403)
 
         path = request.POST.get('path', '/')
-        if not path.startswith('/app'):
-            return JsonResponse({'status': 'danger', 'message': 'Access denied to path.'}, status=403)
+        #if not path.startswith('/app'):
+        #    return JsonResponse({'status': 'danger', 'message': 'Access denied to path.'}, status=403)
 
         if action == 'list':
             exec_result = container.exec_run(f"ls -la {path}")
