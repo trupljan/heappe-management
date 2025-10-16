@@ -635,21 +635,14 @@ def handle_file_action(request, container_id, action):
             content = exec_result.output.decode('utf-8')
             return JsonResponse({'status': 'success', 'content': content})
 
-
         elif action == 'write':
             content = request.POST.get('content', '')
-
-            encoded_content = base64.b64encode(content.encode('utf-8')).decode('utf-8')
-            write_cmd = f"mkdir -p $(dirname {path}) && printf '%s' '{encoded_content}' | base64 -d > {path}"
+            write_cmd = f"sh -c \"mkdir -p $(dirname '{path}') && cat > '{path}' <<'EOF'\n{content}\nEOF\""
             exec_result = container.exec_run(write_cmd)
-
-            if exec_result.exit_code != 0:
-                error_msg = exec_result.output.decode('utf-8',
-                                                      errors='ignore') if exec_result.output else 'Unknown error'
-
-                return JsonResponse({'status': 'danger', 'message': f'Write failed: {error_msg}'})
-
-            return JsonResponse({'status': 'success', 'message': 'File saved.'})
+            return JsonResponse({
+                'status': 'success' if exec_result.exit_code == 0 else 'danger',
+                'message': exec_result.output.decode('utf-8', errors='ignore')
+            })
 
         elif action == 'delete':
             exec_result = container.exec_run(f"rm -f {path}")
