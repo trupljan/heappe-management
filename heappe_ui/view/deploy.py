@@ -472,7 +472,7 @@ def run_with_retries(instance_name, ports, password):
         print("Max attempts reached. Database initialization failed.")
         raise Exception("Failed to initialize database after maximum retries.")
 
-@login_required
+
 def get_remote_branches(repo_url: str) -> list[str]:
     try:
         result = subprocess.run(
