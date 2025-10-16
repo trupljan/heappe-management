@@ -220,7 +220,7 @@ from datetime import datetime, timedelta
 def dashboard_view(request):
     context = {}
     if request.session.get("chosen_instance") is None:
-        return redirect("chose_instance_view")
+        return redirect("instance_credentials_list")
 
     # Initialize controller
     controller = hp.ManagementApi(request.api_instance)
