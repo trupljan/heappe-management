@@ -267,6 +267,7 @@
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script>
+const basePath = window.location.pathname.split('/').includes('management') ? '/management' : '';
 $(document).ready(function(){
     $('[data-bs-toggle="tooltip"]').tooltip();
 
@@ -274,7 +275,7 @@ $(document).ready(function(){
     function hideLoading() { $('#loading-overlay').css('display','none'); }
     function showBlueAlert() { $('#blue-alert-loading').css('display','flex'); }
     function hideBlueAlert() { $('#blue-alert-loading').css('display','none'); }
-    const basePath = window.location.pathname.split('/').includes('management') ? '/management' : '';
+
 
     // Handle modal title and form visibility
     $('#deployUpdateModal').on('show.bs.modal', function (event) {
