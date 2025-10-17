@@ -625,43 +625,65 @@ def is_superuser(user):
 
 @login_required
 def update_server_page(request):
-    """Renders the page with the update button."""
+    """Renders the page with the update button and form."""
     return render(request, 'update_server.html')
 
 
 @require_http_methods(["POST"])
 @login_required
 def trigger_deployment_direct(request):
-    """
-    DANGEROUS IMPLEMENTATION: Runs the system deployment script directly from Gunicorn.
-    The Gunicorn process will detach the script but may still encounter permission/deadlock issues.
-    """
+    # 1. Input Validation and Parsing
+    try:
+        # Load JSON data from the request body
+        data = json.loads(request.body.decode('utf-8'))
+        git_url = data.get('git_url', 'DEFAULT_URL_IF_NEEDED')  # Get Git URL, handle if missing
+        git_tag = data.get('git_tag', 'main')  # Default to 'main' branch/tag
+        git_user = data.get('git_username', '')  # Username is required
+        git_pass = data.get('git_password', '')  # Password is required
 
-    # 1. Kontrola existence skriptu (Měl by být stažen z Gitu)
+        if not all([git_url, git_user, git_pass]):
+            return JsonResponse({"status": "error", "message": "Missing Git URL, Username, or Password."}, status=400)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"status": "error", "message": "Invalid JSON request body."}, status=400)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"Error processing input: {e}"}, status=400)
+
+    # 2. Check for Script and Permissions (Same as original)
     if not os.path.exists(DEPLOY_SCRIPT_PATH):
         return JsonResponse({"status": "error", "message": f"Deployment script not found at {DEPLOY_SCRIPT_PATH}"},
                             status=500)
-
-    # 2. Nastavení práv CHMOD pro spuštění skriptu
-    # Nastavuje práva ke spuštění (rwxr--r--) pro vlastníka.
     try:
         os.chmod(DEPLOY_SCRIPT_PATH, 0o744)
     except Exception as e:
         return JsonResponse({"status": "error", "message": f"Error setting chmod on script: {e}"}, status=500)
 
-    # 3. Spuštění Deployment Skriptu
+    # 3. Launch Subprocess with Environment Variables
     try:
+        # Create a copy of the current environment
+        env_vars = os.environ.copy()
+
+        # Pass the dynamic inputs as environment variables
+        # This is SAFER than passing them as command-line arguments.
+        env_vars['GIT_URL'] = git_url
+        env_vars['GIT_TAG'] = git_tag
+        env_vars['GIT_USER'] = git_user
+        env_vars['GIT_PASS'] = git_pass  # SENSITIVE! Handled carefully in the shell script
+
         process = subprocess.Popen(
             ['/bin/bash', DEPLOY_SCRIPT_PATH],
             cwd=settings.BASE_DIR,
-            start_new_session=True,  # Odpoutá proces od Gunicornu
+            start_new_session=True,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            env=env_vars  # Pass the modified environment
         )
 
         return JsonResponse({
             "status": "success",
-            "message": f"Deployment script ({DEPLOY_SCRIPT_NAME}) launched on background process {process.pid}. Server will restart."
+            "message": f"Deployment script ({DEPLOY_SCRIPT_NAME}) launched on background process {process.pid}. Server will restart.",
+            "git_tag": git_tag,
+            "git_url": git_url
         })
 
     except Exception as e:

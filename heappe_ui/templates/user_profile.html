@@ -32,18 +32,14 @@
 
                         <hr>
 
-                        {# --- NOVÁ SEKCE PRO AKTUALIZACI SERVERU (ADMIN POUZE) --- #}
+
                         {% if user.is_superuser %}
                             <div class="mt-4 p-3 border border-danger rounded">
                                 <h6 class="text-danger mb-3">SERVER MAINTENANCE (Admin Only)</h6>
 
-                                <button id="update-button" class="btn btn-danger w-100 mb-2">
-                                    🚀 Run Server Update
-                                </button>
-
-                                <div id="update-status" class="mt-2 small" style="min-height: 20px;">
-                                    Status: Ready
-                                </div>
+                                <a href="{% url 'update_server' %}" class="btn btn-danger w-100 mb-2">
+                                    Update Application and Restart Server
+                                </a>
                             </div>
                             <hr>
                         {% endif %}
@@ -78,49 +74,6 @@ document.addEventListener("DOMContentLoaded", function() {
             toggleButton.textContent = "🔒 Show";
         }
     });
-
-    {% if user.is_superuser %}
-        const updateButton = document.getElementById("update-button");
-        const updateStatusDiv = document.getElementById("update-status");
-
-        // Logika pro spuštění aktualizace serveru
-        updateButton.addEventListener("click", function() {
-            const button = this;
-
-            if (button.disabled) return;
-            button.disabled = true;
-            updateStatusDiv.innerHTML = '<span class="text-info">🚀 Running deployment script... Please wait.</span>';
-
-            // Použijte název URL, který mapuje na trigger_deployment_direct view
-            fetch('{% url "trigger_deployment_direct" %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    // Získání CSRF tokenu z DOM (z logout formuláře)
-                    'X-CSRFToken': document.querySelector('input[name="csrfmiddlewaretoken"]').value
-                },
-                body: JSON.stringify({})
-            })
-            .then(response => response.json().then(data => ({
-                status: response.status,
-                ok: response.ok,
-                data: data
-            })))
-            .then(({ status, ok, data }) => {
-                if (ok) {
-                    updateStatusDiv.innerHTML = `<span class="text-success">✅ SUCCESS: ${data.message}</span>`;
-                } else {
-                    updateStatusDiv.innerHTML = `<span class="text-danger">❌ ERROR (${status}): ${data.message || 'Unknown error.'}</span>`;
-                }
-            })
-            .catch(error => {
-                updateStatusDiv.innerHTML = `<span class="text-danger">❌ FATAL ERROR: Cannot reach deploy service.</span>`;
-            })
-            .finally(() => {
-                button.disabled = false;
-            });
-        });
-    {% endif %}
 });
 </script>
 {% endblock %}

@@ -3,24 +3,34 @@
 
 {% block content %}
 <div class="container mt-5">
-    <h1>Code Update Management (Deployment)</h1>
+    <h1>Code Update Management (Dynamic Deployment)</h1>
     
     <div class="alert alert-danger" role="alert">
-        <strong>⚠️ WARNING: DANGEROUS OPERATION.</strong> This action executes a **Git pull** and **restarts** the `adminpanel` system service directly from the web application. A **brief outage** will occur during the restart. Proceed with caution.
+        <strong>⚠️ WARNING: DANGEROUS OPERATION.</strong> Executes Git operations and a service restart.
     </div>
 
-    <p>
-        Clicking the button will execute the **`deploy.sh`** script, performing the following steps:
-        <ol>
-            <li>Git pull to fetch the latest code.</li>
-            <li>Stop the `adminpanel` service.</li>
-            <li>Delete and recreate the `venv`.</li>
-            <li>Install dependencies and run migrations.</li>
-            <li>Restart the service.</li>
-        </ol>
-    </p>
+    <form id="deployment-form">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="git-url" class="form-label">Git Repository URL (e.g., https://github.com/user/repo.git)</label>
+            <input type="url" class="form-control" id="git-url" value="<Your Default URL Here>" required>
+        </div>
+        <div class="mb-3">
+            <label for="git-tag" class="form-label">Git Tag/Branch (e.g., v1.2.0 or main)</label>
+            <input type="text" class="form-control" id="git-tag" value="main" required>
+        </div>
+        <div class="mb-3">
+            <label for="git-username" class="form-label">Git Username/Token</label>
+            <input type="text" class="form-control" id="git-username" required>
+        </div>
+        <div class="mb-3">
+            <label for="git-password" class="form-label">Git Password/Token</label>
+            <input type="password" class="form-control" id="git-password" required>
+            <small class="form-text text-muted">This credential will be used for authentication during the Git pull.</small>
+        </div>
 
-    <button id="update-button" class="btn btn-danger btn-lg">Execute Code Update and Restart</button>
+        <button type="submit" id="update-button" class="btn btn-danger btn-lg">Execute Code Update and Restart</button>
+    </form>
 
     <div id="status-message" class="mt-4 p-3 border rounded" style="background-color: #f8f9fa;">
         Deployment status will appear here.
@@ -29,36 +39,49 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        const form = document.getElementById('deployment-form');
         const updateButton = document.getElementById('update-button');
         const statusDiv = document.getElementById('status-message');
         
-        // Function to get the CSRF token from the DOM (assuming it's present in the template)
         function getCsrfToken() {
-            return document.querySelector('[name=csrfmiddlewaretoken]').value;
+            // Get CSRF token from the form's hidden input
+            return form.querySelector('[name=csrfmiddlewaretoken]').value;
         }
 
-        updateButton.addEventListener('click', function() {
-            const button = this;
+        form.addEventListener('submit', function(event) {
+            event.preventDefault(); // Prevent standard form submission
+            const button = updateButton;
 
             // 1. Security and Visual Feedback
             if (button.disabled) return;
             button.disabled = true;
-            statusDiv.innerHTML = '<p class="text-info">🚀 Launching deployment script in the background... Sending request to the server.</p>';
+            statusDiv.innerHTML = '<p class="text-info">🚀 Launching deployment script... Sending request to the server.</p>';
             
             const csrfToken = getCsrfToken();
+            
+            // 2. Collect Data
+            const gitUrl = document.getElementById('git-url').value;
+            const gitTag = document.getElementById('git-tag').value;
+            const gitUsername = document.getElementById('git-username').value;
+            const gitPassword = document.getElementById('git-password').value;
 
-            // 2. Fetch API for the POST request to the Django View
+            const payload = {
+                git_url: gitUrl,
+                git_tag: gitTag,
+                git_username: gitUsername,
+                git_password: gitPassword // SENSITIVE DATA
+            };
+
+            // 3. Fetch API for the POST request
             fetch('{% url "trigger_deployment_direct" %}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    // Adding the CSRF token is essential for Django security
                     'X-CSRFToken': csrfToken 
                 },
-                body: JSON.stringify({}) 
+                body: JSON.stringify(payload) 
             })
             .then(response => {
-                // Process the JSON response regardless of the status code
                 return response.json().then(data => ({
                     status: response.status,
                     ok: response.ok,
@@ -66,23 +89,23 @@
                 }));
             })
             .then(({ status, ok, data }) => {
-                // 3. Display the result to the user
+                // 4. Display the result
                 if (ok) {
-                    // HTTP 200-299 status code (Successfully launched)
                     statusDiv.innerHTML = `<p class="text-success">✅ SUCCESS (${status}): ${data.message}</p>
-                                          <p class="text-success"><strong>IMPORTANT:</strong> The script is running in the background. Check server logs (journalctl) to confirm the final result.</p>`;
+                                          <p class="text-info">URL: ${data.git_url}, Tag: ${data.git_tag}</p>
+                                          <p class="text-success"><strong>IMPORTANT:</strong> Check server logs (journalctl) for final result.</p>`;
                 } else {
-                    // HTTP 4xx or 5xx status code (Error during script execution or permissions issue)
-                    statusDiv.innerHTML = `<p class="text-danger">❌ ERROR (${status}): ${data.message || 'Unknown error occurred while launching deployment.'}</p>`;
+                    statusDiv.innerHTML = `<p class="text-danger">❌ ERROR (${status}): ${data.message || 'Unknown error occurred.'}</p>`;
                 }
             })
             .catch(error => {
-                // 4. Critical network error (e.g., server unreachable)
                 statusDiv.innerHTML = `<p class="text-danger">❌ CRITICAL COMMUNICATION ERROR: ${error}. The server did not respond.</p>`;
             })
             .finally(() => {
                 // 5. Re-enable the button
                 button.disabled = false;
+                // SECURITY: Clear the password field after transmission attempt
+                document.getElementById('git-password').value = '';
             });
         });
     });
