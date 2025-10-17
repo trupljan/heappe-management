@@ -5,8 +5,9 @@
 #
 # This script performs a code update via Git, a complete virtual environment
 # rebuild, runs Django commands, and restarts the systemd service.
-# CRITICAL: This must be run by a user allowed to execute 'sudo systemctl'
-# commands WITHOUT A PASSWORD (configured via /etc/sudoers).
+#
+# FIX: Changed 'disable --now' to 'stop' in step 3 to prevent the script
+# from self-terminating if it is executed by a process managed by this service.
 # ==============================================================================
 
 # --- CONFIGURATION ---
@@ -42,10 +43,11 @@ log "Pulling latest code from Git..."
 git pull
 check_error "Git pull"
 
-# 3. Stop and Disable Current Service
-# This is necessary before deleting the VENV to avoid conflicts
-log "Stopping and disabling the $SERVICE_NAME service..."
-sudo systemctl disable $SERVICE_NAME --now
+# 3. Stop Current Service (FIXED: Use 'stop' instead of 'disable --now')
+# This is necessary before deleting the VENV to avoid conflicts but must
+# not terminate the running script if the service launched it.
+log "Stopping the $SERVICE_NAME service..."
+sudo systemctl stop $SERVICE_NAME
 check_error "Stop service"
 
 # 4. Reload Systemd Daemon Configuration
@@ -82,10 +84,8 @@ python manage.py collectstatic --noinput
 check_error "Django Collectstatic"
 deactivate # Deactivate VENV after usage
 
-# 7. Restart Service
-log "Enabling and restarting the $SERVICE_NAME service..."
-sudo systemctl enable $SERVICE_NAME
-check_error "Enable service"
+# 7. Restart Service (Cleaned up: only 'restart' is needed)
+log "Restarting the $SERVICE_NAME service..."
 sudo systemctl restart $SERVICE_NAME
 check_error "Restart service"
 
