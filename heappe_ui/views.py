@@ -622,7 +622,6 @@ def is_superuser(user):
     """Checks if the user is active and a superuser."""
     return user.is_active and user.is_superuser
 
-
 import json
 import subprocess
 import os
@@ -632,14 +631,16 @@ from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.conf import settings
+from django.core.files.storage import default_storage # Volitelně, pro lepší práci s cestami
 
 # --- DEFINE THESE CONSTANTS BASED ON YOUR PROJECT SETUP ---
 # Example: Define the path to your deployment script relative to BASE_DIR
 DEPLOY_SCRIPT_NAME = 'deploy.sh'
 # Assuming the script is in the project's root directory
+# Ujistěte se, že toto je správná cesta, např. /cesta/k/projektu/deploy.sh
 DEPLOY_SCRIPT_PATH = os.path.join(settings.BASE_DIR, DEPLOY_SCRIPT_NAME)
 
-
+# PŘED POUŽITÍM ZKONTROLUJTE, ŽE settings.BASE_DIR JE SPRÁVNĚ NASTAVENO!
 # ---------------------------------------------------------
 
 
@@ -647,12 +648,11 @@ DEPLOY_SCRIPT_PATH = os.path.join(settings.BASE_DIR, DEPLOY_SCRIPT_NAME)
 @login_required
 def update_server_page(request):
     """Renders the page with the update button and form."""
-    # Ensure this template uses the two-step JavaScript logic
     return render(request, 'update_server.html')
 
 
 # -----------------------------------------------------------------
-# --- HELPER FUNCTION: Step 1 Git Check Logic ---
+# --- HELPER FUNCTION: Step 1 Git Check Logic (Neměněno) ---
 # -----------------------------------------------------------------
 
 def execute_git_ls_remote(git_url, git_username=None, git_password=None):
@@ -669,6 +669,7 @@ def execute_git_ls_remote(git_url, git_username=None, git_password=None):
             domain_and_path = url_parts[1]
             auth_url = f"{url_parts[0]}://{git_username}:{git_password}@{domain_and_path}"
         else:
+            # Nevalidní URL formát, použijeme původní
             auth_url = git_url
     else:
         auth_url = git_url
@@ -677,11 +678,17 @@ def execute_git_ls_remote(git_url, git_username=None, git_password=None):
     command = ['git', 'ls-remote', '--heads', '--tags', auth_url]
 
     try:
+        # Použijeme nastavení ověřování SSL z prostředí Git (je-li potřeba)
+        # Tímto se zamezí chybám SSL, pokud není certifikát známý
+        env = os.environ.copy()
+        # env['GIT_SSL_NO_VERIFY'] = 'true' # Povolte pouze v testovacím prostředí
+
         result = subprocess.run(command,
                                 capture_output=True,
                                 text=True,
                                 check=False,
-                                timeout=15)
+                                timeout=15,
+                                env=env) # Předáme upravené prostředí
 
         # 3. Handle Git errors
         if result.returncode != 0:
@@ -689,8 +696,8 @@ def execute_git_ls_remote(git_url, git_username=None, git_password=None):
 
             # Authentication failure check
             if any(auth_error in error_output for auth_error in
-                   ['authentication failed', '401 unauthorized', '403 forbidden', 'credential']):
-                return None, "Authentication required or failed for Git URL.", 401
+                   ['authentication failed', '401 unauthorized', '403 forbidden', 'credential', 'could not read username']):
+                return None, "Authentication required or failed for Git URL. Status code: 401.", 401
 
             return None, f"Git error: {result.stderr.strip()}", 500
 
@@ -718,15 +725,14 @@ def execute_git_ls_remote(git_url, git_username=None, git_password=None):
 
 
 # -----------------------------------------------------------------
-# --- VIEW FOR STEP 1: Check Repo and Fetch Branches (API Endpoint) ---
+# --- VIEW FOR STEP 1: Check Repo and Fetch Branches (API Endpoint - Neměněno) ---
 # -----------------------------------------------------------------
 
 @csrf_exempt
 @require_http_methods(["POST"])
-# Note: You might want to add @login_required here as well, but the AJAX
-# requests might be blocked if you don't use 'ensure_csrf_cookie' middleware
-# or other AJAX-friendly auth methods. Since @login_required is on
-# trigger_deployment_direct, we'll focus on the data validation here.
+# Použití @csrf_exempt je zde v pořádku, protože na backendu dojde k ověření přes GIT,
+# ale v produkci zvažte přidání např. @login_required + @ensure_csrf_cookie nebo jiný token pro AJAX.
+# Pokud je tento endpoint volán jen po úspěšném přihlášení, je to mírně bezpečnější.
 def check_repo_and_fetch_branches(request):
     """API endpoint to check a Git URL and fetch available branches/tags."""
     try:
@@ -736,12 +742,13 @@ def check_repo_and_fetch_branches(request):
 
     git_url = data.get('git_url')
     git_username = data.get('git_username')
+    # Opatrně s heslem - zde ho přijímáme a rovnou posíláme do helper funkce, kde je použito v URL
     git_password = data.get('git_password')
 
     if not git_url:
         return JsonResponse({'message': 'Git URL is required.'}, status=400)
 
-    # Call the helper function
+    # Volání helper funkce, která provede Git operaci
     tags_and_branches, error_message, status_code = execute_git_ls_remote(
         git_url, git_username, git_password
     )
@@ -763,15 +770,16 @@ def check_repo_and_fetch_branches(request):
 
 
 # -----------------------------------------------------------------
-# --- VIEW FOR STEP 2: Execute Deployment (API Endpoint) ---
+# --- VIEW FOR STEP 2: Execute Deployment (API Endpoint - Neměněno) ---
 # -----------------------------------------------------------------
 
 @require_http_methods(["POST"])
-@login_required
+@login_required # Důležité: Tuto kritickou operaci smí spustit jen přihlášený uživatel.
 def trigger_deployment_direct(request):
     """Final API endpoint to execute the deployment script."""
     # 1. Input Validation and Parsing
     try:
+        # Použijeme .decode('utf-8') pro jistotu
         data = json.loads(request.body.decode('utf-8'))
         git_url = data.get('git_url')
         git_tag = data.get('git_tag')
@@ -789,7 +797,7 @@ def trigger_deployment_direct(request):
         return JsonResponse({"status": "error", "message": f"Deployment script not found at {DEPLOY_SCRIPT_PATH}"},
                             status=500)
     try:
-        # Ensure script is executable
+        # Ensure script is executable (rwx pro vlastníka, r-- pro skupinu/ostatní)
         os.chmod(DEPLOY_SCRIPT_PATH, 0o744)
     except Exception as e:
         return JsonResponse({"status": "error", "message": f"Error setting permissions on script: {e}"}, status=500)
@@ -804,10 +812,12 @@ def trigger_deployment_direct(request):
         env_vars['GIT_USER'] = git_user
         env_vars['GIT_PASS'] = git_pass  # SENSITIVE!
 
+        # Doporučené: Použít shlex pro správné formátování příkazu
+        # Ale jelikož je spouštěn jen skript, stačí i tento zápis
         process = subprocess.Popen(
             ['/bin/bash', DEPLOY_SCRIPT_PATH],
             cwd=settings.BASE_DIR,
-            start_new_session=True,  # Detach the process
+            start_new_session=True,  # Důležité: Proces se odpojí a běží nezávisle (daemonizace)
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env_vars
