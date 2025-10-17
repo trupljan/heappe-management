@@ -54,11 +54,10 @@ else
     AUTH_URL="$GIT_URL"
 fi
 
-log "Fetching all remote references from authenticated repository..."
+log "Pulling all remote references from authenticated repository..."
 
-# Safely fetch all references (no merge, just update local references)
-git fetch "$AUTH_URL"
-check_error "Git fetch failed. Check credentials/URL."
+git pull "$AUTH_URL"
+check_error "Git pull failed. Check credentials/URL."
 
 # 4. Checkout and Reset (The safer deployment method)
 # Resetuje HEAD na přesný stav vzdálené reference (např. origin/main nebo tag v1.0.0)
