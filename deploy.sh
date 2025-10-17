@@ -65,6 +65,10 @@ log "Restarting the $SERVICE_NAME service..."
 sudo systemctl restart $SERVICE_NAME
 check_error "Restart service"
 
+log "Reverting deployment script to committed state..."
+git checkout deployment_script.sh
+check_error "Git checkout deployment script"
+
 # 6. Status Check and Logging
 log "Waiting 5 seconds and checking service status..."
 sleep 5
