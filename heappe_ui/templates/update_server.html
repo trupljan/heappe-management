@@ -1,10 +1,10 @@
-{% extends 'base.html' %} 
+{% extends 'base.html' %}
 {% load static %}
 
 {% block content %}
 <div class="container mt-5">
     <h1>Code Update Management (Dynamic Deployment)</h1>
-    
+
     <div class="alert alert-danger" role="alert">
         <strong>⚠️ WARNING: DANGEROUS OPERATION.</strong> Executes Git operations and a service restart.
     </div>
@@ -13,18 +13,18 @@
         {% csrf_token %}
         <div class="mb-3">
             <label for="git-url" class="form-label">Git Repository URL (e.g., https://github.com/user/repo.git)</label>
-            <input type="url" class="form-control" id="git-url" value="<Your Default URL Here>" required>
+            <input type="url" class="form-control" id="git_url" value="" required>
         </div>
-        
+
         <div id="auth-fields" style="display: none;">
             <p class="text-warning mt-3">Authentication required or failed. Please enter credentials.</p>
             <div class="mb-3">
                 <label for="git-username" class="form-label">Git Username/Token</label>
-                <input type="text" class="form-control" id="git-username">
+                <input type="text" class="form-control" id="git_username">
             </div>
             <div class="mb-3">
                 <label for="git-password" class="form-label">Git Password/Token</label>
-                <input type="password" class="form-control" id="git-password">
+                <input type="password" class="form-control" id="git_password">
                 <small class="form-text text-muted">Enter credentials if the repository is private or if the previous check failed.</small>
             </div>
         </div>
@@ -33,20 +33,20 @@
     </form>
 
     <hr class="mt-4 mb-4">
-    
+
     <form id="deployment-form" style="display: none;">
         {% csrf_token %}
         <h3>Step 2: Selection and Execution</h3>
         <div class="mb-3">
             <label for="git-tag" class="form-label">Select Git Tag/Branch to Deploy</label>
-            <select class="form-select" id="git-tag" required>
+            <select class="form-select" id="git_tag" required>
                 <option value="" disabled selected>Loading...</option>
             </select>
         </div>
-        
-        <input type="hidden" id="deploy-url">
-        <input type="hidden" id="deploy-username">
-        <input type="hidden" id="deploy-password">
+
+        <input type="hidden" id="git_url">
+        <input type="hidden" id="git_username">
+        <input type="hidden" id="git_password">
 
         <button type="submit" id="update-button" class="btn btn-danger btn-lg">Execute Code Update and Restart</button>
     </form>
@@ -69,7 +69,7 @@
         const gitTagSelect = document.getElementById('git-tag');
         const gitUsernameInput = document.getElementById('git-username');
         const gitPasswordInput = document.getElementById('git-password');
-        
+
         // --- Helper Functions ---
         function getCsrfToken(form) {
             return form.querySelector('[name=csrfmiddlewaretoken]').value;
@@ -91,7 +91,7 @@
         // --- Step 1: Check Repository and Fetch Branches/Tags ---
         repoCheckForm.addEventListener('submit', function(event) {
             event.preventDefault();
-            
+
             if (checkRepoButton.disabled) return;
             checkRepoButton.disabled = true;
             deploymentForm.style.display = 'none'; // Hide Step 2
@@ -101,31 +101,31 @@
             const gitPassword = gitPasswordInput.value;
 
             // SECURITY: Get password value then clear input immediately for safety
-            gitPasswordInput.value = ''; 
+            gitPasswordInput.value = '';
 
             const payload = {
                 git_url: gitUrl,
                 git_username: gitUsername,
                 git_password: gitPassword // SENSITIVE DATA sent in payload
             };
-            
+
             setStatus('Checking repository and fetching branches/tags...');
 
             // NOTE: This URL must be created in your Django urls.py
-            fetch('{% url "check_repo_and_fetch_branches" %}', { 
+            fetch('{% url "check_repo_and_fetch_branches" %}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': getCsrfToken(repoCheckForm)
                 },
-                body: JSON.stringify(payload) 
+                body: JSON.stringify(payload)
             })
             .then(response => response.json().then(data => ({ status: response.status, ok: response.ok, data: data })))
             .then(({ status, ok, data }) => {
                 if (ok) {
                     // Successful fetch
                     setStatus(`Repository checked. Found ${data.tags_and_branches.length} references. Select one to deploy.`, 'success');
-                    
+
                     // Populate the dropdown
                     gitTagSelect.innerHTML = ''; // Clear previous options
                     data.tags_and_branches.forEach(item => {
@@ -134,16 +134,16 @@
                         option.textContent = item;
                         gitTagSelect.appendChild(option);
                     });
-                    
+
                     // Store credentials/url for Step 2 deployment (safely in hidden fields)
                     document.getElementById('deploy-url').value = gitUrl;
                     document.getElementById('deploy-username').value = gitUsername;
                     // Only store the password if it was entered and auth was successful (backend should confirm this)
-                    document.getElementById('deploy-password').value = gitPassword; 
-                    
+                    document.getElementById('deploy-password').value = gitPassword;
+
                     // Show Step 2 and hide auth fields
                     deploymentForm.style.display = 'block';
-                    authFieldsDiv.style.display = 'none'; 
+                    authFieldsDiv.style.display = 'none';
 
                 } else if (status === 401 || status === 403) {
                     // Authentication required or failed - backend returned 401/403
@@ -168,8 +168,8 @@
 
         // --- Step 2: Execute Deployment ---
         deploymentForm.addEventListener('submit', function(event) {
-            event.preventDefault(); 
-            
+            event.preventDefault();
+
             if (updateButton.disabled) return;
             updateButton.disabled = true;
 
@@ -193,9 +193,9 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': getCsrfToken(deploymentForm) 
+                    'X-CSRFToken': getCsrfToken(deploymentForm)
                 },
-                body: JSON.stringify(payload) 
+                body: JSON.stringify(payload)
             })
             .then(response => response.json().then(data => ({ status: response.status, ok: response.ok, data: data })))
             .then(({ status, ok, data }) => {
