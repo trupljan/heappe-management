@@ -1,0 +1,90 @@
+{% extends 'base.html' %} 
+{% load static %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1>Code Update Management (Deployment)</h1>
+    
+    <div class="alert alert-danger" role="alert">
+        <strong>⚠️ WARNING: DANGEROUS OPERATION.</strong> This action executes a **Git pull** and **restarts** the `adminpanel` system service directly from the web application. A **brief outage** will occur during the restart. Proceed with caution.
+    </div>
+
+    <p>
+        Clicking the button will execute the **`deploy.sh`** script, performing the following steps:
+        <ol>
+            <li>Git pull to fetch the latest code.</li>
+            <li>Stop the `adminpanel` service.</li>
+            <li>Delete and recreate the `venv`.</li>
+            <li>Install dependencies and run migrations.</li>
+            <li>Restart the service.</li>
+        </ol>
+    </p>
+
+    <button id="update-button" class="btn btn-danger btn-lg">Execute Code Update and Restart</button>
+
+    <div id="status-message" class="mt-4 p-3 border rounded" style="background-color: #f8f9fa;">
+        Deployment status will appear here.
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const updateButton = document.getElementById('update-button');
+        const statusDiv = document.getElementById('status-message');
+        
+        // Function to get the CSRF token from the DOM (assuming it's present in the template)
+        function getCsrfToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]').value;
+        }
+
+        updateButton.addEventListener('click', function() {
+            const button = this;
+
+            // 1. Security and Visual Feedback
+            if (button.disabled) return;
+            button.disabled = true;
+            statusDiv.innerHTML = '<p class="text-info">🚀 Launching deployment script in the background... Sending request to the server.</p>';
+            
+            const csrfToken = getCsrfToken();
+
+            // 2. Fetch API for the POST request to the Django View
+            fetch('{% url "trigger_deployment_direct" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // Adding the CSRF token is essential for Django security
+                    'X-CSRFToken': csrfToken 
+                },
+                body: JSON.stringify({}) 
+            })
+            .then(response => {
+                // Process the JSON response regardless of the status code
+                return response.json().then(data => ({
+                    status: response.status,
+                    ok: response.ok,
+                    data: data
+                }));
+            })
+            .then(({ status, ok, data }) => {
+                // 3. Display the result to the user
+                if (ok) {
+                    // HTTP 200-299 status code (Successfully launched)
+                    statusDiv.innerHTML = `<p class="text-success">✅ SUCCESS (${status}): ${data.message}</p>
+                                          <p class="text-success"><strong>IMPORTANT:</strong> The script is running in the background. Check server logs (journalctl) to confirm the final result.</p>`;
+                } else {
+                    // HTTP 4xx or 5xx status code (Error during script execution or permissions issue)
+                    statusDiv.innerHTML = `<p class="text-danger">❌ ERROR (${status}): ${data.message || 'Unknown error occurred while launching deployment.'}</p>`;
+                }
+            })
+            .catch(error => {
+                // 4. Critical network error (e.g., server unreachable)
+                statusDiv.innerHTML = `<p class="text-danger">❌ CRITICAL COMMUNICATION ERROR: ${error}. The server did not respond.</p>`;
+            })
+            .finally(() => {
+                // 5. Re-enable the button
+                button.disabled = false;
+            });
+        });
+    });
+</script>
+{% endblock %}

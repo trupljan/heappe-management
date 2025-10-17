@@ -64,4 +64,7 @@ urlpatterns = [
     path('instances/<int:pk>/edit/', views.instance_credentials_edit, name='instance_credentials_edit'),
     path('instances/<int:pk>/delete/', views.instance_credentials_delete, name='instance_credentials_delete'),
     path('instances/choose/', views.chose_instance_view, name='chose_instance_view'),
+
+    path('server-update/', views.update_server_page, name='update_server_page'),
+    path('server-update/trigger/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
 ]

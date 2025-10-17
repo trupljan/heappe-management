@@ -601,3 +601,70 @@ def instance_credentials_delete(request, pk):
         messages.success(request, f"Instance '{instance_name}' deleted successfully.")
         return redirect('instance_credentials_list')
     return render(request, 'instance_credentials.html', {'object_list': InstanceCredentials.objects.all()})
+
+
+import subprocess
+import os
+from django.conf import settings
+from django.shortcuts import render
+from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import user_passes_test
+from django.http import JsonResponse
+
+# Skript je umístěn PŘÍMO v kořenovém adresáři projektu, vedle manage.py
+DEPLOY_SCRIPT_NAME = "deploy.sh"
+# Sestavení plné cesty
+DEPLOY_SCRIPT_PATH = os.path.join(settings.BASE_DIR, DEPLOY_SCRIPT_NAME)
+
+
+@login_required
+def is_superuser(user):
+    """Checks if the user is active and a superuser."""
+    return user.is_active and user.is_superuser
+
+
+@user_passes_test(is_superuser)
+@login_required
+def update_server_page(request):
+    """Renders the page with the update button."""
+    return render(request, 'update_server.html')
+
+
+@require_http_methods(["POST"])
+@user_passes_test(is_superuser)
+@login_required
+def trigger_deployment_direct(request):
+    """
+    DANGEROUS IMPLEMENTATION: Runs the system deployment script directly from Gunicorn.
+    The Gunicorn process will detach the script but may still encounter permission/deadlock issues.
+    """
+
+    # 1. Kontrola existence skriptu (Měl by být stažen z Gitu)
+    if not os.path.exists(DEPLOY_SCRIPT_PATH):
+        return JsonResponse({"status": "error", "message": f"Deployment script not found at {DEPLOY_SCRIPT_PATH}"},
+                            status=500)
+
+    # 2. Nastavení práv CHMOD pro spuštění skriptu
+    # Nastavuje práva ke spuštění (rwxr--r--) pro vlastníka.
+    try:
+        os.chmod(DEPLOY_SCRIPT_PATH, 0o744)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"Error setting chmod on script: {e}"}, status=500)
+
+    # 3. Spuštění Deployment Skriptu
+    try:
+        process = subprocess.Popen(
+            ['/bin/bash', DEPLOY_SCRIPT_PATH],
+            cwd=settings.BASE_DIR,
+            start_new_session=True,  # Odpoutá proces od Gunicornu
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        return JsonResponse({
+            "status": "success",
+            "message": f"Deployment script ({DEPLOY_SCRIPT_NAME}) launched on background process {process.pid}. Server will restart."
+        })
+
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"Fatal error launching script: {e}"}, status=500)
