@@ -65,6 +65,7 @@ urlpatterns = [
     path('instances/<int:pk>/delete/', views.instance_credentials_delete, name='instance_credentials_delete'),
     path('instances/choose/', views.chose_instance_view, name='chose_instance_view'),
 
-    path('server-update/', views.update_server_page, name='update_server_page'),
-    path('server-update/trigger/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
+    path('update/', views.update_server_page, name='update_server_page'),
+    path('api/check-repo/', views.check_repo_and_fetch_branches, name='check_repo_and_fetch_branches'),
+    path('api/deploy-direct/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
 ]

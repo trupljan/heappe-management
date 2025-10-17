@@ -623,65 +623,199 @@ def is_superuser(user):
     return user.is_active and user.is_superuser
 
 
+import json
+import subprocess
+import os
+from django.http import JsonResponse, HttpResponseBadRequest
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import render
+from django.conf import settings
+
+# --- DEFINE THESE CONSTANTS BASED ON YOUR PROJECT SETUP ---
+# Example: Define the path to your deployment script relative to BASE_DIR
+DEPLOY_SCRIPT_NAME = 'deploy.sh'
+# Assuming the script is in the project's root directory
+DEPLOY_SCRIPT_PATH = os.path.join(settings.BASE_DIR, DEPLOY_SCRIPT_NAME)
+
+
+# ---------------------------------------------------------
+
+
+# --- HTML Renderer View ---
 @login_required
 def update_server_page(request):
     """Renders the page with the update button and form."""
+    # Ensure this template uses the two-step JavaScript logic
     return render(request, 'update_server.html')
 
+
+# -----------------------------------------------------------------
+# --- HELPER FUNCTION: Step 1 Git Check Logic ---
+# -----------------------------------------------------------------
+
+def execute_git_ls_remote(git_url, git_username=None, git_password=None):
+    """
+    Executes 'git ls-remote' to get branches and tags, handling credentials.
+    Returns (list_of_refs, error_message, status_code).
+    """
+
+    # 1. Prepare Git URL with credentials for HTTPS access
+    if git_username and git_password:
+        url_parts = git_url.split('://', 1)
+        if len(url_parts) == 2:
+            # Format: https://<username>:<password>@<domain>/<repo.git>
+            domain_and_path = url_parts[1]
+            auth_url = f"{url_parts[0]}://{git_username}:{git_password}@{domain_and_path}"
+        else:
+            auth_url = git_url
+    else:
+        auth_url = git_url
+
+    # 2. Prepare the command: list all branches (--heads) and tags (--tags)
+    command = ['git', 'ls-remote', '--heads', '--tags', auth_url]
+
+    try:
+        result = subprocess.run(command,
+                                capture_output=True,
+                                text=True,
+                                check=False,
+                                timeout=15)
+
+        # 3. Handle Git errors
+        if result.returncode != 0:
+            error_output = result.stderr.lower()
+
+            # Authentication failure check
+            if any(auth_error in error_output for auth_error in
+                   ['authentication failed', '401 unauthorized', '403 forbidden', 'credential']):
+                return None, "Authentication required or failed for Git URL.", 401
+
+            return None, f"Git error: {result.stderr.strip()}", 500
+
+        # 4. Parse the successful output
+        refs = []
+        for line in result.stdout.splitlines():
+            if '\t' in line:
+                ref = line.split('\t')[1]
+
+                # Clean up: strip 'refs/heads/' or 'refs/tags/' prefix
+                if ref.startswith('refs/heads/'):
+                    refs.append(ref.replace('refs/heads/', ''))
+                elif ref.startswith('refs/tags/'):
+                    # Ignore the dereferenced tag lines (e.g., 'v1.0.0^{}')
+                    if not ref.endswith('^{}'):
+                        refs.append(ref.replace('refs/tags/', ''))
+
+        # Return unique and sorted refs (e.g., ['main', 'v1.0.0'])
+        return sorted(list(set(refs))), None, 200
+
+    except subprocess.TimeoutExpired:
+        return None, "Git operation timed out (15s).", 504
+    except Exception as e:
+        return None, f"Internal server error during Git check: {e}", 500
+
+
+# -----------------------------------------------------------------
+# --- VIEW FOR STEP 1: Check Repo and Fetch Branches (API Endpoint) ---
+# -----------------------------------------------------------------
+
+@csrf_exempt
+@require_http_methods(["POST"])
+# Note: You might want to add @login_required here as well, but the AJAX
+# requests might be blocked if you don't use 'ensure_csrf_cookie' middleware
+# or other AJAX-friendly auth methods. Since @login_required is on
+# trigger_deployment_direct, we'll focus on the data validation here.
+def check_repo_and_fetch_branches(request):
+    """API endpoint to check a Git URL and fetch available branches/tags."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return HttpResponseBadRequest("Invalid JSON.")
+
+    git_url = data.get('git_url')
+    git_username = data.get('git_username')
+    git_password = data.get('git_password')
+
+    if not git_url:
+        return JsonResponse({'message': 'Git URL is required.'}, status=400)
+
+    # Call the helper function
+    tags_and_branches, error_message, status_code = execute_git_ls_remote(
+        git_url, git_username, git_password
+    )
+
+    if tags_and_branches:
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Repository check successful.',
+            'git_url': git_url,
+            'tags_and_branches': tags_and_branches
+        }, status=status_code)
+    else:
+        # Authentication failure (401) or general error (500)
+        return JsonResponse({
+            'status': 'error',
+            'message': error_message,
+            'git_url': git_url,
+        }, status=status_code)
+
+
+# -----------------------------------------------------------------
+# --- VIEW FOR STEP 2: Execute Deployment (API Endpoint) ---
+# -----------------------------------------------------------------
 
 @require_http_methods(["POST"])
 @login_required
 def trigger_deployment_direct(request):
+    """Final API endpoint to execute the deployment script."""
     # 1. Input Validation and Parsing
     try:
-        # Load JSON data from the request body
         data = json.loads(request.body.decode('utf-8'))
-        git_url = data.get('git_url', 'DEFAULT_URL_IF_NEEDED')  # Get Git URL, handle if missing
-        git_tag = data.get('git_tag', 'main')  # Default to 'main' branch/tag
-        git_user = data.get('git_username', '')  # Username is required
-        git_pass = data.get('git_password', '')  # Password is required
+        git_url = data.get('git_url')
+        git_tag = data.get('git_tag')
+        git_user = data.get('git_username', '')
+        git_pass = data.get('git_password', '')
 
-        if not all([git_url, git_user, git_pass]):
-            return JsonResponse({"status": "error", "message": "Missing Git URL, Username, or Password."}, status=400)
+        if not all([git_url, git_tag]):
+            return JsonResponse({"status": "error", "message": "Missing Git URL or selected Tag/Branch."}, status=400)
 
     except json.JSONDecodeError:
         return JsonResponse({"status": "error", "message": "Invalid JSON request body."}, status=400)
-    except Exception as e:
-        return JsonResponse({"status": "error", "message": f"Error processing input: {e}"}, status=400)
 
-    # 2. Check for Script and Permissions (Same as original)
+    # 2. Check for Script and Permissions
     if not os.path.exists(DEPLOY_SCRIPT_PATH):
         return JsonResponse({"status": "error", "message": f"Deployment script not found at {DEPLOY_SCRIPT_PATH}"},
                             status=500)
     try:
+        # Ensure script is executable
         os.chmod(DEPLOY_SCRIPT_PATH, 0o744)
     except Exception as e:
-        return JsonResponse({"status": "error", "message": f"Error setting chmod on script: {e}"}, status=500)
+        return JsonResponse({"status": "error", "message": f"Error setting permissions on script: {e}"}, status=500)
 
     # 3. Launch Subprocess with Environment Variables
     try:
-        # Create a copy of the current environment
         env_vars = os.environ.copy()
 
         # Pass the dynamic inputs as environment variables
-        # This is SAFER than passing them as command-line arguments.
         env_vars['GIT_URL'] = git_url
         env_vars['GIT_TAG'] = git_tag
         env_vars['GIT_USER'] = git_user
-        env_vars['GIT_PASS'] = git_pass  # SENSITIVE! Handled carefully in the shell script
+        env_vars['GIT_PASS'] = git_pass  # SENSITIVE!
 
         process = subprocess.Popen(
             ['/bin/bash', DEPLOY_SCRIPT_PATH],
             cwd=settings.BASE_DIR,
-            start_new_session=True,
+            start_new_session=True,  # Detach the process
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            env=env_vars  # Pass the modified environment
+            env=env_vars
         )
 
         return JsonResponse({
             "status": "success",
-            "message": f"Deployment script ({DEPLOY_SCRIPT_NAME}) launched on background process {process.pid}. Server will restart.",
+            "message": f"Deployment script ({DEPLOY_SCRIPT_NAME}) launched on background process {process.pid}. Server will restart shortly.",
             "git_tag": git_tag,
             "git_url": git_url
         })
