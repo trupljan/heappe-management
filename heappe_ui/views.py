@@ -624,7 +624,6 @@ def is_superuser(user):
 
 
 @user_passes_test(is_superuser)
-@login_required
 def update_server_page(request):
     """Renders the page with the update button."""
     return render(request, 'update_server.html')
@@ -632,7 +631,6 @@ def update_server_page(request):
 
 @require_http_methods(["POST"])
 @user_passes_test(is_superuser)
-@login_required
 def trigger_deployment_direct(request):
     """
     DANGEROUS IMPLEMENTATION: Runs the system deployment script directly from Gunicorn.
