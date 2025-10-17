@@ -49,8 +49,8 @@ AUTH_URL=$(echo "$GIT_URL" | sed "s|//|//${GIT_USER}:${GIT_PASS}@|")
 
 log "Fetching latest code from authenticated repository..."
 
-# Use the authenticated URL to fetch all updates
-git fetch "$AUTH_URL"
+# Use the authenticated URL to pull all updates
+git pull "$AUTH_URL"
 check_error "Git fetch"
 
 # 4. Checkout the specific tag/branch
