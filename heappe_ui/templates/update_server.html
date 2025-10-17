@@ -3,7 +3,7 @@
 
 {% block content %}
 <div class="container mt-5">
-    <h1>Code Update Management (Dynamic Deployment)</h1>
+    <h1>Code Update Management</h1>
 
     <div class="alert alert-danger" role="alert">
         <strong>⚠️ WARNING: DANGEROUS OPERATION.</strong> Executes Git operations and a service restart.
@@ -17,7 +17,7 @@
         </div>
 
         <div id="auth-fields" style="display: none;">
-            <p class="text-warning mt-3">Authentication required or failed. Please enter credentials.</p>
+            <p class="text-warning mt-3">Please enter credentials. (Optional)</p>
             <div class="mb-3">
                 <label for="git-username" class="form-label">Git Username/Token</label>
                 <input type="text" class="form-control" id="git_username">
