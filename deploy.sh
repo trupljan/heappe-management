@@ -76,20 +76,6 @@ fi
 git reset --hard "$RESET_REF"
 check_error "Git reset --hard $GIT_TAG"
 
-# 5. Environment and Database Updates (Django Specific)
-log "Installing/Updating Python dependencies..."
-$PIP_COMMAND install -r requirements.txt --upgrade
-check_error "Dependency update (pip install)"
-
-log "Running database migrations..."
-$VENV_PYTHON manage.py migrate --noinput
-check_error "Database migrations"
-
-log "Collecting static files..."
-$VENV_PYTHON manage.py collectstatic --noinput
-check_error "Collecting static files"
-
-# 6. Service Restart
 log "Restarting the $SERVICE_NAME service..."
 sudo systemctl restart $SERVICE_NAME
 check_error "Restart service $SERVICE_NAME"
