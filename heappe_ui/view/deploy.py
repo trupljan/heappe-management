@@ -117,7 +117,7 @@ def generate_secure_password(length=12):
     if length < 8:
         raise ValueError("Password length should be at least 8 characters.")
 
-    alphabet = string.ascii_letters + string.digits + string.punctuation
+    alphabet = string.ascii_letters + string.digits
     while True:
         password = ''.join(secrets.choice(alphabet) for _ in range(length))
         if (any(c.islower() for c in password)
