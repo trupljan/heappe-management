@@ -441,7 +441,6 @@ def initialize_database(
         print(f"Unexpected error: {e}")
         return False
 
-@login_required
 # Retry logic
 def run_with_retries(instance_name, ports, password):
     max_attempts = 10
