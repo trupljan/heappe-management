@@ -122,10 +122,8 @@ def generate_secure_password(length=12):
         password = ''.join(secrets.choice(alphabet) for _ in range(length))
         if (any(c.islower() for c in password)
                 and any(c.isupper() for c in password)
-                and any(c.isdigit() for c in password)
-                and any(c in string.punctuation for c in password)):
+                and any(c.isdigit() for c in password)):
             return password
-
 
 def wait_for_container_running(container_name, timeout=60, interval=5):
     """Wait until a Docker container is in 'running' state using Docker SDK."""
