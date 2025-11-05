@@ -487,7 +487,7 @@ def get_remote_branches(repo_url: str) -> list[str]:
         return []
 
 import threading
-@login_required
+
 def deploy_background(config, instance_name, ports, s1, s2, s3, s4):
     thread = threading.Thread(
         target=handle_deployment_action,
