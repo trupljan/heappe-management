@@ -113,11 +113,18 @@ import secrets
 import string
 
 
-def generate_secure_password(length=12):
+def generate_secure_password(length=12, forbidden_chars=None):
     if length < 8:
         raise ValueError("Password length should be at least 8 characters.")
 
-    alphabet = string.ascii_letters + string.digits
+    if forbidden_chars is None:
+        forbidden_chars = set(',^\\\"\'%(){}[]<>:;/?=+*!$&#@|`~')
+
+    alphabet = ''.join(
+        c for c in (string.ascii_letters + string.digits)
+        if c not in forbidden_chars
+    )
+
     while True:
         password = ''.join(secrets.choice(alphabet) for _ in range(length))
         if (any(c.islower() for c in password)
