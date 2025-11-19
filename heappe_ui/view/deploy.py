@@ -117,18 +117,27 @@ import secrets
 
 import secrets
 
+import random
+import string
+
 def generate_secure_password(length=12):
     if length < 8:
         raise ValueError("Password length should be at least 8 characters.")
 
-    alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    lower = string.ascii_lowercase
+    upper = string.ascii_uppercase
+    digits = string.digits
+    all_chars = lower + upper + digits
 
-    while True:
-        password = ''.join(secrets.choice(alphabet) for _ in range(length))
-        if (any(c.islower() for c in password)
-                and any(c.isupper() for c in password)
-                and any(c.isdigit() for c in password)):
-            return password
+    password = [
+        random.choice(lower),
+        random.choice(upper),
+        random.choice(digits)
+    ]
+
+    password += [random.choice(all_chars) for _ in range(length - 3)]
+    random.shuffle(password)
+    return ''.join(password)
 
 def wait_for_container_running(container_name, timeout=60, interval=5):
     """Wait until a Docker container is in 'running' state using Docker SDK."""
