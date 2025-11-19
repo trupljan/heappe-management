@@ -116,56 +116,75 @@ class HEAppEDeployService:
             ports: Optional[Dict[str, int]] = None,
             overwrite_existing: bool = False
     ) -> str:
-        """Generate .env file for HEAppE project."""
+        """Generate .env file for HEAppE project using separate build and save methods."""
+        content = self.build_env_content(instance_name, vault_password, sa_password, ports)
+        return self.save_env_file(instance_name, content, overwrite_existing)
+
+    def build_env_content(
+            self,
+            instance_name: str,
+            vault_password: str,
+            sa_password: str,
+            ports: Optional[Dict[str, int]] = None
+    ) -> str:
+        """Build content for .env file for HEAppE project."""
         ports = ports or self.config.default_ports
-        content = f"""COMPOSE_instance_name=heappe
-INSTANCE_NAME={instance_name}
+        return f"""COMPOSE_instance_name=heappe
+    INSTANCE_NAME={instance_name}
 
-## HashiCorp Vault
-VAULT_FILE_DIR_PATH={self.config.base_path}{instance_name}
-SHARED_VAULT_FILE=false
-SHARED_VAULT_FILE_NAME=credentials_{instance_name.lower()}
-VAULT_PASSWORD={vault_password}
-BASE_PATH={self.config.base_path}{instance_name}/app/confs
+    ## HashiCorp Vault
+    VAULT_FILE_DIR_PATH={self.config.base_path}{instance_name}
+    SHARED_VAULT_FILE=false
+    SHARED_VAULT_FILE_NAME=credentials_{instance_name.lower()}
+    VAULT_PASSWORD={vault_password}
+    BASE_PATH={self.config.base_path}{instance_name}/app/confs
 
-HOST_SSHAGENT_NAME=sshagent-{instance_name}
-HOST_SSHAGENT_HOST_MAP_FOLD_PATH={self.config.base_path}{instance_name}/ssh_agent/keys
-HOST_SSHAGENT_CONTAINER_MAP_FOLD_PATH=/opt/heappe/sshagent_keys:ro
+    HOST_SSHAGENT_NAME=sshagent-{instance_name}
+    HOST_SSHAGENT_HOST_MAP_FOLD_PATH={self.config.base_path}{instance_name}/ssh_agent/keys
+    HOST_SSHAGENT_CONTAINER_MAP_FOLD_PATH=/opt/heappe/sshagent_keys:ro
 
-HOST_MSSQL_NAME=mssql-{instance_name}
-HOST_MSSQL_PORT={ports['mssql_port']}
-HOST_MSSQL_PASSWORD={sa_password}
+    HOST_MSSQL_NAME=mssql-{instance_name}
+    HOST_MSSQL_PORT={ports['mssql_port']}
+    HOST_MSSQL_PASSWORD={sa_password}
 
-HOST_APP_NAME=heappe-{instance_name}
-HOST_APP_PORT={ports['app_port']}
-HOST_APP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
-HOST_APP_CONTAINER_MAP_FOLD_PATH=/opt/heappe
+    HOST_APP_NAME=heappe-{instance_name}
+    HOST_APP_PORT={ports['app_port']}
+    HOST_APP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
+    HOST_APP_CONTAINER_MAP_FOLD_PATH=/opt/heappe
 
-HOST_DATA_STAGING_NAME=datastaging-{instance_name}
-HOST_DATA_STAGING_PORT={ports['data_staging_port']}
-HOST_DATA_STAGING_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
-HOST_DATA_STAGING_CONTAINER_MAP_FOLD_PATH=/opt/heappe
+    HOST_DATA_STAGING_NAME=datastaging-{instance_name}
+    HOST_DATA_STAGING_PORT={ports['data_staging_port']}
+    HOST_DATA_STAGING_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
+    HOST_DATA_STAGING_CONTAINER_MAP_FOLD_PATH=/opt/heappe
 
-DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database
-DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database/logs
+    DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database
+    DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database/logs
 
-# Only for Local Cluster mode
-HOST_LOCAL_NAME=localhpc-{instance_name}
-HOST_LOCAL_PORT={ports['local_port']}
+    # Only for Local Cluster mode
+    HOST_LOCAL_NAME=localhpc-{instance_name}
+    HOST_LOCAL_PORT={ports['local_port']}
 
-PWD={self.config.base_path}{instance_name}/heappe-core
-"""
+    PWD={self.config.base_path}{instance_name}/heappe-core
+    """
+
+    def save_env_file(
+            self,
+            instance_name: str,
+            content: str,
+            overwrite_existing: bool = False
+    ) -> str:
+        """Save .env content to file."""
         output_dir = os.path.join(self.config.base_path, instance_name, self.config.target_dir)
         output_path = os.path.join(output_dir, ".env")
 
         try:
-            if os.path.exists(output_path) and not overwrite_existing:
-                self.logger.info(f".env file already exists at {output_path}, skipping generation")
-                return output_path
-
-            if os.path.exists(output_path) and overwrite_existing:
-                os.remove(output_path)
-                self.logger.info(f"Removed existing .env file: {output_path}")
+            if os.path.exists(output_path):
+                if overwrite_existing:
+                    os.remove(output_path)
+                    self.logger.info(f"Removed existing .env file: {output_path}")
+                else:
+                    self.logger.info(f".env file already exists at {output_path}, skipping generation")
+                    return output_path
 
             os.makedirs(output_dir, exist_ok=True)
             with open(output_path, "w", encoding="utf-8") as f:
@@ -494,6 +513,29 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 with open(output_path_app, "w", encoding="utf-8") as f:
                     json.dump(appsettings_new, f, indent=3)
                 self.logger.info(f"Updated appsettings file generated at: {output_path_app}")
+
+                #generate and update .env file
+                #archive old .env
+                old_env_path = os.path.join(self.config.base_path, instance_name, self.config.target_dir, ".env")
+                if os.path.exists(old_env_path):
+                    archived_env_path = os.path.join(self.config.base_path, instance_name, self.config.target_dir, f".env_{old_version}_{timestamp}")
+                    shutil.copy2(old_env_path, archived_env_path)
+                    self.logger.info(f"Archived old .env to: {archived_env_path}")
+
+
+                env_path = self.generate_env_file(
+                    instance_name,
+                    vault_password=old_appsettings.get("HashiCorpVaultSettings", {}).get("VaultPassword", "changeme"),
+                    sa_password=old_appsettings.get("DatabaseSettings", {}).get("SaPassword", "Passw0rd"),
+                    ports={
+                        "mssql_port": old_appsettings.get("DatabaseSettings", {}).get("Port", 6000),
+                        "app_port": old_appsettings.get("ApplicationAPISettings", {}).get("Port", 5000),
+                        "data_staging_port": old_appsettings.get("DataStagingSettings", {}).get("Port", 5001),
+                        "local_port": old_appsettings.get("LocalClusterSettings", {}).get("Port", 49005)
+                    },
+                    overwrite_existing=True
+                )
+                self.logger.info(f"Updated .env file generated at: {env_path}")
                 self.logger.info("HEAppE update initialization completed successfully")
             except Exception as e:
                 self.logger.error(f"Update initialization failed: {e}")
