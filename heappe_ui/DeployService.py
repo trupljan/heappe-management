@@ -449,12 +449,12 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             self.logger.error(f"Deployment initialization failed: {e}")
             return {"status": "error", "message": str(e)}
 
-    def deep_merge_dicts(base: dict, override: dict):
+    def deep_merge_dicts(self, base: dict, override: dict):
         result = base.copy()
 
         for key, value in override.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = deep_merge_dicts(result[key], value)
+                result[key] = self.deep_merge_dicts(result[key], value)
             else:
                 result[key] = value
 

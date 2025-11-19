@@ -319,7 +319,7 @@ def handle_update_action(config, instance_name):
         if git_result.returncode != 0:
             return git_result, f"Failed to pull latest code: {git_result.stderr}", 'danger'
 
-        # update appsettings
+        # update appsettings and .env
         service.update_init(instance_name=instance_name, version=config.repo_branch)
 
         # rebuild and restart containers
