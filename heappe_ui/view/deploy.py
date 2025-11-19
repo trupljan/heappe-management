@@ -477,19 +477,25 @@ def run_with_retries(instance_name, ports, password):
         raise Exception("Failed to initialize database after maximum retries.")
 
 
-def get_remote_branches(repo_url: str) -> list[str]:
+def get_remote_tags(repo_url: str) -> list[str]:
     try:
         result = subprocess.run(
             ["git", "ls-remote", "--tags", repo_url],
             capture_output=True, text=True, check=True
         )
-        branches = []
+
+        tags = []
         for line in result.stdout.splitlines():
             if "refs/tags/" in line:
-                branches.append(line.split("refs/tags/")[1])
-        return branches
+                tag = line.split("refs/tags/")[1]
+                if tag.endswith("^{}"):
+                    continue  # přeskočit anotované peel tagy
+                tags.append(tag)
+        return tags
+
     except subprocess.CalledProcessError:
         return []
+
 
 import threading
 
