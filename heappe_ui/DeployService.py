@@ -524,6 +524,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
 
                 # get ports from old .env
                 ports = {}
+                vault_password = ""
+                sa_password = ""
                 with open(archived_env_path, "r", encoding="utf-8") as f:
                     for line in f:
                         if line.startswith("HOST_MSSQL_PORT="):
@@ -534,11 +536,15 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                             ports["data_staging_port"] = int(line.strip().split("=")[1])
                         elif line.startswith("HOST_LOCAL_PORT="):
                             ports["local_port"] = int(line.strip().split("=")[1])
+                        elif line.startswith("VAULT_PASSWORD="):
+                            vault_password = line.strip().split("=")[1]
+                        elif line.startswith("HOST_MSSQL_PASSWORD="):
+                            sa_password = line.strip().split("=")[1]
 
                 env_path = self.generate_env_file(
                     instance_name,
-                    vault_password=old_appsettings.get("HashiCorpVaultSettings", {}).get("VaultPassword", "changeme"),
-                    sa_password=old_appsettings.get("DatabaseSettings", {}).get("SaPassword", "Passw0rd"),
+                    vault_password=vault_password,
+                    sa_password=sa_password,
                     ports=ports,
                     overwrite_existing=True
                 )
