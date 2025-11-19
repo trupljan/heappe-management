@@ -480,7 +480,7 @@ def run_with_retries(instance_name, ports, password):
 def get_remote_branches(repo_url: str) -> list[str]:
     try:
         result = subprocess.run(
-            ["git", "ls-remote", "--heads", repo_url],
+            ["git", "ls-remote", "--tags", repo_url],
             capture_output=True, text=True, check=True
         )
         branches = []
