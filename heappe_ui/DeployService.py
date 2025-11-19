@@ -276,7 +276,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             deployed_ip="localhost"
         )
 
-        return deep_merge_dicts(old_appsettings, new_appsettings)
+        return self.merge_keep_old(old_appsettings, new_appsettings)
     def generate_appsettings_files(
             self,
             instance_name: str,
@@ -449,16 +449,15 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             self.logger.error(f"Deployment initialization failed: {e}")
             return {"status": "error", "message": str(e)}
 
-    def deep_merge_dicts(self, base: dict, override: dict):
-        result = base.copy()
-
-        for key, value in override.items():
+    def merge_keep_old(self, old: dict, new: dict) -> dict:
+        result = new.copy()  # začneme s novým JSONem
+        for key, value in old.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = self.deep_merge_dicts(result[key], value)
+                result[key] = self.merge_keep_old(value, result[key])  # rekurzivní merge dictů
             else:
-                result[key] = value
-
+                result[key] = value  # použijeme hodnotu ze starého JSONu
         return result
+
     def update_init(
                 self,
                 instance_name: str,
