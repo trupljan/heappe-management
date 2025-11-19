@@ -552,6 +552,8 @@ def get_remote_tags(repo_url: str) -> list[str]:
                     continue
                 if tag >= "V6.0.0":  # filtr od verze 6.0.0
                     tags.append(tag)
+        # Sort tags in descending order
+        tags.sort(reverse=True)
         return tags
 
     except subprocess.CalledProcessError:
