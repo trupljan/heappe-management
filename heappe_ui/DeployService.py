@@ -522,17 +522,24 @@ class HEAppEDeployService:
                     shutil.copy2(old_env_path, archived_env_path)
                     self.logger.info(f"Archived old .env to: {archived_env_path}")
 
+                # get ports from old .env
+                ports = {}
+                with open(archived_env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.startswith("HOST_MSSQL_PORT="):
+                            ports["mssql_port"] = int(line.strip().split("=")[1])
+                        elif line.startswith("HOST_APP_PORT="):
+                            ports["app_port"] = int(line.strip().split("=")[1])
+                        elif line.startswith("HOST_DATA_STAGING_PORT="):
+                            ports["data_staging_port"] = int(line.strip().split("=")[1])
+                        elif line.startswith("HOST_LOCAL_PORT="):
+                            ports["local_port"] = int(line.strip().split("=")[1])
 
                 env_path = self.generate_env_file(
                     instance_name,
                     vault_password=old_appsettings.get("HashiCorpVaultSettings", {}).get("VaultPassword", "changeme"),
                     sa_password=old_appsettings.get("DatabaseSettings", {}).get("SaPassword", "Passw0rd"),
-                    ports={
-                        "mssql_port": old_appsettings.get("DatabaseSettings", {}).get("Port", 6000),
-                        "app_port": old_appsettings.get("ApplicationAPISettings", {}).get("Port", 5000),
-                        "data_staging_port": old_appsettings.get("DataStagingSettings", {}).get("Port", 5001),
-                        "local_port": old_appsettings.get("LocalClusterSettings", {}).get("Port", 49005)
-                    },
+                    ports=ports,
                     overwrite_existing=True
                 )
                 self.logger.info(f"Updated .env file generated at: {env_path}")
