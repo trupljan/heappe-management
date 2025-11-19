@@ -485,8 +485,8 @@ def get_remote_branches(repo_url: str) -> list[str]:
         )
         branches = []
         for line in result.stdout.splitlines():
-            if "refs/heads/" in line:
-                branches.append(line.split("refs/heads/")[1])
+            if "refs/tags/" in line:
+                branches.append(line.split("refs/tags/")[1])
         return branches
     except subprocess.CalledProcessError:
         return []
