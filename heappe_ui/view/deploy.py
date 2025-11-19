@@ -489,12 +489,14 @@ def get_remote_tags(repo_url: str) -> list[str]:
             if "refs/tags/" in line:
                 tag = line.split("refs/tags/")[1]
                 if tag.endswith("^{}"):
-                    continue  # přeskočit anotované peel tagy
-                tags.append(tag)
+                    continue
+                if tag >= "V6.0.0":  # filtr od verze 6.0.0
+                    tags.append(tag)
         return tags
 
     except subprocess.CalledProcessError:
         return []
+
 
 
 import threading
@@ -516,7 +518,7 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
     repo_branch = "V6.0.0"
     version = "v6.0.0"
     ip = "localhost"
-    branches = get_remote_branches(repo_url)
+    branches = get_remote_tags(repo_url)
 
     ports = {}
     action_message = None
