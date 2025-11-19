@@ -300,6 +300,66 @@ def handle_global_action(compose_dir, instance_name, action):
         'success' if result.returncode == 0 else 'danger'
     )
 
+def handle_update_action(config, instance_name):
+    """Handle the update process and return the result."""
+    service = HEAppEDeployService(config)
+    compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
+
+    try:
+        # git pull
+        git_command = ["git", "pull", "origin", config.repo_branch]
+        git_result = subprocess.run(
+            git_command,
+            cwd=compose_dir,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        print(f"Git pull done: {git_result.returncode} {git_result.stdout} {git_result.stderr}")
+        if git_result.returncode != 0:
+            return git_result, f"Failed to pull latest code: {git_result.stderr}", 'danger'
+
+        # update appsettings
+        service.update_init(instance_name=instance_name, version=config.repo_branch)
+
+        # rebuild and restart containers
+        build_command = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
+            "-p", instance_name,
+            "build",  "--no-cache"
+        ]
+
+
+        restart_command = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
+            "-p", instance_name,
+            "up", "-d"
+        ]
+        restart_result = execute_docker_compose(restart_command, compose_dir)
+        print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
+
+        if restart_result.returncode != 0:
+            return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
+
+        return restart_result, "Update completed successfully.", 'success'
+    except Exception as e:
+        print(f"Update error: {str(e)}")
+        return None, f"Update error: {str(e)}", 'danger'
+
 
 def container_logs_view(request, container_id):
     """Fetch logs for a specific container."""
@@ -509,6 +569,14 @@ def deploy_background(config, instance_name, ports, s1, s2, s3, s4):
     )
     thread.start()
 
+def update_background(config, instance_name):
+    thread = threading.Thread(
+        target=handle_update_action,
+        args=(config, instance_name),
+        daemon=True
+    )
+    thread.start()
+
 from django.utils import timezone
 @login_required
 def deploy_view(request, instance_name: str = '') -> HttpResponse:
@@ -556,10 +624,16 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     "local_port": local_port
                 }
 
-                deploy_background(HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=version, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
+                deploy_background(HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=repo_branch, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
                     instance_name, ports, s1, s2, s3, s4
                 )
                 action_message = "Deployment started in the background. This may take several minutes."
+                action_status = 'info'
+            elif action == "update":
+                update_background(HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=repo_branch, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
+                    instance_name
+                )
+                action_message = "Update started in the background. This may take several minutes."
                 action_status = 'info'
 
 

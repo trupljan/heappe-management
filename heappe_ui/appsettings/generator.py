@@ -1,15 +1,4 @@
 
-def deep_merge_dicts(base: dict, override: dict):
-    result = base.copy()
-
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_merge_dicts(result[key], value)
-        else:
-            result[key] = value
-
-    return result
-
 def build_connection_strings_from_container(container_name: str, password: str):
     """Builds connection strings using MSSQL container name instead of IP/port."""
     MiddlewareContext = f"Server={container_name};Database=heappe;User=SA;Password={password};TrustServerCertificate=True;"

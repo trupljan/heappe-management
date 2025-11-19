@@ -256,6 +256,27 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             self.logger.error(f"Failed to generate seed.njson file: {e}")
             raise RuntimeError(f"seed.njson file generation failed: {e}")
 
+    def generate_appsettings_and_merge_with_old(self, old_appsettings: dict, version: str) -> dict:
+        """Generate appsettings.json and merge with old settings."""
+        # This is a placeholder for the actual implementation
+        # You would generate new appsettings and then merge with old_appsettings
+        if version.startswith("V6.0.0"):
+            app_fn = generate_appsettings_v6_0_0
+            data_fn = generate_appsettings_data_staging_v6_0_0
+        elif version.startswith("V6.1.0"):
+            app_fn = generate_appsettings_v6_1_0
+            data_fn = generate_appsettings_data_staging_v6_1_0
+
+        new_appsettings = app_fn(
+            instance_name="instance",
+            sa_password="Passw0rd",
+            port=5000,
+            automigrate=True,
+            version=version,
+            deployed_ip="localhost"
+        )
+
+        return deep_merge_dicts(old_appsettings, new_appsettings)
     def generate_appsettings_files(
             self,
             instance_name: str,
@@ -427,3 +448,59 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         except Exception as e:
             self.logger.error(f"Deployment initialization failed: {e}")
             return {"status": "error", "message": str(e)}
+
+    def deep_merge_dicts(base: dict, override: dict):
+        result = base.copy()
+
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = deep_merge_dicts(result[key], value)
+            else:
+                result[key] = value
+
+        return result
+    def update_init(
+                self,
+                instance_name: str,
+                version: str
+        ) -> Dict[str, Any]:
+            """Initialize HEAppE update with option to merge with existing resources."""
+            try:
+                self.logger.info(
+                    f"Starting HEAppE update initialization for instance: {instance_name}")
+                # load old appsettings from disc and merge with new settings
+                old_appsettings_path = os.path.join(self.config.base_path, instance_name, "app", "confs", "appsettings.json")
+                if os.path.exists(old_appsettings_path):
+                    with open(old_appsettings_path, "r", encoding="utf-8") as f:
+                        old_appsettings = json.load(f)
+                else:
+                    old_appsettings = {}
+
+                old_version = old_appsettings.get("ApplicationAPISettings", {}).get("DeploymentSettings", {}).get("Version", "")
+                # change version in old appsettings to the new version
+                if version:
+                    old_appsettings["ApplicationAPISettings"]["DeploymentSettings"]["Version"] = version
+
+                # Generate configuration files
+                appsettings_new = self.generate_appsettings_and_merge_with_old(old_appsettings, version)
+
+                # archive old appsettings
+                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                archived_appsettings_path = os.path.join(self.config.base_path, instance_name, "app", "confs", f"appsettings_{old_version}_{timestamp}.json")
+                shutil.copy2(old_appsettings_path, archived_appsettings_path)
+                self.logger.info(f"Archived old appsettings to: {archived_appsettings_path}")
+                # save new merged appsettings
+                output_dir = os.path.join(self.config.base_path, instance_name, "app", "confs")
+                output_path_app = os.path.join(output_dir, "appsettings.json")
+                with open(output_path_app, "w", encoding="utf-8") as f:
+                    json.dump(appsettings_new, f, indent=3)
+                self.logger.info(f"Updated appsettings file generated at: {output_path_app}")
+                self.logger.info("HEAppE update initialization completed successfully")
+            except Exception as e:
+                self.logger.error(f"Update initialization failed: {e}")
+                return {
+                    "status": "success",
+                    "appsettings": appsettings_new,
+                    "instance_settings": get_instance_settings(instance_name)
+                }
+
