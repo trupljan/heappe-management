@@ -194,7 +194,8 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             data_staging_token=data_staging_token,
             ports=ports,
             overwrite_existing=True,
-            deployed_ip='localhost'
+            deployed_ip='localhost',
+            version=config.repo_branch
         )['instance_settings']
 
         build_command = [
