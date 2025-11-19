@@ -115,21 +115,13 @@ import string
 
 import secrets
 
-def generate_secure_password(length=12, forbidden_chars=None):
+import secrets
+
+def generate_secure_password(length=12):
     if length < 8:
         raise ValueError("Password length should be at least 8 characters.")
 
-    if forbidden_chars is None:
-        forbidden_chars = set(',^\\\"\'%(){}[]<>:;/?=+*!$&#@|`~')
-
-    # Ručně zadané písmena a číslice
-    alphabet = ''.join(
-        c for c in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-        if c not in forbidden_chars
-    )
-
-    if not alphabet:
-        raise ValueError("No characters left to generate password after applying forbidden_chars.")
+    alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
     while True:
         password = ''.join(secrets.choice(alphabet) for _ in range(length))
@@ -137,6 +129,7 @@ def generate_secure_password(length=12, forbidden_chars=None):
                 and any(c.isupper() for c in password)
                 and any(c.isdigit() for c in password)):
             return password
+
 def wait_for_container_running(container_name, timeout=60, interval=5):
     """Wait until a Docker container is in 'running' state using Docker SDK."""
     client = docker.from_env()

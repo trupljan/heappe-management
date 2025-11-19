@@ -537,9 +537,9 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                         elif line.startswith("HOST_LOCAL_PORT="):
                             ports["local_port"] = int(line.strip().split("=")[1])
                         elif line.startswith("VAULT_PASSWORD="):
-                            vault_password = line.strip().split("=")[1]
+                            vault_password = line.strip().split("=", 1)[1]
                         elif line.startswith("HOST_MSSQL_PASSWORD="):
-                            sa_password = line.strip().split("=")[1]
+                            sa_password = line.strip().split("=", 1)[1]
 
                 env_path = self.generate_env_file(
                     instance_name,
