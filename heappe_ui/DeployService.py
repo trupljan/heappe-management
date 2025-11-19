@@ -146,6 +146,9 @@ HOST_DATA_STAGING_PORT={ports['data_staging_port']}
 HOST_DATA_STAGING_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
 HOST_DATA_STAGING_CONTAINER_MAP_FOLD_PATH=/opt/heappe
 
+DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database
+DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database/logs
+
 # Only for Local Cluster mode
 HOST_LOCAL_NAME=localhpc-{instance_name}
 HOST_LOCAL_PORT={ports['local_port']}
