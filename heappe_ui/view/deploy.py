@@ -506,8 +506,8 @@ from django.utils import timezone
 def deploy_view(request, instance_name: str = '') -> HttpResponse:
     base_path = "/opt/heappe-deployment/"
     #repo_url = "https://github.com/It4innovations/HEAppE.git"
-    repo_url = "https://code.it4i.cz/ADAS-Private/HEAppE/heappe-core.git"
-    repo_branch = "develop"
+    repo_url = "https://github.com/It4innovations/HEAppE"
+    repo_branch = "V6.0.0"
     version = "v6.0.0"
     ip = "localhost"
     branches = get_remote_branches(repo_url)
