@@ -130,41 +130,41 @@ class HEAppEDeployService:
         """Build content for .env file for HEAppE project."""
         ports = ports or self.config.default_ports
         return f"""COMPOSE_instance_name=heappe
-    INSTANCE_NAME={instance_name}
+INSTANCE_NAME={instance_name}
 
-    ## HashiCorp Vault
-    VAULT_FILE_DIR_PATH={self.config.base_path}{instance_name}
-    SHARED_VAULT_FILE=false
-    SHARED_VAULT_FILE_NAME=credentials_{instance_name.lower()}
-    VAULT_PASSWORD={vault_password}
-    BASE_PATH={self.config.base_path}{instance_name}/app/confs
+## HashiCorp Vault
+VAULT_FILE_DIR_PATH={self.config.base_path}{instance_name}
+SHARED_VAULT_FILE=false
+SHARED_VAULT_FILE_NAME=credentials_{instance_name.lower()}
+VAULT_PASSWORD={vault_password}
+BASE_PATH={self.config.base_path}{instance_name}/app/confs
 
-    HOST_SSHAGENT_NAME=sshagent-{instance_name}
-    HOST_SSHAGENT_HOST_MAP_FOLD_PATH={self.config.base_path}{instance_name}/ssh_agent/keys
-    HOST_SSHAGENT_CONTAINER_MAP_FOLD_PATH=/opt/heappe/sshagent_keys:ro
+HOST_SSHAGENT_NAME=sshagent-{instance_name}
+HOST_SSHAGENT_HOST_MAP_FOLD_PATH={self.config.base_path}{instance_name}/ssh_agent/keys
+HOST_SSHAGENT_CONTAINER_MAP_FOLD_PATH=/opt/heappe/sshagent_keys:ro
 
-    HOST_MSSQL_NAME=mssql-{instance_name}
-    HOST_MSSQL_PORT={ports['mssql_port']}
-    HOST_MSSQL_PASSWORD={sa_password}
+HOST_MSSQL_NAME=mssql-{instance_name}
+HOST_MSSQL_PORT={ports['mssql_port']}
+HOST_MSSQL_PASSWORD={sa_password}
 
-    HOST_APP_NAME=heappe-{instance_name}
-    HOST_APP_PORT={ports['app_port']}
-    HOST_APP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
-    HOST_APP_CONTAINER_MAP_FOLD_PATH=/opt/heappe
+HOST_APP_NAME=heappe-{instance_name}
+HOST_APP_PORT={ports['app_port']}
+HOST_APP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
+HOST_APP_CONTAINER_MAP_FOLD_PATH=/opt/heappe
 
-    HOST_DATA_STAGING_NAME=datastaging-{instance_name}
-    HOST_DATA_STAGING_PORT={ports['data_staging_port']}
-    HOST_DATA_STAGING_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
-    HOST_DATA_STAGING_CONTAINER_MAP_FOLD_PATH=/opt/heappe
+HOST_DATA_STAGING_NAME=datastaging-{instance_name}
+HOST_DATA_STAGING_PORT={ports['data_staging_port']}
+HOST_DATA_STAGING_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
+HOST_DATA_STAGING_CONTAINER_MAP_FOLD_PATH=/opt/heappe
 
-    DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database
-    DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database/logs
+DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database
+DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database/logs
 
-    # Only for Local Cluster mode
-    HOST_LOCAL_NAME=localhpc-{instance_name}
-    HOST_LOCAL_PORT={ports['local_port']}
+# Only for Local Cluster mode
+HOST_LOCAL_NAME=localhpc-{instance_name}
+HOST_LOCAL_PORT={ports['local_port']}
 
-    PWD={self.config.base_path}{instance_name}/heappe-core
+PWD={self.config.base_path}{instance_name}/heappe-core
     """
 
     def save_env_file(
