@@ -407,7 +407,7 @@ def generate_appsettings_v6_1_0(
             },
             "SshCaSettings": {
                 "UseCertificateAuthorityForAuthentication": False,
-                "BaseUri": "",
+                "BaseUri": "api.ca.heappe.eu",
                 "CAName": "",
                 "ConnectionTimeoutInSeconds": 15
             },
