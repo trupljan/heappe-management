@@ -120,7 +120,11 @@ import secrets
 import random
 import string
 
-def generate_secure_password(length=12):
+import random
+import string
+
+
+def generate_secure_password(length=16):
     if length < 8:
         raise ValueError("Password length should be at least 8 characters.")
 
@@ -129,15 +133,18 @@ def generate_secure_password(length=12):
     digits = string.digits
     all_chars = lower + upper + digits
 
+    # zajistí alespoň jednu malou, jednu velkou a jednu číslici
     password = [
         random.choice(lower),
         random.choice(upper),
         random.choice(digits)
     ]
 
+    # doplní zbytek hesla náhodnými znaky
     password += [random.choice(all_chars) for _ in range(length - 3)]
     random.shuffle(password)
     return ''.join(password)
+
 
 def wait_for_container_running(container_name, timeout=60, interval=5):
     """Wait until a Docker container is in 'running' state using Docker SDK."""
@@ -162,19 +169,6 @@ def wait_for_container_running(container_name, timeout=60, interval=5):
 
 import secrets
 import string
-
-
-def generate_secure_password(length=16):
-    alphabet = string.ascii_letters + string.digits + string.punctuation
-    password = secrets.choice(string.digits)
-    password += secrets.choice(string.punctuation)
-    password += secrets.choice(string.ascii_uppercase)
-    password += secrets.choice(string.ascii_lowercase)
-    for _ in range(length - 4):
-        password += secrets.choice(alphabet)
-    password_list = list(password)
-    secrets.SystemRandom().shuffle(password_list)
-    return ''.join(password_list)
 
 
 def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
