@@ -108,20 +108,7 @@ def get_container_details(container):
         'started_at': container.attrs['State']['StartedAt'][:19] if container.attrs['State']['StartedAt'] else 'N/A'
     }
 
-
-import secrets
-import string
-
-
-import secrets
-
-import secrets
-
 import random
-import string
-
-import random
-import string
 
 
 def generate_secure_password(length=16):
