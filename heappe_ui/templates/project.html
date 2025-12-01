@@ -541,16 +541,37 @@ function setUsernameInModal(username) {
 }
 
 function copyToClipboard(text, feedbackId) {
-  navigator.clipboard.writeText(text).then(() => {
-    const feedbackElement = document.getElementById(feedbackId);
-    feedbackElement.classList.remove('d-none');
-    setTimeout(() => {
-      feedbackElement.classList.add('d-none');
-    }, 1000);
-  }).catch(err => {
-    console.error('Failed to copy: ', err);
-  });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showFeedback(feedbackId))
+        .catch(err => fallbackCopy(text, feedbackId));
+    } else {
+        fallbackCopy(text, feedbackId);
+    }
 }
+
+function fallbackCopy(text, feedbackId) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+        document.execCommand('copy');
+        showFeedback(feedbackId);
+    } catch (err) {
+        console.error('Fallback: copy failed', err);
+    }
+    document.body.removeChild(textarea);
+}
+
+function showFeedback(feedbackId) {
+    const feedbackElement = document.getElementById(feedbackId);
+    if (!feedbackElement) return;
+    feedbackElement.classList.remove('d-none');
+    setTimeout(() => feedbackElement.classList.add('d-none'), 1000);
+}
+
 </script>
 
         {% endif %}
