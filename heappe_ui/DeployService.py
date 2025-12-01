@@ -312,10 +312,10 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         version = version or self.config.default_version
         deployed_ip = deployed_ip or self.config.default_ip
 
-        if version.startswith("V6.0.0"):
+        if version.startswith("V6.0."):
             app_fn = generate_appsettings_v6_0_0
             data_fn = generate_appsettings_data_staging_v6_0_0
-        elif version.startswith("V6.1.0"):
+        elif version.startswith("V6.1."):
             app_fn = generate_appsettings_v6_1_0
             data_fn = generate_appsettings_data_staging_v6_1_0
 
