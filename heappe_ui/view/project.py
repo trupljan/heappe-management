@@ -469,15 +469,19 @@ def initialize_hpc_account(request: HttpRequest):
 def create_new_hpc_account(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
+
     payload_data = {
+        "Credentials" : [
+            {
+                "Username": request.POST.get("username"),
+                "Password": request.POST.get("password")
+            }],
         "ProjectId": project_id,
-        "Username": request.POST.get("username"),
-        "Password": request.POST.get("password")
     }
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
         request,
-        lambda: controller.heappe_management_secure_shell_key_post(**payload),
+        lambda: controller.heappe_management_generate_secure_shell_key_post(**payload),
         "HPC account created successfully!",
         "Failed to create HPC account"
     )
