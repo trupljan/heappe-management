@@ -340,7 +340,7 @@
     <code class="d-inline-block text-truncate me-3" style="max-width: 200px;">
       {{ account.public_key_open_ssh|slice:":10" }}...{{ account.public_key_open_ssh|slice:"-10:" }}
     </code>
-    <button class="btn btn-outline-primary btn-sm copy-btn" 
+    <button class="btn btn-outline-primary btn-sm copy-btn"
             onclick="copyToClipboard('{{ account.public_key_open_ssh|escapejs }}', 'open_ssh_feedback_{{ account.id }}')">
       <i class="bi bi-clipboard me-1"></i> Copy
     </button>
@@ -352,7 +352,7 @@
     <code class="d-inline-block text-truncate me-3" style="max-width: 200px;">
       {{ account.public_key_pem|slice:":10" }}...{{ account.public_key_pem|slice:"-10:" }}
     </code>
-    <button class="btn btn-outline-primary btn-sm copy-btn" 
+    <button class="btn btn-outline-primary btn-sm copy-btn"
             onclick="copyToClipboard('{{ account.public_key_pem|escapejs }}', 'pem_feedback_{{ account.id }}')">
       <i class="bi bi-clipboard me-1"></i> Copy
     </button>
@@ -372,28 +372,64 @@
 
 
               <td>
-              <form method="post" style="display:inline;">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="test_hpc_access">
-                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                    <input type="hidden" name="username" id="username" value="{{ account.username }}">
-                  <button type="submit" class="btn btn-sm btn-info" name="test_hpc_access" value="test_hpc_access">Test HPC Access</button>
-                  <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#regenerateSshKeyModal" onclick="setUsernameInModal('{{ account.username }}')">Regenerate SSH Key</button>
-              </form>
-              <form method="post" style="display:inline;">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="initialize_hpc_account">
-                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                    <input type="hidden" name="Username" id="Username" value="{{ account.username }}">
-                  <button type="submit" class="btn btn-sm btn-secondary" name="initialize_hpc_account" value="initialize_hpc_account">Initialize HPC Account</button>
-              </form>
-               <form method="post" style="display:inline;" id="delete-hpc-account-form">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-danger" name="delete_hpc_account" value="delete_hpc_account">Delete</button>
-                    <input type="hidden" name="action" value="delete_hpc_account">
-                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                    <input type="hidden" name="username" value="{{ account.username }}">
-                </form>
+              <!-- Test HPC Access -->
+<form method="post" class="mb-2">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="test_hpc_access">
+    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+    <input type="hidden" name="username" value="{{ account.username }}">
+
+    <button type="submit" class="btn btn-sm btn-info w-100">
+        Test HPC Access
+    </button>
+</form>
+
+<!-- Regenerate SSH Key -->
+<form class="mb-2">
+    <button type="button"
+            class="btn btn-sm btn-warning w-100"
+            data-bs-toggle="modal"
+            data-bs-target="#regenerateSshKeyModal"
+            onclick="setUsernameInModal('{{ account.username }}')">
+        Regenerate SSH Key
+    </button>
+</form>
+
+<!-- Change Username & Password -->
+<form class="mb-2">
+    <button type="button"
+            class="btn btn-sm btn-dark w-100"
+            data-bs-toggle="modal"
+            data-bs-target="#renameAccountModal"
+            onclick="setRenameAccountUsername('{{ account.username }}')">
+        Change Username & Password
+    </button>
+</form>
+
+<!-- Initialize HPC Account -->
+<form method="post" class="mb-2">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="initialize_hpc_account">
+    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+    <input type="hidden" name="Username" value="{{ account.username }}">
+
+    <button type="submit" class="btn btn-sm btn-secondary w-100">
+        Initialize HPC Account
+    </button>
+</form>
+
+<!-- Delete Account -->
+<form method="post" id="delete-hpc-account-form" class="mb-2">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="delete_hpc_account">
+    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+    <input type="hidden" name="username" value="{{ account.username }}">
+
+    <button type="submit" class="btn btn-sm btn-danger w-100">
+        Delete
+    </button>
+</form>
+
 
                     <script>
                     document.addEventListener('DOMContentLoaded', function() {
@@ -476,6 +512,51 @@ document.addEventListener('DOMContentLoaded', function () {
 </div>
 
       </div>
+      <!-- Modal for Renaming Account -->
+    <!-- Rename Account Modal -->
+<div class="modal fade" id="renameAccountModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="rename_hpc_account">
+        <input type="hidden" id="oldUsername" name="oldUsername">
+        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+
+        <div class="modal-header">
+          <h5 class="modal-title">Rename Account</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <label class="form-label">New Username</label>
+          <input type="text" class="form-control" id="NewUsername" name="NewUsername" required>
+        </div>
+
+        <div class="modal-body">
+            <label for="password" class="form-label">Password (Optional)</label>
+            <input type="password" class="form-control" id="NewPassword" name="NewPassword">
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Rename</button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function openRenameAccountModal(id, username) {
+  document.getElementById('renameAccountId').value = id;
+  document.getElementById('renameAccountUsername').value = username;
+  new bootstrap.Modal(document.getElementById('renameAccountModal')).show();
+}
+</script>
+
+
 
 
       <!-- Modal for Regenerating SSH Key -->
@@ -538,6 +619,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
 function setUsernameInModal(username) {
     document.getElementById('modal-username').value = username;
+}
+
+function setRenameAccountUsername(username) {
+    document.getElementById('oldUsername').value = username;
 }
 
 function copyToClipboard(text, feedbackId) {

@@ -97,12 +97,17 @@ def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
         filetransfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code)
         # get only filetransfer methods for this cluster
         cluster_filetransfer_methods = [ftm.to_dict() for ftm in filetransfer_methods if ftm.cluster_id == cluster_id]
+
+        queue_groups = [g.to_dict() for g in
+                        controller.heappe_management_cluster_node_type_aggregations_get(
+                            SessionCode=request.session_code)]
         # map protocol to cluster_filetransfer_methods
         for ftm in cluster_filetransfer_methods:
             ftm['protocol_name'] = dict(PROTOCOL_CHOICES).get(ftm['protocol'], "Unknown")
         return render(request, "queue.html", {
             "cluster": cluster,
-            "filetransfer_methods": cluster_filetransfer_methods
+            "filetransfer_methods": cluster_filetransfer_methods,
+            "queue_groups": queue_groups
         })
 
     if request.method == "POST":

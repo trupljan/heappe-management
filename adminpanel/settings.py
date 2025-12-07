@@ -28,6 +28,7 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 FORCE_SCRIPT_NAME = '/management'
 LOGIN_URL = '/management/login'
+#LOGIN_URL = '/login'
 AUTHENTICATION_BACKENDS = [
     #"heappe_ui.auth_backend.HeappeAuthBackend",
     "django.contrib.auth.backends.ModelBackend",  # fallback

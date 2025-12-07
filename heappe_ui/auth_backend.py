@@ -5,11 +5,10 @@ from django.contrib.auth.models import User
 
 from heappe_ui import DeployService
 from heappe_ui.DeployService import get_instance_settings
-from py4heappe.heappe_v6_0_0.core import AuthenticateUserPasswordModel, PasswordCredentialsExt
+import py4heappe.heappe_v6.core as hp
 
 # přidání knihovny py4heappe
-sys.path.insert(1, './py4heappe')
-import heappe_v6_0_0.core as hp
+import py4heappe
 
 
 class HeappeAuthBackend:

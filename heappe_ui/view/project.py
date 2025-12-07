@@ -11,6 +11,10 @@ KEY_TYPE_CHOICES = {
     6: "Ed25519",
 }
 
+
+
+
+
 @login_required
 def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> HttpResponse:
     filter_type = request.GET.get("project_filter", "own")
@@ -41,6 +45,8 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
             return create_new_hpc_account(request)
         if action == "regenerate_ssh_key":
             return regenerate_ssh_key(request)
+        if action == "rename_hpc_account":
+            return rename_hpc_account(request)
         if action == "delete_hpc_account":
             return delete_hpc_account(request)
 
@@ -505,6 +511,38 @@ def regenerate_ssh_key(request: HttpRequest) -> HttpResponse:
         lambda: controller.heappe_management_regenerate_secure_shell_key_put(**payload),
         "SSH key regenerated successfully!",
         "Failed to regenerate SSH key"
+    )
+    reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
+    return redirect(reload_url)
+
+def rename_hpc_account(request):
+    project_id = int(request.POST.get("ProjectId"))
+    redirect_result = ensure_heappe_version(
+        request,
+        min_version="6.1.0",
+        error_message="Renaming HPC accounts is not supported in this HEAppE version.",
+        fallback_url=f"/projects/{project_id}/?tab=accounts",
+    )
+
+    if redirect_result:
+        return redirect_result
+    controller = hp.ManagementApi(request.api_instance)
+    project_id = int(request.POST.get("ProjectId"))
+    old_username = request.POST.get("oldUsername")
+    new_username = request.POST.get("NewUsername")
+    new_password = request.POST.get("NewPassword")
+    payload_data = {
+        "ProjectId": project_id,
+        "OldUsername": old_username,
+        "NewUsername": new_username,
+        "NewPassword": new_password
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_modify_cluster_authentication_credential_put(**payload),
+        "HPC account renamed successfully!",
+        "Failed to rename HPC account"
     )
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)

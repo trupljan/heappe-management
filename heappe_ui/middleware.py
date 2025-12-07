@@ -4,8 +4,7 @@ import time
 
 from heappe_ui.auth_backend import HeappeAuthBackend
 
-sys.path.insert(1, './py4heappe')
-import heappe_v6_0_0.core as hp
+import py4heappe.heappe_v6.core as hp
 
 class HeappeSessionMiddleware:
     def __init__(self, get_response):
