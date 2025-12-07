@@ -520,7 +520,7 @@ def rename_hpc_account(request):
     redirect_result = ensure_heappe_version(
         request,
         min_version="6.1.0",
-        error_message="Renaming HPC accounts is not supported in this HEAppE version.",
+        error_message="Renaming HPC accounts is not supported in this HEAppE version. Please upgrade to HEAppE 6.1.0 or later to use this feature.",
         fallback_url=f"/projects/{project_id}/?tab=accounts",
     )
 
