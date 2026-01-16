@@ -26,9 +26,22 @@ SECRET_KEY = 'django-insecure-)%+r0j4kegpuo4bn4a898y8-me-h9@88123&@f*yxq!z)y@g-k
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
-FORCE_SCRIPT_NAME = '/management'
-LOGIN_URL = '/management/login'
-#LOGIN_URL = '/login'
+import os
+
+# SECURITY WARNING: don't run with debug turned on in production!
+IS_DEV = os.getenv('IS_DEV', 'False').lower() in ('true', '1', 't')
+
+DEBUG = IS_DEV
+
+if IS_DEV:
+    # DEV
+    FORCE_SCRIPT_NAME = None
+    LOGIN_URL = '/login'
+else:
+    # PROD with nxinx reverse proxy
+    FORCE_SCRIPT_NAME = '/management'
+    LOGIN_URL = '/management/login'
+
 AUTHENTICATION_BACKENDS = [
     #"heappe_ui.auth_backend.HeappeAuthBackend",
     "django.contrib.auth.backends.ModelBackend",  # fallback
