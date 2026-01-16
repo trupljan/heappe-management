@@ -680,6 +680,21 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
     return render(request, "deploy.html", context)
 
 
+from django.http import JsonResponse
+
+
+@login_required
+def fetch_repo_branches(request):
+    repo_url = request.GET.get('url')
+    if not repo_url:
+        return JsonResponse({'error': 'No URL provided'}, status=400)
+
+    try:
+        branches = get_remote_tags(repo_url)
+        return JsonResponse({'branches': branches})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 import base64
 import json
 from django.http import JsonResponse
