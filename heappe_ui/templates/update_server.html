@@ -84,11 +84,11 @@
             let className;
             let icon;
             switch (type) {
-                case 'success': className = 'text-success'; icon = '✅'; break;
-                case 'error': className = 'text-danger'; icon = '❌'; break;
-                case 'warning': className = 'text-warning'; icon = '⚠️'; break;
+                case 'success': className = 'text-success'; icon = ''; break;
+                case 'error': className = 'text-danger'; icon = ''; break;
+                case 'warning': className = 'text-warning'; icon = ''; break;
                 case 'info':
-                default: className = 'text-info'; icon = '🚀'; break;
+                default: className = 'text-info'; icon = ''; break;
             }
             statusDiv.innerHTML = `<p class="${className}"><strong>${icon} ${message}</strong></p>`;
         }
