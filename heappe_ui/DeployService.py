@@ -11,8 +11,15 @@ from dataclasses import dataclass
 from django.http import HttpResponse
 from django.shortcuts import render
 
-from heappe_ui.appsettings.generator import generate_appsettings_v6_0_0, generate_appsettings_data_staging_v6_0_0, \
-    generate_appsettings_v6_1_0, generate_appsettings_data_staging_v6_1_0
+from heappe_ui.appsettings.generator import (
+    generate_appsettings_v6_0_0,
+    generate_appsettings_data_staging_v6_0_0,
+    generate_appsettings_v6_1_0,
+    generate_appsettings_data_staging_v6_1_0,
+    generate_appsettings_v6_2_0,
+    generate_appsettings_data_staging_v6_2_0,
+)
+
 from heappe_ui.models import InstanceCredentials
 
 logger = logging.getLogger(__name__)
@@ -281,10 +288,10 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         # You would generate new appsettings and then merge with old_appsettings
         if version.startswith("V6.0."):
             app_fn = generate_appsettings_v6_0_0
-            data_fn = generate_appsettings_data_staging_v6_0_0
         elif version.startswith("V6.1."):
             app_fn = generate_appsettings_v6_1_0
-            data_fn = generate_appsettings_data_staging_v6_1_0
+        elif version.startswith("V6.2."):
+            app_fn = generate_appsettings_v6_2_0
 
         new_appsettings = app_fn(
             instance_name="instance",
@@ -318,6 +325,9 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         elif version.startswith("V6.1."):
             app_fn = generate_appsettings_v6_1_0
             data_fn = generate_appsettings_data_staging_v6_1_0
+        elif version.startswith("V6.2."):
+            app_fn = generate_appsettings_v6_2_0
+            data_fn = generate_appsettings_data_staging_v6_2_0
 
         appsettings = app_fn(
             instance_name=instance_name,

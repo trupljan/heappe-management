@@ -8,6 +8,7 @@ from heappe_ui.view.project import *
 from heappe_ui.view.accounting import *
 from heappe_ui.view.deploy import *
 from heappe_ui.view.command_template import *
+from heappe_ui.view.adaptor_user import *
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 import datetime

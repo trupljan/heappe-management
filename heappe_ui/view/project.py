@@ -19,6 +19,7 @@ KEY_TYPE_CHOICES = {
 def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> HttpResponse:
     filter_type = request.GET.get("project_filter", "own")
     controller = hp.ManagementApi(request.api_instance)
+    controller_health = hp.HealthApi(request.api_instance)
     if _tab is not None:
         tab = _tab
     else:
@@ -27,6 +28,8 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
     clusters = [c.to_dict() for c in controller.heappe_management_clusters_get(SessionCode=request.session_code)]
     not_assigned_clusters = clusters.copy()
     command_templates, project_accounts, project_data, project_assignments = [], [], None, []
+    adaptor_users = []
+    ui_features = {}
 
     #if post
     if request.method == "POST":
@@ -58,6 +61,15 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
         command_templates = [ct.to_dict() for ct in controller.heappe_management_command_templates_get(
             ProjectId=project_id, SessionCode=request.session_code
         )]
+
+        try:
+            adaptor_users = [e.to_dict() for e in controller.heappe_management_adaptor_users_in_project_get(
+                SessionCode=request.session_code, 
+                ProjectId=project_id
+            )]
+            ui_features['adaptor_users'] = True
+        except Exception as e:
+            adaptor_users = []
 
         dict_ntypes = {}
         for ct in command_templates:
@@ -141,6 +153,8 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
         "command_templates": command_templates,
         "project_accounts": project_accounts,
         "node_types": list(dict_ntypes.values()),
+        "adaptor_users": adaptor_users,
+        "ui_features": ui_features,
     })
 
 

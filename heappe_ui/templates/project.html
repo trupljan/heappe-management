@@ -17,11 +17,11 @@
 
 {% extends "base.html" %}
 
-{% block title %}{% if project %}{{ project.Name }}{% else %}New Project{% endif %}{% endblock %}
+{% block title %}{% if project %}{{ project.name }}{% else %}New Project{% endif %}{% endblock %}
 
 {% block content %}
 
-    {% if project %}
+{% if project %}
 <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
   <div class="container justify-content-center">
     <ul class="nav nav-pills">
@@ -34,6 +34,11 @@
       <li class="nav-item">
         <a class="nav-link {% if active_tab == 'accounts' %}active{% endif %}" href="?tab=accounts">SSH Accounts</a>
       </li>
+      {% if ui_features.adaptor_users %}
+      <li class="nav-item">
+        <a class="nav-link {% if active_tab == 'adaptor_users' %}active{% endif %}"href="?tab=adaptor_users">Service Accounts</a>
+      </li>
+      {% endif %}
     </ul>
   </div>
 </nav>
@@ -659,7 +664,13 @@ function showFeedback(feedbackId) {
 
 </script>
 
-        {% endif %}
+{% elif active_tab == 'adaptor_users' %}
+
+<div class="container">
+  {% include "adaptor_users_table.html" %}
+</div>
+
+{% endif %}
 
 
 {% endblock %}

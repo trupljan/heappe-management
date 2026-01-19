@@ -1,0 +1,108 @@
+<style>
+  .copy-btn {
+    transition: all 0.2s ease-in-out;
+  }
+  .copy-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+  .copy-badge {
+    animation: fadeIn 0.3s ease-in;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+</style>
+
+{% extends "base.html" %}
+
+{% block title %}{% if adaptor_user %}{{ adaptor_user.Username }}{% else %}New Service Account{% endif %}{% endblock %}
+
+{% block content %}
+
+
+<div class="container">
+
+<h1 class="mb-4 text-center">
+    {% if adaptor_user %}{{ adaptor_user.username }}{% else %}Create a service account{% endif %}
+</h1>
+
+<!-- Main Adaptor User Form -->
+<div class="card mb-4 w-75 mx-auto shadow-sm">
+    <div class="card-header d-flex align-items-center">
+        <strong>Service Account Information</strong>
+        {% if adaptor_user %}
+        <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="{% if adaptor_user %}adaptor_user_update{% else %}adaptor_user_create{% endif %}">
+            <div class="row g-3">
+                {% if adaptor_user %}
+                <div class="col-md-3">
+                    <label class="form-label">Id</label>
+                    <input type="number" class="form-control" value="{{ adaptor_user.id }}" readonly disabled>
+                </div>
+                {% endif %}
+
+                <div class="col-md-6">
+                    <label class="form-label">New Username</label>
+                    <input type="text" class="form-control" name="Username" value="{{ adaptor_user.username|default:'' }}">
+                </div>
+            </div>
+            <div class="mt-4 d-flex justify-content-between">
+                {% if adaptor_user %}
+                    <button type="submit" class="btn btn-primary" name="action" value="update_adaptor_user">Update Service Account</button>
+                {% else %}
+                    <button type="submit" class="btn btn-success" name="action" value="create_adaptor_user">Create Service Account</button>
+                {% endif %}
+                <button type="button" class="btn btn-secondary" onclick="history.back()">Back</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if adaptor_user %}
+<div class="row g-4 w-75 mx-auto">
+    <!-- Project assign -->
+    <div class="col-md-6">
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header">
+                <strong>Assign {{ adaptor_user.username }} to Project</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="adaptor_user_assign_to_project">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="ProjectId">Select Project</label>
+                            <select class="form-select" id="ProjectId" name="ProjectId" required>
+                                <option value="" disabled selected>Select a project</option>
+                                {% for project in projects %}
+                                    <option value="{{ project.id }}">{{ project.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="Role">Role</label>
+                            <input type="text" class="form-control" id="Role" name="Role" value="" placeholder="Enter Role">
+                        </div>
+
+                        <div class="col-12">
+                            <button type="submit"  class="btn btn-primary mt-2">Assign Project</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+</div>
+
+{% endblock %}

@@ -1,0 +1,56 @@
+<div class="card mb-4 w-75 mx-auto shadow-sm">
+      <div class="card-header d-flex align-items-center">
+          <strong>Service Accounts</strong>
+             <div class="ms-auto">
+                <a href="{% url 'adaptor_user_create' %}" class="btn btn-sm btn-primary me-2">Add New</a>
+                <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
+             </div>
+      </div>
+
+      <div class="card-body">
+       {% if adaptor_users %}
+        <div class="table-responsive">
+            <table class="table table-striped mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">ID</th>
+                        <th scope="col">Username</th>
+                        <th scope="col">Group and Role</th>
+                        <th scope="col">Actions</th>
+                    </tr>
+                    {% for adaptor_user in adaptor_users %}
+                        {% for group in adaptor_user.adaptor_user_groups %}
+                            {% if group.project.id == project.id %}
+                                {% for role in group.roles %}
+                                    <tr>
+                                        <td>{{ adaptor_user.id }}</td>
+                                        <td>{{ adaptor_user.username }}</td>
+                                        <td>
+                                            <strong>{{ group.name }}:</strong> {{ role }}
+                                        </td>
+                                        <td>
+                                            <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="btn btn-sm btn-primary">Detail</a>
+                                            <form method="post" action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}" style="display:inline;">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                <input type="hidden" name="Role" value="{{ role }}">
+                                                <button type="submit" class="btn btn-sm btn-danger"
+                                                        onclick="return confirm('Are you sure you want to unassign this adaptor user?');">
+                                                    Unassign
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                </thead>
+            </table>
+      </div>
+        {% else %}
+            <p class="mb-0">No service accounts assigned for the project {{project.name}}.</p>
+        {% endif %}
+    </div>
+
+</div>
