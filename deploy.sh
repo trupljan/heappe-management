@@ -53,8 +53,8 @@ fi
 $VENV_PYTHON manage.py migrate --noinput
 check_error "django migrate"
 
-$VENV_PYTHON manage.py collectstatic --noinput
-check_error "django collectstatic"
+#$VENV_PYTHON manage.py collectstatic --noinput
+#check_error "django collectstatic"
 
 sudo systemctl restart $SERVICE_NAME
 check_error "systemctl restart"
