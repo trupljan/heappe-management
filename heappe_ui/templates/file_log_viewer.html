@@ -25,14 +25,14 @@
                 {% if filter_session %}
                 <span class="active-filter-badge">
                     <i class="bi bi-key-fill me-1 opacity-50"></i> Session: {{ filter_session|slice:":8" }}...
-                    <a href="?date={{ selected_date }}&search={{ search_query }}&user={{ filter_user }}" class="ms-2 text-reset"><i class="bi bi-x-circle-fill"></i></a>
+                    <a href="?date={{ selected_date }}&search={{ search_query }}&user={{ filter_user }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}" class="ms-2 text-reset"><i class="bi bi-x-circle-fill"></i></a>
                 </span>
                 {% endif %}
 
                 {% if filter_user %}
                 <span class="active-filter-badge">
                     <i class="bi bi-person-fill me-1 opacity-50"></i> User: {{ filter_user }}
-                    <a href="?date={{ selected_date }}&search={{ search_query }}&session={{ filter_session }}" class="ms-2 text-reset"><i class="bi bi-x-circle-fill"></i></a>
+                    <a href="?date={{ selected_date }}&search={{ search_query }}&session={{ filter_session }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}" class="ms-2 text-reset"><i class="bi bi-x-circle-fill"></i></a>
                 </span>
                 {% endif %}
 
@@ -44,7 +44,6 @@
 
         <div class="row g-4">
             <div class="col-lg-3 col-xl-2">
-
                 <div class="card border-0 shadow-sm mb-4 card-hover">
                     <div class="card-body p-4">
                         <h6 class="text-uppercase text-muted fw-bold small mb-3">Configuration</h6>
@@ -66,8 +65,28 @@
                                     <input type="text" name="search" class="form-control bg-light border-start-0 ps-0" placeholder="Keywords..." value="{{ search_query }}">
                                 </div>
                             </div>
+
+                            <hr class="my-3 text-muted opacity-25">
+                            <h6 class="text-uppercase text-muted fw-bold small mb-3">Display Options</h6>
+
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" name="feat_meta" id="featMeta" {% if features.meta %}checked{% endif %}>
+                                <label class="form-check-label small" for="featMeta">Smart Linking</label>
+                                <div class="form-text" style="font-size: 0.7rem; line-height: 1.2">Clickable User/Session IDs</div>
+                            </div>
+
+                            <div class="form-check form-switch mb-2">
+                                <input class="form-check-input" type="checkbox" name="feat_json" id="featJson" {% if features.json %}checked{% endif %}>
+                                <label class="form-check-label small" for="featJson">Pretty JSON</label>
+                            </div>
+
+                            <div class="form-check form-switch mb-4">
+                                <input class="form-check-input" type="checkbox" name="feat_colors" id="featColors" {% if features.colors %}checked{% endif %}>
+                                <label class="form-check-label small" for="featColors">Highlight Syntax</label>
+                            </div>
+
                             <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm btn-animate">
-                                Update View
+                                Apply & Refresh
                             </button>
 
                             {% if filter_session or filter_user or search_query %}
@@ -82,17 +101,14 @@
                 <div class="card border-0 shadow-sm card-hover">
                     <div class="card-body p-4">
                         <h6 class="text-uppercase text-muted fw-bold small mb-3">Overview</h6>
-
                         <div class="stat-item d-flex justify-content-between align-items-center mb-2 p-2 rounded hover-bg">
                             <span class="text-danger fw-bold small"><i class="bi bi-x-octagon-fill me-2"></i>Errors</span>
                             <span class="badge bg-danger-subtle text-danger rounded-pill">{{ stats.ERROR }}</span>
                         </div>
-
                         <div class="stat-item d-flex justify-content-between align-items-center mb-2 p-2 rounded hover-bg">
                             <span class="text-warning-emphasis fw-bold small"><i class="bi bi-exclamation-triangle-fill me-2"></i>Warnings</span>
                             <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill">{{ stats.WARN }}</span>
                         </div>
-
                         <div class="stat-item d-flex justify-content-between align-items-center p-2 rounded hover-bg">
                             <span class="text-info-emphasis fw-bold small"><i class="bi bi-info-circle-fill me-2"></i>Info</span>
                             <span class="badge bg-info-subtle text-info-emphasis rounded-pill">{{ stats.INFO }}</span>
@@ -105,7 +121,10 @@
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white border-bottom py-3 sticky-top shadow-sm d-flex justify-content-between align-items-center" style="z-index: 20;">
                         <h6 class="mb-0 fw-bold text-dark">Console Output</h6>
-                        <small class="text-muted font-monospace">Live Analysis</small>
+                        <div class="d-flex gap-2 align-items-center">
+                            {% if not features.meta %}<span class="badge bg-secondary opacity-50 me-2">Raw Mode</span>{% endif %}
+                            <small class="text-muted font-monospace">Live Analysis (Max 2k lines)</small>
+                        </div>
                     </div>
                     <div class="card-body p-0 position-relative">
                         <div class="log-window" id="logWindow">
@@ -119,15 +138,15 @@
                                                 <span class="badge {{ entry.text_class }} bg-light border fw-bold mb-1">
                                                     {{ entry.level }}
                                                 </span>
-                                                <span class="text-muted small" style="font-size: 0.7rem;">
+                                                <span class="text-muted small" style="font-size: 0.65rem; word-break: break-all;">
                                                     {{ entry.file }}
                                                 </span>
                                             </div>
                                         </td>
 
                                         <td class="py-3 pe-4">
-                                            {% if entry.metadata %}
-                                            <div class="mb-2 d-flex flex-wrap gap-2">
+                                            {% if features.meta and entry.metadata %}
+                                            <div class="mb-2 d-flex flex-wrap gap-2 animate-fade-in">
                                                 {% if entry.metadata.action %}
                                                 <span class="meta-badge badge bg-primary-subtle text-primary border border-primary-subtle">
                                                     <i class="bi bi-lightning-fill me-1"></i> {{ entry.metadata.action }}
@@ -135,17 +154,17 @@
                                                 {% endif %}
 
                                                 {% if entry.metadata.user_id %}
-                                                <a href="?date={{ selected_date }}&search={{ search_query }}&user={{ entry.metadata.user_id }}&session={{ filter_session }}"
+                                                <a href="?date={{ selected_date }}&search={{ search_query }}&user={{ entry.metadata.user_id }}&session={{ filter_session }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}"
                                                    class="meta-badge badge bg-light text-secondary border hover-shadow"
-                                                   title="Filter by this User">
+                                                   title="Filter by User {{ entry.metadata.user_id }}">
                                                     <i class="bi bi-person me-1"></i> User: {{ entry.metadata.user_id }}
                                                 </a>
                                                 {% endif %}
 
                                                 {% if entry.metadata.session %}
-                                                <a href="?date={{ selected_date }}&search={{ search_query }}&session={{ entry.metadata.session }}&user={{ filter_user }}"
+                                                <a href="?date={{ selected_date }}&search={{ search_query }}&session={{ entry.metadata.session }}&user={{ filter_user }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}"
                                                    class="meta-badge badge bg-light text-secondary border hover-shadow"
-                                                   title="Filter by this Session">
+                                                   title="Filter by Session">
                                                     <i class="bi bi-key me-1"></i> {{ entry.metadata.session|slice:":8" }}...
                                                 </a>
                                                 {% endif %}
@@ -161,7 +180,6 @@
                                             <div class="py-5 text-muted">
                                                 <i class="bi bi-search display-4 mb-3 d-block opacity-25"></i>
                                                 <p class="mb-0 fw-semibold">No logs found.</p>
-                                                <p class="small opacity-75">Try adjusting your filters or date.</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -177,106 +195,98 @@
 </div>
 
 <style>
-    /* Global Styling */
+    /* VARIABLES */
     :root {
         --bg-body: #f8f9fa;
-        --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
-        --font-code: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+        --font-ui: 'Inter', system-ui, sans-serif;
+        --font-code: 'JetBrains Mono', monospace;
     }
 
-    body {
-        font-family: var(--font-ui);
-        background-color: var(--bg-body);
-        color: #344767;
-    }
+    body { font-family: var(--font-ui); background: var(--bg-body); color: #344767; }
 
-    /* Active Filter Badges */
-    .active-filter-badge {
-        display: inline-flex;
-        align-items: center;
-        background: #4f46e5;
-        color: white;
-        padding: 6px 14px;
-        border-radius: 50px;
-        font-size: 0.85rem;
-        font-weight: 500;
-        box-shadow: 0 2px 5px rgba(79, 70, 229, 0.2);
-    }
-
-    /* Metadata Badges in Logs */
-    .meta-badge {
-        font-family: var(--font-ui);
-        font-weight: 500;
-        text-decoration: none;
-        transition: all 0.2s;
-        cursor: pointer;
-    }
-    .hover-shadow:hover {
-        background-color: #fff !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.08) !important;
-        border-color: #cbd5e1 !important;
-        color: #0f172a !important;
-    }
-
-    /* JSON Formatting */
-    .json-block {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-left: 3px solid #64748b;
-        border-radius: 6px;
-        padding: 10px 15px;
-        margin-top: 8px;
-        font-size: 0.8rem;
-        color: #334155;
-        overflow-x: auto;
-    }
-
-    /* Log Window & Table */
+    /* LAYOUT & SCROLL */
     .log-window {
-        max-height: 80vh;
+        height: 75vh;
         overflow-y: auto;
         background: #fff;
         border-bottom-left-radius: 12px;
         border-bottom-right-radius: 12px;
     }
-    .log-window::-webkit-scrollbar { width: 8px; height: 8px; }
+    .log-window::-webkit-scrollbar { width: 8px; }
     .log-window::-webkit-scrollbar-track { background: transparent; }
     .log-window::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    .log-window::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
+    /* CONTENT STYLING */
     .log-content {
         font-family: var(--font-code);
         font-size: 0.85rem;
-        line-height: 1.6;
+        line-height: 1.5;
         white-space: pre-wrap;
         word-break: break-all;
         color: #1e293b;
     }
 
-    /* Row Styling */
-    .log-row { transition: background-color 0.15s; }
-    .log-row:hover { background-color: #f8fafc !important; }
+    .time-badge {
+        display: inline-block;
+        padding: 0px 4px;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        color: #475569;
+        font-size: 0.8em;
+        margin-right: 6px;
+    }
 
-    /* Custom borders */
-    tr.border-danger { border-left: 4px solid #dc3545 !important; background-color: rgba(220, 53, 69, 0.02); }
-    tr.border-warning { border-left: 4px solid #ffc107 !important; background-color: rgba(255, 193, 7, 0.02); }
-    tr.border-secondary { border-left: 4px solid #6c757d !important; opacity: 0.85; }
-    tr.border-info { border-left: 4px solid #0dcaf0 !important; }
+    /* JSON BLOCK */
+    .json-block {
+        background: #f8fafc;
+        border-left: 3px solid #64748b;
+        border-radius: 4px;
+        padding: 8px 12px;
+        margin-top: 6px;
+        font-size: 0.8rem;
+        color: #334155;
+        overflow-x: auto;
+    }
 
-    /* Inputs & Buttons */
-    .form-control, .input-group-text { padding: 0.6rem 1rem; border-color: #e9ecef; }
-    .form-control:focus { box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15); border-color: #86b7fe; }
-    .btn-animate { transition: transform 0.1s; }
-    .btn-animate:active { transform: scale(0.98); }
+    /* FILTERS & BADGES */
+    .active-filter-badge {
+        display: inline-flex;
+        align-items: center;
+        background: #4f46e5;
+        color: white;
+        padding: 5px 12px;
+        border-radius: 50px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+    }
+    .meta-badge {
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .hover-shadow:hover {
+        background: #fff !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        transform: translateY(-1px);
+    }
+
+    /* UTILS */
     .card { border-radius: 12px; }
-    .hover-bg:hover { background-color: #f8f9fa; }
+    .btn-animate:active { transform: scale(0.98); }
+    .form-control:focus { box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15); border-color: #86b7fe; }
+
+    /* BORDERS */
+    tr.border-danger { border-left: 4px solid #dc3545 !important; background-color: rgba(220, 53, 69, 0.03); }
+    tr.border-warning { border-left: 4px solid #ffc107 !important; background-color: rgba(255, 193, 7, 0.03); }
+    tr.border-secondary { border-left: 4px solid #6c757d !important; }
+    tr.border-info { border-left: 4px solid #0dcaf0 !important; }
 </style>
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         const logWindow = document.getElementById('logWindow');
-        // Scroll only if no search/filter is active (assuming user wants to see latest)
-        // OR simply always scroll to bottom on load:
         if (logWindow) {
             logWindow.scrollTop = logWindow.scrollHeight;
         }

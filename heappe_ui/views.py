@@ -856,94 +856,88 @@ def colorize_log_line(content):
 import os
 import re
 import json
+from collections import deque
 from datetime import datetime
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
 
+# --- KONFIGURACE RYCHLOSTI ---
+MAX_LOG_LINES = 2000  # Načte maximálně posledních 2000 řádků (prevence sekání)
+
 
 def format_json_match(match):
-    """Helper to pretty print JSON found inside logs"""
+    """Zformátuje nalezený JSON do HTML bloku."""
     try:
-        # Load the JSON string
         data = json.loads(match.group(0))
-        # Dump it with indentation
         formatted = json.dumps(data, indent=2)
-        # Wrap in a pre block for styling
-        return f'<pre class="json-block">{escape(formatted)}</pre>'
+        return f'<div class="json-block">{escape(formatted)}</div>'
     except:
         return match.group(0)
 
 
-def process_log_entry(raw_content, file_name):
-    # 1. CLEANUP: Handle the specific case "2026_01_27.logINFO"
+def process_log_entry(raw_content, file_name, features):
+    """Zpracuje jeden log entry podle zapnutých funkcí."""
     clean_content = raw_content
+    # Oprava spojeného názvu souboru a levelu (např. 2026.logINFO -> INFO)
     if clean_content.startswith(file_name):
         clean_content = clean_content.replace(file_name, "", 1)
 
-    # 2. LEVEL DETECTION
-    content_upper = clean_content.upper()[:50]  # Check start only for speed
+    # Rychlá detekce levelu
+    content_upper = clean_content.upper()[:50]
     level = "INFO"
     border_class = "border-info"
     text_class = "text-info"
 
     if "ERROR" in content_upper or "FATAL" in content_upper:
-        level = "ERROR"
-        border_class = "border-danger"
+        level = "ERROR";
+        border_class = "border-danger";
         text_class = "text-danger"
     elif "WARN" in content_upper:
-        level = "WARN"
-        border_class = "border-warning"
+        level = "WARN";
+        border_class = "border-warning";
         text_class = "text-warning"
     elif "DEBUG" in content_upper:
-        level = "DEBUG"
-        border_class = "border-secondary"
+        level = "DEBUG";
+        border_class = "border-secondary";
         text_class = "text-muted"
 
-    # 3. ANALYSIS: Extract Context (Session, User, Action)
     metadata = {}
-
-    # Extract Session Code (UUID format)
-    session_match = re.search(r'sessionCode["\s:]+([a-f0-9-]{36})', clean_content, re.IGNORECASE)
-    if session_match:
-        metadata['session'] = session_match.group(1)
-
-    # Extract User ID
-    user_match = re.search(r'UserId[:\s]+(\d+)', clean_content, re.IGNORECASE) or \
-                 re.search(r'\[User:(\d+)\]', clean_content, re.IGNORECASE)
-    if user_match:
-        metadata['user_id'] = user_match.group(1)
-
-    # Extract Action/Method
-    action_match = re.search(r'Action: ([a-zA-Z0-9\._]+)', clean_content)
-    if action_match:
-        metadata['action'] = action_match.group(1).split('.')[-1]  # Shorten to just method name
-
-    # 4. FORMATTING
-    # Escape HTML first
     formatted_content = escape(clean_content)
 
-    # Highlight Timestamp
-    formatted_content = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
-                               r'<span class="badge bg-light text-dark border font-monospace me-2">\1</span>',
-                               formatted_content)
+    # 1. FEATURE: COLORS (Barvičky)
+    if features.get('colors'):
+        formatted_content = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
+                                   r'<span class="time-badge">\1</span>',
+                                   formatted_content)
+        formatted_content = re.sub(r'(\d{2}:\d{2}:\d{2})\s+([a-zA-Z0-9\._]+)\s+-',
+                                   r'\1 <strong class="text-primary">\2</strong> -',
+                                   formatted_content)
 
-    # Highlight Source Class (Text between Time and - )
-    # Matches: 2026.. 15:08:31 SourceClass - Message
-    formatted_content = re.sub(r'(\d{2}:\d{2}:\d{2})\s+([a-zA-Z0-9\._]+)\s+-',
-                               r'\1 <strong class="text-primary">\2</strong> -',
-                               formatted_content)
+    # 2. FEATURE: META (Smart filtry)
+    if features.get('meta'):
+        # Session Code
+        session_match = re.search(r'sessionCode["\s:]+([a-f0-9-]{36})', clean_content, re.IGNORECASE)
+        if session_match: metadata['session'] = session_match.group(1)
 
-    # Pretty Print JSON (Headers and Arguments)
-    # Finds {...} structures. Note: complex regex, careful with performance on huge logs
-    # We apply this only if "Arguments:" or "Headers:" is present to save CPU
-    if "Arguments:" in formatted_content or "Headers:" in formatted_content:
+        # User ID
+        user_match = re.search(r'UserId[:\s]+(\d+)', clean_content, re.IGNORECASE) or \
+                     re.search(r'\[User:(\d+)\]', clean_content, re.IGNORECASE)
+        if user_match: metadata['user_id'] = user_match.group(1)
+
+        # Action (metoda)
+        action_match = re.search(r'Action: ([a-zA-Z0-9\._]+)', clean_content)
+        if action_match: metadata['action'] = action_match.group(1).split('.')[-1]
+
+    # 3. FEATURE: JSON (Formátování) - náročné na výkon, děláme jen když je zapnuto
+    if features.get('json') and ("Arguments:" in formatted_content or "Headers:" in formatted_content):
+        # Hledá struktury {...}
         formatted_content = re.sub(r'(\{.*?\})', format_json_match, formatted_content)
 
     return {
         'file': file_name,
-        'content': mark_safe(formatted_content),  # Safe because we escaped earlier
+        'content': mark_safe(formatted_content),
         'level': level,
         'border_class': border_class,
         'text_class': text_class,
@@ -959,9 +953,18 @@ def log_viewer_view(request):
     selected_date = request.GET.get('date', datetime.now().strftime('%Y-%m-%d'))
     search_query = request.GET.get('search', '').lower()
 
-    # New Filters
+    # Filtry
     filter_session = request.GET.get('session', '')
     filter_user = request.GET.get('user', '')
+
+    # Načtení nastavení funkcí (Checkboxy)
+    # Pokud uživatel nic neodeslal (první načtení), zapneme vše defaultně
+    is_filtered = len(request.GET) > 0
+    feat_colors = request.GET.get('feat_colors') == 'on' if is_filtered else True
+    feat_meta = request.GET.get('feat_meta') == 'on' if is_filtered else True
+    feat_json = request.GET.get('feat_json') == 'on' if is_filtered else True
+
+    features = {'colors': feat_colors, 'meta': feat_meta, 'json': feat_json}
 
     stats = {"ERROR": 0, "WARN": 0, "INFO": 0, "DEBUG": 0}
     all_entries = []
@@ -970,48 +973,36 @@ def log_viewer_view(request):
         f_date = selected_date.replace("-", "_")
         log_files = sorted([f for f in os.listdir(log_base_path) if f.startswith(f_date) and f.endswith(".log")])
 
-        # Regex detects start of log line even if filename is glued:
-        # Matches: "INFO" OR "2026_01_27.logINFO"
+        # Regex pro začátek logu (zachytí i "slepené" názvy)
         log_start_pattern = re.compile(r'^.*?((INFO|WARN|ERROR|DEBUG|TRACE|FATAL)\s+)')
 
         for file_name in log_files:
             try:
-                with open(os.path.join(log_base_path, file_name), 'r', encoding='utf-8', errors='ignore') as f:
+                file_path = os.path.join(log_base_path, file_name)
+
+                # OPTIMALIZACE: Čteme jen posledních N řádků pomocí deque
+                # Tím zamezíme načítání 500MB souborů do paměti
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = deque(f, maxlen=MAX_LOG_LINES)
+
                     current_raw = ""
-                    for line in f:
-                        # Check if this line looks like a start of a new log entry
+                    for line in lines:
                         if log_start_pattern.match(line):
                             if current_raw:
-                                entry = process_log_entry(current_raw, file_name)
-
-                                # Apply Filters
-                                include = True
-                                if search_query and search_query not in entry['raw'].lower(): include = False
-                                if filter_session and entry['metadata'].get(
-                                    'session') != filter_session: include = False
-                                if filter_user and entry['metadata'].get('user_id') != filter_user: include = False
-
-                                if include:
-                                    all_entries.append(entry)
-                                    stats[entry['level']] = stats.get(entry['level'], 0) + 1
+                                # Zpracování předchozího záznamu
+                                process_and_add(all_entries, stats, current_raw, file_name, features, search_query,
+                                                filter_session, filter_user)
                             current_raw = line
                         else:
                             current_raw += line
 
+                    # Poslední záznam
                     if current_raw:
-                        entry = process_log_entry(current_raw, file_name)
-                        # Copy paste filter logic (or refactor into func)
-                        include = True
-                        if search_query and search_query not in entry['raw'].lower(): include = False
-                        if filter_session and entry['metadata'].get('session') != filter_session: include = False
-                        if filter_user and entry['metadata'].get('user_id') != filter_user: include = False
-
-                        if include:
-                            all_entries.append(entry)
-                            stats[entry['level']] = stats.get(entry['level'], 0) + 1
+                        process_and_add(all_entries, stats, current_raw, file_name, features, search_query,
+                                        filter_session, filter_user)
 
             except Exception as e:
-                print(f"Error parsing {file_name}: {e}")
+                print(f"Log Error {file_name}: {e}")
                 continue
 
     return render(request, 'file_log_viewer.html', {
@@ -1021,5 +1012,22 @@ def log_viewer_view(request):
         'search_query': search_query,
         'filter_session': filter_session,
         'filter_user': filter_user,
+        'features': features,
         'instance': instance
     })
+
+
+def process_and_add(entries_list, stats, raw, file_name, features, search, f_session, f_user):
+    """Pomocná funkce pro filtrování a přidání do listu"""
+    # Rychlý pre-filter textu (aby se nedělal regex zbytečně)
+    if search and search not in raw.lower():
+        return
+
+    entry = process_log_entry(raw, file_name, features)
+
+    # Aplikace kontextových filtrů
+    if f_session and entry['metadata'].get('session') != f_session: return
+    if f_user and entry['metadata'].get('user_id') != f_user: return
+
+    entries_list.append(entry)
+    stats[entry['level']] = stats.get(entry['level'], 0) + 1
