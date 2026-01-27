@@ -3,8 +3,8 @@
 APP_DIR="/opt/heappe/heappe-admin-app"
 SERVICE_NAME="adminpanel"
 LOG_FILE="/var/log/deploy_${SERVICE_NAME}.log"
-VENV_PYTHON="/opt/heappe/venv/bin/python"
-PIP_COMMAND="pip"
+VENV_PYTHON="/opt/heappe/heappe-admin-app/venv/bin/python"
+PIP_COMMAND="/opt/heappe/heappe-admin-app/venv/bin/pip"
 
 log() {
     echo "[$(date +'%Y-%m-%d %H:%M:%S')] $1" | tee -a $LOG_FILE
