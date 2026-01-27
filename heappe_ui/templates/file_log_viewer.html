@@ -12,16 +12,32 @@
 {% block content %}
 <div class="dashboard-container min-vh-100 py-4">
     <div class="container-fluid px-4">
+
         <div class="d-flex justify-content-between align-items-center mb-4">
             <div>
                 <h4 class="fw-bold text-dark mb-1">
                     <i class="bi bi-speedometer2 text-primary me-2"></i>Log Analyzer
                 </h4>
-                <p class="text-muted small mb-0">Viewing logs for instance: <span class="fw-semibold text-dark">{{ instance|upper }}</span></p>
+                <p class="text-muted small mb-0">Instance: <span class="fw-semibold text-dark">{{ instance|upper }}</span></p>
             </div>
-            <div class="text-end">
-                <span class="badge bg-white text-secondary border shadow-sm px-3 py-2">
-                    <i class="bi bi-clock me-1"></i> {{ logs|length }} entries
+
+            <div class="d-flex align-items-center gap-2">
+                {% if filter_session %}
+                <span class="active-filter-badge">
+                    <i class="bi bi-key-fill me-1 opacity-50"></i> Session: {{ filter_session|slice:":8" }}...
+                    <a href="?date={{ selected_date }}&search={{ search_query }}&user={{ filter_user }}" class="ms-2 text-reset"><i class="bi bi-x-circle-fill"></i></a>
+                </span>
+                {% endif %}
+
+                {% if filter_user %}
+                <span class="active-filter-badge">
+                    <i class="bi bi-person-fill me-1 opacity-50"></i> User: {{ filter_user }}
+                    <a href="?date={{ selected_date }}&search={{ search_query }}&session={{ filter_session }}" class="ms-2 text-reset"><i class="bi bi-x-circle-fill"></i></a>
+                </span>
+                {% endif %}
+
+                <span class="badge bg-white text-secondary border shadow-sm px-3 py-2 ms-2">
+                    <i class="bi bi-list-ol me-1"></i> {{ logs|length }} entries
                 </span>
             </div>
         </div>
@@ -33,6 +49,9 @@
                     <div class="card-body p-4">
                         <h6 class="text-uppercase text-muted fw-bold small mb-3">Configuration</h6>
                         <form method="GET">
+                            {% if filter_session %}<input type="hidden" name="session" value="{{ filter_session }}">{% endif %}
+                            {% if filter_user %}<input type="hidden" name="user" value="{{ filter_user }}">{% endif %}
+
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-secondary">DATE</label>
                                 <div class="input-group">
@@ -44,12 +63,18 @@
                                 <label class="form-label small fw-bold text-secondary">SEARCH</label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-light border-end-0"><i class="bi bi-search"></i></span>
-                                    <input type="text" name="search" class="form-control bg-light border-start-0 ps-0" placeholder="Filter..." value="{{ search_query }}">
+                                    <input type="text" name="search" class="form-control bg-light border-start-0 ps-0" placeholder="Keywords..." value="{{ search_query }}">
                                 </div>
                             </div>
                             <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm btn-animate">
-                                Refresh Logs
+                                Update View
                             </button>
+
+                            {% if filter_session or filter_user or search_query %}
+                            <a href="?date={{ selected_date }}" class="btn btn-link text-decoration-none text-muted w-100 mt-2 btn-sm">
+                                Reset Filters
+                            </a>
+                            {% endif %}
                         </form>
                     </div>
                 </div>
@@ -58,28 +83,19 @@
                     <div class="card-body p-4">
                         <h6 class="text-uppercase text-muted fw-bold small mb-3">Overview</h6>
 
-                        <div class="stat-item d-flex align-items-center mb-3 p-2 rounded bg-danger-subtle text-danger">
-                            <div class="stat-icon me-3"><i class="bi bi-x-octagon-fill"></i></div>
-                            <div>
-                                <div class="h5 mb-0 fw-bold">{{ stats.ERROR }}</div>
-                                <small class="fw-semibold opacity-75">Errors</small>
-                            </div>
+                        <div class="stat-item d-flex justify-content-between align-items-center mb-2 p-2 rounded hover-bg">
+                            <span class="text-danger fw-bold small"><i class="bi bi-x-octagon-fill me-2"></i>Errors</span>
+                            <span class="badge bg-danger-subtle text-danger rounded-pill">{{ stats.ERROR }}</span>
                         </div>
 
-                        <div class="stat-item d-flex align-items-center mb-3 p-2 rounded bg-warning-subtle text-warning-emphasis">
-                            <div class="stat-icon me-3"><i class="bi bi-exclamation-triangle-fill"></i></div>
-                            <div>
-                                <div class="h5 mb-0 fw-bold">{{ stats.WARN }}</div>
-                                <small class="fw-semibold opacity-75">Warnings</small>
-                            </div>
+                        <div class="stat-item d-flex justify-content-between align-items-center mb-2 p-2 rounded hover-bg">
+                            <span class="text-warning-emphasis fw-bold small"><i class="bi bi-exclamation-triangle-fill me-2"></i>Warnings</span>
+                            <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill">{{ stats.WARN }}</span>
                         </div>
 
-                        <div class="stat-item d-flex align-items-center p-2 rounded bg-info-subtle text-info-emphasis">
-                            <div class="stat-icon me-3"><i class="bi bi-info-circle-fill"></i></div>
-                            <div>
-                                <div class="h5 mb-0 fw-bold">{{ stats.INFO }}</div>
-                                <small class="fw-semibold opacity-75">Info</small>
-                            </div>
+                        <div class="stat-item d-flex justify-content-between align-items-center p-2 rounded hover-bg">
+                            <span class="text-info-emphasis fw-bold small"><i class="bi bi-info-circle-fill me-2"></i>Info</span>
+                            <span class="badge bg-info-subtle text-info-emphasis rounded-pill">{{ stats.INFO }}</span>
                         </div>
                     </div>
                 </div>
@@ -87,37 +103,65 @@
 
             <div class="col-lg-9 col-xl-10">
                 <div class="card border-0 shadow-sm h-100">
-                    <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center sticky-top shadow-sm" style="z-index: 20;">
+                    <div class="card-header bg-white border-bottom py-3 sticky-top shadow-sm d-flex justify-content-between align-items-center" style="z-index: 20;">
                         <h6 class="mb-0 fw-bold text-dark">Console Output</h6>
-                        <small class="text-muted">Live view</small>
+                        <small class="text-muted font-monospace">Live Analysis</small>
                     </div>
                     <div class="card-body p-0 position-relative">
                         <div class="log-window" id="logWindow">
                             <table class="table table-hover mb-0 log-table">
-                                <thead class="bg-light sticky-top" style="top: 0; z-index: 10;">
-                                    <tr>
-                                        <th style="width: 140px;" class="ps-4 text-secondary small text-uppercase">Source</th>
-                                        <th class="text-secondary small text-uppercase">Message</th>
-                                    </tr>
-                                </thead>
                                 <tbody>
                                     {% for entry in logs %}
                                     <tr class="log-row {{ entry.border_class }}">
-                                        <td class="ps-4 align-top py-2">
-                                            <span class="badge bg-light text-secondary border font-monospace fw-normal">
-                                                {{ entry.file }}
-                                            </span>
+
+                                        <td style="width: 120px;" class="ps-4 py-3 align-top bg-transparent">
+                                            <div class="d-flex flex-column align-items-start">
+                                                <span class="badge {{ entry.text_class }} bg-light border fw-bold mb-1">
+                                                    {{ entry.level }}
+                                                </span>
+                                                <span class="text-muted small" style="font-size: 0.7rem;">
+                                                    {{ entry.file }}
+                                                </span>
+                                            </div>
                                         </td>
-                                        <td class="py-2 pe-4">
-                                            <pre class="mb-0 log-content">{{ entry.content|safe }}</pre>
+
+                                        <td class="py-3 pe-4">
+                                            {% if entry.metadata %}
+                                            <div class="mb-2 d-flex flex-wrap gap-2">
+                                                {% if entry.metadata.action %}
+                                                <span class="meta-badge badge bg-primary-subtle text-primary border border-primary-subtle">
+                                                    <i class="bi bi-lightning-fill me-1"></i> {{ entry.metadata.action }}
+                                                </span>
+                                                {% endif %}
+
+                                                {% if entry.metadata.user_id %}
+                                                <a href="?date={{ selected_date }}&search={{ search_query }}&user={{ entry.metadata.user_id }}&session={{ filter_session }}"
+                                                   class="meta-badge badge bg-light text-secondary border hover-shadow"
+                                                   title="Filter by this User">
+                                                    <i class="bi bi-person me-1"></i> User: {{ entry.metadata.user_id }}
+                                                </a>
+                                                {% endif %}
+
+                                                {% if entry.metadata.session %}
+                                                <a href="?date={{ selected_date }}&search={{ search_query }}&session={{ entry.metadata.session }}&user={{ filter_user }}"
+                                                   class="meta-badge badge bg-light text-secondary border hover-shadow"
+                                                   title="Filter by this Session">
+                                                    <i class="bi bi-key me-1"></i> {{ entry.metadata.session|slice:":8" }}...
+                                                </a>
+                                                {% endif %}
+                                            </div>
+                                            {% endif %}
+
+                                            <div class="log-content">{{ entry.content }}</div>
                                         </td>
                                     </tr>
                                     {% empty %}
                                     <tr>
                                         <td colspan="2" class="text-center py-5">
                                             <div class="py-5 text-muted">
-                                                <i class="bi bi-journal-x display-4 mb-3 d-block opacity-25"></i>
-                                                <p class="mb-0">No logs found for this criteria.</p>
+                                                <i class="bi bi-search display-4 mb-3 d-block opacity-25"></i>
+                                                <p class="mb-0 fw-semibold">No logs found.</p>
+                                                <p class="small opacity-75">Try adjusting your filters or date.</p>
                                             </div>
                                         </td>
                                     </tr>
@@ -146,52 +190,48 @@
         color: #344767;
     }
 
-    /* Layout & Cards */
-    .dashboard-container {
-        background-color: #f3f4f6;
+    /* Active Filter Badges */
+    .active-filter-badge {
+        display: inline-flex;
+        align-items: center;
+        background: #4f46e5;
+        color: white;
+        padding: 6px 14px;
+        border-radius: 50px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        box-shadow: 0 2px 5px rgba(79, 70, 229, 0.2);
     }
 
-    .card {
-        border-radius: 12px;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-
-    .card-header {
-        border-top-left-radius: 12px !important;
-        border-top-right-radius: 12px !important;
-    }
-
-    /* Inputs */
-    .form-control, .input-group-text {
-        border-color: #e9ecef;
-        padding: 0.6rem 1rem;
-    }
-
-    .form-control:focus {
-        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
-        border-color: #86b7fe;
-    }
-
-    /* Buttons */
-    .btn-animate {
+    /* Metadata Badges in Logs */
+    .meta-badge {
+        font-family: var(--font-ui);
+        font-weight: 500;
+        text-decoration: none;
         transition: all 0.2s;
+        cursor: pointer;
     }
-    .btn-animate:active {
-        transform: scale(0.98);
-    }
-
-    /* Stats */
-    .stat-item {
-        transition: transform 0.2s;
-    }
-    .stat-item:hover {
-        transform: translateX(4px);
-    }
-    .stat-icon {
-        font-size: 1.5rem;
+    .hover-shadow:hover {
+        background-color: #fff !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.08) !important;
+        border-color: #cbd5e1 !important;
+        color: #0f172a !important;
     }
 
-    /* Log Window */
+    /* JSON Formatting */
+    .json-block {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-left: 3px solid #64748b;
+        border-radius: 6px;
+        padding: 10px 15px;
+        margin-top: 8px;
+        font-size: 0.8rem;
+        color: #334155;
+        overflow-x: auto;
+    }
+
+    /* Log Window & Table */
     .log-window {
         max-height: 80vh;
         overflow-y: auto;
@@ -199,57 +239,45 @@
         border-bottom-left-radius: 12px;
         border-bottom-right-radius: 12px;
     }
-
-    /* Scrollbar */
     .log-window::-webkit-scrollbar { width: 8px; height: 8px; }
     .log-window::-webkit-scrollbar-track { background: transparent; }
     .log-window::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     .log-window::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-    /* Log Table */
-    .log-table {
-        table-layout: fixed;
-    }
-
     .log-content {
         font-family: var(--font-code);
         font-size: 0.85rem;
-        line-height: 1.5;
+        line-height: 1.6;
         white-space: pre-wrap;
         word-break: break-all;
         color: #1e293b;
     }
 
-    /* Row Styling based on Borders (Using Bootstrap utilities logic) */
-    .log-row {
-        transition: background-color 0.15s;
-    }
+    /* Row Styling */
+    .log-row { transition: background-color 0.15s; }
+    .log-row:hover { background-color: #f8fafc !important; }
 
-    .log-row:hover {
-        background-color: #f8fafc !important;
-    }
-
-    /* Custom borders for log rows */
+    /* Custom borders */
     tr.border-danger { border-left: 4px solid #dc3545 !important; background-color: rgba(220, 53, 69, 0.02); }
     tr.border-warning { border-left: 4px solid #ffc107 !important; background-color: rgba(255, 193, 7, 0.02); }
-    tr.border-success { border-left: 4px solid #198754 !important; }
+    tr.border-secondary { border-left: 4px solid #6c757d !important; opacity: 0.85; }
     tr.border-info { border-left: 4px solid #0dcaf0 !important; }
 
-    /* Sticky header z-index fix */
-    thead.sticky-top th {
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        background-color: #fff;
-        border-bottom: 1px solid #e2e8f0;
-        padding-top: 1rem;
-        padding-bottom: 1rem;
-    }
+    /* Inputs & Buttons */
+    .form-control, .input-group-text { padding: 0.6rem 1rem; border-color: #e9ecef; }
+    .form-control:focus { box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15); border-color: #86b7fe; }
+    .btn-animate { transition: transform 0.1s; }
+    .btn-animate:active { transform: scale(0.98); }
+    .card { border-radius: 12px; }
+    .hover-bg:hover { background-color: #f8f9fa; }
 </style>
 
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         const logWindow = document.getElementById('logWindow');
+        // Scroll only if no search/filter is active (assuming user wants to see latest)
+        // OR simply always scroll to bottom on load:
         if (logWindow) {
-            // Pouze pokud uživatel není nahoře, scrolluj dolů (UX improvement)
             logWindow.scrollTop = logWindow.scrollHeight;
         }
     });

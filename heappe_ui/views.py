@@ -855,38 +855,100 @@ def colorize_log_line(content):
 
 import os
 import re
+import json
 from datetime import datetime
 from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
 from django.utils.html import escape
+from django.utils.safestring import mark_safe
+
+
+def format_json_match(match):
+    """Helper to pretty print JSON found inside logs"""
+    try:
+        # Load the JSON string
+        data = json.loads(match.group(0))
+        # Dump it with indentation
+        formatted = json.dumps(data, indent=2)
+        # Wrap in a pre block for styling
+        return f'<pre class="json-block">{escape(formatted)}</pre>'
+    except:
+        return match.group(0)
 
 
 def process_log_entry(raw_content, file_name):
-    # Určení typu a barvy pro Bootstrap třídy
-    content_upper = raw_content.upper()
+    # 1. CLEANUP: Handle the specific case "2026_01_27.logINFO"
+    clean_content = raw_content
+    if clean_content.startswith(file_name):
+        clean_content = clean_content.replace(file_name, "", 1)
+
+    # 2. LEVEL DETECTION
+    content_upper = clean_content.upper()[:50]  # Check start only for speed
     level = "INFO"
     border_class = "border-info"
+    text_class = "text-info"
 
     if "ERROR" in content_upper or "FATAL" in content_upper:
         level = "ERROR"
         border_class = "border-danger"
+        text_class = "text-danger"
     elif "WARN" in content_upper:
         level = "WARN"
         border_class = "border-warning"
+        text_class = "text-warning"
     elif "DEBUG" in content_upper:
         level = "DEBUG"
         border_class = "border-secondary"
+        text_class = "text-muted"
 
-    # Formátování textu (zvýraznění dat a času)
-    formatted_content = escape(raw_content)
-    formatted_content = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', r'<strong class="text-primary">\1</strong>',
+    # 3. ANALYSIS: Extract Context (Session, User, Action)
+    metadata = {}
+
+    # Extract Session Code (UUID format)
+    session_match = re.search(r'sessionCode["\s:]+([a-f0-9-]{36})', clean_content, re.IGNORECASE)
+    if session_match:
+        metadata['session'] = session_match.group(1)
+
+    # Extract User ID
+    user_match = re.search(r'UserId[:\s]+(\d+)', clean_content, re.IGNORECASE) or \
+                 re.search(r'\[User:(\d+)\]', clean_content, re.IGNORECASE)
+    if user_match:
+        metadata['user_id'] = user_match.group(1)
+
+    # Extract Action/Method
+    action_match = re.search(r'Action: ([a-zA-Z0-9\._]+)', clean_content)
+    if action_match:
+        metadata['action'] = action_match.group(1).split('.')[-1]  # Shorten to just method name
+
+    # 4. FORMATTING
+    # Escape HTML first
+    formatted_content = escape(clean_content)
+
+    # Highlight Timestamp
+    formatted_content = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
+                               r'<span class="badge bg-light text-dark border font-monospace me-2">\1</span>',
                                formatted_content)
+
+    # Highlight Source Class (Text between Time and - )
+    # Matches: 2026.. 15:08:31 SourceClass - Message
+    formatted_content = re.sub(r'(\d{2}:\d{2}:\d{2})\s+([a-zA-Z0-9\._]+)\s+-',
+                               r'\1 <strong class="text-primary">\2</strong> -',
+                               formatted_content)
+
+    # Pretty Print JSON (Headers and Arguments)
+    # Finds {...} structures. Note: complex regex, careful with performance on huge logs
+    # We apply this only if "Arguments:" or "Headers:" is present to save CPU
+    if "Arguments:" in formatted_content or "Headers:" in formatted_content:
+        formatted_content = re.sub(r'(\{.*?\})', format_json_match, formatted_content)
 
     return {
         'file': file_name,
-        'content': formatted_content,
+        'content': mark_safe(formatted_content),  # Safe because we escaped earlier
         'level': level,
         'border_class': border_class,
-        'raw': raw_content
+        'text_class': text_class,
+        'metadata': metadata,
+        'raw': clean_content
     }
 
 
@@ -897,6 +959,10 @@ def log_viewer_view(request):
     selected_date = request.GET.get('date', datetime.now().strftime('%Y-%m-%d'))
     search_query = request.GET.get('search', '').lower()
 
+    # New Filters
+    filter_session = request.GET.get('session', '')
+    filter_user = request.GET.get('user', '')
+
     stats = {"ERROR": 0, "WARN": 0, "INFO": 0, "DEBUG": 0}
     all_entries = []
 
@@ -904,31 +970,48 @@ def log_viewer_view(request):
         f_date = selected_date.replace("-", "_")
         log_files = sorted([f for f in os.listdir(log_base_path) if f.startswith(f_date) and f.endswith(".log")])
 
-        log_start_pattern = re.compile(r'^(?:.*\.log\s+)?(INFO|WARN|ERROR|DEBUG|TRACE|FATAL|WARNING)\s+')
+        # Regex detects start of log line even if filename is glued:
+        # Matches: "INFO" OR "2026_01_27.logINFO"
+        log_start_pattern = re.compile(r'^.*?((INFO|WARN|ERROR|DEBUG|TRACE|FATAL)\s+)')
 
         for file_name in log_files:
             try:
                 with open(os.path.join(log_base_path, file_name), 'r', encoding='utf-8', errors='ignore') as f:
                     current_raw = ""
                     for line in f:
-                        clean_line = line.replace(f"{file_name} ", "") if line.startswith(file_name) else line
-
-                        if log_start_pattern.match(clean_line.strip()):
+                        # Check if this line looks like a start of a new log entry
+                        if log_start_pattern.match(line):
                             if current_raw:
                                 entry = process_log_entry(current_raw, file_name)
-                                if not search_query or search_query in entry['raw'].lower():
+
+                                # Apply Filters
+                                include = True
+                                if search_query and search_query not in entry['raw'].lower(): include = False
+                                if filter_session and entry['metadata'].get(
+                                    'session') != filter_session: include = False
+                                if filter_user and entry['metadata'].get('user_id') != filter_user: include = False
+
+                                if include:
                                     all_entries.append(entry)
                                     stats[entry['level']] = stats.get(entry['level'], 0) + 1
-                            current_raw = clean_line
+                            current_raw = line
                         else:
                             current_raw += line
 
-                    if current_raw:  # Poslední záznam
+                    if current_raw:
                         entry = process_log_entry(current_raw, file_name)
-                        if not search_query or search_query in entry['raw'].lower():
+                        # Copy paste filter logic (or refactor into func)
+                        include = True
+                        if search_query and search_query not in entry['raw'].lower(): include = False
+                        if filter_session and entry['metadata'].get('session') != filter_session: include = False
+                        if filter_user and entry['metadata'].get('user_id') != filter_user: include = False
+
+                        if include:
                             all_entries.append(entry)
                             stats[entry['level']] = stats.get(entry['level'], 0) + 1
-            except Exception:
+
+            except Exception as e:
+                print(f"Error parsing {file_name}: {e}")
                 continue
 
     return render(request, 'file_log_viewer.html', {
@@ -936,5 +1019,7 @@ def log_viewer_view(request):
         'stats': stats,
         'selected_date': selected_date,
         'search_query': search_query,
+        'filter_session': filter_session,
+        'filter_user': filter_user,
         'instance': instance
     })
