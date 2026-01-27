@@ -822,64 +822,73 @@ def trigger_deployment_direct(request):
     except Exception as e:
         return JsonResponse({"status": "error", "message": f"Fatal error launching script: {e}"}, status=500)
 
+
 import os
 import re
 from datetime import datetime
 from django.shortcuts import render
+from django.utils.html import escape
+from django.contrib.auth.decorators import login_required
 
 
-def get_log_files(log_path, selected_date_str):
-    formatted_date = selected_date_str.replace("-", "_")
-    files = []
-    if os.path.exists(log_path):
-        for f in os.listdir(log_path):
-            if f.startswith(formatted_date) and ".log" in f:
-                files.append(f)
-    return sorted(files)
+def colorize_log_line(content):
+    content = escape(content)
 
-
-def colorize_log_line(line):
-    line_lower = line.upper()
-    color = "#d4d4d4"
-    if "ERROR" in line_lower:
-        color = "#ff5555"
-    elif "WARNING" in line_lower:
-        color = "#ffb86c"
-    elif "DEBUG" in line_lower:
+    # Levels
+    if "ERROR" in content.upper():
+        color = "#ff6e6e"
+    elif "WARN" in content.upper():
+        color = "#f1fa8c"
+    elif "DEBUG" in content.upper():
         color = "#8be9fd"
-    elif "INFO" in line_lower:
+    else:
         color = "#50fa7b"
 
-    line = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', r'<span style="color: #bd93f9">\1</span>', line)
-    line = re.sub(r'(\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2}:\d{2}(?:\s?[AP]M)?)',
-                  r'<span style="color: #bd93f9">\1</span>', line)
-    line = re.sub(r'(\[User:\d+\])',
-                  r'<span style="background: #44475a; padding: 2px 4px; border-radius: 3px; color: #f8f8f2;">\1</span>',
-                  line)
-    return f'<span style="color: {color}">{line}</span>'
+    # Keywords & Formatting
+    content = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:,\d+)?|(?:\d{2}/){2}\d{4} \d{2}:\d{2}:\d{2})',
+                     r'<span style="color: #bd93f9; font-weight: bold;">\1</span>', content)
+    content = re.sub(r'(\[.*?\])', r'<span style="color: #6272a4;">\1</span>', content)
+    content = re.sub(r'(sbatch|bash|eval|ssh)', r'<span style="color: #ff79c6;">\1</span>', content)
+
+    return f'<div style="color: {color}">{content}</div>'
 
 
 @login_required
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
     log_base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
-
     selected_date = request.GET.get('date', datetime.now().strftime('%Y-%m-%d'))
     search_query = request.GET.get('search', '').lower()
 
-    log_files = get_log_files(log_base_path, selected_date)
+    log_files = []
+    if os.path.exists(log_base_path):
+        f_date = selected_date.replace("-", "_")
+        log_files = sorted([f for f in os.listdir(log_base_path) if f.startswith(f_date) and f.endswith(".log")])
+
     all_logs_content = []
+    log_start_pattern = re.compile(r'^(?:.*\.log\s+)?(INFO|WARN|ERROR|DEBUG|TRACE|FATAL|WARNING)\s+')
 
     for file_name in log_files:
-        file_path = os.path.join(log_base_path, file_name)
         try:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            with open(os.path.join(log_base_path, file_name), 'r', encoding='utf-8', errors='ignore') as f:
+                current_entry = None
                 for line in f:
-                    if not search_query or search_query in line.lower():
-                        all_logs_content.append({
-                            'file': file_name,
-                            'content': colorize_log_line(line.strip())
-                        })
+                    clean_line = line.replace(f"{file_name} ", "") if line.startswith(file_name) else line
+
+                    if log_start_pattern.match(clean_line.strip()):
+                        if current_entry:
+                            if not search_query or search_query in current_entry['raw'].lower():
+                                all_logs_content.append(
+                                    {'file': file_name, 'content': colorize_log_line(current_entry['raw'])})
+                        current_entry = {'raw': clean_line}
+                    else:
+                        if current_entry:
+                            current_entry['raw'] += clean_line
+                        else:
+                            current_entry = {'raw': clean_line}
+
+                if current_entry and (not search_query or search_query in current_entry['raw'].lower()):
+                    all_logs_content.append({'file': file_name, 'content': colorize_log_line(current_entry['raw'])})
         except Exception as e:
             all_logs_content.append({'file': file_name, 'content': str(e)})
 

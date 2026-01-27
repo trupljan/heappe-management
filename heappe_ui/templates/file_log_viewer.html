@@ -4,87 +4,169 @@
 
 {% block content %}
 <style>
-    .log-window {
-        background: #282a36;
-        color: #f8f8f2;
-        font-family: 'Consolas', 'Monaco', monospace;
-        padding: 1rem;
-        border-radius: 4px;
-        height: 75vh;
-        overflow-y: auto;
-        font-size: 0.8rem;
+    :root {
+        --bg-dark: #1e1e2e;
+        --bg-panel: #24273a;
+        --accent: #8aadf4;
+        --border: #363a4f;
+        --text: #cad3f5;
+        --subtext: #a5adcb;
     }
-    .log-row {
+
+    body { background-color: var(--bg-dark); color: var(--text); }
+
+    .log-container {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 1.5rem;
+        padding: 1.5rem;
+        height: calc(100vh - 60px);
+    }
+
+    .glass-card {
+        background: var(--bg-panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
         display: flex;
-        border-bottom: 1px solid #3b3d4d;
-        padding: 2px 0;
+        flex-direction: column;
+        overflow: hidden;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
     }
-    .log-file-column {
-        min-width: 150px;
-        color: #6272a4;
+
+    .log-window {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        font-family: 'Fira Code', 'Cascadia Code', monospace;
+        font-size: 0.85rem;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+    }
+
+    .log-entry {
+        display: flex;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        padding: 0.5rem 0;
+        transition: background 0.2s;
+    }
+
+    .log-entry:hover { background: rgba(255,255,255,0.03); }
+
+    .log-meta {
+        min-width: 140px;
         font-size: 0.7rem;
-        border-right: 1px solid #44475a;
-        margin-right: 10px;
+        color: var(--subtext);
+        border-right: 2px solid var(--border);
+        margin-right: 1rem;
+        user-select: none;
     }
-    .log-text-column { flex: 1; white-space: pre-wrap; }
-    .sidebar-card { border-radius: 8px; }
+
+    .log-content {
+        flex: 1;
+        white-space: pre-wrap;
+        word-break: break-all;
+        line-height: 1.5;
+    }
+
+    .sidebar-header {
+        background: linear-gradient(135deg, #8aadf4, #b7bdf8);
+        padding: 1.5rem;
+        color: #1e2030;
+    }
+
+    .form-control {
+        background: #181926;
+        border: 1px solid var(--border);
+        color: white;
+        border-radius: 8px;
+    }
+
+    .form-control:focus {
+        background: #181926;
+        border-color: var(--accent);
+        color: white;
+        box-shadow: 0 0 0 0.25rem rgba(138, 173, 244, 0.25);
+    }
+
+    .btn-refresh {
+        background: var(--accent);
+        border: none;
+        color: #1e2030;
+        font-weight: 700;
+        border-radius: 8px;
+        transition: transform 0.1s;
+    }
+
+    .btn-refresh:active { transform: scale(0.98); }
+
+    .file-badge {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--border);
+        padding: 0.5rem;
+        border-radius: 6px;
+        margin-bottom: 0.5rem;
+        font-size: 0.75rem;
+        cursor: default;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
 </style>
 
-<div class="container-fluid py-4">
-    <div class="row">
-        <div class="col-md-3">
-            <div class="card shadow-sm sidebar-card">
-                <div class="card-header bg-primary text-white">
-                    <strong>{{ instance|upper }}</strong> Logs
-                </div>
-                <div class="card-body">
-                    <form method="GET">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small">DATE</label>
-                            <input type="date" name="date" class="form-control" value="{{ selected_date }}">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold small">SEARCH</label>
-                            <input type="text" name="search" class="form-control" placeholder="Filter text..." value="{{ search_query }}">
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 fw-bold">REFRESH</button>
-                    </form>
-                    <hr>
-                    <div class="small text-muted mb-2 fw-bold">FILES FOUND:</div>
-                    {% for f in available_files %}
-                        <div class="badge bg-light text-dark border mb-1 d-block text-start p-2">{{ f }}</div>
-                    {% empty %}
-                        <div class="alert alert-warning py-2 small">No log files found in <code>{{ instance }}</code> path.</div>
-                    {% endfor %}
-                </div>
-            </div>
+<div class="log-container">
+    <div class="glass-card">
+        <div class="sidebar-header">
+            <h5 class="mb-0 fw-bold">HEAppE <small class="opacity-75">LOGS</small></h5>
+            <div class="small fw-bold">{{ instance|upper }}</div>
         </div>
-
-        <div class="col-md-9">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h4 class="mb-0">Instance: <span class="text-primary">{{ instance }}</span></h4>
-                <div class="text-end text-muted small">
-                    Date: <strong>{{ selected_date }}</strong> | Lines: <strong>{{ logs|length }}</strong>
+        <div class="p-3 overflow-auto">
+            <form method="GET">
+                <div class="mb-3">
+                    <label class="small text-uppercase fw-bold mb-1 opacity-50">Filter Date</label>
+                    <input type="date" name="date" class="form-control" value="{{ selected_date }}">
                 </div>
-            </div>
-            <div class="log-window" id="logWindow">
-                {% for entry in logs %}
-                    <div class="log-row">
-                        <div class="log-file-column">{{ entry.file }}</div>
-                        <div class="log-text-column">{{ entry.content|safe }}</div>
-                    </div>
-                {% empty %}
-                    <div class="text-center py-5 text-muted italic">No log entries found for this selection.</div>
+                <div class="mb-3">
+                    <label class="small text-uppercase fw-bold mb-1 opacity-50">Search Keywords</label>
+                    <input type="text" name="search" class="form-control" placeholder="..." value="{{ search_query }}">
+                </div>
+                <button type="submit" class="btn btn-refresh w-100 py-2">REFRESH VIEW</button>
+            </form>
+            <div class="mt-4">
+                <label class="small text-uppercase fw-bold mb-2 opacity-50 d-block">Source Files</label>
+                {% for f in available_files %}
+                    <div class="file-badge">{{ f }}</div>
                 {% endfor %}
             </div>
+        </div>
+    </div>
+
+    <div class="glass-card">
+        <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center bg-dark bg-opacity-25">
+            <span class="small text-muted">Showing <strong>{{ logs|length }}</strong> entries</span>
+            <span class="badge bg-primary">{{ selected_date }}</span>
+        </div>
+        <div class="log-window" id="logWindow">
+            {% for entry in logs %}
+                <div class="log-entry">
+                    <div class="log-meta">
+                        <div class="fw-bold">{{ entry.file|truncatechars:20 }}</div>
+                    </div>
+                    <div class="log-content">{{ entry.content|safe }}</div>
+                </div>
+            {% empty %}
+                <div class="h-100 d-flex align-items-center justify-content-center text-muted">
+                    <div class="text-center">
+                        <i class="bi bi-search d-block fs-1 mb-2"></i>
+                        No logs found.
+                    </div>
+                </div>
+            {% endfor %}
         </div>
     </div>
 </div>
 
 <script>
     const logWindow = document.getElementById('logWindow');
-    if (logWindow) {
-        logWindow.scrollTop = logWindow.scrollHeight;
-    }
+    if (logWindow) logWindow.scrollTop = logWindow.scrollHeight;
 </script>
 {% endblock %}
