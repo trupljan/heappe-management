@@ -856,15 +856,11 @@ def colorize_log_line(content):
 import os
 import re
 import json
-from collections import deque
 from datetime import datetime
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
-
-# --- KONFIGURACE ---
-DEFAULT_LIMIT = 2000
 
 
 def format_json_match(match):
@@ -878,11 +874,13 @@ def format_json_match(match):
 
 
 def process_log_entry(raw_content, file_name, features):
-    """Zpracuje jeden log entry podle zapnutých funkcí."""
+    """Zpracuje jeden log entry."""
     clean_content = raw_content
+    # Oprava: odstranění názvu souboru ze začátku řádku (pokud tam je)
     if clean_content.startswith(file_name):
         clean_content = clean_content.replace(file_name, "", 1)
 
+    # Detekce levelu
     content_upper = clean_content.upper()[:50]
     level = "INFO"
     border_class = "border-info"
@@ -915,13 +913,16 @@ def process_log_entry(raw_content, file_name, features):
 
     # 2. META DATA (Smart filtry)
     if features.get('meta'):
+        # Session
         session_match = re.search(r'sessionCode["\s:]+([a-f0-9-]{36})', clean_content, re.IGNORECASE)
         if session_match: metadata['session'] = session_match.group(1)
 
+        # User
         user_match = re.search(r'UserId[:\s]+(\d+)', clean_content, re.IGNORECASE) or \
                      re.search(r'\[User:(\d+)\]', clean_content, re.IGNORECASE)
         if user_match: metadata['user_id'] = user_match.group(1)
 
+        # Action
         action_match = re.search(r'Action: ([a-zA-Z0-9\._]+)', clean_content)
         if action_match: metadata['action'] = action_match.group(1).split('.')[-1]
 
@@ -951,12 +952,8 @@ def log_viewer_view(request):
     filter_session = request.GET.get('session', '').strip()
     filter_user = request.GET.get('user', '').strip()
 
-    # Nastavení zobrazení
+    # Nastavení zobrazení (checkboxy)
     is_filtered = len(request.GET) > 0
-
-    # LIMIT MODE: Defaultně 'on', pokud uživatel nepřepne
-    limit_mode = request.GET.get('limit_mode', 'on')
-
     feat_colors = request.GET.get('feat_colors') == 'on' if is_filtered else True
     feat_meta = request.GET.get('feat_meta') == 'on' if is_filtered else True
     feat_json = request.GET.get('feat_json') == 'on' if is_filtered else True
@@ -976,14 +973,9 @@ def log_viewer_view(request):
                 file_path = os.path.join(log_base_path, file_name)
 
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    # LOGIKA LIMITU: Buď Deque (posledních N), nebo přímý iterátor (vše)
-                    if limit_mode == 'on':
-                        lines = deque(f, maxlen=DEFAULT_LIMIT)
-                    else:
-                        lines = f  # Iteruje přes celý soubor od začátku
-
                     current_raw = ""
-                    for line in lines:
+                    # Procházíme soubor řádek po řádku (bez limitu)
+                    for line in f:
                         if log_start_pattern.match(line):
                             if current_raw:
                                 process_and_add(all_entries, stats, current_raw, file_name, features, search_query,
@@ -992,6 +984,7 @@ def log_viewer_view(request):
                         else:
                             current_raw += line
 
+                    # Poslední záznam
                     if current_raw:
                         process_and_add(all_entries, stats, current_raw, file_name, features, search_query,
                                         filter_session, filter_user)
@@ -1008,18 +1001,17 @@ def log_viewer_view(request):
         'filter_session': filter_session,
         'filter_user': filter_user,
         'features': features,
-        'limit_mode': limit_mode,  # Posíláme zpět stav přepínače
         'instance': instance
     })
 
 
 def process_and_add(entries_list, stats, raw, file_name, features, search, f_session, f_user):
-    # Pre-filter text
+    # Rychlý pre-filter textu
     if search and search not in raw.lower(): return
 
     entry = process_log_entry(raw, file_name, features)
 
-    # Context filtry (z inputů nebo kliknutí)
+    # Context filtry
     if f_session and f_session not in entry['metadata'].get('session', ''): return
     if f_user and f_user != entry['metadata'].get('user_id'): return
 
