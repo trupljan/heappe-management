@@ -646,36 +646,32 @@ from django.http import JsonResponse
 from django.conf import settings
 
 
+import subprocess
+from django.conf import settings
+from django.http import JsonResponse
+
 def check_for_updates(request):
-    """
-    Porovná lokální commit hash s nejnovějším commitem na vzdáleném repozitáři.
-    """
+    repo_path = settings.BASE_DIR
     try:
-        repo_path = settings.BASE_DIR
-        #log
-        print(f"DEBUG: Spouštím git fetch v adresáři: {settings.BASE_DIR}")
+        subprocess.run(['git', 'fetch', '--all'], cwd=repo_path, check=True, timeout=15, capture_output=True)
 
-        # Aktualizujeme informace o vzdáleném repozitáři (fetch)
-        subprocess.run(['git', 'fetch'], cwd=repo_path, check=True, timeout=10)
-
-        # Získáme hash lokální verze
         local_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo_path).decode().strip()
 
-        # Získáme hash na origin/master (nebo main, podle vaší konfigurace)
-        # Zjistíme jméno aktuální větve
-        current_branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-                                                 cwd=repo_path).decode().strip()
-        remote_hash = subprocess.check_output(['git', 'rev-parse', f'origin/{current_branch}'],
-                                              cwd=repo_path).decode().strip()
+        branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=repo_path).decode().strip()
 
-        update_available = local_hash != remote_hash
+        remote_hash = subprocess.check_output(['git', 'rev-parse', '@{u}'], cwd=repo_path).decode().strip()
 
         return JsonResponse({
-            'update_available': update_available,
+            'update_available': local_hash != remote_hash,
             'local': local_hash[:7],
             'remote': remote_hash[:7],
-            'branch': current_branch
+            'branch': branch
         })
+
+    except subprocess.CalledProcessError as e:
+        # Specifická chyba pro Git příkazy
+        error_msg = e.stderr.decode() if e.stderr else str(e)
+        return JsonResponse({'error': f'Git error: {error_msg}'}, status=500)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
