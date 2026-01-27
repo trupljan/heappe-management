@@ -68,5 +68,6 @@ urlpatterns = [
     path('update/', views.update_server_page, name='update_server_page'),
     path('api/check-repo/', views.check_repo_and_fetch_branches, name='check_repo_and_fetch_branches'),
     path('api/deploy-direct/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
-    path('fetch-branches/', views.fetch_repo_branches, name='fetch_branches')
+    path('fetch-branches/', views.fetch_repo_branches, name='fetch_branches'),
+    path('logfiles/', views.log_viewer_view, name='log_viewer_view'),
 ]

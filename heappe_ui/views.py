@@ -648,10 +648,6 @@ def update_server_page(request):
     return render(request, 'update_server.html')
 
 
-# -----------------------------------------------------------------
-# --- HELPER FUNCTION: Step 1 Git Check Logic (Neměněno) ---
-# -----------------------------------------------------------------
-
 def execute_git_ls_remote(git_url, git_username=None, git_password=None):
     """
     Executes 'git ls-remote' to get branches and tags, handling credentials.
@@ -766,10 +762,6 @@ def check_repo_and_fetch_branches(request):
         }, status=status_code)
 
 
-# -----------------------------------------------------------------
-# --- VIEW FOR STEP 2: Execute Deployment (API Endpoint - Neměněno) ---
-# -----------------------------------------------------------------
-
 @require_http_methods(["POST"])
 @login_required # Důležité: Tuto kritickou operaci smí spustit jen přihlášený uživatel.
 def trigger_deployment_direct(request):
@@ -829,3 +821,73 @@ def trigger_deployment_direct(request):
 
     except Exception as e:
         return JsonResponse({"status": "error", "message": f"Fatal error launching script: {e}"}, status=500)
+
+import os
+import re
+from datetime import datetime
+from django.shortcuts import render
+
+
+@login_required
+def get_log_files(log_path, selected_date_str):
+    formatted_date = selected_date_str.replace("-", "_")
+    files = []
+    if os.path.exists(log_path):
+        for f in os.listdir(log_path):
+            if f.startswith(formatted_date) and ".log" in f:
+                files.append(f)
+    return sorted(files)
+
+
+def colorize_log_line(line):
+    line_lower = line.upper()
+    color = "#d4d4d4"
+    if "ERROR" in line_lower:
+        color = "#ff5555"
+    elif "WARNING" in line_lower:
+        color = "#ffb86c"
+    elif "DEBUG" in line_lower:
+        color = "#8be9fd"
+    elif "INFO" in line_lower:
+        color = "#50fa7b"
+
+    line = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', r'<span style="color: #bd93f9">\1</span>', line)
+    line = re.sub(r'(\d{1,2}/\d{1,2}/\d{4} \d{1,2}:\d{2}:\d{2}(?:\s?[AP]M)?)',
+                  r'<span style="color: #bd93f9">\1</span>', line)
+    line = re.sub(r'(\[User:\d+\])',
+                  r'<span style="background: #44475a; padding: 2px 4px; border-radius: 3px; color: #f8f8f2;">\1</span>',
+                  line)
+    return f'<span style="color: {color}">{line}</span>'
+
+
+@login_required
+def log_viewer_view(request):
+    instance = request.session.get('chosen_instance', 'develop')
+    log_base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
+
+    selected_date = request.GET.get('date', datetime.now().strftime('%Y-%m-%d'))
+    search_query = request.GET.get('search', '').lower()
+
+    log_files = get_log_files(log_base_path, selected_date)
+    all_logs_content = []
+
+    for file_name in log_files:
+        file_path = os.path.join(log_base_path, file_name)
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    if not search_query or search_query in line.lower():
+                        all_logs_content.append({
+                            'file': file_name,
+                            'content': colorize_log_line(line.strip())
+                        })
+        except Exception as e:
+            all_logs_content.append({'file': file_name, 'content': str(e)})
+
+    return render(request, 'logs/viewer.html', {
+        'logs': all_logs_content,
+        'selected_date': selected_date,
+        'search_query': search_query,
+        'available_files': log_files,
+        'instance': instance
+    })
