@@ -853,6 +853,43 @@ def colorize_log_line(content):
     return f'<div style="color: {color}">{content}</div>'
 
 
+import os
+import re
+from datetime import datetime
+from django.shortcuts import render
+from django.utils.html import escape
+
+
+def process_log_entry(raw_content, file_name):
+    # Určení typu a barvy pro Bootstrap třídy
+    content_upper = raw_content.upper()
+    level = "INFO"
+    border_class = "border-info"
+
+    if "ERROR" in content_upper or "FATAL" in content_upper:
+        level = "ERROR"
+        border_class = "border-danger"
+    elif "WARN" in content_upper:
+        level = "WARN"
+        border_class = "border-warning"
+    elif "DEBUG" in content_upper:
+        level = "DEBUG"
+        border_class = "border-secondary"
+
+    # Formátování textu (zvýraznění dat a času)
+    formatted_content = escape(raw_content)
+    formatted_content = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', r'<strong class="text-primary">\1</strong>',
+                               formatted_content)
+
+    return {
+        'file': file_name,
+        'content': formatted_content,
+        'level': level,
+        'border_class': border_class,
+        'raw': raw_content
+    }
+
+
 @login_required
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
@@ -860,42 +897,44 @@ def log_viewer_view(request):
     selected_date = request.GET.get('date', datetime.now().strftime('%Y-%m-%d'))
     search_query = request.GET.get('search', '').lower()
 
-    log_files = []
+    stats = {"ERROR": 0, "WARN": 0, "INFO": 0, "DEBUG": 0}
+    all_entries = []
+
     if os.path.exists(log_base_path):
         f_date = selected_date.replace("-", "_")
         log_files = sorted([f for f in os.listdir(log_base_path) if f.startswith(f_date) and f.endswith(".log")])
 
-    all_logs_content = []
-    log_start_pattern = re.compile(r'^(?:.*\.log\s+)?(INFO|WARN|ERROR|DEBUG|TRACE|FATAL|WARNING)\s+')
+        log_start_pattern = re.compile(r'^(?:.*\.log\s+)?(INFO|WARN|ERROR|DEBUG|TRACE|FATAL|WARNING)\s+')
 
-    for file_name in log_files:
-        try:
-            with open(os.path.join(log_base_path, file_name), 'r', encoding='utf-8', errors='ignore') as f:
-                current_entry = None
-                for line in f:
-                    clean_line = line.replace(f"{file_name} ", "") if line.startswith(file_name) else line
+        for file_name in log_files:
+            try:
+                with open(os.path.join(log_base_path, file_name), 'r', encoding='utf-8', errors='ignore') as f:
+                    current_raw = ""
+                    for line in f:
+                        clean_line = line.replace(f"{file_name} ", "") if line.startswith(file_name) else line
 
-                    if log_start_pattern.match(clean_line.strip()):
-                        if current_entry:
-                            if not search_query or search_query in current_entry['raw'].lower():
-                                all_logs_content.append(
-                                    {'file': file_name, 'content': colorize_log_line(current_entry['raw'])})
-                        current_entry = {'raw': clean_line}
-                    else:
-                        if current_entry:
-                            current_entry['raw'] += clean_line
+                        if log_start_pattern.match(clean_line.strip()):
+                            if current_raw:
+                                entry = process_log_entry(current_raw, file_name)
+                                if not search_query or search_query in entry['raw'].lower():
+                                    all_entries.append(entry)
+                                    stats[entry['level']] = stats.get(entry['level'], 0) + 1
+                            current_raw = clean_line
                         else:
-                            current_entry = {'raw': clean_line}
+                            current_raw += line
 
-                if current_entry and (not search_query or search_query in current_entry['raw'].lower()):
-                    all_logs_content.append({'file': file_name, 'content': colorize_log_line(current_entry['raw'])})
-        except Exception as e:
-            all_logs_content.append({'file': file_name, 'content': str(e)})
+                    if current_raw:  # Poslední záznam
+                        entry = process_log_entry(current_raw, file_name)
+                        if not search_query or search_query in entry['raw'].lower():
+                            all_entries.append(entry)
+                            stats[entry['level']] = stats.get(entry['level'], 0) + 1
+            except Exception:
+                continue
 
     return render(request, 'file_log_viewer.html', {
-        'logs': all_logs_content,
+        'logs': all_entries,
+        'stats': stats,
         'selected_date': selected_date,
         'search_query': search_query,
-        'available_files': log_files,
         'instance': instance
     })

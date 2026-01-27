@@ -1,169 +1,101 @@
 {% extends "base.html" %}
 
-{% block title %}Logs - {{ instance }}{% endblock %}
+{% block title %}Log Analyzer - {{ instance }}{% endblock %}
 
 {% block content %}
-<style>
-    :root {
-        --bg-dark: #1e1e2e;
-        --bg-panel: #24273a;
-        --accent: #8aadf4;
-        --border: #363a4f;
-        --text: #cad3f5;
-        --subtext: #a5adcb;
-    }
+<div class="container-fluid bg-light min-vh-100 py-4">
+    <div class="row g-4">
+        <div class="col-lg-3">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h6 class="mb-0 fw-bold text-primary">Configuration</h6>
+                </div>
+                <div class="card-body">
+                    <form method="GET">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">INSTANCE</label>
+                            <input type="text" class="form-control bg-light border-0" value="{{ instance|upper }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">DATE</label>
+                            <input type="date" name="date" class="form-control" value="{{ selected_date }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-muted">SEARCH</label>
+                            <input type="text" name="search" class="form-control" placeholder="Filter logs..." value="{{ search_query }}">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">REFRESH</button>
+                    </form>
+                </div>
+            </div>
 
-    body { background-color: var(--bg-dark); color: var(--text); }
-
-    .log-container {
-        display: grid;
-        grid-template-columns: 320px 1fr;
-        gap: 1.5rem;
-        padding: 1.5rem;
-        height: calc(100vh - 60px);
-    }
-
-    .glass-card {
-        background: var(--bg-panel);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-    }
-
-    .log-window {
-        flex: 1;
-        overflow-y: auto;
-        padding: 1rem;
-        font-family: 'Fira Code', 'Cascadia Code', monospace;
-        font-size: 0.85rem;
-        scrollbar-width: thin;
-        scrollbar-color: var(--border) transparent;
-    }
-
-    .log-entry {
-        display: flex;
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-        padding: 0.5rem 0;
-        transition: background 0.2s;
-    }
-
-    .log-entry:hover { background: rgba(255,255,255,0.03); }
-
-    .log-meta {
-        min-width: 140px;
-        font-size: 0.7rem;
-        color: var(--subtext);
-        border-right: 2px solid var(--border);
-        margin-right: 1rem;
-        user-select: none;
-    }
-
-    .log-content {
-        flex: 1;
-        white-space: pre-wrap;
-        word-break: break-all;
-        line-height: 1.5;
-    }
-
-    .sidebar-header {
-        background: linear-gradient(135deg, #8aadf4, #b7bdf8);
-        padding: 1.5rem;
-        color: #1e2030;
-    }
-
-    .form-control {
-        background: #181926;
-        border: 1px solid var(--border);
-        color: white;
-        border-radius: 8px;
-    }
-
-    .form-control:focus {
-        background: #181926;
-        border-color: var(--accent);
-        color: white;
-        box-shadow: 0 0 0 0.25rem rgba(138, 173, 244, 0.25);
-    }
-
-    .btn-refresh {
-        background: var(--accent);
-        border: none;
-        color: #1e2030;
-        font-weight: 700;
-        border-radius: 8px;
-        transition: transform 0.1s;
-    }
-
-    .btn-refresh:active { transform: scale(0.98); }
-
-    .file-badge {
-        background: rgba(255,255,255,0.05);
-        border: 1px solid var(--border);
-        padding: 0.5rem;
-        border-radius: 6px;
-        margin-bottom: 0.5rem;
-        font-size: 0.75rem;
-        cursor: default;
-    }
-
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
-</style>
-
-<div class="log-container">
-    <div class="glass-card">
-        <div class="sidebar-header">
-            <h5 class="mb-0 fw-bold">HEAppE <small class="opacity-75">LOGS</small></h5>
-            <div class="small fw-bold">{{ instance|upper }}</div>
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h6 class="mb-0 fw-bold text-primary">Statistics</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-danger rounded-pill">Errors</span>
+                        <span class="fw-bold">{{ stats.ERROR }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-warning text-dark rounded-pill">Warnings</span>
+                        <span class="fw-bold">{{ stats.WARN }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-info text-dark rounded-pill">Info</span>
+                        <span class="fw-bold">{{ stats.INFO }}</span>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="small text-muted">Total Entries</span>
+                        <span class="fw-bold">{{ logs|length }}</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="p-3 overflow-auto">
-            <form method="GET">
-                <div class="mb-3">
-                    <label class="small text-uppercase fw-bold mb-1 opacity-50">Filter Date</label>
-                    <input type="date" name="date" class="form-control" value="{{ selected_date }}">
+
+        <div class="col-lg-9">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 80vh; overflow-y: auto;" id="logWindow">
+                        <table class="table table-hover mb-0" style="table-layout: fixed;">
+                            <thead class="bg-white sticky-top shadow-sm">
+                                <tr>
+                                    <th style="width: 15%;">Source</th>
+                                    <th style="width: 85%;">Log Content</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white">
+                                {% for entry in logs %}
+                                <tr class="border-start border-4 {{ entry.border_class }}">
+                                    <td class="small text-muted border-end py-2">{{ entry.file }}</td>
+                                    <td class="py-2">
+                                        <pre class="mb-0 small" style="white-space: pre-wrap; word-break: break-all;">{{ entry.content|safe }}</pre>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="2" class="text-center py-5 text-muted">No records found for the selected criteria.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="small text-uppercase fw-bold mb-1 opacity-50">Search Keywords</label>
-                    <input type="text" name="search" class="form-control" placeholder="..." value="{{ search_query }}">
-                </div>
-                <button type="submit" class="btn btn-refresh w-100 py-2">REFRESH VIEW</button>
-            </form>
-            <div class="mt-4">
-                <label class="small text-uppercase fw-bold mb-2 opacity-50 d-block">Source Files</label>
-                {% for f in available_files %}
-                    <div class="file-badge">{{ f }}</div>
-                {% endfor %}
             </div>
         </div>
     </div>
-
-    <div class="glass-card">
-        <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center bg-dark bg-opacity-25">
-            <span class="small text-muted">Showing <strong>{{ logs|length }}</strong> entries</span>
-            <span class="badge bg-primary">{{ selected_date }}</span>
-        </div>
-        <div class="log-window" id="logWindow">
-            {% for entry in logs %}
-                <div class="log-entry">
-                    <div class="log-meta">
-                        <div class="fw-bold">{{ entry.file|truncatechars:20 }}</div>
-                    </div>
-                    <div class="log-content">{{ entry.content|safe }}</div>
-                </div>
-            {% empty %}
-                <div class="h-100 d-flex align-items-center justify-content-center text-muted">
-                    <div class="text-center">
-                        <i class="bi bi-search d-block fs-1 mb-2"></i>
-                        No logs found.
-                    </div>
-                </div>
-            {% endfor %}
-        </div>
-    </div>
 </div>
+
+<style>
+    pre { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; }
+    .table-hover tbody tr:hover { background-color: rgba(0,0,0,0.02); }
+    .sticky-top { z-index: 10; }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+</style>
 
 <script>
     const logWindow = document.getElementById('logWindow');
