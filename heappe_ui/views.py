@@ -828,7 +828,6 @@ from datetime import datetime
 from django.shortcuts import render
 
 
-@login_required
 def get_log_files(log_path, selected_date_str):
     formatted_date = selected_date_str.replace("-", "_")
     files = []
@@ -884,7 +883,7 @@ def log_viewer_view(request):
         except Exception as e:
             all_logs_content.append({'file': file_name, 'content': str(e)})
 
-    return render(request, 'logs/viewer.html', {
+    return render(request, 'file_log_viewer.html', {
         'logs': all_logs_content,
         'selected_date': selected_date,
         'search_query': search_query,

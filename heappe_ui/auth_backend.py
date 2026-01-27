@@ -91,5 +91,10 @@ class HeappeAuthBackend:
         if not all([host, username, password]):
             print("[auth_backend] Missing host/username/password in session for reauth.")
             return None
-        user = self.authenticate(request, host=f'{host}:{port}', username=username, password=password, reauthenticate=True)
-        return user
+        if port == '443' or port == '80' or port is None or port == '':
+            self.authenticate(request, host=f'{host}', username=username, password=password,
+                                     reauthenticate=True)
+        else:
+            self.authenticate(request, host=f'{host}:{port}', username=username, password=password,
+                                     reauthenticate=True)
+        return
