@@ -44,7 +44,10 @@ else
 fi
 
 log "Target: $TARGET"
-git reset --hard "$TARGET"
+
+git checkout -f "$TARGET" >> $LOG_FILE 2>&1
+git reset --hard "$TARGET" >> $LOG_FILE 2>&1
+git clean -fd >> $LOG_FILE 2>&1
 check_error
 
 log "Commit: $(git rev-parse HEAD)"
