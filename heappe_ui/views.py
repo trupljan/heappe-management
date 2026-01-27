@@ -24,11 +24,6 @@ def home(request: HttpRequest) -> HttpResponse:
     return dashboard_view(request)
 
 
-
-
-
-
-
 @login_required
 def logout_view(request):
     from django.contrib.auth import logout
