@@ -21,22 +21,18 @@
                 <p class="text-muted small mb-0">Instance: <span class="fw-semibold text-dark">{{ instance|upper }}</span></p>
             </div>
 
-            <div class="d-flex align-items-center gap-2">
-                {% if filter_session %}
-                <span class="active-filter-badge">
-                    <i class="bi bi-key-fill me-1 opacity-50"></i> Session: {{ filter_session|slice:":8" }}...
-                    <a href="?date={{ selected_date }}&search={{ search_query }}&user={{ filter_user }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}" class="ms-2 text-reset"><i class="bi bi-x-circle-fill"></i></a>
-                </span>
-                {% endif %}
+            <div class="text-end">
+                 {% if limit_mode == 'on' %}
+                 <span class="badge bg-success-subtle text-success border border-success-subtle me-2">
+                    <i class="bi bi-lightning-charge-fill me-1"></i> Live Mode (Max 2k)
+                 </span>
+                 {% else %}
+                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle me-2">
+                    <i class="bi bi-database-fill me-1"></i> Full History
+                 </span>
+                 {% endif %}
 
-                {% if filter_user %}
-                <span class="active-filter-badge">
-                    <i class="bi bi-person-fill me-1 opacity-50"></i> User: {{ filter_user }}
-                    <a href="?date={{ selected_date }}&search={{ search_query }}&session={{ filter_session }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}" class="ms-2 text-reset"><i class="bi bi-x-circle-fill"></i></a>
-                </span>
-                {% endif %}
-
-                <span class="badge bg-white text-secondary border shadow-sm px-3 py-2 ms-2">
+                <span class="badge bg-white text-secondary border shadow-sm px-3 py-2">
                     <i class="bi bi-list-ol me-1"></i> {{ logs|length }} entries
                 </span>
             </div>
@@ -46,54 +42,61 @@
             <div class="col-lg-3 col-xl-2">
                 <div class="card border-0 shadow-sm mb-4 card-hover">
                     <div class="card-body p-4">
-                        <h6 class="text-uppercase text-muted fw-bold small mb-3">Configuration</h6>
                         <form method="GET">
-                            {% if filter_session %}<input type="hidden" name="session" value="{{ filter_session }}">{% endif %}
-                            {% if filter_user %}<input type="hidden" name="user" value="{{ filter_user }}">{% endif %}
 
+                            <h6 class="text-uppercase text-muted fw-bold small mb-3">Filter & Search</h6>
+                            <div class="mb-2">
+                                <label class="form-label small fw-bold text-secondary mb-1">DATE</label>
+                                <input type="date" name="date" class="form-control bg-light form-control-sm" value="{{ selected_date }}">
+                            </div>
                             <div class="mb-3">
-                                <label class="form-label small fw-bold text-secondary">DATE</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-calendar3"></i></span>
-                                    <input type="date" name="date" class="form-control bg-light border-start-0 ps-0" value="{{ selected_date }}">
-                                </div>
+                                <label class="form-label small fw-bold text-secondary mb-1">KEYWORD</label>
+                                <input type="text" name="search" class="form-control bg-light form-control-sm" placeholder="Text search..." value="{{ search_query }}">
                             </div>
-                            <div class="mb-4">
-                                <label class="form-label small fw-bold text-secondary">SEARCH</label>
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-search"></i></span>
-                                    <input type="text" name="search" class="form-control bg-light border-start-0 ps-0" placeholder="Keywords..." value="{{ search_query }}">
+
+                            <div class="p-3 bg-light rounded mb-3 border">
+                                <label class="form-label small fw-bold text-secondary mb-2"><i class="bi bi-funnel"></i> SPECIFIC CONTEXT</label>
+
+                                <div class="mb-2">
+                                    <input type="text" name="user" class="form-control form-control-sm" placeholder="User ID (e.g. 12)" value="{{ filter_user }}">
+                                </div>
+                                <div class="mb-0">
+                                    <input type="text" name="session" class="form-control form-control-sm font-monospace" placeholder="Session UUID" value="{{ filter_session }}" style="font-size: 0.75rem;">
                                 </div>
                             </div>
 
-                            <hr class="my-3 text-muted opacity-25">
-                            <h6 class="text-uppercase text-muted fw-bold small mb-3">Display Options</h6>
+                            <h6 class="text-uppercase text-muted fw-bold small mb-3 mt-4">Options</h6>
 
-                            <div class="form-check form-switch mb-2">
-                                <input class="form-check-input" type="checkbox" name="feat_meta" id="featMeta" {% if features.meta %}checked{% endif %}>
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" name="limit_mode" value="on" id="limitMode" {% if limit_mode == 'on' %}checked{% endif %}>
+                                <label class="form-check-label small fw-bold" for="limitMode">Live Limit (2k lines)</label>
+                                <div class="form-text text-muted" style="font-size: 0.7rem;">Uncheck to load FULL logs (slower)</div>
+                            </div>
+
+                            <hr class="my-2 opacity-25">
+
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="feat_meta" value="on" id="featMeta" {% if features.meta %}checked{% endif %}>
                                 <label class="form-check-label small" for="featMeta">Smart Linking</label>
-                                <div class="form-text" style="font-size: 0.7rem; line-height: 1.2">Clickable User/Session IDs</div>
                             </div>
-
-                            <div class="form-check form-switch mb-2">
-                                <input class="form-check-input" type="checkbox" name="feat_json" id="featJson" {% if features.json %}checked{% endif %}>
+                            <div class="form-check form-switch mb-1">
+                                <input class="form-check-input" type="checkbox" name="feat_json" value="on" id="featJson" {% if features.json %}checked{% endif %}>
                                 <label class="form-check-label small" for="featJson">Pretty JSON</label>
                             </div>
-
-                            <div class="form-check form-switch mb-4">
-                                <input class="form-check-input" type="checkbox" name="feat_colors" id="featColors" {% if features.colors %}checked{% endif %}>
-                                <label class="form-check-label small" for="featColors">Highlight Syntax</label>
+                            <div class="form-check form-switch mb-3">
+                                <input class="form-check-input" type="checkbox" name="feat_colors" value="on" id="featColors" {% if features.colors %}checked{% endif %}>
+                                <label class="form-check-label small" for="featColors">Colors</label>
                             </div>
 
                             <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold shadow-sm btn-animate">
-                                Apply & Refresh
+                                Apply Filters
                             </button>
 
-                            {% if filter_session or filter_user or search_query %}
-                            <a href="?date={{ selected_date }}" class="btn btn-link text-decoration-none text-muted w-100 mt-2 btn-sm">
-                                Reset Filters
-                            </a>
-                            {% endif %}
+                            <div class="text-center mt-2">
+                                <a href="?date={{ selected_date }}" class="small text-decoration-none text-muted">
+                                    Reset All
+                                </a>
+                            </div>
                         </form>
                     </div>
                 </div>
@@ -101,16 +104,16 @@
                 <div class="card border-0 shadow-sm card-hover">
                     <div class="card-body p-4">
                         <h6 class="text-uppercase text-muted fw-bold small mb-3">Overview</h6>
-                        <div class="stat-item d-flex justify-content-between align-items-center mb-2 p-2 rounded hover-bg">
-                            <span class="text-danger fw-bold small"><i class="bi bi-x-octagon-fill me-2"></i>Errors</span>
+                        <div class="stat-item d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-danger fw-bold small">Errors</span>
                             <span class="badge bg-danger-subtle text-danger rounded-pill">{{ stats.ERROR }}</span>
                         </div>
-                        <div class="stat-item d-flex justify-content-between align-items-center mb-2 p-2 rounded hover-bg">
-                            <span class="text-warning-emphasis fw-bold small"><i class="bi bi-exclamation-triangle-fill me-2"></i>Warnings</span>
+                        <div class="stat-item d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-warning-emphasis fw-bold small">Warnings</span>
                             <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill">{{ stats.WARN }}</span>
                         </div>
-                        <div class="stat-item d-flex justify-content-between align-items-center p-2 rounded hover-bg">
-                            <span class="text-info-emphasis fw-bold small"><i class="bi bi-info-circle-fill me-2"></i>Info</span>
+                        <div class="stat-item d-flex justify-content-between align-items-center">
+                            <span class="text-info-emphasis fw-bold small">Info</span>
                             <span class="badge bg-info-subtle text-info-emphasis rounded-pill">{{ stats.INFO }}</span>
                         </div>
                     </div>
@@ -120,10 +123,13 @@
             <div class="col-lg-9 col-xl-10">
                 <div class="card border-0 shadow-sm h-100">
                     <div class="card-header bg-white border-bottom py-3 sticky-top shadow-sm d-flex justify-content-between align-items-center" style="z-index: 20;">
-                        <h6 class="mb-0 fw-bold text-dark">Console Output</h6>
+                        <h6 class="mb-0 fw-bold text-dark">Output</h6>
                         <div class="d-flex gap-2 align-items-center">
-                            {% if not features.meta %}<span class="badge bg-secondary opacity-50 me-2">Raw Mode</span>{% endif %}
-                            <small class="text-muted font-monospace">Live Analysis (Max 2k lines)</small>
+                            {% if filter_user or filter_session %}
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                <i class="bi bi-funnel-fill"></i> Context Active
+                            </span>
+                            {% endif %}
                         </div>
                     </div>
                     <div class="card-body p-0 position-relative">
@@ -154,17 +160,15 @@
                                                 {% endif %}
 
                                                 {% if entry.metadata.user_id %}
-                                                <a href="?date={{ selected_date }}&search={{ search_query }}&user={{ entry.metadata.user_id }}&session={{ filter_session }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}"
-                                                   class="meta-badge badge bg-light text-secondary border hover-shadow"
-                                                   title="Filter by User {{ entry.metadata.user_id }}">
-                                                    <i class="bi bi-person me-1"></i> User: {{ entry.metadata.user_id }}
+                                                <a href="?date={{ selected_date }}&search={{ search_query }}&user={{ entry.metadata.user_id }}&session={{ filter_session }}&limit_mode={{ limit_mode }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}"
+                                                   class="meta-badge badge bg-light text-secondary border hover-shadow {% if filter_user == entry.metadata.user_id %}bg-warning-subtle border-warning{% endif %}">
+                                                    <i class="bi bi-person me-1"></i> {{ entry.metadata.user_id }}
                                                 </a>
                                                 {% endif %}
 
                                                 {% if entry.metadata.session %}
-                                                <a href="?date={{ selected_date }}&search={{ search_query }}&session={{ entry.metadata.session }}&user={{ filter_user }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}"
-                                                   class="meta-badge badge bg-light text-secondary border hover-shadow"
-                                                   title="Filter by Session">
+                                                <a href="?date={{ selected_date }}&search={{ search_query }}&session={{ entry.metadata.session }}&user={{ filter_user }}&limit_mode={{ limit_mode }}&feat_meta=on&feat_json={{ features.json|yesno:'on,off' }}&feat_colors={{ features.colors|yesno:'on,off' }}"
+                                                   class="meta-badge badge bg-light text-secondary border hover-shadow {% if filter_session == entry.metadata.session %}bg-warning-subtle border-warning{% endif %}">
                                                     <i class="bi bi-key me-1"></i> {{ entry.metadata.session|slice:":8" }}...
                                                 </a>
                                                 {% endif %}
@@ -204,7 +208,7 @@
 
     body { font-family: var(--font-ui); background: var(--bg-body); color: #344767; }
 
-    /* LAYOUT & SCROLL */
+    /* LAYOUT */
     .log-window {
         height: 75vh;
         overflow-y: auto;
@@ -216,7 +220,6 @@
     .log-window::-webkit-scrollbar-track { background: transparent; }
     .log-window::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
-    /* CONTENT STYLING */
     .log-content {
         font-family: var(--font-code);
         font-size: 0.85rem;
@@ -227,57 +230,24 @@
     }
 
     .time-badge {
-        display: inline-block;
-        padding: 0px 4px;
-        background: #f1f5f9;
-        border: 1px solid #e2e8f0;
-        border-radius: 4px;
-        color: #475569;
-        font-size: 0.8em;
-        margin-right: 6px;
+        display: inline-block; padding: 0px 4px; background: #f1f5f9;
+        border: 1px solid #e2e8f0; border-radius: 4px; color: #475569;
+        font-size: 0.8em; margin-right: 6px;
     }
 
-    /* JSON BLOCK */
     .json-block {
-        background: #f8fafc;
-        border-left: 3px solid #64748b;
-        border-radius: 4px;
-        padding: 8px 12px;
-        margin-top: 6px;
-        font-size: 0.8rem;
-        color: #334155;
-        overflow-x: auto;
+        background: #f8fafc; border-left: 3px solid #64748b; border-radius: 4px;
+        padding: 8px 12px; margin-top: 6px; font-size: 0.8rem; color: #334155; overflow-x: auto;
     }
 
-    /* FILTERS & BADGES */
-    .active-filter-badge {
-        display: inline-flex;
-        align-items: center;
-        background: #4f46e5;
-        color: white;
-        padding: 5px 12px;
-        border-radius: 50px;
-        font-size: 0.8rem;
-        font-weight: 500;
-        box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
-    }
-    .meta-badge {
-        text-decoration: none;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    .hover-shadow:hover {
-        background: #fff !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-        transform: translateY(-1px);
-    }
+    /* BADGES & HOVERS */
+    .meta-badge { text-decoration: none; cursor: pointer; transition: all 0.2s; }
+    .hover-shadow:hover { background: #fff !important; box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important; transform: translateY(-1px); }
 
-    /* UTILS */
     .card { border-radius: 12px; }
     .btn-animate:active { transform: scale(0.98); }
     .form-control:focus { box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15); border-color: #86b7fe; }
 
-    /* BORDERS */
     tr.border-danger { border-left: 4px solid #dc3545 !important; background-color: rgba(220, 53, 69, 0.03); }
     tr.border-warning { border-left: 4px solid #ffc107 !important; background-color: rgba(255, 193, 7, 0.03); }
     tr.border-secondary { border-left: 4px solid #6c757d !important; }
