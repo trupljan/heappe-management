@@ -641,7 +641,41 @@ DEPLOY_SCRIPT_PATH = os.path.join(settings.BASE_DIR, DEPLOY_SCRIPT_NAME)
 # ---------------------------------------------------------
 
 
-# --- HTML Renderer View ---
+import subprocess
+from django.http import JsonResponse
+from django.conf import settings
+
+
+def check_for_updates(request):
+    """
+    Porovná lokální commit hash s nejnovějším commitem na vzdáleném repozitáři.
+    """
+    try:
+        repo_path = settings.BASE_DIR
+        # Aktualizujeme informace o vzdáleném repozitáři (fetch)
+        subprocess.run(['git', 'fetch'], cwd=repo_path, check=True, timeout=10)
+
+        # Získáme hash lokální verze
+        local_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo_path).decode().strip()
+
+        # Získáme hash na origin/master (nebo main, podle vaší konfigurace)
+        # Zjistíme jméno aktuální větve
+        current_branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
+                                                 cwd=repo_path).decode().strip()
+        remote_hash = subprocess.check_output(['git', 'rev-parse', f'origin/{current_branch}'],
+                                              cwd=repo_path).decode().strip()
+
+        update_available = local_hash != remote_hash
+
+        return JsonResponse({
+            'update_available': update_available,
+            'local': local_hash[:7],
+            'remote': remote_hash[:7],
+            'branch': current_branch
+        })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
 @login_required
 def update_server_page(request):
     """Renders the page with the update button and form."""

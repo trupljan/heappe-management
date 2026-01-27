@@ -70,4 +70,5 @@ urlpatterns = [
     path('api/deploy-direct/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
     path('fetch-branches/', views.fetch_repo_branches, name='fetch_branches'),
     path('logfiles/', views.log_viewer_view, name='log_viewer_view'),
+    path('api/check-updates/', views.check_for_updates, name='check_updates')
 ]
