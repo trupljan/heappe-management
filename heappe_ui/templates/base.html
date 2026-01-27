@@ -27,102 +27,40 @@
 </head>
 <body>
     <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow">
+   <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow py-2">
         <div class="container-fluid">
-            <!-- Left: app name with icon -->
-            <a class="navbar-brand fw-bold d-flex align-items-center" href="{% url 'dashboard_view' %}">
+            <a class="navbar-brand fw-bold d-flex align-items-center me-4" href="{% url 'dashboard_view' %}">
                 <img src="{% static 'images/HEAppE_logo.png' %}" alt="Logo" class="me-2" style="height: 30px;">
-                HEAppE Admin Panel
+                <span>HEAppE Admin Panel</span>
             </a>
-
-            <!-- Toggle for mobile -->
+    
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
                 <span class="navbar-toggler-icon"></span>
             </button>
-
-            <!-- Navbar content -->
+    
             <div class="collapse navbar-collapse" id="navbarContent">
-                <!-- Center: main menu -->
-                <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0 align-items-center">
                     <li class="nav-item">
-                        <a class="nav-link nav-white" href="{% url 'dashboard_view' %}">
+                        <a class="nav-link nav-white d-flex align-items-center" href="{% url 'dashboard_view' %}">
                             <i class="bi bi-house me-1"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle" href="#" id="infrastructureDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="infrastructureDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-hdd-stack me-1"></i> Infrastructure
                         </a>
                         <ul class="dropdown-menu" aria-labelledby="infrastructureDropdown">
-                            <li><a class="dropdown-item" href="{% url 'cluster_list' %}">
-                                <i class="bi bi-server me-2"></i> Clusters
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'queues_view' %}">
-                                <i class="bi bi-cpu me-2"></i> Queues
-                            </a></li>
-                            <li><a class="dropdown-item" href="{% url 'queue_groups' %}">
-                                <i class="bi bi-diagram-3 me-2"></i> Queue Groups
-                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'cluster_list' %}"><i class="bi bi-server me-2"></i> Clusters</a></li>
+                            <li><a class="dropdown-item" href="{% url 'queues_view' %}"><i class="bi bi-cpu me-2"></i> Queues</a></li>
+                            <li><a class="dropdown-item" href="{% url 'queue_groups' %}"><i class="bi bi-diagram-3 me-2"></i> Queue Groups</a></li>
                         </ul>
                     </li>
-                    {% if False %}
+                    
                     <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle" href="#" id="jobsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-play-circle me-1"></i> Jobs
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="jobsDropdown">
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-list-task me-2"></i> All Jobs
-                            </a></li>
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-hourglass-split me-2"></i> Running Jobs
-                            </a></li>
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-clock-history me-2"></i> Job History
-                            </a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-gear me-2"></i> Command Templates
-                            </a></li>
-                        </ul>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle" href="#" id="usersDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="bi bi-people me-1"></i> Users
-                        </a>
-                        <ul class="dropdown-menu" aria-labelledby="usersDropdown">
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-person-lines-fill me-2"></i> User Management
-                            </a></li>
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-shield-check me-2"></i> Permissions
-                            </a></li>
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-graph-up me-2"></i> Usage Statistics
-                            </a></li>
-                        </ul>
-                    </li>
-                    {% endif %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle" href="#" id="monitoringDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="monitoringDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-graph-up me-1"></i> System Management
                         </a>
-
-
-
-
                         <ul class="dropdown-menu" aria-labelledby="monitoringDropdown">
-                            {% if False %}
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-speedometer2 me-2"></i> System Status
-                            </a></li>
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-bar-chart me-2"></i> Resource Usage
-                            </a></li>
-                            <li><a class="dropdown-item" href="#">
-                                <i class="bi bi-exclamation-triangle me-2"></i> Alerts
-                            </a></li>
-                            {% endif %}
                             {% if request.session.chosen_instance %}
                              <li><a class="dropdown-item" href="{% url 'deploy_view' request.session.chosen_instance %}">
                                     <i class="bi bi-speedometer2 me-2"></i> Application Control
@@ -131,99 +69,64 @@
                             <li><a class="dropdown-item" href="{% url 'logs' %}">
                                 <i class="bi bi-file-text me-2"></i> Logs
                             </a></li>
-
-
                         </ul>
+                    </li>
+    
                     <li class="nav-item">
-                        <a class="nav-link nav-white" href="{% url 'deploy_view' %}">
-                            <i class="bi bi bi-cloud-arrow-up me-1"></i> Deploy
+                        <a class="nav-link nav-white d-flex align-items-center" href="{% url 'deploy_view' %}">
+                            <i class="bi bi-cloud-arrow-up me-1"></i> Deploy
                         </a>
                     </li>
-                    </li>
                 </ul>
-
-                <!-- Right: user menu -->
-                <ul class="navbar-nav">
+    
+                <div class="d-flex align-items-center gap-2">
                     {% if user.is_authenticated %}
-                        <!-- Quick actions -->
-                        <li class="nav-item d-none" id="update-notification-item">
-                            <button class="btn btn-warning btn-sm mt-1 me-3 animate-pulse" onclick="confirmUpdate()">
-                                <i class="bi bi-arrow-up-circle-fill"></i> Update Available
+                        <div id="update-notification-item" class="d-none">
+                            <button class="btn btn-warning btn-sm fw-bold px-3 shadow-sm animate-pulse" onclick="confirmUpdate()">
+                                <i class="bi bi-arrow-up-circle-fill me-1"></i> Update Available
                             </button>
-                        </li>
-                        
-                        <style>
-                        /* Jemné pulzování, aby si uživatel všiml */
-                        @keyframes pulse-warning {
-                            0% { transform: scale(1); }
-                            50% { transform: scale(1.05); }
-                            100% { transform: scale(1); }
-                        }
-                        .animate-pulse {
-                            animation: pulse-warning 2s infinite;
-                        }
-                        </style>
-                        {% if False %}
-                        <li class="nav-item">
-                            <a class="nav-link nav-white" href="#" title="Notifications">
-                                <i class="bi bi-bell"></i>
-                                <span class="badge bg-danger rounded-pill ms-1" style="font-size: 0.6em;">3</span>
-                            </a>
-                        </li>
-                        {% endif %}
-
+                        </div>
+    
                         {% if request.session.chosen_instance %}
-                            <li class="nav-item d-flex align-items-center me-3">
-                                <a class="btn btn-sm btn-outline-light ms-2" href="{% url 'reconnect_view' %}">
-                                    <i class="bi bi-hdd-stack me-1"></i> Reconnect HEAppE {{ request.session.chosen_instance }}
-                                </a>
-
-                                <a class="btn btn-sm btn-outline-light ms-2" href="{% url 'instance_credentials_list' %}">
-                                    Switch Instance
-                                </a>
-                            </li>
+                            <a class="btn btn-sm btn-outline-light text-nowrap px-3" href="{% url 'reconnect_view' %}">
+                                <i class="bi bi-hdd-stack me-1"></i> Reconnect HEAppE {{ request.session.chosen_instance }}
+                            </a>
+    
+                            <a class="btn btn-sm btn-outline-light text-nowrap px-3" href="{% url 'instance_credentials_list' %}">
+                                Switch Instance
+                            </a>
                         {% endif %}
-
-                        <!-- User dropdown -->
-                        <li class="nav-item dropdown">
-                            <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-person-circle me-1"></i>
+    
+                        <div class="dropdown ms-2">
+                            <a class="nav-link nav-white dropdown-toggle d-flex align-items-center px-2" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-person-circle fs-5 me-1"></i>
                                 <span class="d-none d-md-inline">{{ user.username }}</span>
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                                <li><h6 class="dropdown-header">{{ user.get_full_name|default:user.username }}</h6></li>
-                                <li><hr class="dropdown-divider"></li>
+                            <ul class="dropdown-menu dropdown-menu-end shadow" aria-labelledby="userDropdown">
+                                <li><h6 class="dropdown-header border-bottom mb-2 pb-2">{{ user.get_full_name|default:user.username }}</h6></li>
                                 <li><a class="dropdown-item" href="{% url 'profile_view' %}">
                                     <i class="bi bi-person me-2"></i> Profile
                                 </a></li>
-                                {% if False %}
-                                <li><a class="dropdown-item" href="#">
-                                    <i class="bi bi-gear me-2"></i> Settings
-                                </a></li>
                                 <li><hr class="dropdown-divider"></li>
-                                    {% endif %}
-                                <li>
-                                    <form method="post" action="{% url 'logout' %}" class="px-3 py-1">
+                                <li class="px-3 py-1">
+                                    <form method="post" action="{% url 'logout' %}">
                                         {% csrf_token %}
-                                        <button type="submit" class="btn btn-outline-danger w-100">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">
                                             <i class="bi bi-box-arrow-right me-1"></i> Logout
                                         </button>
                                     </form>
                                 </li>
                             </ul>
-                        </li>
+                        </div>
                     {% else %}
-                        <li class="nav-item">
-                            <a class="nav-link nav-white btn btn-outline-light px-3" href="{% url 'login' %}">
-                                <i class="bi bi-box-arrow-in-right me-1"></i> Login
-                            </a>
-                        </li>
+                        <a class="btn btn-outline-light btn-sm px-4" href="{% url 'login' %}">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> Login
+                        </a>
                     {% endif %}
-                </ul>
+                </div>
             </div>
         </div>
     </nav>
-
     <!-- Messages -->
     {% if messages %}
         <div class="container mt-3">
