@@ -22,7 +22,7 @@ check_error() {
     fi
 }
 
-log "START: $GIT_TAG"
+log "=== START DEPLOYMENT: $GIT_TAG ==="
 
 cd $APP_DIR
 check_error
@@ -34,7 +34,8 @@ else
     AUTH_URL="$GIT_URL"
 fi
 
-git fetch "$AUTH_URL" --tags --force --prune
+log "Fetching from $GIT_TAG..."
+git fetch "$AUTH_URL" --tags --force --prune >> $LOG_FILE 2>&1
 check_error
 
 if git rev-parse --verify "origin/$GIT_TAG" >/dev/null 2>&1; then
@@ -43,32 +44,35 @@ else
     TARGET="$GIT_TAG"
 fi
 
-log "Target: $TARGET"
+log "Target commit/branch: $TARGET"
 
-git checkout -f "$TARGET" >> $LOG_FILE 2>&1
+git checkout -f "$GIT_TAG" >> $LOG_FILE 2>&1 || git checkout -b "$GIT_TAG" "$TARGET" >> $LOG_FILE 2>&1
 git reset --hard "$TARGET" >> $LOG_FILE 2>&1
 git clean -fd >> $LOG_FILE 2>&1
 check_error
 
-log "Commit: $(git rev-parse HEAD)"
+log "Current commit after reset: $(git rev-parse HEAD)"
 
 if [ -f "requirements.txt" ]; then
+    log "Installing requirements..."
     $PIP_COMMAND install -r requirements.txt >> $LOG_FILE 2>&1
     check_error
 fi
 
+log "Running database migrations..."
 $VENV_PYTHON manage.py migrate --noinput >> $LOG_FILE 2>&1
 check_error
 
+log "Restarting service $SERVICE_NAME..."
 sudo systemctl restart $SERVICE_NAME
 check_error
 
 sleep 5
 if sudo systemctl is-active --quiet $SERVICE_NAME; then
-    log "SUCCESS"
+    log "=== SUCCESS: Deployment finished ==="
 else
-    log "FAILED: Service not active"
-    sudo journalctl -u $SERVICE_NAME -n 20 --no-pager >> $LOG_FILE
+    log "FAILED: Service not active!"
+    sudo journalctl -u $SERVICE_NAME -n 50 --no-pager >> $LOG_FILE
     exit 1
 fi
 
