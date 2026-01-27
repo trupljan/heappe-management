@@ -652,6 +652,9 @@ def check_for_updates(request):
     """
     try:
         repo_path = settings.BASE_DIR
+        #log
+        print(f"DEBUG: Spouštím git fetch v adresáři: {settings.BASE_DIR}")
+
         # Aktualizujeme informace o vzdáleném repozitáři (fetch)
         subprocess.run(['git', 'fetch'], cwd=repo_path, check=True, timeout=10)
 
