@@ -10,7 +10,7 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     path('profile/', views.profile_view, name='profile_view'),
     path('dashboard/', views.dashboard_view, name='dashboard_view'),
-    path("logs/", views.logs_view, name="logs"),
+
     path("deploy/", views.deploy_view, name="deploy_view"),
     path("deploy/<str:instance_name>/", views.deploy_view, name="deploy_view"),
     path('logs/<str:container_id>/', views.container_logs_view, name='container_logs'),
@@ -70,5 +70,7 @@ urlpatterns = [
     path('api/deploy-direct/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
     path('fetch-branches/', views.fetch_repo_branches, name='fetch_branches'),
     path('logfiles/', views.log_viewer_view, name='log_viewer_view'),
+    path("logs/", views.log_viewer_view, name="log_viewer_view"),
+    #path("logs/", views.logs_view, name="logs"),
     path('api/check-updates/', views.check_for_updates, name='check_updates')
 ]
