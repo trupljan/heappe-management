@@ -637,43 +637,51 @@ DEPLOY_SCRIPT_NAME = 'deploy.sh'
 # Ujistěte se, že toto je správná cesta, např. /cesta/k/projektu/deploy.sh
 DEPLOY_SCRIPT_PATH = os.path.join(settings.BASE_DIR, DEPLOY_SCRIPT_NAME)
 
-# PŘED POUŽITÍM ZKONTROLUJTE, ŽE settings.BASE_DIR JE SPRÁVNĚ NASTAVENO!
-# ---------------------------------------------------------
+import subprocess
+import json
+import os
+from django.http import JsonResponse
+from django.conf import settings
+from django.contrib.auth.decorators import login_required
 
 
 import subprocess
-from django.http import JsonResponse
-from django.conf import settings
-
-
-import subprocess
+import json
+import os
 from django.conf import settings
 from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
 
+@login_required
 def check_for_updates(request):
+    script_path = os.path.join(settings.BASE_DIR, 'scripts', 'check_git_updates.sh')
     repo_path = settings.BASE_DIR
+
+    if not os.path.exists(script_path):
+        return JsonResponse({"error": "Script not found"}, status=500)
+
     try:
-        subprocess.run(['git', 'fetch', '--all'], cwd=repo_path, check=True, timeout=15, capture_output=True)
+        os.chmod(script_path, 0o744)
+        result = subprocess.run(
+            [script_path, str(repo_path)],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=20
+        )
 
-        local_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo_path).decode().strip()
-
-        branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=repo_path).decode().strip()
-
-        remote_hash = subprocess.check_output(['git', 'rev-parse', '@{u}'], cwd=repo_path).decode().strip()
-
+        data = json.loads(result.stdout)
         return JsonResponse({
-            'update_available': local_hash != remote_hash,
-            'local': local_hash[:7],
-            'remote': remote_hash[:7],
-            'branch': branch
+            'update_available': data['local'] != data['remote'],
+            'local': data['local'][:7],
+            'remote': data['remote'][:7],
+            'branch': data['branch']
         })
-
     except subprocess.CalledProcessError as e:
-        # Specifická chyba pro Git příkazy
-        error_msg = e.stderr.decode() if e.stderr else str(e)
-        return JsonResponse({'error': f'Git error: {error_msg}'}, status=500)
+        return JsonResponse({'error': e.stderr.strip()}, status=500)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
 
 @login_required
 def update_server_page(request):
