@@ -45,14 +45,14 @@ if [ "$GIT_URL" = "origin" ] || [ -z "$GIT_URL" ]; then
 fi
 
 REMOTE_CHANGED=false
-if [ -n "$GIT_USER" ] && [ -n "$GIT_PASS" ]; then
+
+if [ -n "$GIT_USER" ] && [ -n "$GIT_PASS" ] && [ -n "$GIT_URL" ] && [ "$GIT_URL" != "origin" ]; then
     ENCODED_PASS=$(echo -n "$GIT_PASS" | curl -s -o /dev/null -w "%{url_effective}" --get --data-urlencode "=@-" "" | cut -c 3-)
     AUTH_URL=$(echo "$GIT_URL" | sed "s|//|//${GIT_USER}:${ENCODED_PASS}@|")
     git remote set-url origin "$AUTH_URL"
     check_error
     REMOTE_CHANGED=true
 fi
-
 git fetch origin --tags --force --prune >> "$LOG_FILE" 2>&1
 check_error
 
