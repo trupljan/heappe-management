@@ -888,15 +888,17 @@ def colorize_log_line(content):
 import os
 import re
 import json
+import time
 from datetime import datetime
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.utils.html import escape
 from django.utils.safestring import mark_safe
+from django.http import StreamingHttpResponse
 
 
 def format_json_match(match):
-    """Zformátuje nalezený JSON do HTML bloku."""
+    """Formats found JSON into an HTML block."""
     try:
         data = json.loads(match.group(0))
         formatted = json.dumps(data, indent=2)
@@ -906,19 +908,17 @@ def format_json_match(match):
 
 
 def process_log_entry(raw_content, file_name, features):
-    """Zpracuje jeden log entry."""
+    """Processes a single log entry."""
     clean_content = raw_content
-    # Oprava: odstranění názvu souboru ze začátku řádku (pokud tam je)
     if clean_content.startswith(file_name):
         clean_content = clean_content.replace(file_name, "", 1)
 
-    # Detekce levelu
     content_upper = clean_content.upper()[:50]
     level = "INFO"
     border_class = "border-info"
     text_class = "text-info"
 
-    if "ERROR" in content_upper or "FATAL" in content_upper:
+    if any(word in content_upper for word in ["ERROR", "FATAL", "EXCEPTION"]):
         level = "ERROR";
         border_class = "border-danger";
         text_class = "text-danger"
@@ -934,7 +934,6 @@ def process_log_entry(raw_content, file_name, features):
     metadata = {}
     formatted_content = escape(clean_content)
 
-    # 1. BARVIČKY
     if features.get('colors'):
         formatted_content = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
                                    r'<span class="time-badge">\1</span>',
@@ -943,22 +942,15 @@ def process_log_entry(raw_content, file_name, features):
                                    r'\1 <strong class="text-primary">\2</strong> -',
                                    formatted_content)
 
-    # 2. META DATA (Smart filtry)
     if features.get('meta'):
-        # Session
         session_match = re.search(r'sessionCode["\s:]+([a-f0-9-]{36})', clean_content, re.IGNORECASE)
         if session_match: metadata['session'] = session_match.group(1)
-
-        # User
         user_match = re.search(r'UserId[:\s]+(\d+)', clean_content, re.IGNORECASE) or \
                      re.search(r'\[User:(\d+)\]', clean_content, re.IGNORECASE)
         if user_match: metadata['user_id'] = user_match.group(1)
-
-        # Action
         action_match = re.search(r'Action: ([a-zA-Z0-9\._]+)', clean_content)
         if action_match: metadata['action'] = action_match.group(1).split('.')[-1]
 
-    # 3. JSON
     if features.get('json') and ("Arguments:" in formatted_content or "Headers:" in formatted_content):
         formatted_content = re.sub(r'(\{.*?\})', format_json_match, formatted_content)
 
@@ -979,18 +971,15 @@ def log_viewer_view(request):
     log_base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
     selected_date = request.GET.get('date', datetime.now().strftime('%Y-%m-%d'))
     search_query = request.GET.get('search', '').lower()
-
-    # Filtry
     filter_session = request.GET.get('session', '').strip()
     filter_user = request.GET.get('user', '').strip()
 
-    # Nastavení zobrazení (checkboxy)
     is_filtered = len(request.GET) > 0
-    feat_colors = request.GET.get('feat_colors') == 'on' if is_filtered else True
-    feat_meta = request.GET.get('feat_meta') == 'on' if is_filtered else True
-    feat_json = request.GET.get('feat_json') == 'on' if is_filtered else True
-
-    features = {'colors': feat_colors, 'meta': feat_meta, 'json': feat_json}
+    features = {
+        'colors': request.GET.get('feat_colors') == 'on' if is_filtered else True,
+        'meta': request.GET.get('feat_meta') == 'on' if is_filtered else True,
+        'json': request.GET.get('feat_json') == 'on' if is_filtered else True
+    }
 
     stats = {"ERROR": 0, "WARN": 0, "INFO": 0, "DEBUG": 0}
     all_entries = []
@@ -1003,10 +992,8 @@ def log_viewer_view(request):
         for file_name in log_files:
             try:
                 file_path = os.path.join(log_base_path, file_name)
-
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     current_raw = ""
-                    # Procházíme soubor řádek po řádku (bez limitu)
                     for line in f:
                         if log_start_pattern.match(line):
                             if current_raw:
@@ -1015,37 +1002,62 @@ def log_viewer_view(request):
                             current_raw = line
                         else:
                             current_raw += line
-
-                    # Poslední záznam
                     if current_raw:
                         process_and_add(all_entries, stats, current_raw, file_name, features, search_query,
                                         filter_session, filter_user)
-
-            except Exception as e:
-                print(f"Log Error {file_name}: {e}")
+            except:
                 continue
 
     return render(request, 'file_log_viewer.html', {
-        'logs': all_entries,
-        'stats': stats,
-        'selected_date': selected_date,
-        'search_query': search_query,
-        'filter_session': filter_session,
-        'filter_user': filter_user,
-        'features': features,
-        'instance': instance
+        'logs': all_entries, 'stats': stats, 'selected_date': selected_date,
+        'search_query': search_query, 'filter_session': filter_session,
+        'filter_user': filter_user, 'features': features, 'instance': instance
     })
 
 
 def process_and_add(entries_list, stats, raw, file_name, features, search, f_session, f_user):
-    # Rychlý pre-filter textu
     if search and search not in raw.lower(): return
-
     entry = process_log_entry(raw, file_name, features)
-
-    # Context filtry
     if f_session and f_session not in entry['metadata'].get('session', ''): return
     if f_user and f_user != entry['metadata'].get('user_id'): return
-
     entries_list.append(entry)
     stats[entry['level']] = stats.get(entry['level'], 0) + 1
+
+
+@login_required
+def stream_logs(request):
+    """SSE Endpoint for Tail -f behavior."""
+    instance = request.session.get('chosen_instance', 'develop')
+    log_base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
+
+    def event_stream():
+        # Find the latest file for today
+        today_prefix = datetime.now().strftime('%Y_%m_%d')
+
+        while True:
+            files = sorted([f for f in os.listdir(log_base_path) if f.startswith(today_prefix) and f.endswith(".log")])
+            if not files:
+                time.sleep(2)
+                continue
+
+            latest_file = files[-1]
+            file_path = os.path.join(log_base_path, latest_file)
+
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                f.seek(0, os.SEEK_END)
+                while True:
+                    line = f.readline()
+                    if not line:
+                        # Check if a new file was created (log rotation)
+                        new_files = sorted([f for f in os.listdir(log_base_path) if f.startswith(today_prefix)])
+                        if new_files and new_files[-1] != latest_file:
+                            break  # Break inner loop to open new file
+
+                        time.sleep(0.5)
+                        continue
+
+                    entry = process_log_entry(line, latest_file, {'colors': True, 'meta': True, 'json': True})
+                    html = f'<tr class="log-row {entry["border_class"]} animate-fade-in"><td style="width: 120px;" class="ps-4 py-3 align-top bg-transparent"><span class="badge {entry["text_class"]} bg-light border fw-bold">LIVE</span></td><td class="py-3 pe-4"><div class="log-content">{entry["content"]}</div></td></tr>'
+                    yield f"data: {html.replace('CSS', '')}\n\n"
+
+    return StreamingHttpResponse(event_stream(), content_type='text/event-stream')
