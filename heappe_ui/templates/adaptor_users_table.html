@@ -15,7 +15,7 @@
                     <tr>
                         <th scope="col">ID</th>
                         <th scope="col">Username</th>
-                        <th scope="col">Group and Role</th>
+                        <th scope="col">Group (ID) and Role</th>
                         <th scope="col">Actions</th>
                     </tr>
                     {% for adaptor_user in adaptor_users %}
@@ -26,7 +26,7 @@
                                         <td>{{ adaptor_user.id }}</td>
                                         <td>{{ adaptor_user.username }}</td>
                                         <td>
-                                            <strong>{{ group.name }}:</strong> {{ role }}
+                                            <strong>{{ group.name }} ({{ group.id }}):</strong> {{ role }}
                                         </td>
                                         <td>
                                             <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="btn btn-sm btn-primary">Detail</a>

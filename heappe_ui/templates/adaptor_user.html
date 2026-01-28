@@ -103,6 +103,39 @@
 </div>
 {% endif %}
 
+{% if adaptor_user %}
+<div class="row g-4 w-75 mx-auto">
+    <!-- User group assign -->
+    <div class="col-md-6">
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header">
+                <strong>Assign {{ adaptor_user.username }} to User Group</strong>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="adaptor_user_assign_to_user_group">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="UserGroupId">User Group ID</label>
+                            <input type="text" class="form-control" id="UserGroupId" name="UserGroupId" value="" placeholder="Enter user group ID">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="Role">Role</label>
+                            <input type="text" class="form-control" id="Role" name="Role" value="" placeholder="Enter Role">
+                        </div>
+
+                        <div class="col-12">
+                            <button type="submit"  class="btn btn-primary mt-2">Assign User Group</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 </div>
 
 {% endblock %}

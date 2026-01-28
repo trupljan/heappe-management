@@ -36,6 +36,8 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
             return adaptor_user_create(request)
         if action == "adaptor_user_assign_to_project":
             return adaptor_user_assign_to_project(request, adaptor_user_username)
+        if action == "adaptor_user_assign_to_user_group":
+            return adaptor_user_assign_to_user_group(request, adaptor_user_username)
 
 
     return render(request, "adaptor_user.html", {
@@ -138,8 +140,29 @@ def adaptor_user_unassign_from_project(request: HttpRequest, adaptor_user_userna
         result = _handle_api_call(
             request,
             lambda: controller.heappe_management_remove_adaptor_user_from_project_delete(**payload),
-            "Service account removed from project successfully!",
-            "Failed to remove Service account from project"
+            "Service account role removed from project successfully!",
+            "Failed to remove Service account role from project"
         )
         
         return redirect(f"{reverse('project_detail', kwargs={'project_id': project_id})}?tab=adaptor_users")
+
+@login_required
+def adaptor_user_assign_to_user_group(request: HttpRequest, adaptor_user_username: str) -> HttpResponse:
+    if request.method == "GET":
+        return render(request, "adaptor_user.html", {})
+    if request.method == "POST":
+        controller = hp.ManagementApi(request.api_instance)
+        payload_data = {
+            "Username": adaptor_user_username,
+            "UserGroupId": int(request.POST.get("UserGroupId")),
+            "Role": int(request.POST.get("Role"))
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_assign_adaptor_user_to_user_group_post(**payload),
+            "Service account assigned to user group successfully!",
+            "Failed to assign Service account to user group"
+        )
+
+        return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)
