@@ -29,6 +29,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
     not_assigned_clusters = clusters.copy()
     command_templates, project_accounts, project_data, project_assignments = [], [], None, []
     adaptor_users = []
+    adaptor_users_not_in_project = []
     ui_features = {}
 
     #if post
@@ -67,7 +68,18 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
                 SessionCode=request.session_code, 
                 ProjectId=project_id
             )]
+            all_adaptor_users = [e.to_dict() for e in controller.heappe_management_adaptor_users_get(
+                SessionCode=request.session_code
+            )]
+            existing_user_ids = {user['id'] for user in adaptor_users}
+
+            adaptor_users_not_in_project = [
+                user for user in all_adaptor_users
+                if user['id'] not in existing_user_ids
+            ]
+
             ui_features['adaptor_users'] = True
+            ui_features['adaptor_users_not_in_project'] = True
         except Exception as e:
             adaptor_users = []
 
@@ -154,6 +166,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
         "project_accounts": project_accounts,
         "node_types": list(dict_ntypes.values()),
         "adaptor_users": adaptor_users,
+        "adaptor_users_not_in_project": adaptor_users_not_in_project,
         "ui_features": ui_features,
     })
 

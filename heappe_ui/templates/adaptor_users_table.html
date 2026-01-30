@@ -1,87 +1,213 @@
-<div class="card mb-4 w-75 mx-auto shadow-sm">
-    <div class="card-header d-flex align-items-center">
-        <strong>Service Accounts Management</strong>
-        <div class="ms-auto">
-            <a href="{% url 'adaptor_user_create' %}" class="btn btn-sm btn-primary me-2">Create New User</a>
-            <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">
-                <i class="bi bi-arrow-clockwise"></i> Reload
-            </button>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+
+<style>
+    table.dataTable { width: 100% !important; border-collapse: collapse !important; }
+    .dataTables_wrapper { padding: 1rem 0; }
+    .dataTables_filter input { border: 1px solid #dee2e6; border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; margin-bottom: 10px; }
+    .nav-tabs .nav-link { font-size: 0.85rem; color: #6c757d; border: none; border-bottom: 2px solid transparent; padding: 0.8rem 1.2rem; transition: 0.3s; }
+    .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; background: none; }
+    .card-header-tabs { margin-bottom: -10px; }
+    .role-badge { min-width: 110px; background: white; border-radius: 4px; border: 1px solid #dee2e6; padding: 4px 8px; display: inline-flex; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 4px; }
+    .role-name { font-size: 0.65rem; font-weight: bold; color: #0d6efd; text-transform: uppercase; }
+    .group-name { font-size: 0.75rem; color: #6c757d; }
+    .table-success-fade { animation: fadeBackground 2s forwards; }
+    @keyframes fadeBackground { from { background-color: #d1e7dd; } to { background-color: transparent; } }
+</style>
+
+<div class="card mb-4 shadow-sm border-0">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 border-bottom">
+        <ul class="nav nav-tabs card-header-tabs border-bottom-0" id="userTabs" role="tablist">
+            <li class="nav-item">
+                <button class="nav-link active fw-bold text-uppercase" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button">
+                    In Project (<span id="countIn">{{ adaptor_users|length }}</span>)
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link fw-bold text-uppercase" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button">
+                    Available Accounts (<span id="countOut">{{ adaptor_users_not_in_project|length }}</span>)
+                </button>
+            </li>
+        </ul>
+        <div class="btn-group">
+            <a href="{% url 'adaptor_user_create' %}" class="btn btn-primary btn-sm px-3"><i class="bi bi-plus-lg"></i> Create New</a>
+            <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();"><i class="bi bi-arrow-clockwise"></i></button>
         </div>
     </div>
 
-    <div class="card-body">
-        {% if adaptor_users %}
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th style="width: 80px;">ID</th>
-                        <th>User Details</th>
-                        <th>Assigned Roles (by Group)</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for adaptor_user in adaptor_users %}
-                    <tr>
-                        <td class="text-muted small">#{{ adaptor_user.id }}</td>
-                        <td>
-                            <div class="fw-bold">{{ adaptor_user.username }}</div>
-                        </td>
-                        <td>
-                            {% for group in adaptor_user.adaptor_user_groups %}
-                                {% if group.project.id == project.id %}
-                                    <div class="mb-2">
-                                        <span class="badge bg-secondary mb-1">{{ group.name }}</span>
-                                        <div class="d-flex flex-wrap gap-1">
-                                            {% for role in group.roles %}
-                                                <div class="btn-group btn-group-sm" role="group">
-                                                    <span class="btn btn-outline-info btn-sm disabled text-dark" style="opacity: 1;">
-                                                        {{ role }}
-                                                    </span>
-                                                    <form method="post" action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}" style="display:inline;">
-                                                        {% csrf_token %}
-                                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                        <input type="hidden" name="Role" value="{{ role }}">
-                                                        <button type="submit" class="btn btn-danger btn-sm" 
-                                                                onclick="return confirm('Remove role {{ role }} from user {{ adaptor_user.username }}?');"
-                                                                title="Remove role">
-                                                            &times;
-                                                        </button>
-                                                    </form>
-                                                </div>
+    <div class="card-body p-0">
+        <div class="tab-content">
+            <div class="tab-pane fade show active px-3 pb-3" id="in-project-pane" role="tabpanel">
+                <div class="table-responsive">
+                    <table id="tableIn" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                        <thead class="table-light text-muted small text-uppercase">
+                            <tr>
+                                <th class="ps-4" style="width: 80px;">ID</th>
+                                <th>User</th>
+                                <th>Project Roles & Groups</th>
+                                <th class="text-end pe-4">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for adaptor_user in adaptor_users %}
+                            <tr>
+                                <td class="ps-4 text-muted small">#{{ adaptor_user.id }}</td>
+                                <td class="fw-medium text-dark">{{ adaptor_user.username }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center w-100">
+                                        <div class="d-flex flex-wrap gap-2 role-container-{{ adaptor_user.username }}">
+                                            {% for group in adaptor_user.adaptor_user_groups|dictsort:"name" %}
+                                                {% if group.project.id == project.id %}
+                                                    {% for role in group.roles %}
+                                                    <div class="role-badge">
+                                                        <div class="d-flex flex-column flex-grow-1">
+                                                            <span class="role-name">{{ role }}</span>
+                                                            <span class="group-name text-truncate" style="max-width: 150px;">{{ group.name }}</span>
+                                                        </div>
+                                                        <form method="post" action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}" class="ms-2">
+                                                            {% csrf_token %}
+                                                            <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                            <input type="hidden" name="Role" value="{{ role }}">
+                                                            <button type="submit" class="btn-close" style="font-size: 0.5rem;" onclick="return confirm('Remove {{ role }}?');"></button>
+                                                        </form>
+                                                    </div>
+                                                    {% endfor %}
+                                                {% endif %}
                                             {% endfor %}
                                         </div>
+
+                                        <form method="post" action="{% url 'adaptor_user_assign_to_project' adaptor_user.username %}" class="ms-auto ps-3 ajax-assign-form" data-table="in">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                            <input type="hidden" name="role_name_display" class="role-name-display">
+                                            <div class="input-group input-group-sm" style="width: 250px;">
+                                                <select name="role" class="form-select border-secondary-subtle" required>
+                                                <option value="" selected disabled>+ Add Role</option>
+                                                <option value="1" title="HEAppE administrator role with access to the entire system.">Administrator</option>
+                                                <option value="2" title="HEAppE maintainer role for getting information about actual HEAppE status.">Maintainer</option>
+                                                <option value="3" title="Standard user, can submit and check his own jobs.">Submitter</option>
+                                                <option value="4" title="Users with this role car report in assigned groups.">GroupReporter</option>
+                                                <option value="5" title="Users with this role can watch other jobs in the same group.">Reporter</option>
+                                                <option value="6" title="User with this role can create new project and use management API.">ManagementAdmin</option>
+                                                <option value="7" title="User with this role can manage command templates, can submit and check his own jobs.">Manager</option>
+                                            </select>
+                                                <button class="btn btn-success" type="submit">Add</button>
+                                            </div>
+                                        </form>
                                     </div>
-                                {% endif %}
+                                </td>
+                                <td class="text-end pe-4">
+                                    <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="btn btn-sm btn-outline-secondary py-0 px-2">Detail</a>
+                                </td>
+                            </tr>
                             {% endfor %}
-                            
-                            <form method="post" action="{% url 'adaptor_user_assign_to_project' adaptor_user.username %}" class="mt-2 d-flex gap-1">
-                                {% csrf_token %}
-                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                <select name="Role" class="form-select form-select-sm" style="max-width: 150px;" required>
-                                    <option value="" selected disabled hidden>+ Add role...</option>
-                                    <option value="User">User</option>
-                                    <option value="Manager">Manager</option>
-                                    <option value="Admin">Admin</option>
-                                </select>
-                                <button type="submit" class="btn btn-sm btn-outline-success">Add</button>
-                            </form>
-                        </td>
-                        <td class="text-end">
-                            <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="btn btn-sm btn-primary">
-                                <i class="bi bi-person"></i> Full Detail
-                            </a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-pane fade px-3 pb-3" id="available-pane" role="tabpanel">
+                <div class="table-responsive">
+                    <table id="tableOut" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                        <thead class="table-light text-muted small text-uppercase">
+                            <tr>
+                                <th class="ps-4">Username</th>
+                                <th>System ID</th>
+                                <th class="text-end pe-4">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in adaptor_users_not_in_project %}
+                            <tr>
+                                <td class="ps-4 fw-medium">{{ user.username }}</td>
+                                <td class="text-muted small">#{{ user.id }}</td>
+                                <td class="text-end pe-4">
+                                    <form method="post" action="{% url 'adaptor_user_assign_to_project' user.username %}" class="d-inline-block ajax-assign-form" data-table="out">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                        <input type="hidden" name="role_name_display" class="role-name-display">
+                                        <div class="input-group input-group-sm" style="width: 260px;">
+                                            <select name="role" class="form-select border-secondary-subtle" required>
+                                                <option value="" selected disabled>+ Add Role</option>
+                                                <option value="1" title="HEAppE administrator role with access to the entire system.">Administrator</option>
+                                                <option value="2" title="HEAppE maintainer role for getting information about actual HEAppE status.">Maintainer</option>
+                                                <option value="3" title="Standard user, can submit and check his own jobs.">Submitter</option>
+                                                <option value="4" title="Users with this role car report in assigned groups.">GroupReporter</option>
+                                                <option value="5" title="Users with this role can watch other jobs in the same group.">Reporter</option>
+                                                <option value="6" title="User with this role can create new project and use management API.">ManagementAdmin</option>
+                                                <option value="7" title="User with this role can manage command templates, can submit and check his own jobs.">Manager</option>
+                                            </select>
+                                            <button type="submit" class="btn btn-primary">Add to Project</button>
+                                        </div>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-        {% else %}
-        <div class="text-center py-4">
-            <p class="text-muted mb-0">No service accounts assigned for the project <strong>{{ project.name }}</strong>.</p>
-        </div>
-        {% endif %}
     </div>
 </div>
+
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+    $(document).ready(function() {
+        const t1 = $('#tableIn').DataTable({ pageLength: 10, language: {search: ""}, autoWidth: false });
+        const t2 = $('#tableOut').DataTable({ pageLength: 10, language: {search: ""}, autoWidth: false });
+
+        $(document).on('submit', '.ajax-assign-form', function(e) {
+            e.preventDefault();
+            const $form = $(this);
+            const $btn = $form.find('button');
+            const tableType = $form.data('table');
+            const selectedOption = $form.find('select[name="role"] option:selected');
+            const roleText = selectedOption.text();
+
+            $form.find('.role-name-display').val(roleText);
+            const $row = $form.closest('tr');
+            const username = tableType === 'in' ? $row.find('td:eq(1)').text().trim() : $row.find('td:eq(0)').text().trim();
+
+            $btn.prop('disabled', true).prepend('<span class="spinner-border spinner-border-sm me-1"></span>');
+
+            fetch($form.attr('action'), {
+                method: 'POST',
+                body: new FormData(this),
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            })
+            .then(res => {
+                if (!res.ok) return res.json().then(d => { throw new Error(d.message || 'Error') });
+                return res.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    if (tableType === 'out') {
+                        const sysId = $row.find('td:eq(1)').text();
+                        t2.row($row).remove().draw();
+                        const node = t1.row.add([
+                            sysId,
+                            `<span class="fw-medium text-dark">${username}</span>`,
+                            `<div class="d-flex align-items-center w-100"><div class="d-flex flex-wrap gap-2 role-container-${username}"><div class="role-badge"><div class="d-flex flex-column"><span class="role-name">${data.role_name}</span><span class="group-name">Project Group</span></div></div></div></div>`,
+                            `<div class="text-end pe-4"><a href="/adaptor_users/detail/${username}/" class="btn btn-sm btn-outline-secondary py-0 px-2">Detail</a></div>`
+                        ]).draw().node();
+                        $(node).addClass('table-success-fade');
+                    } else {
+                        const badge = `<div class="role-badge"><div class="d-flex flex-column"><span class="role-name">${data.role_name}</span><span class="group-name">Project Group</span></div></div>`;
+                        $(`.role-container-${username}`).append(badge);
+                    }
+                }
+            })
+            .catch(err => alert(err.message))
+            .finally(() => {
+                $btn.prop('disabled', false).find('.spinner-border').remove();
+                $('#countIn').text(t1.rows().count());
+                $('#countOut').text(t2.rows().count());
+            });
+        });
+
+        $('button[data-bs-toggle="tab"]').on('shown.bs.tab', () => { t1.columns.adjust(); t2.columns.adjust(); });
+    });
+</script>
