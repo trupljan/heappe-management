@@ -38,14 +38,23 @@
           <input type="hidden" name="Id" value="{{ command_template.Id|default:0 }}">
           <input type="hidden" name="ProjectId" value="{{ project_id }}">
           <div class="row g-3">
+          {% if command_template %}
             <div class="col-md-3">
               <label class="form-label">Id</label>
               <input type="number" class="form-control" name="Id" value="{{ command_template.id|default:0 }}" readonly disabled>
             </div>
+          {% endif %}
+          {% if command_template %}
             <div class="col-md-9">
               <label class="form-label">Name</label>
               <input type="text" class="form-control" name="Name" value="{{ command_template.name|default:'' }}" required>
             </div>
+            {% else %}
+            <div class="col-md-12">
+              <label class="form-label">Name</label>
+              <input type="text" class="form-control" name="Name" value="{{ command_template.name|default:'' }}" required>
+            </div>
+            {% endif %}
             <div class="col-md-6">
               <label class="form-label">Description</label>
               <input type="text" class="form-control" name="Description" value="{{ command_template.description|default:'' }}">
@@ -54,6 +63,14 @@
               <label class="form-label">Extended Allocation Command</label>
               <input type="text" class="form-control" name="ExtendedAllocationCommand" value="{{ command_template.extended_allocation_command|default:'' }}">
             </div>
+          {% if v620_check %}
+                {% if project %}
+                    <div class="col-md-6">
+                        <label class="form-label">KeyScripts Directory Path</label>
+                        <input type="email" class="form-control" name="KeyScriptsDirectoryPath" readonly disabled value="{{ project.key_scripts_directory_path|default:'' }}">
+                    </div>
+                {% endif %}
+            {% endif %}
             <div class="col-md-6">
               <label class="form-label">Executable File</label>
               <input type="text" class="form-control" name="ExecutableFile" value="{{ command_template.executable_file|default:'' }}">
@@ -62,7 +79,7 @@
               <label class="form-label">Preparation Script</label>
               <input type="text" class="form-control" name="PreparationScript" value="{{ command_template.preparation_script|default:'' }}">
             </div>
-            <div class="col-md-6">
+            <div class="col-md-12">
               <label class="form-label">Command Parameters</label>
               <input type="text" class="form-control" name="CommandParameters" value="{{ command_template.command_parameters|default:'' }}" disabled readonly>
             </div>
@@ -72,12 +89,14 @@
                 <label class="form-check-label">Is Generic</label>
               </div>
             </div>
+          {% if command_template %}
             <div class="col-md-3 d-flex align-items-center">
               <div class="form-check mt-2">
                 <input class="form-check-input" type="checkbox" name="IsEnabled" {% if command_template.is_enabled %}checked{% endif %}>
                 <label class="form-check-label">Is Enabled</label>
               </div>
             </div>
+            {% endif %}
             <div class="col-md-3">
               <label class="form-label">Cluster Node Type</label>
               <select class="form-control" name="ClusterNodeTypeId">

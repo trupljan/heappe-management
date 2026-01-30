@@ -84,6 +84,15 @@
                            {% if project %}readonly disabled{% endif %}>
                 </div>
 
+            {% if v620_check %}
+                {% if project %}
+                    <div class="col-md-6">
+                        <label class="form-label">KeyScripts Directory Path</label>
+                        <input type="email" class="form-control" name="KeyScriptsDirectoryPath" readonly disabled value="{{ project.key_scripts_directory_path|default:'' }}">
+                    </div>
+                {% endif %}
+            {% endif %}
+
                 <div class="col-12">
                     <label class="form-label">Description</label>
                     <textarea class="form-control" name="Description" rows="3">{{ project.description|default:'' }}</textarea>
@@ -193,7 +202,7 @@
                             <tr>
                                 <th scope="col">Cluster Name</th>
                                 <th scope="col">Scratch Storage Path</th>
-                                <th scope="col">Permanent Storage Path</th>
+                                <th scope="col">Project Storage Path</th>
                                 <th scope="col">Action</th>
                             </tr>
                         </thead>
@@ -401,6 +410,8 @@
 </form>
 
 <!-- Change Username & Password -->
+
+{% if v610_check %}
 <form class="mb-2">
     <button type="button"
             class="btn btn-sm btn-dark w-100"
@@ -410,6 +421,7 @@
         Change Username & Password
     </button>
 </form>
+{% endif %}
 
 <!-- Initialize HPC Account -->
 <form method="post" class="mb-2">

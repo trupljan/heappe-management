@@ -1050,3 +1050,21 @@ def process_and_add(entries_list, stats, raw, file_name, features, search, f_ses
 
     entries_list.append(entry)
     stats[entry['level']] = stats.get(entry['level'], 0) + 1
+
+@login_required
+def heappe_check_api(request, min_version):
+    try:
+        controller = hp.HealthApi(request.api_instance)
+        health_info = controller.heappe_health_get()
+        current_version = health_info.version.lstrip("vV")
+
+        is_ok = current_version >= min_version
+
+        return JsonResponse({
+            "status": "success" if is_ok else "version_mismatch",
+            "current_version": current_version,
+            "required_version": min_version,
+            "message": "OK" if is_ok else f"Version {current_version} is less than required {min_version} for that feature."
+        })
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
