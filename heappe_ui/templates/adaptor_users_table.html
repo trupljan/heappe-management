@@ -1,56 +1,87 @@
 <div class="card mb-4 w-75 mx-auto shadow-sm">
-      <div class="card-header d-flex align-items-center">
-          <strong>Service Accounts</strong>
-             <div class="ms-auto">
-                <a href="{% url 'adaptor_user_create' %}" class="btn btn-sm btn-primary me-2">Add New</a>
-                <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
-             </div>
-      </div>
-
-      <div class="card-body">
-       {% if adaptor_users %}
-        <div class="table-responsive">
-            <table class="table table-striped mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th scope="col">ID</th>
-                        <th scope="col">Username</th>
-                        <th scope="col">Group (ID) and Role</th>
-                        <th scope="col">Actions</th>
-                    </tr>
-                    {% for adaptor_user in adaptor_users %}
-                        {% for group in adaptor_user.adaptor_user_groups %}
-                            {% if group.project.id == project.id %}
-                                {% for role in group.roles %}
-                                    <tr>
-                                        <td>{{ adaptor_user.id }}</td>
-                                        <td>{{ adaptor_user.username }}</td>
-                                        <td>
-                                            <strong>{{ group.name }} ({{ group.id }}):</strong> {{ role }}
-                                        </td>
-                                        <td>
-                                            <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="btn btn-sm btn-primary">Detail</a>
-                                            <form method="post" action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}" style="display:inline;">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                <input type="hidden" name="Role" value="{{ role }}">
-                                                <button type="submit" class="btn btn-sm btn-danger"
-                                                        onclick="return confirm('Are you sure you want to unassign this adaptor user?');">
-                                                    Unassign
-                                                </button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            {% endif %}
-                        {% endfor %}
-                    {% endfor %}
-                </thead>
-            </table>
-      </div>
-        {% else %}
-            <p class="mb-0">No service accounts assigned for the project {{project.name}}.</p>
-        {% endif %}
+    <div class="card-header d-flex align-items-center">
+        <strong>Service Accounts Management</strong>
+        <div class="ms-auto">
+            <a href="{% url 'adaptor_user_create' %}" class="btn btn-sm btn-primary me-2">Create New User</a>
+            <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">
+                <i class="bi bi-arrow-clockwise"></i> Reload
+            </button>
+        </div>
     </div>
 
+    <div class="card-body">
+        {% if adaptor_users %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 80px;">ID</th>
+                        <th>User Details</th>
+                        <th>Assigned Roles (by Group)</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for adaptor_user in adaptor_users %}
+                    <tr>
+                        <td class="text-muted small">#{{ adaptor_user.id }}</td>
+                        <td>
+                            <div class="fw-bold">{{ adaptor_user.username }}</div>
+                        </td>
+                        <td>
+                            {% for group in adaptor_user.adaptor_user_groups %}
+                                {% if group.project.id == project.id %}
+                                    <div class="mb-2">
+                                        <span class="badge bg-secondary mb-1">{{ group.name }}</span>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            {% for role in group.roles %}
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <span class="btn btn-outline-info btn-sm disabled text-dark" style="opacity: 1;">
+                                                        {{ role }}
+                                                    </span>
+                                                    <form method="post" action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}" style="display:inline;">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                        <input type="hidden" name="Role" value="{{ role }}">
+                                                        <button type="submit" class="btn btn-danger btn-sm" 
+                                                                onclick="return confirm('Remove role {{ role }} from user {{ adaptor_user.username }}?');"
+                                                                title="Remove role">
+                                                            &times;
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            <form method="post" action="{% url 'adaptor_user_assign_to_project' adaptor_user.username %}" class="mt-2 d-flex gap-1">
+                                {% csrf_token %}
+                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                <select name="Role" class="form-select form-select-sm" style="max-width: 150px;" required>
+                                    <option value="" selected disabled hidden>+ Add role...</option>
+                                    <option value="User">User</option>
+                                    <option value="Manager">Manager</option>
+                                    <option value="Admin">Admin</option>
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-outline-success">Add</button>
+                            </form>
+                        </td>
+                        <td class="text-end">
+                            <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-person"></i> Full Detail
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+            <p class="text-muted mb-0">No service accounts assigned for the project <strong>{{ project.name }}</strong>.</p>
+        </div>
+        {% endif %}
+    </div>
 </div>
