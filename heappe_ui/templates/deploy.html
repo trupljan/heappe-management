@@ -270,8 +270,8 @@ $(document).ready(function() {
         const modal = bootstrap.Modal.getInstance(document.getElementById('deployUpdateModal'));
         if (modal) modal.hide();
 
-        const title = action === 'deploy' ? "Nasazování instance..." : "Aktualizace instance...";
-        showLoading(title, "To může trvat 2-5 minut. Prosím nezavírejte okno.");
+        const title = action === 'deploy' ? "Instance is being deployed..." : "Instance is being updated...";
+        showLoading(title, "It may take a few minutes. The page will refresh automatically.");
 
         $.ajax({
             url: window.location.href,
