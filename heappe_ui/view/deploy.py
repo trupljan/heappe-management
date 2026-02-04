@@ -461,8 +461,12 @@ def initialize_database(
                         InstanceVersion NVARCHAR(10) NOT NULL,
                         LevelId INT NOT NULL REFERENCES dbo.LoggingLevelType(Id) ON DELETE CASCADE,
                         Date DATETIME2 NOT NULL,
+                        UserId INT NULL,
+                        UserName NVARCHAR(30) NULL,
+                        UserEmail NVARCHAR(50) NULL,
+                        JobId INT NULL,
                         Message NVARCHAR(1000) NOT NULL,
-                        Exception NVARCHAR(255),
+                        Exception NVARCHAR(MAX),
                         Class NVARCHAR(255)
                     );
                     CREATE INDEX IX_Log_LevelId ON dbo.Log(LevelId);
