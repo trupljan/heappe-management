@@ -9,14 +9,17 @@ import subprocess
 import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
-
-def get_free_port_safe():
-    """Helper function to safely allocate a free port (placeholder implementation)."""
-    import socket
-    s = socket.socket()
-    s.bind(('', 0))
-    port = s.getsockname()[1]
-    return port, s
+import socket
+def get_port_starting_at(start_port):
+    port = start_port
+    while True:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            s.bind(('', port))
+            return port, s
+        except socket.error:
+            s.close()
+            port += 1
 
 import subprocess
 
@@ -603,10 +606,10 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
             compose_dir = os.path.join(base_path, instance_name, "heappe-core")
 
             if action == 'deploy':
-                mssql_port, s1 = get_free_port_safe()
-                app_port, s2 = get_free_port_safe()
-                data_staging_port, s3 = get_free_port_safe()
-                local_port, s4 = get_free_port_safe()
+                app_port, s2 = get_port_starting_at(start_port=5000)
+                data_staging_port, s3 = get_port_starting_at(start_port=5001)
+                mssql_port, s1 = get_port_starting_at(start_port=6000)
+                local_port, s4 =  get_port_starting_at(start_port=49005)
                 ports = {
                     "mssql_port": mssql_port,
                     "app_port": app_port,
