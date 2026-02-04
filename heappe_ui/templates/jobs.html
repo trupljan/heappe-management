@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+
+    <div class="container">
+        <div class="card mb-4 w-90 mx-auto shadow-sm p-0">
+            <div class="card-header d-flex align-items-center">
+                <strong>Available Jobs</strong>
+                <div class="ms-auto d-flex align-items-center">
+                    <a href="{% url 'job_create' %}" class="btn btn-sm btn-primary me-2">Add New</a>
+                    <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
+                </div>
+            </div>
+            <div class="">
+                {% if jobs %}
+                    <div class="table-responsive">
+                        <table class="table table-striped mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Job ID</th>
+                                    <th scope="col">Cluster</th>
+                                    <th scope="col">User</th>
+                                    <th scope="col">Status</th>
+                                    <th scope="col">Submission Time</th>
+                                    <th scope="col">Start Time</th>
+                                    <th scope="col">End Time</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            
+                            

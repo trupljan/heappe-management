@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}Logs Dashboard{% endblock %}
+
+{% block content %}
+<div class="w-full min-h-screen p-4 bg-gray-50">
+    <div class="flex justify-between items-center mb-4">
+        <h1 class="text-3xl font-bold text-gray-900 text-center">System Logs Dashboard</h1>
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="viewToggle">
+            <label class="form-check-label" for="viewToggle">Show Database Config</label>
+        </div>
+    </div>
+
+    <!-- Display Database Connection Error -->
+    {% if error %}
+    <div class="bg-red-100 text-red-800 p-4 rounded-md mb-4">
+        <strong>Error:</strong> {{ error }}<br>
+        Please update the database configuration to resolve the issue.
+    </div>
+    {% endif %}
+
+    <!-- Logs Dashboard -->
+    <div id="logsDashboard" class="view-content" {% if error %}style="display: none;"{% endif %}>
+        <!-- Filters Panel -->
+        <div class="bg-white rounded-lg p-4 mb-6 shadow-md hover:shadow-lg transition-all duration-300 w-full">
+            <form method="get" id="logsFilterForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end w-full">
+                <div>
+                    <label for="date_from" class="block text-sm font-medium text-gray-700">From</label>
+<input type="datetime-local" name="date_from" id="date_from" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50"
+       value="{{ request.GET.date_from|default:default_date_from }}">
+                </div>
+                <div>
+                    <label for="date_to" class="block text-sm font-medium text-gray-700">To</label>
+                    <input type="datetime-local" name="date_to" id="date_to" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ request.GET.date_to }}">
+                </div>
+                <div>
+                    <label for="level" class="block text-sm font-medium text-gray-700">Level</label>
+                    <select name="level" id="level" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50">
+                        <option value="">All Levels</option>
+                        {% for lvl in levels %}
+                        <option value="{{ lvl.Id }}" {% if request.GET.level == lvl.Id|stringformat:"s" %}selected{% endif %}>{{ lvl.Name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label for="search" class="block text-sm font-medium text-gray-700">Search</label>
+                    <input type="text" name="search" id="search" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" placeholder="Message / Class" value="{{ request.GET.search }}">
+                </div>
+                <div class="flex space-x-2">
+                    <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium">Filter</button>
+                    <a href="{% url 'logs' %}" class="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors text-sm font-medium">Reset</a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Summary Cards + Circular Countdown -->
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6 w-full items-center">
+            <!-- Summary Cards -->
+            <div class="col-span-4">
+                <div class="grid grid-cols-1 sm:grid-cols-5 gap-4">
+                    <div class="bg-gray-200 rounded-lg shadow p-6 text-center">
+                        <h6 class="text-sm font-semibold text-gray-800">Debug</h6>
+                        <p class="text-3xl font-bold text-gray-700" id="debugCount">{{ debug_count }}</p>
+                    </div>
+                    <div class="bg-blue-100 rounded-lg shadow p-6 text-center">
+                        <h6 class="text-sm font-semibold text-blue-800">Info</h6>
+                        <p class="text-3xl font-bold text-blue-900" id="infoCount">{{ info_count }}</p>
+                    </div>
+                    <div class="bg-yellow-100 rounded-lg shadow p-6 text-center">
+                        <h6 class="text-sm font-semibold text-yellow-800">Warning</h6>
+                        <p class="text-3xl font-bold text-yellow-900" id="warningCount">{{ warning_count }}</p>
+                    </div>
+                    <div class="bg-red-100 rounded-lg shadow p-6 text-center">
+                        <h6 class="text-sm font-semibold text-red-800">Error</h6>
+                        <p class="text-3xl font-bold text-red-900" id="errorCount">{{ error_count }}</p>
+                    </div>
+                    <div class="bg-gray-800 rounded-lg shadow p-6 text-center">
+                        <h6 class="text-sm font-semibold text-white">Critical</h6>
+                        <p class="text-3xl font-bold text-white" id="criticalCount">{{ critical_count }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Circular Countdown -->
+            <div class="d-flex flex-column align-items-center col-span-1">
+                <svg class="w-20 h-20 mb-3" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="16" stroke="#E5E7EB" stroke-width="4" fill="none" />
+                    <circle id="progressCircle" cx="18" cy="18" r="16" stroke="#0d6efd" stroke-width="4" fill="none"
+                            stroke-dasharray="100" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 18 18)" />
+                    <text id="countdownNumber" x="18" y="22" text-anchor="middle" font-size="10" fill="#1F2937" font-weight="bold">15</text>
+                </svg>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                    <label class="form-check-label" for="autoRefresh">Auto Refresh</label>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-4 lg:col-span-4 h-64">
+            <h6 class="text-lg font-semibold text-gray-800 mb-2">Log Trends</h6>
+            <canvas id="logsChart" class="h-full w-full"></canvas>
+        </div>
+        </br>
+
+        <!-- Logs Table -->
+        <div class="bg-white rounded-lg shadow-md p-4 w-full overflow-x-auto">
+            <h6 class="text-lg font-semibold text-gray-800 mb-4">System Logs</h6>
+            <table class="min-w-full divide-y divide-gray-200" id="logsTable">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exception</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instance</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for log in logs %}
+                    <tr class="hover:bg-gray-50 transition-colors">
+                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.Date|date:"d.m.Y H:i:s" }}</td>
+                        <td class="px-4 py-2 text-sm">
+                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                                {% if log.LevelName == 'Debug' %}bg-gray-200 text-gray-800
+                                {% elif log.LevelName == 'Information' %}bg-blue-100 text-blue-800
+                                {% elif log.LevelName == 'Warning' %}bg-yellow-100 text-yellow-800
+                                {% elif log.LevelName == 'Error' %}bg-red-100 text-red-800
+                                {% elif log.LevelName == 'Critical' %}bg-gray-800 text-white
+                                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ log.LevelName }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.Message }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.Exception|default:"-" }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.InstanceName }} ({{ log.InstanceVersion }})</td>
+                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.Class }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.IP }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-2 text-sm text-gray-500 text-center">No logs found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <!-- Bootstrap 5 Pagination -->
+            {% if logs.has_other_pages %}
+            <div class="mt-4 flex justify-center">
+                <nav aria-label="Logs pagination">
+                    <ul class="pagination">
+                        <!-- Previous Button -->
+                        <li class="page-item {% if not logs.has_previous %}disabled{% endif %}">
+                            <a class="page-link" href="{% if logs.has_previous %}?page={{ logs.previous_page_number }}{% else %}#{% endif %}" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        <!-- Page Numbers -->
+                        {% for num in logs.paginator.page_range %}
+                            {% if num|add:"-2" <= logs.number and num|add:"2" >= logs.number or num == 1 or num == logs.paginator.num_pages %}
+                                <li class="page-item {% if logs.number == num %}active{% endif %}">
+                                    <a class="page-link" href="?page={{ num }}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}{% if request.GET.level %}&level={{ request.GET.level }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">{{ num }}</a>
+                                </li>
+                            {% elif num|add:"-3" == logs.number or num|add:"3" == logs.number %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">...</span>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        <!-- Next Button -->
+                        <li class="page-item {% if not logs.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{% if logs.has_next %}?page={{ logs.next_page_number }}{% else %}#{% endif %}" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Database Configuration Form -->
+    <div id="dbConfig" class="view-content hidden">
+        <div class="bg-white rounded-lg p-6 mb-6 shadow-md hover:shadow-lg transition-all duration-300 w-full max-w-lg mx-auto">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">Database Configuration</h2>
+            <form method="post" action="{% url 'logs' %}" class="grid grid-cols-1 gap-4">
+                {% csrf_token %}
+                <input type="hidden" name="config_submit" value="1">
+                <div>
+                    <label for="server" class="block text-sm font-medium text-gray-700">Server</label>
+                    <input type="text" name="server" id="server" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_server|default:'localhost' }}" required>
+                </div>
+                <div>
+                    <label for="port" class="block text-sm font-medium text-gray-700">Port</label>
+                    <input type="number" name="port" id="port" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_port|default:'6000' }}" required>
+                </div>
+                <div>
+                    <label for="user" class="block text-sm font-medium text-gray-700">User</label>
+                    <input type="text" name="user" id="user" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_user|default:'heappe-monitoring' }}" required>
+                </div>
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" name="password" id="password" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_password }}">
+                </div>
+                <div>
+                    <label for="database" class="block text-sm font-medium text-gray-700">Database</label>
+                    <input type="text" name="database" id="database" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_database|default:'heappe-monitoring' }}" required>
+                </div>
+                <div class="flex space-x-2">
+                    <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium">Save</button>
+                    <button type="button" id="cancelConfig" class="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors text-sm font-medium">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <script>
+    let logsChart;
+    function initChart() {
+        const ctx = document.getElementById('logsChart').getContext('2d');
+        logsChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: {{ chart_dates|safe }},
+                datasets: [
+                    { label: 'Errors', data: {{ chart_errors|safe }}, borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.2)', tension: 0.3, fill: true },
+                    { label: 'Warnings', data: {{ chart_warnings|safe }}, borderColor: '#F59E0B', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.3, fill: true },
+                    { label: 'Info', data: {{ chart_info|safe }}, borderColor: '#3B82F6', backgroundColor: 'rgba(59,130,246,0.2)', tension: 0.3, fill: true },
+                    { label: 'Debug', data: {{ chart_debug|safe }}, borderColor: '#6B7280', backgroundColor: 'rgba(107,114,128,0.2)', tension: 0.3, fill: true },
+                    { label: 'Critical', data: {{ chart_critical|safe }}, borderColor: '#9B7283', backgroundColor: 'rgba(107,114,128,0.2)', tension: 0.3, fill: true }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 20, padding: 15, font: { size: 12 } } },
+                    tooltip: { mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)', padding: 10 }
+                },
+                scales: {
+                    x: { title: { display: true, text: 'Date', font: { size: 12 } }, grid: { display: false } },
+                    y: { title: { display: true, text: 'Count', font: { size: 12 } }, beginAtZero: true, grid: { color: '#E5E7EB' } }
+                },
+                interaction: { mode: 'index', intersect: false }
+            }
+        });
+    }
+
+    // Initialize chart only if logs dashboard is visible and no error
+    if (!document.getElementById('viewToggle').checked && !{{ error|yesno:"true,false" }}) {
+        initChart();
+    }
+
+    // Circular countdown and auto-reload
+    let reloadInterval = 15000;
+    let countdown = reloadInterval;
+    const circle = document.getElementById('progressCircle');
+    const number = document.getElementById('countdownNumber');
+    const autoRefreshCheckbox = document.getElementById('autoRefresh');
+    let autoRefresh = autoRefreshCheckbox.checked;
+
+    autoRefreshCheckbox.addEventListener('change', () => {
+        autoRefresh = autoRefreshCheckbox.checked;
+    });
+
+    // Update countdown circle
+    function updateCircle() {
+        if (!autoRefresh || document.getElementById('viewToggle').checked || {{ error|yesno:"true,false" }}) return;
+        countdown -= 100;
+        if (countdown < 0) countdown = 0;
+        const percent = (countdown / reloadInterval) * 100;
+        circle.setAttribute('stroke-dashoffset', 100 - percent);
+        number.textContent = Math.ceil(countdown / 1000);
+    }
+
+    // Reload logs
+    function reloadLogs() {
+        if (!autoRefresh || document.getElementById('viewToggle').checked || {{ error|yesno:"true,false" }}) return;
+        $.get("{% url 'logs' %}", $("#logsFilterForm").serialize(), function(data) {
+            $("#logsTable tbody").html($(data).find("#logsTable tbody").html());
+            $("#errorCount").text($(data).find("#errorCount").text());
+            $("#warningCount").text($(data).find("#warningCount").text());
+            $("#infoCount").text($(data).find("#infoCount").text());
+            $("#debugCount").text($(data).find("#debugCount").text());
+            $("#criticalCount").text($(data).find("#criticalCount").text());
+
+            // Aktualizace grafu
+            logsChart.data.labels = {{ chart_dates|safe }};
+            logsChart.data.datasets[0].data = {{ chart_errors|safe }};
+            logsChart.data.datasets[1].data = {{ chart_warnings|safe }};
+            logsChart.data.datasets[2].data = {{ chart_info|safe }};
+            logsChart.data.datasets[3].data = {{ chart_debug|safe }};
+            logsChart.data.datasets[4].data = {{ chart_critical|safe }};
+            logsChart.update();
+
+            countdown = reloadInterval;
+        });
+    }
+
+    // Interval pro countdown a reload
+    setInterval(updateCircle, 100);
+    setInterval(reloadLogs, reloadInterval);
+
+    // Toggle between logs dashboard and db config
+    const viewToggle = document.getElementById('viewToggle');
+    const logsDashboard = document.getElementById('logsDashboard');
+    const dbConfig = document.getElementById('dbConfig');
+    const cancelConfig = document.getElementById('cancelConfig');
+
+    viewToggle.addEventListener('change', () => {
+        if (viewToggle.checked) {
+            logsDashboard.classList.add('hidden');
+            dbConfig.classList.remove('hidden');
+            if (logsChart) {
+                logsChart.destroy(); // Destroy chart to prevent memory leaks
+            }
+        } else {
+            dbConfig.classList.add('hidden');
+            logsDashboard.classList.remove('hidden');
+            if (!{{ error|yesno:"true,false" }}) {
+                initChart(); // Re-initialize chart only if no error
+            }
+        }
+    });
+
+    cancelConfig.addEventListener('click', () => {
+        viewToggle.checked = false;
+        dbConfig.classList.add('hidden');
+        logsDashboard.classList.remove('hidden');
+        if (!{{ error|yesno:"true,false" }}) {
+            initChart();
+        }
+    });
+    </script>
+</div>
+{% endblock %}

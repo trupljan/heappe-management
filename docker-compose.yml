@@ -1,0 +1,16 @@
+version: '3.9'
+
+services:
+  web:
+    container_name: heappe_admin_app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - /opt/heappe/:/opt/heappe/
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}HEAppE Profile{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">HEAppE Profile</h5>
+                </div>
+                <div class="card-body">
+                    {% if user.is_authenticated %}
+                        <p><strong>Username:</strong> {{ user.username }}</p>
+                        <p><strong>HEAppE Host:</strong> {{ request.session.heappe_host }}</p>
+                        <p>
+                            <strong>Session Code:</strong>
+                            <button id="toggle-session" class="btn btn-sm btn-outline-secondary">
+                                🔒 Show
+                            </button>
+                            <span id="session-code" style="display:none;">{{ request.session.heappe_session_code }}</span>
+                        </p>
+                        <p><strong>Last Auth:</strong>
+                            {% if last_auth %}
+                                {{ last_auth | date:"d.m.Y H:i:s" }} UTC
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </p>
+
+
+                        <hr>
+
+
+                        {% if user.is_superuser %}
+                            <div class="mt-4 p-3 border border-danger rounded">
+                                <h6 class="text-danger mb-3">SERVER MAINTENANCE (Admin Only)</h6>
+
+                                <a href="{% url 'update_server_page' %}" class="btn btn-danger w-100 mb-2">
+                                    Update Application
+                                </a>
+                            </div>
+                            <hr>
+                        {% endif %}
+                        {# -------------------------------------------------------- #}
+
+                        <form method="post" action="{% url 'logout' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-danger w-100">Logout</button>
+                        </form>
+                    {% else %}
+                        <p class="text-danger">You are not logged in.</p>
+                        <a href="{% url 'login' %}" class="btn btn-primary">Login</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const toggleButton = document.getElementById("toggle-session");
+    const sessionCodeSpan = document.getElementById("session-code");
+
+    // Logika pro zobrazení/skrytí Session Code
+    toggleButton.addEventListener("click", function() {
+        if (sessionCodeSpan.style.display === "none") {
+            sessionCodeSpan.style.display = "inline";
+            toggleButton.textContent = "🔓 Hide";
+        } else {
+            sessionCodeSpan.style.display = "none";
+            toggleButton.textContent = "🔒 Show";
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="container">
+    <div class="card mb-4 w-90 mx-auto shadow-sm p-0">
+        <div class="card-header d-flex align-items-center">
+            <strong>Queue Groups</strong>
+            <div class="ms-auto d-flex align-items-center">
+            <a href="{% url 'queue_group_create' %}" class="btn btn-sm btn-success me-2">New Queue Group</a>
+                {% if queue_groups %}
+                    <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#assignQueueGroupModal">Assign Queue Group</button>
+                    
+                {% endif %}
+                <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+                {% if queue_groups %}
+                    <div class="table-responsive">
+                        <table class="table table-striped mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th scope="col">ID</th>
+                                    <th scope="col">Name</th>
+                                    <th scope="col">Description</th>
+                                    <th scope="col">Allocation Type</th>
+                                    <th scope="col">Validity From</th>
+                                    <th scope="col">Validity To</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for queue_group in queue_groups %}
+                                <tr>
+                                    <td>{{ queue_group.id }}</td>
+                                    <td>{{ queue_group.name }}</td>
+                                    <td>{{ queue_group.description }}</td>
+                                    <td>{{ queue_group.allocation_type }}</td>
+                                    <td>{{ queue_group.validity_from }}</td>
+                                    <td>{{ queue_group.validity_to }}</td>
+                                    <td>
+                                        <a href="{% url 'queue_group_detail' queue_group.id %}" class="btn btn-sm btn-primary me-1">Detail</a>
+                                        <form action="{% url 'queue_groups' %}" method="post" style="display:inline;">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="delete_queue_group">
+                                            <input type="hidden" name="QueueGroupId" value="{{ queue_group.id }}">
+                                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this queue group?');">Delete</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="mb-0 p-3 text-center">No queue groups available.</p>
+                {% endif %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
