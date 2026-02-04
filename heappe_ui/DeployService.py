@@ -350,6 +350,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             version=version
         )
 
+        print(f"Generated appsettings: {appsettings}")
+
         output_dir = os.path.join(self.config.base_path, instance_name, "app", "confs")
         output_path_app = os.path.join(output_dir, "appsettings.json")
         output_path_staging = os.path.join(output_dir, "appsettings-data.json")
@@ -373,6 +375,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             results['appsettings'] = appsettings
         except OSError as e:
             self.logger.error(f"Failed to generate appsettings.json file: {e}")
+            print(f"Failed to generate appsettings.json file: {e}")
             raise RuntimeError(f"appsettings.json file generation failed: {e}")
 
         # Handle appsettings-data.json
