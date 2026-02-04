@@ -10,6 +10,10 @@ import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
 import socket
+
+from ..models import InstanceCredentials
+
+
 def get_port_with_fallback(start_port=8080, max_tries=100):
     """
     Zkusí port start_port. Pokud je obsazený, zkusí start_port + 1 atd.
@@ -651,7 +655,7 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                         'status': 'success',
                         'message': action_message,
                         'instance_name': instance_name,
-                        'redirect_url': f'/deploy/{instance_name}/'  # <-- CRITICAL: Tells JS where to go
+                        'redirect_url': f'/management/deploy/{instance_name}/'  # <-- CRITICAL: Tells JS where to go
                     })
 
             elif action == "update":
