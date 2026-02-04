@@ -94,7 +94,7 @@ def adaptor_user_update(request: HttpRequest, adaptor_user_username: str) -> Htt
         )
         if result and result.get("ApiKey"):
             messages.info(request, 
-                          f"{result.get("ApiKey")}",
+                          f'{result.get("ApiKey")}',
                           extra_tags=f"adaptor-user-api-key"
                           )
         if result:
