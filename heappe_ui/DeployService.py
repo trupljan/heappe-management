@@ -164,8 +164,8 @@ HOST_DATA_STAGING_PORT={ports['data_staging_port']}
 HOST_DATA_STAGING_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
 HOST_DATA_STAGING_CONTAINER_MAP_FOLD_PATH=/opt/heappe
 
-DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database
-DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database/logs
+DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/backups/database
+DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/backups/database/logs
 
 # Only for Local Cluster mode
 HOST_LOCAL_NAME=localhpc-{instance_name}
@@ -319,6 +319,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         version = version or self.config.default_version
         deployed_ip = deployed_ip or self.config.default_ip
 
+        print(f"Generating appsettings for version: {version}")
+
         if version.startswith("V6.0."):
             app_fn = generate_appsettings_v6_0_0
             data_fn = generate_appsettings_data_staging_v6_0_0
@@ -328,6 +330,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         elif version.startswith("V6.2."):
             app_fn = generate_appsettings_v6_2_0
             data_fn = generate_appsettings_data_staging_v6_2_0
+        else:
+            raise ValueError(f"Unsupported version: {version}")
 
         appsettings = app_fn(
             instance_name=instance_name,
