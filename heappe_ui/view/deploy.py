@@ -532,7 +532,7 @@ def run_with_retries(instance_name, ports, password):
 
     if attempt > max_attempts:
         print("Max attempts reached. Database initialization failed.")
-        raise Exception("Failed to initialize database after maximum retries.")
+        #raise Exception("Failed to initialize database after maximum retries.")
 
 
 def get_remote_tags(repo_url: str) -> list[str]:
