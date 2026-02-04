@@ -10,16 +10,23 @@ import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
 import socket
-def get_port_starting_at(start_port):
-    port = start_port
-    while True:
+def get_port_with_fallback(start_port=8080, max_tries=100):
+    """
+    Zkusí port start_port. Pokud je obsazený, zkusí start_port + 1 atd.
+    """
+    for port in range(start_port, start_port + max_tries):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
+            print(f"Checking port {port}...")
             s.bind(('', port))
+            print(f"Port {port} is free.")
             return port, s
-        except socket.error:
+        except OSError:
+            print(f"Port {port} is in use, trying next port...")
             s.close()
-            port += 1
+            continue
+
+    raise OSError(f"Nepodařilo se najít volný port v rozsahu {start_port}-{start_port + max_tries}")
 
 import subprocess
 
@@ -461,12 +468,8 @@ def initialize_database(
                         InstanceVersion NVARCHAR(10) NOT NULL,
                         LevelId INT NOT NULL REFERENCES dbo.LoggingLevelType(Id) ON DELETE CASCADE,
                         Date DATETIME2 NOT NULL,
-                        UserId INT NULL,
-                        UserName NVARCHAR(30) NULL,
-                        UserEmail NVARCHAR(50) NULL,
-                        JobId INT NULL,
                         Message NVARCHAR(1000) NOT NULL,
-                        Exception NVARCHAR(MAX),
+                        Exception NVARCHAR(255),
                         Class NVARCHAR(255)
                     );
                     CREATE INDEX IX_Log_LevelId ON dbo.Log(LevelId);
@@ -610,10 +613,10 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
             compose_dir = os.path.join(base_path, instance_name, "heappe-core")
 
             if action == 'deploy':
-                app_port, s2 = get_port_starting_at(start_port=5000)
-                data_staging_port, s3 = get_port_starting_at(start_port=5001)
-                mssql_port, s1 = get_port_starting_at(start_port=6000)
-                local_port, s4 =  get_port_starting_at(start_port=49005)
+                app_port, s2 = get_port_with_fallback(start_port=5000, max_tries=100)
+                data_staging_port, s3 = get_port_with_fallback(start_port=5001, max_tries=100)
+                mssql_port, s1 = get_port_with_fallback(start_port=6000, max_tries=100)
+                local_port, s4 = get_port_with_fallback(start_port=49005, max_tries=100)
                 ports = {
                     "mssql_port": mssql_port,
                     "app_port": app_port,
