@@ -10,6 +10,10 @@ import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
 import socket
+
+from ..models import InstanceCredentials
+
+
 def get_port_with_fallback(start_port=8080, max_tries=100):
     """
     Zkusí port start_port. Pokud je obsazený, zkusí start_port + 1 atd.
@@ -579,9 +583,9 @@ def update_background(config, instance_name):
 
 from django.utils import timezone
 @login_required
+@login_required
 def deploy_view(request, instance_name: str = '') -> HttpResponse:
     base_path = "/opt/heappe-deployment/"
-    #repo_url = "https://github.com/It4innovations/HEAppE.git"
     repo_url = "https://github.com/It4innovations/HEAppE"
     repo_branch = "V6.0.0"
     version = "v6.0.0"
@@ -592,27 +596,32 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
     action_message = None
     action_status = None
     containers = []
+    instance_service = None
 
-    #get instance from db
-    from ..models import InstanceCredentials
-    try:
-        instance_service = InstanceCredentials.objects.get(instance_name=instance_name)
-    except InstanceCredentials.DoesNotExist:
-        instance_service = None
-
-
+    # Try to fetch existing instance details if name provided
+    if instance_name:
+        try:
+            instance_service = InstanceCredentials.objects.get(instance_name=instance_name)
+        except InstanceCredentials.DoesNotExist:
+            instance_service = None
 
     try:
         client = docker.from_env()
 
         if request.method == 'POST':
             action = request.POST.get('action')
-            instance_name = request.POST.get('InstanceName', 'heappe-instance')
-            repo_url = request.POST.get('Repository',"https://github.com/It4innovations/HEAppE.git")
-            repo_branch = request.POST.get('RepositoryBranch',"master")
+
+            # If deploying new, get name from form, otherwise use URL param
+            if action == 'deploy':
+                instance_name = request.POST.get('InstanceName', 'heappe-instance')
+
+            # Form params
+            input_repo = request.POST.get('Repository', repo_url)
+            input_branch = request.POST.get('RepositoryBranch', "master")
             compose_dir = os.path.join(base_path, instance_name, "heappe-core")
 
             if action == 'deploy':
+                # --- PORT ALLOCATION LOGIC ---
                 app_port, s2 = get_port_with_fallback(start_port=5000, max_tries=100)
                 data_staging_port, s3 = get_port_with_fallback(start_port=5001, max_tries=100)
                 mssql_port, s1 = get_port_with_fallback(start_port=6000, max_tries=100)
@@ -624,20 +633,44 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     "local_port": local_port
                 }
 
-                deploy_background(HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=repo_branch, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
-                    instance_name, ports, s1, s2, s3, s4
+                # --- START BACKGROUND DEPLOYMENT ---
+                config = HEAppEConfig(
+                    base_path=base_path,
+                    repo_url=input_repo,
+                    repo_branch=input_branch,
+                    default_version=input_branch,
+                    default_ip=ip,
+                    default_ports=ports,
+                    target_dir="heappe-core"
                 )
-                action_message = "Deployment started in the background. This may take several minutes."
+
+                deploy_background(config, instance_name, ports, s1, s2, s3, s4)
+
+                action_message = "Deployment started in the background."
                 action_status = 'info'
+
+                # --- JSON RESPONSE WITH REDIRECT ---
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': action_message,
+                        'instance_name': instance_name,
+                        'redirect_url': f'/management/deploy/{instance_name}/'  # <-- CRITICAL: Tells JS where to go
+                    })
+
             elif action == "update":
-                update_background(HEAppEConfig(base_path=base_path, repo_url=repo_url, repo_branch=repo_branch, default_version=repo_branch, default_ip=ip, default_ports=ports, target_dir="heappe-core"),
-                    instance_name
+                config = HEAppEConfig(
+                    base_path=base_path,
+                    repo_url=input_repo,
+                    repo_branch=input_branch,
+                    default_version=input_branch,
+                    default_ip=ip,
+                    default_ports=ports,
+                    target_dir="heappe-core"
                 )
-                action_message = "Update started in the background. This may take several minutes."
+                update_background(config, instance_name)
+                action_message = "Update started in the background."
                 action_status = 'info'
-
-
-
 
             elif action in ['start', 'stop', 'restart']:
                 action_message, action_status = handle_container_action(
@@ -647,37 +680,35 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
             elif action in ['start_all', 'restart_all', 'stop_all']:
                 action_message, action_status = handle_global_action(compose_dir, instance_name, action)
 
+            # Generic JSON response for non-deploy actions
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                print("AJAX request detected, returning JSON response.")
-                updated_containers = [get_container_details(c) for c in client.containers.list(all=True)
-                                    if c.labels.get('com.docker.compose.project') == instance_name]
+                updated_containers = [
+                    get_container_details(c) for c in client.containers.list(all=True)
+                    if c.labels.get('com.docker.compose.project') == instance_name
+                ]
                 return JsonResponse({
                     'status': action_status,
                     'message': action_message,
                     'instance_name': instance_name,
-                    'deployment_status': {
-                        'returncode': None,
-                    'deployment_message': {
-                        'stdout':  '',
-                        'stderr':  ''
-                    } if 'result' in locals() else None },
-                    'ports': ports if action == 'deploy' else {},
                     'containers': updated_containers
                 })
 
-        containers = [{'container': c, 'ports': get_container_details(c)['ports']}
-                     for c in client.containers.list(all=True)
-                     if c.labels.get('com.docker.compose.project') == instance_name]
+        # --- GET REQUEST / PAGE LOAD ---
+        # Fetch containers only if we are looking at a specific instance
+        if instance_name:
+            containers = [
+                {'container': c, 'ports': get_container_details(c)['ports']}
+                for c in client.containers.list(all=True)
+                if c.labels.get('com.docker.compose.project') == instance_name
+            ]
 
-    except ImportError:
-        action_message = "Docker not available, skipping container listing."
+    except Exception as e:
+        print(f"Error in deploy_view: {e}")
+        action_message = "Docker not available or error occurred."
         action_status = 'warning'
 
     context = {
         "containers": containers,
-        "deployment_status": locals().get('result'),
-        "deployment_message": locals().get('result'),
-        "ports": ports,
         "instance_name": instance_name,
         "action_message": action_message,
         "action_status": action_status,
@@ -688,7 +719,6 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
         "is_deployed": instance_service.is_deployed if instance_service else False
     }
     return render(request, "deploy.html", context)
-
 
 from django.http import JsonResponse
 

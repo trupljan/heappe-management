@@ -6,24 +6,27 @@
 
     <div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; justify-content:center; align-items:center; color:white;">
         <div class="spinner-border text-primary mb-3" style="width:4rem; height:4rem;" role="status"></div>
-        <h4 id="loading-title" class="fw-bold">Probíhá operace...</h4>
-        <p id="loading-subtext" class="text-muted">Tato akce může trvat několik minut. Stránka se sama obnoví.</p>
+        <h4 id="loading-title" class="fw-bold">Operation in progress...</h4>
+        <p id="loading-subtext" class="text-muted">This action may take a few minutes. The page will refresh automatically.</p>
     </div>
 
     <div class="row mb-4 align-items-center">
         <div class="col-md-8">
-            {% if not is_deployed %}
-                <h2 class="mb-0 fw-bold">Deploy Instance</h2>
+            {% if not instance_name %}
+                <h2 class="mb-0 fw-bold">Deploy New Instance</h2>
             {% else %}
                 <h2 class="mb-0 fw-bold">Management: <span class="text-primary">{{ instance_name }}</span></h2>
+                {% if not is_deployed %}
+                    <span class="badge bg-warning text-dark">Deployment in Progress / Not Active</span>
+                {% endif %}
             {% endif %}
         </div>
         <div class="col-md-4 text-md-end mt-3 mt-md-0">
-            {% if not is_deployed %}
+            {% if not instance_name %}
                 <button type="button" class="btn btn-primary btn-lg shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="deploy">
                     <i class="bi bi-rocket-takeoff me-2"></i>Deploy Instance
                 </button>
-            {% else %}
+            {% elif is_deployed %}
                 <button type="button" class="btn btn-outline-primary shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="update">
                     <i class="bi bi-arrow-repeat me-2"></i>Update Instance
                 </button>
@@ -254,14 +257,21 @@ let isPolling = false;
 
 $(document).ready(function() {
     // --- UI HELPERS ---
-    function showLoading(title = "Probíhá operace...", subtext = "Stránka se automaticky obnoví po dokončení.") {
+    window.showLoading = function(title = "Operation in progress...", subtext = "Page will refresh automatically when done.") {
         $('#loading-title').text(title);
         $('#loading-subtext').text(subtext);
         $('#loading-overlay').css('display','flex');
     }
     function hideLoading() { $('#loading-overlay').css('display','none'); }
 
-    // --- DEPLOY / UPDATE POLLING LOGIC ---
+    // --- AUTOMATIC LOADING STATE FOR REDIRECTED USERS ---
+    // If we have an instance name but it's not deployed yet, show the loader automatically
+    {% if instance_name and not is_deployed %}
+        showLoading("Deployment in progress...", "Your instance is being created. Please wait.");
+        startStatusPolling();
+    {% endif %}
+
+    // --- DEPLOY / UPDATE LOGIC ---
     $(document).on('submit', 'form.instance-action-form', function(e) {
         const form = $(this);
         const action = form.find('input[name="action"]').val();
@@ -270,20 +280,26 @@ $(document).ready(function() {
         const modal = bootstrap.Modal.getInstance(document.getElementById('deployUpdateModal'));
         if (modal) modal.hide();
 
-        const title = action === 'deploy' ? "Instance is being deployed..." : "Instance is being updated...";
-        showLoading(title, "It may take a few minutes. The page will refresh automatically.");
+        const title = action === 'deploy' ? "Initiating Deployment..." : "Initiating Update...";
+        showLoading(title, "Please wait for the server response.");
 
         $.ajax({
-            url: window.location.href,
+            url: window.location.href, // This posts to the current URL (usually generic /deploy/)
             type: 'POST',
             data: form.serialize(),
-            success: function(r) {
-                // Po spuštění deploye/update začneme kontrolovat stav
-                startStatusPolling();
+            success: function(response) {
+                // If this was a deploy action, the server should send a redirect URL
+                if (action === 'deploy' && response.redirect_url) {
+                    // Redirect immediately to the specific instance page
+                    window.location.href = response.redirect_url;
+                } else {
+                    // For updates or if no redirect provided, start polling on current page
+                    startStatusPolling();
+                }
             },
             error: function(xhr) {
                 hideLoading();
-                alert('Akce selhala: ' + (xhr.responseJSON?.message || 'Chyba serveru'));
+                alert('Action failed: ' + (xhr.responseJSON?.message || 'Server Error'));
             }
         });
     });
@@ -296,11 +312,10 @@ $(document).ready(function() {
             $.ajax({
                 url: window.location.href,
                 type: 'GET',
-                // Chceme jen HTML, abychom zjistili, zda už je is_deployed=True
                 success: function(data) {
                     const html = $(data);
-                    // Hledáme prvek, který existuje jen pokud je instance nasazena
-                    // (např. tlačítko Update nebo globální akce)
+                    // We check if the 'update' button exists in the response.
+                    // This implies the instance state is now 'deployed' in the view.
                     const deployedDetected = html.find('button[data-action="update"]').length > 0;
 
                     if (deployedDetected) {
@@ -312,20 +327,20 @@ $(document).ready(function() {
                     console.log("Status check failed, retrying...");
                 }
             });
-        }, 5000); // Kontrola každých 5 sekund
+        }, 5000); // Poll every 5 seconds
     }
 
     // --- CONTAINER & GLOBAL ACTIONS ---
     $(document).on('submit', '.container-control-form, .global-control-form', function(e) {
         e.preventDefault();
         const form = $(this);
-        showLoading("Provádím akci...", "Měním stav kontejnerů.");
+        showLoading("Executing action...", "Modifying container state.");
         $.ajax({
             url: window.location.href,
             type: 'POST',
             data: form.serialize(),
             success: () => location.reload(),
-            error: (xhr) => { hideLoading(); alert('Chyba: ' + xhr.responseText); }
+            error: (xhr) => { hideLoading(); alert('Error: ' + xhr.responseText); }
         });
     });
 
@@ -337,7 +352,7 @@ $(document).ready(function() {
         const $spinner = $form.find('.branch-spinner');
         const $btn = $(this);
 
-        if (!repoUrl) return alert('Zadejte URL');
+        if (!repoUrl) return alert('Please enter a URL');
         $btn.prop('disabled', true);
         $spinner.show();
 
@@ -349,7 +364,7 @@ $(document).ready(function() {
                 $branchSelect.empty();
                 r.branches.forEach(b => $branchSelect.append(new Option(b, b)));
             },
-            error: () => alert('Chyba při načítání tagů'),
+            error: () => alert('Error fetching tags'),
             complete: () => { $btn.prop('disabled', false); $spinner.hide(); }
         });
     });
@@ -368,7 +383,7 @@ $(document).ready(function() {
         const cid = $(e.relatedTarget).data('container-id');
         const fetch = () => {
             $.get(`${basePath}/logs/${cid}/`, r => {
-                $('#logs-content').text(r.logs || 'Prázdné logy');
+                $('#logs-content').text(r.logs || 'No logs available');
                 const pre = document.getElementById('logs-content');
                 pre.scrollTop = pre.scrollHeight;
             });
@@ -385,7 +400,7 @@ $(document).ready(function() {
     });
 
     function loadFileList() {
-        $('#file-list').html('<li class="list-group-item small text-muted">Načítám...</li>');
+        $('#file-list').html('<li class="list-group-item small text-muted">Loading...</li>');
         $.post(`${basePath}/container/${currentContainerId}/file/list/`, {
             path: currentPath,
             instance_name: '{{ instance_name }}',
@@ -418,7 +433,7 @@ $(document).ready(function() {
         } else {
             $('#editor-placeholder').hide();
             $('#editor-ui').show();
-            $('#file-content').val('Načítám obsah...');
+            $('#file-content').val('Reading content...');
             $('#edit-file-name').text(selectedFilePath);
             $.post(`${basePath}/container/${currentContainerId}/file/read/`, {
                 path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
@@ -452,7 +467,7 @@ $(document).ready(function() {
     $('#save-file').click(() => {
         $.post(`${basePath}/container/${currentContainerId}/file/write/`, {
             path: selectedFilePath, content: $('#file-content').val(), instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
-        }, () => alert('Uloženo'));
+        }, () => alert('Saved successfully'));
     });
 
     $('#upload-action-btn').click(() => {
