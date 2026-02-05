@@ -73,5 +73,12 @@ urlpatterns = [
     path("logs/", views.log_viewer_view, name="logs"),
     path("stream-logs/", views.stream_logs, name="stream_logs"),
     #path("logs/", views.logs_view, name="logs"),
-    path('api/check-updates/', views.check_for_updates, name='check_updates')
+    path('api/check-updates/', views.check_for_updates, name='check_updates'),
+    path('api/heappe-check/<str:min_version>/', views.heappe_check_api, name='heappe_check_api'),
+
+    # Adaptor Users
+    path('adaptor_users/new/', views.adaptor_user_create, name='adaptor_user_create'),
+    path('adaptor_users/<str:adaptor_user_username>/', views.adaptor_user_detail, name='adaptor_user_detail'),
+    path('adaptor_users/unassign/<str:adaptor_user_username>/', views.adaptor_user_unassign_from_project, name='adaptor_user_unassign_from_project'),
+    path('adaptor_users/assign/<str:adaptor_user_username>/', views.adaptor_user_assign_to_project, name='adaptor_user_assign_to_project')
 ]

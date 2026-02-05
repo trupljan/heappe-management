@@ -11,8 +11,15 @@ from dataclasses import dataclass
 from django.http import HttpResponse
 from django.shortcuts import render
 
-from heappe_ui.appsettings.generator import generate_appsettings_v6_0_0, generate_appsettings_data_staging_v6_0_0, \
-    generate_appsettings_v6_1_0, generate_appsettings_data_staging_v6_1_0
+from heappe_ui.appsettings.generator import (
+    generate_appsettings_v6_0_0,
+    generate_appsettings_data_staging_v6_0_0,
+    generate_appsettings_v6_1_0,
+    generate_appsettings_data_staging_v6_1_0,
+    generate_appsettings_v6_2_0,
+    generate_appsettings_data_staging_v6_2_0,
+)
+
 from heappe_ui.models import InstanceCredentials
 
 logger = logging.getLogger(__name__)
@@ -157,8 +164,8 @@ HOST_DATA_STAGING_PORT={ports['data_staging_port']}
 HOST_DATA_STAGING_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/app
 HOST_DATA_STAGING_CONTAINER_MAP_FOLD_PATH=/opt/heappe
 
-DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database
-DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME=/opt/heappe/projects/{instance_name}/backups/database/logs
+DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/backups/database
+DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/backups/database/logs
 
 # Only for Local Cluster mode
 HOST_LOCAL_NAME=localhpc-{instance_name}
@@ -281,10 +288,10 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         # You would generate new appsettings and then merge with old_appsettings
         if version.startswith("V6.0."):
             app_fn = generate_appsettings_v6_0_0
-            data_fn = generate_appsettings_data_staging_v6_0_0
         elif version.startswith("V6.1."):
             app_fn = generate_appsettings_v6_1_0
-            data_fn = generate_appsettings_data_staging_v6_1_0
+        elif version.startswith("V6.2."):
+            app_fn = generate_appsettings_v6_2_0
 
         new_appsettings = app_fn(
             instance_name="instance",
@@ -312,12 +319,19 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         version = version or self.config.default_version
         deployed_ip = deployed_ip or self.config.default_ip
 
+        print(f"Generating appsettings for version: {version}")
+
         if version.startswith("V6.0."):
             app_fn = generate_appsettings_v6_0_0
             data_fn = generate_appsettings_data_staging_v6_0_0
         elif version.startswith("V6.1."):
             app_fn = generate_appsettings_v6_1_0
             data_fn = generate_appsettings_data_staging_v6_1_0
+        elif version.startswith("V6.2."):
+            app_fn = generate_appsettings_v6_2_0
+            data_fn = generate_appsettings_data_staging_v6_2_0
+        else:
+            raise ValueError(f"Unsupported version: {version}")
 
         appsettings = app_fn(
             instance_name=instance_name,
@@ -335,6 +349,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             port=port_staging,
             version=version
         )
+
+        print(f"Generated appsettings: {appsettings}")
 
         output_dir = os.path.join(self.config.base_path, instance_name, "app", "confs")
         output_path_app = os.path.join(output_dir, "appsettings.json")
@@ -359,6 +375,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             results['appsettings'] = appsettings
         except OSError as e:
             self.logger.error(f"Failed to generate appsettings.json file: {e}")
+            print(f"Failed to generate appsettings.json file: {e}")
             raise RuntimeError(f"appsettings.json file generation failed: {e}")
 
         # Handle appsettings-data.json

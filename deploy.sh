@@ -1,6 +1,6 @@
 #!/bin/bash
 
-APP_DIR="/opt/heappe/heappe-admin-app"
+APP_DIR="/opt/heappe/heappe-admin-app/branches/develop"
 SERVICE_NAME="adminpanel"
 LOG_FILE="/var/log/deploy_${SERVICE_NAME}.log"
 VENV_PYTHON="${APP_DIR}/venv/bin/python"

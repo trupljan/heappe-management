@@ -1,4 +1,11 @@
 {% load static %}
+{% load custom_filters %}
+
+
+{% heappe_version_ok "6.1.0" as v610_check %}
+{% heappe_version_ok "6.1.1" as v611_check %}
+{% heappe_version_ok "6.2.0" as v620_check %}
+{% heappe_version_ok "6.3.0" as v630_check %}
 
 <!DOCTYPE html>
 <html>
@@ -129,15 +136,33 @@
     </nav>
     <!-- Messages -->
     {% if messages %}
-        <div class="container mt-3">
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show" role="alert">
-                    <i class="bi bi-{% if message.tags == 'error' %}exclamation-circle{% elif message.tags == 'success' %}check-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    <div class="container mt-3">
+        {% for message in messages %}
+            {% if "adaptor-user-api-key" in message.tags %}
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                <i class="bi bi-key me-2"></i>
+
+                <span class="api-key-value" data-key="{{ message }}">
+                    New service account API key:
+                </span>
+
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary ms-2"
+                        onclick="copyApiKey(this)">
+                    Copy to clipboard
+                </button>
+
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
-            {% endfor %}
-        </div>
+            {% else %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+                <i class="bi bi-{% if message.tags == 'error' %}exclamation-circle{% elif message.tags == 'success' %}check-circle{% elif message.tags == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %} me-2"></i>
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endif %}
+        {% endfor %}
+    </div>
     {% endif %}
 
     <!-- Main content -->
@@ -163,6 +188,16 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function copyApiKey(btn) {
+        const span = btn.previousElementSibling;
+        const key = span.dataset.key;
+
+        navigator.clipboard.writeText(key).then(() => {
+            btn.textContent = "Copied";
+        });
+        }
+    </script>
 </body>
 </html>
 

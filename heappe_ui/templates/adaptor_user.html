@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Service Account - {{ adaptor_user.username }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2">Service Account: <span class="text-primary">{{ adaptor_user.username }}</span></h1>
+        <button type="button" class="btn btn-outline-secondary" onclick="history.back()">Back</button>
+    </div>
+
+    <div class="card shadow-sm mb-4 border-0">
+        <div class="card-header bg-light fw-bold py-3">General Settings</div>
+        <div class="card-body p-4">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_adaptor_user">
+                <div class="row align-items-end g-3">
+                    <div class="col-md-8">
+                        <label class="form-label fw-bold small text-uppercase text-muted">Username</label>
+                        <input type="text" class="form-control form-control-lg border-2" name="Username" value="{{ adaptor_user.username }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold">Update & Regenerate Key</button>
+                    </div>
+                </div>
+            </form>
+
+            <div class="alert alert-warning mt-4 mb-0 border-0 d-flex align-items-center shadow-sm">
+                <div class="me-3 fs-3">⚠️</div>
+                <div>
+                    <strong>Important:</strong> Changing the service account name includes a procedure that will
+                    <strong>automatically invalidate the old API key</strong> and generate a new one.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-dark text-white fw-bold py-3">Assign to Project</div>
+                <div class="card-body p-4 border border-top-0 rounded-bottom">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="adaptor_user_assign_to_project">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Select Project</label>
+                            <select class="form-select border-2" name="ProjectId" required>
+                                <option value="" disabled selected>Choose a project...</option>
+                                {% for project in projects %}
+                                    <option value="{{ project.id }}">{{ project.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Role Picker</label>
+                            <select name="role" class="form-select border-2" required>
+                                <option value="" selected disabled>-- Select Permissions --</option>
+                                <option value="1">Administrator</option>
+                                <option value="2">Maintainer</option>
+                                <option value="3">Submitter</option>
+                                <option value="4">GroupReporter</option>
+                                <option value="5">Reporter</option>
+                                <option value="6">ManagementAdmin</option>
+                                <option value="7">Manager</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary w-100 fw-bold">Add Project Assignment</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-dark text-white fw-bold py-3">Assign to User Group</div>
+                <div class="card-body p-4 border border-top-0 rounded-bottom">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="adaptor_user_assign_to_user_group">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">User Group ID</label>
+                            <input type="number" class="form-control border-2" name="UserGroupId" placeholder="Enter numerical ID" required>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label fw-bold">Role Picker</label>
+                            <select name="role" class="form-select border-2" required>
+                                <option value="" selected disabled>-- Select Permissions --</option>
+                                <option value="1">Administrator</option>
+                                <option value="2">Maintainer</option>
+                                <option value="3">Submitter</option>
+                                <option value="4">GroupReporter</option>
+                                <option value="5">Reporter</option>
+                                <option value="6">ManagementAdmin</option>
+                                <option value="7">Manager</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary w-100 fw-bold">Add Group Assignment</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12">
+            <div class="card shadow-sm border-0 mb-5">
+                <div class="card-header bg-secondary text-white fw-bold py-3">Active Assignments & Roles</div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Project</th>
+                                <th>User Group</th>
+                                <th>Active Roles</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for group in adaptor_user.adaptor_user_groups %}
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold">{{ group.project.name|default:"No Project" }}</div>
+                                    <small class="text-muted">ID: {{ group.project.id }}</small>
+                                </td>
+                                <td>
+                                    <div>{{ group.name }}</div>
+                                    <small class="text-muted text-uppercase small" style="font-size: 0.7rem;">Group ID: {{ group.id }}</small>
+                                </td>
+                                <td>
+                                    {% for role in group.roles %}
+                                    <span class="badge bg-primary rounded-pill px-3">{{ role }}</span>
+                                    {% endfor %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center py-5 text-muted">
+                                    <p class="mb-0 italic">No project or group assignments found for this user.</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

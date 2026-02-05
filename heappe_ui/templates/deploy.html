@@ -4,27 +4,30 @@
 <div class="container mt-5">
     <div id="action-feedback"></div>
 
-    <div id="loading-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;justify-content:center;align-items:center;">
-        <div class="spinner-border text-light" style="width:3rem;height:3rem;" role="status">
-            <span class="visually-hidden">Loading...</span>
-        </div>
+    <div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; justify-content:center; align-items:center; color:white;">
+        <div class="spinner-border text-primary mb-3" style="width:4rem; height:4rem;" role="status"></div>
+        <h4 id="loading-title" class="fw-bold">Operation in progress...</h4>
+        <p id="loading-subtext" class="text-muted">This action may take a few minutes. The page will refresh automatically.</p>
     </div>
 
     <div class="row mb-4 align-items-center">
         <div class="col-md-8">
-            {% if not is_deployed %}
-                <h2 class="mb-0 fw-bold">Deploy Instance</h2>
+            {% if not instance_name %}
+                <h2 class="mb-0 fw-bold">Deploy New Instance</h2>
             {% else %}
                 <h2 class="mb-0 fw-bold">Management: <span class="text-primary">{{ instance_name }}</span></h2>
+                {% if not is_deployed %}
+                    <span class="badge bg-warning text-dark">Deployment in Progress / Not Active</span>
+                {% endif %}
             {% endif %}
         </div>
         <div class="col-md-4 text-md-end mt-3 mt-md-0">
-            {% if not is_deployed %}
-                <button type="button" class="btn btn-primary btn-lg w-100 w-md-auto shadow-sm" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="deploy">
+            {% if not instance_name %}
+                <button type="button" class="btn btn-primary btn-lg shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="deploy">
                     <i class="bi bi-rocket-takeoff me-2"></i>Deploy Instance
                 </button>
-            {% else %}
-                <button type="button" class="btn btn-outline-primary w-100 w-md-auto shadow-sm" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="update">
+            {% elif is_deployed %}
+                <button type="button" class="btn btn-outline-primary shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="update">
                     <i class="bi bi-arrow-repeat me-2"></i>Update Instance
                 </button>
             {% endif %}
@@ -77,9 +80,7 @@
                             <label class="form-label fw-semibold">Repository URL</label>
                             <div class="input-group">
                                 <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
-                                <button class="btn btn-secondary fetch-branches-btn" type="button">
-                                    <i class="bi bi-arrow-clockwise"></i>
-                                </button>
+                                <button class="btn btn-secondary fetch-branches-btn" type="button"><i class="bi bi-arrow-clockwise"></i></button>
                             </div>
                         </div>
                         <div class="mb-3">
@@ -104,19 +105,19 @@
         <div class="card-body">
             <h5 class="card-title mb-3 fw-bold">Global Container Actions</h5>
             <div class="d-flex flex-wrap gap-2">
-                <form id="start-all-form" class="flex-grow-1 flex-md-grow-0">
+                <form id="start-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
                     {% csrf_token %}
                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                     <input type="hidden" name="action" value="start_all">
                     <button type="submit" class="btn btn-success w-100 px-4"><i class="bi bi-play-fill"></i> Start All</button>
                 </form>
-                <form id="restart-all-form" class="flex-grow-1 flex-md-grow-0">
+                <form id="restart-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
                     {% csrf_token %}
                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                     <input type="hidden" name="action" value="restart_all">
                     <button type="submit" class="btn btn-info text-white w-100 px-4"><i class="bi bi-arrow-clockwise"></i> Restart All</button>
                 </form>
-                <form id="down-all-form" class="flex-grow-1 flex-md-grow-0">
+                <form id="down-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
                     {% csrf_token %}
                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                     <input type="hidden" name="action" value="stop_all">
@@ -146,14 +147,14 @@
                 </div>
                 <div class="card-footer bg-white border-top-0 pb-3">
                     <div class="btn-group w-100 shadow-sm">
-                        <form id="start-form-{{ container.id }}" class="w-100">
+                        <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
                             {% csrf_token %}
                             <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                             <input type="hidden" name="container_id" value="{{ container.id }}">
                             <input type="hidden" name="action" value="start">
                             <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %}><i class="bi bi-play-fill"></i></button>
                         </form>
-                        <form id="stop-form-{{ container.id }}" class="w-100">
+                        <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
                             {% csrf_token %}
                             <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                             <input type="hidden" name="container_id" value="{{ container.id }}">
@@ -196,9 +197,7 @@
                     <div class="row g-0 flex-grow-1">
                         <div class="col-md-4 border-end bg-light d-flex flex-column h-100">
                             <div class="p-3 border-bottom">
-                                <nav aria-label="breadcrumb">
-                                    <ol class="breadcrumb mb-2" id="breadcrumb-path"></ol>
-                                </nav>
+                                <nav aria-label="breadcrumb"><ol class="breadcrumb mb-2" id="breadcrumb-path"></ol></nav>
                                 <div class="input-group input-group-sm mb-2">
                                     <span class="input-group-text"><i class="bi bi-search"></i></span>
                                     <input type="text" id="search-files" class="form-control" placeholder="Filter...">
@@ -232,7 +231,7 @@
                                     <div class="p-4 border rounded bg-light">
                                         <h6>Upload to current directory</h6>
                                         <input type="file" id="upload-input" class="form-control mb-3" multiple>
-                                        <button id="upload-btn" class="btn btn-success"><i class="bi bi-cloud-arrow-up"></i> Start Upload</button>
+                                        <button id="upload-action-btn" class="btn btn-success"><i class="bi bi-cloud-arrow-up"></i> Start Upload</button>
                                         <div class="progress mt-3" style="display:none; height: 10px;">
                                             <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
                                         </div>
@@ -254,13 +253,98 @@ const basePath = window.location.pathname.split('/').includes('management') ? '/
 let currentContainerId = null;
 let currentPath = '/opt/heappe/confs/';
 let selectedFilePath = null;
+let isPolling = false;
 
 $(document).ready(function() {
-    // UI Helpers
-    function showLoading() { $('#loading-overlay').css('display','flex'); }
+    // --- UI HELPERS ---
+    window.showLoading = function(title = "Operation in progress...", subtext = "Page will refresh automatically when done.") {
+        $('#loading-title').text(title);
+        $('#loading-subtext').text(subtext);
+        $('#loading-overlay').css('display','flex');
+    }
     function hideLoading() { $('#loading-overlay').css('display','none'); }
 
-    // 1. MODAL BRANCH FETCHING
+    // --- AUTOMATIC LOADING STATE FOR REDIRECTED USERS ---
+    // If we have an instance name but it's not deployed yet, show the loader automatically
+    {% if instance_name and not is_deployed %}
+        showLoading("Deployment in progress...", "Your instance is being created. Please wait.");
+        startStatusPolling();
+    {% endif %}
+
+    // --- DEPLOY / UPDATE LOGIC ---
+    $(document).on('submit', 'form.instance-action-form', function(e) {
+        const form = $(this);
+        const action = form.find('input[name="action"]').val();
+        e.preventDefault();
+
+        const modal = bootstrap.Modal.getInstance(document.getElementById('deployUpdateModal'));
+        if (modal) modal.hide();
+
+        const title = action === 'deploy' ? "Initiating Deployment..." : "Initiating Update...";
+        showLoading(title, "Please wait for the server response.");
+
+        $.ajax({
+            url: window.location.href, // This posts to the current URL (usually generic /deploy/)
+            type: 'POST',
+            data: form.serialize(),
+            success: function(response) {
+                // If this was a deploy action, the server should send a redirect URL
+                if (action === 'deploy' && response.redirect_url) {
+                    // Redirect immediately to the specific instance page
+                    window.location.href = response.redirect_url;
+                } else {
+                    // For updates or if no redirect provided, start polling on current page
+                    startStatusPolling();
+                }
+            },
+            error: function(xhr) {
+                hideLoading();
+                alert('Action failed: ' + (xhr.responseJSON?.message || 'Server Error'));
+            }
+        });
+    });
+
+    function startStatusPolling() {
+        if (isPolling) return;
+        isPolling = true;
+
+        const pollInterval = setInterval(function() {
+            $.ajax({
+                url: window.location.href,
+                type: 'GET',
+                success: function(data) {
+                    const html = $(data);
+                    // We check if the 'update' button exists in the response.
+                    // This implies the instance state is now 'deployed' in the view.
+                    const deployedDetected = html.find('button[data-action="update"]').length > 0;
+
+                    if (deployedDetected) {
+                        clearInterval(pollInterval);
+                        location.reload();
+                    }
+                },
+                error: function() {
+                    console.log("Status check failed, retrying...");
+                }
+            });
+        }, 5000); // Poll every 5 seconds
+    }
+
+    // --- CONTAINER & GLOBAL ACTIONS ---
+    $(document).on('submit', '.container-control-form, .global-control-form', function(e) {
+        e.preventDefault();
+        const form = $(this);
+        showLoading("Executing action...", "Modifying container state.");
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: form.serialize(),
+            success: () => location.reload(),
+            error: (xhr) => { hideLoading(); alert('Error: ' + xhr.responseText); }
+        });
+    });
+
+    // --- BRANCH FETCHING ---
     $('.fetch-branches-btn').on('click', function() {
         const $form = $(this).closest('form');
         const repoUrl = $form.find('.repo-url-input').val();
@@ -268,7 +352,7 @@ $(document).ready(function() {
         const $spinner = $form.find('.branch-spinner');
         const $btn = $(this);
 
-        if (!repoUrl) return alert('Enter URL first');
+        if (!repoUrl) return alert('Please enter a URL');
         $btn.prop('disabled', true);
         $spinner.show();
 
@@ -280,12 +364,12 @@ $(document).ready(function() {
                 $branchSelect.empty();
                 r.branches.forEach(b => $branchSelect.append(new Option(b, b)));
             },
-            error: (e) => alert('Fetch failed'),
+            error: () => alert('Error fetching tags'),
             complete: () => { $btn.prop('disabled', false); $spinner.hide(); }
         });
     });
 
-    // 2. MODAL FORM CONTROL
+    // --- MODAL SETUP ---
     $('#deployUpdateModal').on('show.bs.modal', function (e) {
         const act = $(e.relatedTarget).data('action');
         $(this).find('.modal-title').text(act === 'deploy' ? 'Deploy New Instance' : 'Update Instance');
@@ -293,33 +377,13 @@ $(document).ready(function() {
         $('#update-form').toggle(act === 'update');
     });
 
-    // 3. FORM SUBMISSION
-    $(document).on('submit', 'form:not(#file-manager-related)', function(e) {
-        const form = $(this);
-        if(!form.attr('id')) return; // ignore generic forms
-        e.preventDefault();
-        showLoading();
-        $.ajax({
-            url: window.location.href,
-            type: 'POST',
-            data: form.serialize(),
-            success: function(r) {
-                location.reload(); // Refresh to see changes
-            },
-            error: function(xhr) {
-                hideLoading();
-                alert('Action failed: ' + (xhr.responseJSON?.message || 'Error'));
-            }
-        });
-    });
-
-    // 4. LOGS LOGIC
+    // --- LOGS LOGIC ---
     let logsInterval = null;
     $('#logsModal').on('show.bs.modal', function(e) {
         const cid = $(e.relatedTarget).data('container-id');
         const fetch = () => {
             $.get(`${basePath}/logs/${cid}/`, r => {
-                $('#logs-content').text(r.logs || 'Empty');
+                $('#logs-content').text(r.logs || 'No logs available');
                 const pre = document.getElementById('logs-content');
                 pre.scrollTop = pre.scrollHeight;
             });
@@ -328,7 +392,7 @@ $(document).ready(function() {
         logsInterval = setInterval(fetch, 3000);
     }).on('hidden.bs.modal', () => clearInterval(logsInterval));
 
-    // 5. FILE MANAGER LOGIC
+    // --- FILE MANAGER LOGIC ---
     $('#fileManagerModal').on('show.bs.modal', function(e) {
         currentContainerId = $(e.relatedTarget).data('container-id');
         $('#fm-container-name').text($(e.relatedTarget).data('container-name'));
@@ -369,7 +433,7 @@ $(document).ready(function() {
         } else {
             $('#editor-placeholder').hide();
             $('#editor-ui').show();
-            $('#file-content').val('Loading...');
+            $('#file-content').val('Reading content...');
             $('#edit-file-name').text(selectedFilePath);
             $.post(`${basePath}/container/${currentContainerId}/file/read/`, {
                 path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
@@ -403,10 +467,10 @@ $(document).ready(function() {
     $('#save-file').click(() => {
         $.post(`${basePath}/container/${currentContainerId}/file/write/`, {
             path: selectedFilePath, content: $('#file-content').val(), instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
-        }, () => alert('Saved'));
+        }, () => alert('Saved successfully'));
     });
 
-    $('#upload-btn').click(() => {
+    $('#upload-action-btn').click(() => {
         const files = $('#upload-input')[0].files;
         if(!files.length) return;
         $('.progress').show();
@@ -434,5 +498,6 @@ $(document).ready(function() {
     .breadcrumb-item a { text-decoration: none; }
     #logs-content::-webkit-scrollbar { width: 8px; }
     #logs-content::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    #loading-overlay { display: none; }
 </style>
 {% endblock content %}

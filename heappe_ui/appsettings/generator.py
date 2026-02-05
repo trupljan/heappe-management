@@ -435,6 +435,29 @@ def generate_appsettings_v6_1_0(
         }
     return appsettings
 
+def generate_appsettings_v6_2_0(
+        instance_name: str,
+            sa_password: str,
+            port: int = 5000,
+            automigrate: bool = True,
+            version: str = None,
+            deployed_ip: str = None):
+    appsettings = generate_appsettings_v6_1_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
+    lexis_auth = appsettings.get('ExternalAuthenticationSettings').get('LexisAuthenticationConfiguration')
+    lexis_auth['CommandTemplatePermissions'] = "/api/Heappe/CommandTemplatePermissions/"
+    lexis_auth['CheckCommandTemplatePermissions'] = True
+    lexis_token_flow = appsettings.get('JwtTokenIntrospectionConfiguration').get('LexisTokenFlowConfiguration')
+    lexis_token_flow['UseExpirioServiceForTokenExchange'] = True
+    appsettings['ExpirioSettings'] = {
+        "BaseUrl": "https://expirio.heappe.eu/api",
+        "TimeoutSeconds": 30,
+        "MaxRetries": 3,
+        "RetryInitialDelayMs": 200,
+        "ProviderName": "",
+        "TokenName": ""
+    }
+
+    return appsettings
 
 def generate_appsettings_data_staging_v6_0_0(instance_name: str,
             sa_password: str,
@@ -517,6 +540,13 @@ def generate_appsettings_data_staging_v6_0_0(instance_name: str,
     return appsettings
 
 def generate_appsettings_data_staging_v6_1_0(instance_name: str,
+            sa_password: str,
+            data_staging_token: str,
+            port: int = 5001,
+            version: str = None):
+    return generate_appsettings_data_staging_v6_0_0(instance_name,sa_password,data_staging_token,port,version)
+
+def generate_appsettings_data_staging_v6_2_0(instance_name: str,
             sa_password: str,
             data_staging_token: str,
             port: int = 5001,
