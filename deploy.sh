@@ -1,13 +1,16 @@
 #!/bin/bash
 
-APP_DIR="/opt/heappe/heappe-admin-app/branches/develop"
+BASE_DIR="/opt/heappe/heappe-admin-app"
+GIT_TAG=${GIT_TAG:-"main"}
+APP_DIR="${BASE_DIR}/branches/${GIT_TAG}"
 SERVICE_NAME="adminpanel"
 LOG_FILE="/var/log/deploy_${SERVICE_NAME}.log"
-VENV_PYTHON="${APP_DIR}/venv/bin/python"
-PIP_COMMAND="${APP_DIR}/venv/bin/pip"
 
-GIT_URL=${GIT_URL}
-GIT_TAG=${GIT_TAG:-"testing"}
+VENV_DIR="${BASE_DIR}/branches/.venv-${GIT_TAG}"
+VENV_PYTHON="${VENV_DIR}/bin/python"
+PIP_COMMAND="${VENV_DIR}/bin/pip"
+
+GIT_URL=${GIT_URL:-"origin"}
 GIT_USER=${GIT_USER}
 GIT_PASS=${GIT_PASS}
 
@@ -35,24 +38,25 @@ trap cleanup EXIT
 
 log "=== START DEPLOYMENT: $GIT_TAG ==="
 
+if [ ! -d "$APP_DIR" ]; then
+    log "ERROR: Directory $APP_DIR does not exist."
+    exit 1
+fi
+
 cd "$APP_DIR"
 check_error
 
 ORIGINAL_URL=$(git remote get-url origin 2>/dev/null)
-
-if [ "$GIT_URL" = "origin" ] || [ -z "$GIT_URL" ]; then
-    GIT_URL="$ORIGINAL_URL"
-fi
-
 REMOTE_CHANGED=false
 
-if [ -n "$GIT_USER" ] && [ -n "$GIT_PASS" ] && [ -n "$GIT_URL" ] && [ "$GIT_URL" != "origin" ]; then
+if [ -n "$GIT_USER" ] && [ -n "$GIT_PASS" ] && [ "$GIT_URL" != "origin" ]; then
     ENCODED_PASS=$(echo -n "$GIT_PASS" | curl -s -o /dev/null -w "%{url_effective}" --get --data-urlencode "=@-" "" | cut -c 3-)
     AUTH_URL=$(echo "$GIT_URL" | sed "s|//|//${GIT_USER}:${ENCODED_PASS}@|")
     git remote set-url origin "$AUTH_URL"
     check_error
     REMOTE_CHANGED=true
 fi
+
 git fetch origin --tags --force --prune >> "$LOG_FILE" 2>&1
 check_error
 
@@ -68,11 +72,15 @@ git clean -fd >> "$LOG_FILE" 2>&1
 check_error
 
 if [ -f "requirements.txt" ]; then
+    $PIP_COMMAND install --upgrade pip >> "$LOG_FILE" 2>&1
     $PIP_COMMAND install -r requirements.txt >> "$LOG_FILE" 2>&1
     check_error
 fi
 
 $VENV_PYTHON manage.py migrate --noinput >> "$LOG_FILE" 2>&1
+check_error
+
+$VENV_PYTHON manage.py collectstatic --noinput >> "$LOG_FILE" 2>&1
 check_error
 
 sudo systemctl restart "$SERVICE_NAME"
