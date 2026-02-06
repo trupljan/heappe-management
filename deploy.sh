@@ -1,7 +1,7 @@
 #!/bin/bash
 BASE_DIR="/opt/heappe/heappe-admin-app"
 GIT_TAG=${GIT_TAG:-"main"}
-APP_DIR="${BASE_DIR}/branches/${GIT_TAG}"
+APP_DIR="${BASE_DIR}/branches/main"
 SERVICE_NAME="adminpanel"
 LOG_FILE="/var/log/deploy_${SERVICE_NAME}.log"
 
