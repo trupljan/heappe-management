@@ -6,6 +6,7 @@ SERVICE_NAME="adminpanel"
 LOG_FILE="/var/log/deploy_${SERVICE_NAME}.log"
 STATIC_ROOT_DIR="${BASE_DIR}/static"
 
+
 VENV_DIR="${BASE_DIR}/branches/.venv-main"
 VENV_PYTHON="${VENV_DIR}/bin/python"
 PIP_COMMAND="${VENV_DIR}/bin/pip"
