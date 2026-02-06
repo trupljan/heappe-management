@@ -30,7 +30,7 @@
         }
 
         .changelog-box {
-            max-height: 150px;
+            max-height: 200px;
             overflow-y: auto;
             background: #f8f9fa;
             border-radius: 4px;
@@ -108,34 +108,34 @@
         </div>
     </nav>
 
-    <div class="modal fade" id="updateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal fade" id="updateModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg border-0">
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold">Update System</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title fw-bold">System Update</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" id="modalCloseX"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="mb-1 fw-bold small text-primary">New changes:</p>
-                    <div id="commit-messages" class="changelog-box mb-3"></div>
+                    <div id="update-init-view">
+                        <p class="mb-1 fw-bold small text-primary">New changes detected:</p>
+                        <div id="commit-messages" class="changelog-box mb-3"></div>
 
-                    <form id="modalUpdateForm">
-                        <div class="mb-2">
-                            <input type="text" id="up-user" class="form-control form-control-sm" placeholder="Admin Username" required>
+                        <div class="alert alert-warning py-2 small shadow-sm">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>Notice:</strong> The application will restart. Management UI will be temporarily unavailable for 30-60s.
                         </div>
-                        <div class="mb-3">
-                            <input type="password" id="up-pass" class="form-control form-control-sm" placeholder="Admin Password" required>
-                        </div>
-                        <div class="alert alert-warning py-2 small mb-0">
-                            <i class="bi bi-exclamation-triangle me-1"></i> Service will restart (30-60s downtime).
-                        </div>
-                    </form>
-                    <div id="updateStatus" class="mt-2 d-none small fw-bold text-center"></div>
+                    </div>
+
+                    <div id="update-running-view" class="d-none text-center py-4">
+                        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                        <h5 class="fw-bold">Update in progress...</h5>
+                        <p class="text-muted small">Executing deployment script and restarting server.<br>You will be redirected in <span id="countdown">15</span> seconds.</p>
+                    </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer bg-light" id="modalFooter">
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Later</button>
-                    <button type="button" id="modalUpdateBtn" onclick="executeSystemUpdate()" class="btn btn-sm btn-primary px-4 fw-bold">
-                        <span id="btnSpin" class="spinner-border spinner-border-sm d-none"></span> Update Now
+                    <button type="button" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
+                        Start Update Now
                     </button>
                 </div>
             </div>
@@ -145,7 +145,7 @@
     {% if messages %}
     <div class="container mt-3">
         {% for message in messages %}
-            <div class="alert alert-info alert-dismissible fade show" role="alert">
+            <div class="alert alert-info alert-dismissible fade show shadow-sm border-0" role="alert">
                 {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         {% endfor %}
@@ -170,53 +170,60 @@
                         document.getElementById('update-notification-item').classList.remove('d-none');
                         const container = document.getElementById('commit-messages');
                         if (data.changes && data.changes.length > 0) {
-                            container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1">· ${m}</li>`).join('')}</ul>`;
+                            container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
                         } else {
-                            container.innerHTML = 'New version available.';
+                            container.innerHTML = '<div class="text-muted small italic">New version available.</div>';
                         }
                     }
                 });
         });
 
-        async function executeSystemUpdate() {
-            const user = document.getElementById('up-user').value;
-            const pass = document.getElementById('up-pass').value;
-            const btn = document.getElementById('modalUpdateBtn');
-            const status = document.getElementById('updateStatus');
-            const spin = document.getElementById('btnSpin');
+        function confirmAndDeploy() {
+            if (!confirm("Are you sure you want to start the update process now?")) return;
 
-            if (!user || !pass) { alert('Please enter credentials.'); return; }
+            // UI Switch to Loading state
+            document.getElementById('update-init-view').classList.add('d-none');
+            document.getElementById('modalFooter').classList.add('d-none');
+            document.getElementById('modalCloseX').classList.add('d-none');
+            document.getElementById('update-running-view').classList.remove('d-none');
 
-            btn.disabled = true;
-            spin.classList.remove('d-none');
-            status.className = "mt-2 small fw-bold text-center text-primary";
-            status.innerText = "Applying update... please wait.";
-            status.classList.remove('d-none');
+            // Trigger the existing backend logic
+            fetch('{% url "trigger_deployment_direct" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    git_url: 'origin',
+                    git_tag: 'HEAD'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                let seconds = 15;
+                const countdownEl = document.getElementById('countdown');
+                const timer = setInterval(() => {
+                    seconds--;
+                    countdownEl.innerText = seconds;
+                    if (seconds <= 0) {
+                        clearInterval(timer);
+                        window.location.href = "{% url 'dashboard_view' %}";
+                    }
+                }, 1000);
+            })
+            .catch(error => {
+                alert("Critical error: Deployment failed to launch. " + error);
+                location.reload();
+            });
+        }
 
-            try {
-                const response = await fetch('/update-app/', {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': '{{ csrf_token }}',
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ username: user, password: pass })
-                });
-
-                const result = await response.json();
-                if (response.ok) {
-                    status.className = "mt-2 small fw-bold text-center text-success";
-                    status.innerText = "Update complete! Restarting system...";
-                    setTimeout(() => window.location.reload(), 5000);
-                } else {
-                    throw new Error(result.message || 'Update failed.');
-                }
-            } catch (err) {
-                status.className = "mt-2 small fw-bold text-center text-danger";
-                status.innerText = "Error: " + err.message;
-                btn.disabled = false;
-                spin.classList.add('d-none');
-            }
+        function copyApiKey(btn) {
+            const span = btn.previousElementSibling;
+            const key = span.dataset.key;
+            navigator.clipboard.writeText(key).then(() => {
+                btn.textContent = "Copied";
+            });
         }
     </script>
 </body>
