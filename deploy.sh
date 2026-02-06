@@ -5,7 +5,7 @@ APP_DIR="${BASE_DIR}/branches/main"
 SERVICE_NAME="adminpanel"
 LOG_FILE="/var/log/deploy_${SERVICE_NAME}.log"
 
-VENV_DIR="${BASE_DIR}/branches/.venv-${GIT_TAG}"
+VENV_DIR="${BASE_DIR}/branches/.venv-main"
 VENV_PYTHON="${VENV_DIR}/bin/python"
 PIP_COMMAND="${VENV_DIR}/bin/pip"
 
