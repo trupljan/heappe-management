@@ -575,11 +575,20 @@ def instance_credentials_create(request):
         form = InstanceCredentialsForm()
     return render(request, 'instance_credentials_form.html', {'form': form})
 
+
 @login_required
 def instance_credentials_edit(request, pk):
     instance = get_object_or_404(InstanceCredentials, pk=pk)
+
     if request.method == 'POST':
-        form = InstanceCredentialsForm(request.POST, instance=instance)
+        data = request.POST.copy()
+
+        if not data.get('heappe_password'):
+            data['heappe_password'] = instance.heappe_password
+        if not data.get('log_db_password'):
+            data['log_db_password'] = instance.log_db_password
+
+        form = InstanceCredentialsForm(data, instance=instance)
         if form.is_valid():
             form.save()
             messages.success(request, f"Instance '{form.cleaned_data['instance_name']}' updated successfully.")
@@ -588,6 +597,9 @@ def instance_credentials_edit(request, pk):
             messages.error(request, 'Error updating instance. Please check the form.')
     else:
         form = InstanceCredentialsForm(instance=instance)
+        form.fields['heappe_password'].initial = ""
+        form.fields['log_db_password'].initial = ""
+
     return render(request, 'instance_credentials_form.html', {'form': form})
 
 @login_required
