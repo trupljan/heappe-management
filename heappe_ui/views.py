@@ -651,29 +651,45 @@ import subprocess
 from django.conf import settings
 from django.http import JsonResponse
 
+
 def check_for_updates(request):
     repo_path = settings.BASE_DIR
     try:
         subprocess.run(['git', 'fetch', '--all'], cwd=repo_path, check=True, timeout=15, capture_output=True)
 
         local_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo_path).decode().strip()
-
         branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=repo_path).decode().strip()
-
         remote_hash = subprocess.check_output(['git', 'rev-parse', '@{u}'], cwd=repo_path).decode().strip()
 
+        update_available = local_hash != remote_hash
+        commit_messages = []
+
+        if update_available:
+            log_output = subprocess.check_output(
+                ['git', 'log', 'HEAD..@{u}', '--format=%s'],
+                cwd=repo_path
+            ).decode().strip()
+
+            if log_output:
+                commit_messages = log_output.split('\n')
+
         return JsonResponse({
-            'update_available': local_hash != remote_hash,
+            'update_available': update_available,
             'local': local_hash[:7],
             'remote': remote_hash[:7],
-            'branch': branch
+            'branch': branch,
+            'changes': commit_messages
         })
+
 
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.decode() if e.stderr else str(e)
         return JsonResponse({'error': f'Git error: {error_msg}'}, status=500)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ... tvoje existující error handling ...
 
 @login_required
 def update_server_page(request):

@@ -1,51 +1,139 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Update Application</title>
-</head>
-<body>
-    <h1>Update Application</h1>
-    <form id="updateForm">
-        {% csrf_token %}
-        <label for="username">Username:</label>
-        <input type="text" id="username" name="username" required><br><br>
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required><br><br>
-        <button type="button" onclick="updateApp()">Update Application</button>
-    </form>
+{% extends 'base.html' %}
 
-    <script>
-        async function updateApp() {
-            if (confirm("Are you sure you want to update the application? This may cause a temporary service interruption.")) {
-                try {
-                    const username = document.getElementById('username').value;
-                    const password = document.getElementById('password').value;
+{% block title %}System Update | HEAppE Admin{% endblock %}
 
-                    // Validate inputs
-                    if (!username || !password) {
-                        alert('Please enter both username and password.');
-                        return;
-                    }
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card border-0 shadow-sm mt-4">
+            <div class="card-header bg-white border-bottom py-3">
+                <h5 class="card-title mb-0 fw-bold d-flex align-items-center">
+                    <i class="bi bi-shield-lock text-primary me-2"></i>
+                    Authentication Required
+                </h5>
+            </div>
+            <div class="card-body p-4">
+                <p class="text-muted small mb-4">
+                    To proceed with the system update, please provide your administrative credentials.
+                </p>
 
-                    const response = await fetch('/update-app/', {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            username: username,
-                            password: password
-                        })
-                    });
+                <form id="updateForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="username" class="form-label small fw-bold text-secondary">Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0"><i class="bi bi-person text-muted"></i></span>
+                            <input type="text" class="form-control border-start-0 ps-0" id="username" name="username" placeholder="Enter username" required>
+                        </div>
+                    </div>
 
-                    const result = await response.json();
-                    alert(result.message);
-                } catch (error) {
-                    alert('Error during update: ' + error);
-                }
-            }
+                    <div class="mb-4">
+                        <label for="password" class="form-label small fw-bold text-secondary">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0"><i class="bi bi-key text-muted"></i></span>
+                            <input type="password" class="form-control border-start-0 ps-0" id="password" name="password" placeholder="Enter password" required>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="button" id="updateBtn" onclick="updateApp()" class="btn btn-primary fw-bold py-2 shadow-sm">
+                            <span id="btnText">Start System Update</span>
+                            <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                        </button>
+                        <a href="{% url 'dashboard_view' %}" class="btn btn-link text-muted btn-sm text-decoration-none">Back to Dashboard</a>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer bg-light border-0 py-3">
+                <div class="d-flex align-items-center text-muted small">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <span>Updating from branch: <strong>{{ GIT_BRANCH }}</strong></span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="statusMessage" class="mt-3 d-none">
+            <div class="alert shadow-sm border-0 d-flex align-items-center" role="alert">
+                <i id="statusIcon" class="bi me-2 fs-5"></i>
+                <div id="statusText"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    async function updateApp() {
+        const username = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        const btn = document.getElementById('updateBtn');
+        const btnText = document.getElementById('btnText');
+        const btnSpinner = document.getElementById('btnSpinner');
+        const statusDiv = document.getElementById('statusMessage');
+        const statusText = document.getElementById('statusText');
+        const statusIcon = document.getElementById('statusIcon');
+
+        if (!username || !password) {
+            showStatus('Please enter both username and password.', 'warning');
+            return;
         }
-    </script>
-</body>
-</html>
+
+        // Final safety check
+        if (!confirm("Confirm system update? This will pull latest code and restart the server.")) {
+            return;
+        }
+
+        // UI State: Loading
+        btn.disabled = true;
+        btnText.innerText = "Updating...";
+        btnSpinner.classList.remove('d-none');
+        statusDiv.classList.add('d-none');
+
+        try {
+            const response = await fetch('/update-app/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password })
+            });
+
+            const result = await response.json();
+            
+            if (response.ok) {
+                showStatus(result.message || 'Update successful! Redirecting...', 'success');
+                setTimeout(() => window.location.href = "{% url 'dashboard_view' %}", 3000);
+            } else {
+                showStatus(result.message || 'Update failed.', 'danger');
+                resetBtn();
+            }
+        } catch (error) {
+            showStatus('Network error: ' + error, 'danger');
+            resetBtn();
+        }
+    }
+
+    function showStatus(message, type) {
+        const statusDiv = document.getElementById('statusMessage');
+        const statusText = document.getElementById('statusText');
+        const statusIcon = document.getElementById('statusIcon');
+        const alertBox = statusDiv.querySelector('.alert');
+
+        statusDiv.classList.remove('d-none');
+        statusText.innerText = message;
+        
+        // Reset classes
+        alertBox.className = 'alert shadow-sm border-0 d-flex align-items-center alert-' + type;
+        statusIcon.className = 'bi me-2 fs-5 ' + (type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle');
+    }
+
+    function resetBtn() {
+        const btn = document.getElementById('updateBtn');
+        const btnText = document.getElementById('btnText');
+        const btnSpinner = document.getElementById('btnSpinner');
+        btn.disabled = false;
+        btnText.innerText = "Start System Update";
+        btnSpinner.classList.add('d-none');
+    }
+</script>
+{% endblock %}
