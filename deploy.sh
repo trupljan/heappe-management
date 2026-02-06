@@ -4,6 +4,7 @@ GIT_TAG=${GIT_TAG:-"main"}
 APP_DIR="${BASE_DIR}/branches/main"
 SERVICE_NAME="adminpanel"
 LOG_FILE="/var/log/deploy_${SERVICE_NAME}.log"
+STATIC_ROOT_DIR="${BASE_DIR}/static"
 
 VENV_DIR="${BASE_DIR}/branches/.venv-main"
 VENV_PYTHON="${VENV_DIR}/bin/python"
@@ -78,8 +79,8 @@ fi
 $VENV_PYTHON manage.py migrate --noinput >> "$LOG_FILE" 2>&1
 check_error
 
-$VENV_PYTHON manage.py collectstatic --noinput >> "$LOG_FILE" 2>&1
-check_error
+mkdir -p "$STATIC_ROOT_DIR"
+$VENV_PYTHON manage.py collectstatic --noinput --clear >> "$LOG_FILE" 2>&1 || log "WARNING: collectstatic failed"
 
 sudo systemctl restart "$SERVICE_NAME"
 check_error
