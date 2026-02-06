@@ -326,6 +326,7 @@ def project_create(request: HttpRequest) -> HttpResponse:
             "EndDate": request.POST.get("EndDate"),
             "UsageType": int(request.POST.get("UsageType")),
             "UseAccountingStringForScheduler": request.POST.get("UseAccountingStringForScheduler") == "on",
+            "IsOneToOneMapping": request.POST.get("IsOneToOneMapping") == "on",
             "PIEmail": request.POST.get("PIEmail"),
         }
         payload = _create_payload(request.session_code, payload_data)
@@ -375,6 +376,7 @@ def project_update(request: HttpRequest, project_id: int) -> HttpResponse:
         "EndDate": request.POST.get("EndDate"),
         "UsageType": int(request.POST.get("UsageType")),
         "UseAccountingStringForScheduler": request.POST.get("UseAccountingStringForScheduler") == "on",
+        "IsOneToOneMapping": request.POST.get("IsOneToOneMapping") == "on",
     }
     payload = _create_payload(request.session_code, payload_data)
     _handle_api_call(

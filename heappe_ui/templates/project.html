@@ -125,6 +125,15 @@
                         <option value="2" {% if project.usage_type == 2 %}selected{% endif %}>CoreHours</option>
                     </select>
                 </div>
+            
+                <!--IsOneToOneMapping-->
+                <div class="col-md-6 d-flex align-items-center mt-4">
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="isOneToOneMapping" name="IsOneToOneMapping"
+                               {% if project.is_one_to_one_mapping %}checked{% endif %}>
+                        <label for="useAccStr" class="form-check-label">Map external users to internal accounts directly</label>
+                    </div>
+                </div>
 
                 <div class="col-md-6 d-flex align-items-center mt-4">
                     <div class="form-check">
