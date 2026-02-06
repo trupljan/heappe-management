@@ -1071,40 +1071,53 @@ def heappe_check_api(request, min_version):
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
 
+import os
+import time
+from datetime import datetime
+from django.http import StreamingHttpResponse
+from django.contrib.auth.decorators import login_required
+
+
 @login_required
 def stream_logs(request):
-    """SSE Endpoint for Tail -f behavior."""
     instance = request.session.get('chosen_instance', 'develop')
     log_base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
 
     def event_stream():
-        # Find the latest file for today
         today_prefix = datetime.now().strftime('%Y_%m_%d')
+        latest_file = None
 
         while True:
             files = sorted([f for f in os.listdir(log_base_path) if f.startswith(today_prefix) and f.endswith(".log")])
+
             if not files:
-                time.sleep(2)
+                time.sleep(1)
                 continue
 
-            latest_file = files[-1]
-            file_path = os.path.join(log_base_path, latest_file)
+            current_target = files[-1]
+            file_path = os.path.join(log_base_path, current_target)
 
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 f.seek(0, os.SEEK_END)
+
                 while True:
                     line = f.readline()
                     if not line:
-                        # Check if a new file was created (log rotation)
-                        new_files = sorted([f for f in os.listdir(log_base_path) if f.startswith(today_prefix)])
-                        if new_files and new_files[-1] != latest_file:
-                            break  # Break inner loop to open new file
+                        check_files = sorted([f for f in os.listdir(log_base_path) if f.startswith(today_prefix)])
+                        if check_files and check_files[-1] != current_target:
+                            break
 
                         time.sleep(0.5)
                         continue
 
-                    entry = process_log_entry(line, latest_file, {'colors': True, 'meta': True, 'json': True})
-                    html = f'<tr class="log-row {entry["border_class"]} animate-fade-in"><td style="width: 120px;" class="ps-4 py-3 align-top bg-transparent"><span class="badge {entry["text_class"]} bg-light border fw-bold">LIVE</span></td><td class="py-3 pe-4"><div class="log-content">{entry["content"]}</div></td></tr>'
-                    yield f"data: {html.replace('CSS', '')}\n\n"
+                    entry = process_log_entry(line, current_target, {'colors': True, 'meta': True, 'json': True})
 
-    return StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+                    html = f'<tr class="log-row {entry["border_class"]}"><td class="ps-4 py-3"><span class="badge {entry["text_class"]}">LIVE</span></td><td class="py-3 pe-4">{entry["content"]}</td></tr>'
+
+                    # Formát SSE: data: <obsah>\n\n
+                    yield f"data: {html.replace('\n', '')}\n\n"
+
+    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response
