@@ -1,0 +1,457 @@
+# How to run:
+# ansible-playbook -i inventory.ini --user <your_user> --ask-pass --ask-become-pass playbook_deploy_heappemanagement.yml
+
+- name: Deploy Heappe AdminPanel
+  hosts: all
+  become: true
+  vars_prompt:
+    - name: git_user
+      prompt: "Enter your GIT username (leave empty for public repo)"
+      private: false
+
+    - name: git_pass
+      prompt: "Enter your GIT password/token"
+      private: true
+
+  vars:
+    # --- APPLICATION CONFIGURATION ---
+    app_dir: "/opt/heappe/heappe-admin-app"
+    app_port: 8000
+    app_bind: "0.0.0.0:{{ app_port }}"
+    app_nginx_proxypass: "http://127.0.0.1:{{ app_port }}/"
+    service_file: "/etc/systemd/system/adminpanel.service"
+
+    # --- GIT CONFIGURATION ---
+    git_repo: "opencode.it4i.eu/heappe-middleware/heappe-management.git"
+    git_branch: "main"
+
+    # --- NGINX CONFIGURATION (PLEASE FILL AS NEEDED) ---
+    # Quick Reference:
+    # ---------------------------------------------------------------------------------------------
+    # Variable                  | Description                       | Example Value
+    # --------------------------|-----------------------------------|------------------------------
+    # nginx_server_name         | Server address or FQDN            | server_name heappe.com;
+    # nginx_listen              | Port and protocol                 | listen 80; or listen 443 ssl;
+    # nginx_ssl_certificate     | Path to SSL certificate (.pem)    | /etc/ssl/certs/cert.pem
+    # nginx_ssl_certificate_key | Path to private SSL key (.key)    | /etc/ssl/private/key.key
+    # ---------------------------------------------------------------------------------------------
+
+    nginx_server_name: "server_name ;" # <-- FILL IN DOMAIN OR IP HERE
+    
+    # Select one of the options below (uncomment as needed):
+    nginx_listen: "listen 80;" 
+    # nginx_listen: "listen 443 ssl http2;"
+
+    # If using SSL (port 443), specify the file paths:
+    nginx_ssl_certificate: ""
+    nginx_ssl_certificate_key: ""
+
+# Setup HEAppE API endpoint
+    heappe_nginx_location: "/api/"
+    heappe_nginx_proxypass: "http://127.0.0.1:5000/"
+
+# Setup HEAppE datastaging endpoint
+    heappe_datastaging_nginx_location: "/datastaging/"
+    heappe_datastaging_nginx_proxypass: "http://127.0.0.1:5001/"
+
+# Setup python options
+    build_dir: "{{ app_dir }}/build"
+    python_version_major: 3
+    python_version_minor: 12
+    python_version_patch: 12
+    python_exe: "python{{ python_version_major }}.{{ python_version_minor }}"
+    python_version: "{{ python_version_major }}.{{ python_version_minor }}.{{ python_version_patch }}"
+    python_src_dir: "{{ build_dir }}/python"
+    python_prefix: "{{ app_dir }}/python"
+    venv_dir: "{{ app_dir }}/branches/.venv-{{ git_branch }}"
+
+  tasks:
+    - name: Install required base packages for building Python (Ubuntu / Debian)
+      ansible.builtin.apt:
+        name:
+          - wget
+          - curl
+          - build-essential
+          - xz-utils
+          - tk-dev
+          - zlib1g-dev
+          - libncurses-dev
+          - libgdbm-dev
+          - libnss3-dev
+          - libssl-dev
+          - libreadline-dev
+          - libffi-dev
+          - libbz2-dev
+          - libsqlite3-dev
+          - liblzma-dev
+          - libc6-dev
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Install required base packages for building Python (CentOS / RHEL)
+      ansible.builtin.dnf:
+        name:
+          - git
+          - gcc
+          - make
+          - bzip2
+          - bzip2-devel
+          - xz-devel
+          - zlib-devel
+          - libffi-devel
+          - wget
+          - curl
+          - unixODBC
+          - yum-utils
+          - dnf-plugins-core
+          - openssl-devel
+          - readline-devel
+          - sqlite-devel
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install required base packages (Ubuntu / Debian)
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg-agent
+          - libodbc2
+        state: present
+      when: ansible_os_family == 'Debian'
+
+    - name: Add Docker repository (Ubuntu / Debian)
+      ansible.builtin.deb822_repository:
+        name: docker
+        types: [deb]
+        uris: "https://download.docker.com/linux/{{ ansible_distribution | lower }}"
+        signed_by: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+        suites: ["{{ ansible_distribution_release | lower }}"]
+        components: [stable]
+        state: present
+        enabled: true
+      when: ansible_os_family == 'Debian'
+
+    - name: Add Docker repository (CentOS / RHEL)
+      ansible.builtin.yum_repository:
+        name: docker-ce
+        description: Docker CE Stable repo
+        baseurl: https://download.docker.com/linux/centos/$releasever/$basearch/stable
+        enabled: true
+        gpgcheck: true
+        gpgkey: https://download.docker.com/linux/centos/gpg
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install Docker (CentOS / RHEL)
+      ansible.builtin.dnf:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install Docker (Ubuntu / Debian)
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: true
+      when: ansible_os_family == 'Debian'
+
+    - name: Enable and start Docker
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Ensure application directory exists
+      ansible.builtin.file:
+        path: "{{ app_dir }}/branches/{{ git_branch }}"
+        state: directory
+        mode: '0755'
+
+    - name: Clone or update repository
+      ansible.builtin.git:
+        repo: "https://{{ git_user }}:{{ git_pass }}@{{ git_repo }}"
+        dest: "{{ app_dir }}/branches/{{ git_branch }}"
+        update: true
+        force: true
+        version: "{{ git_branch }}"
+
+    - name: Configure Git safe directory
+      community.general.git_config:
+        scope: global
+        name: safe.directory
+        value: "{{ app_dir }}/branches/{{ git_branch }}"
+
+    - name: Create Python source directory
+      ansible.builtin.file:
+        path: "{{ python_src_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Download Python source
+      ansible.builtin.get_url:
+        url: "https://www.python.org/ftp/python/{{ python_version }}/Python-{{ python_version }}.tgz"
+        dest: "{{ python_src_dir }}/Python-{{ python_version }}.tgz"
+        mode: '0644'
+
+    - name: Extract Python source
+      ansible.builtin.unarchive:
+        src: "{{ python_src_dir }}/Python-{{ python_version }}.tgz"
+        dest: "{{ python_src_dir }}"
+        remote_src: true
+
+    - name: Delete extracted .tgz file
+      ansible.builtin.shell: |
+        rm -f {{ python_src_dir }}/Python-{{ python_version }}.tgz
+      changed_when: true # TODO: run this only if stuff being deleted actually exist
+
+    - name: Create Python installation directory (prefix)
+      ansible.builtin.file:
+        path: "{{ python_prefix }}"
+        state: directory
+        mode: '0755'
+
+    - name: Compile and install Python from source
+      ansible.builtin.shell: |
+        cd {{ python_src_dir }}/Python-{{ python_version }}
+        ./configure --enable-optimizations --with-ensurepip=install --prefix={{ python_prefix }}
+        make -j $(nproc)
+        make altinstall
+      args:
+        creates: "{{ python_prefix }}/bin/{{ python_exe }}"
+
+    - name: Some cleanup
+      ansible.builtin.shell: |
+        rm -rf {{ python_src_dir }}/Python-{{ python_version }}
+        test -n "$(ls -A "{{ python_src_dir }}")" || rmdir "{{ python_src_dir }}"
+        test -n "$(ls -A "{{ build_dir }}")" || rmdir "{{ build_dir }}"
+      changed_when: true # TODO: run this only if stuff being deleted actually exist
+
+    - name: Create systemd service
+      ansible.builtin.copy:
+        dest: "{{ service_file }}"
+# yamllint disable
+        content: |
+          [Unit]
+          Description=Gunicorn instance for Heappe AdminPanel
+          After=network.target
+
+          [Service]
+          User=root
+          Group=root
+          WorkingDirectory={{ app_dir }}/branches/{{ git_branch }}
+          ExecStartPre=/bin/bash -c '[[ -d {{ venv_dir }} ]] || {{ python_prefix }}/bin/{{ python_exe }} -m venv {{ venv_dir }}'
+          ExecStartPre={{ venv_dir }}/bin/pip install --upgrade pip
+          ExecStartPre={{ venv_dir }}/bin/pip install -r {{ app_dir }}/branches/{{ git_branch }}/requirements.txt
+          ExecStartPre={{ venv_dir }}/bin/python {{ app_dir }}/branches/{{ git_branch }}/manage.py migrate
+          ExecStartPre={{ venv_dir }}/bin/python {{ app_dir }}/branches/{{ git_branch }}/manage.py shell -c "from django.contrib.auth import get_user_model; User=get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin')"
+          Environment="PYTHONUNBUFFERED=1"
+          Environment="IS_DEV=true"
+          ExecStart={{ venv_dir }}/bin/gunicorn adminpanel.wsgi:application --workers 1 --bind {{ app_bind }} --timeout 360
+          StandardOutput=journal
+          StandardError=journal
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+# yamllint enable
+        mode: '0644'
+
+    - name: Remove old virtual environment if exists
+      ansible.builtin.file:
+        path: "{{ venv_dir }}"
+        state: absent
+
+    - name: Enable and restart adminpanel service
+      ansible.builtin.systemd:
+        name: adminpanel
+        enabled: true
+        daemon_reload: true
+        state: restarted
+
+    - name: Install nginx (Ubuntu / Debian)
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+      when: ansible_os_family == 'Debian'
+
+    - name: Delete link to default nginx site that hijacks location handling (Ubuntu / Debian)
+      ansible.builtin.file:
+        state: absent
+        path: /etc/nginx/sites-enabled/default
+      when: ansible_os_family == 'Debian'
+
+    - name: Install nginx (CentOS / RHEL)
+      ansible.builtin.dnf:
+        name: nginx
+        state: present
+        update_cache: true
+      when: ansible_os_family == 'RedHat'
+
+    - name: Start and enable Nginx service
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Allow HTTP service in firewall (if firewalld is running)
+      ansible.posix.firewalld:
+        service: http
+        permanent: true
+        state: enabled
+        immediate: true
+      when: ansible_facts.services['firewalld.service'] is defined
+
+    - name: Make sure http and https are enabled for nginx
+      ansible.builtin.shell: |
+        if command -v firewall-cmd >/dev/null 2>&1
+        then
+            firewall-cmd --permanent --zone=public --add-service=http
+            firewall-cmd --permanent --zone=public --add-service=https
+        fi
+        echo "OK"
+      changed_when: false
+
+    - name: Set httpd_can_network_connect flag on and keep it persistent across reboots
+      ansible.posix.seboolean:
+        name: httpd_can_network_connect
+        state: true
+        persistent: true
+      when: ansible_selinux is defined and ansible_selinux and ansible_selinux.status == 'enabled'
+      ignore_errors: true
+
+    - name: Deploy application's nginx config for heappe management
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/heappe-admin-app.conf
+        owner: root
+        group: root
+        force: true
+        mode: '0644'
+# yamllint disable
+        content: |
+
+          log_format api_enhanced '$remote_addr - $remote_user [$time_local] '
+                        '"$request" $status $body_bytes_sent '
+                        'rt=$request_time uct="$upstream_connect_time" uat="$upstream_header_time" urt="$upstream_response_time" '
+                        'host="$host" proto=$scheme '
+                        'API-Key: "$http_x_api_key" '
+                        'Auth: "$http_authorization" '
+                        'Ref: "$http_referer" UA: "$http_user_agent" '
+                        'ReqID: "$request_id"';
+
+          server {
+              {{ nginx_server_name }}
+              {{ nginx_listen }}
+              {{ nginx_ssl_certificate }}
+              {{ nginx_ssl_certificate_key }}
+
+              client_max_body_size 50M;
+
+              location /management/static/ {
+                  alias {{ app_dir }}/branches/{{ git_branch }}/heappe_ui/static/;
+                  expires 30d;
+                  access_log off;
+                  add_header Cache-Control "public, max-age=2592000";
+                  access_log /var/log/nginx/heappe-admin-access.log;
+                  error_log /var/log/nginx/heappe-admin-error.log;
+              }
+
+              location /management/static/admin/ {
+                  alias {{ venv_dir }}/lib/{{ python_exe }}/site-packages/django/contrib/admin/static/admin/;
+                  expires 30d;
+                  access_log off;
+                  add_header Cache-Control "public, max-age=2592000";
+                  access_log /var/log/nginx/heappe-admin-access.log;
+                  error_log /var/log/nginx/heappe-admin-error.log;
+              }
+
+              location /management/ {
+                  proxy_pass {{ app_nginx_proxypass }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  access_log /var/log/nginx/heappe-admin-access.log;
+                  error_log /var/log/nginx/heappe-admin-error.log;
+              }
+
+              {%if heappe_nginx_location and heappe_nginx_proxypass %}
+              location {{ heappe_nginx_location }} {
+                  proxy_pass {{ heappe_nginx_proxypass }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+
+                  proxy_request_buffering off;
+                  proxy_http_version 1.1;
+                  client_max_body_size 3G;
+                  proxy_connect_timeout 3600s;
+                  proxy_read_timeout 3600s;
+                  proxy_send_timeout 3600s;
+                  client_body_timeout 3600s;
+                  
+                  access_log /var/log/nginx/heappe-api-access.log api_enhanced;
+                  error_log /var/log/nginx/heappe-api-error.log;
+              }
+              {% endif %}
+
+              {% if heappe_datastaging_nginx_location and heappe_datastaging_nginx_proxypass %}
+              location {{ heappe_datastaging_nginx_location }} {
+                  proxy_pass {{ heappe_datastaging_nginx_proxypass }};
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+
+                  proxy_request_buffering off;
+                  proxy_http_version 1.1;
+                  client_max_body_size 3G;
+                  proxy_connect_timeout 3600s;
+                  proxy_read_timeout 3600s;
+                  proxy_send_timeout 3600s;
+                  client_body_timeout 3600s;
+
+                  access_log /var/log/nginx/heappe-api-access.log api_enhanced;
+                  error_log /var/log/nginx/heappe-api-error.log;
+                }
+              {% endif %}
+
+              include conf.d/heappe-admin-app-*.inc;
+          }
+# yamllint enable
+      notify: validate_and_reload_nginx
+
+
+  handlers:
+
+    - name: Validate and reload nginx
+      block:
+        - name: Test nginx configuration
+          ansible.builtin.command: |
+            nginx -t
+          changed_when: false
+          listen: validate_and_reload_nginx
+
+        - name: Reload nginx
+          ansible.builtin.systemd:
+            name: nginx
+            state: reloaded
+          changed_when: true
+          listen: validate_and_reload_nginx
+
+    - name: Restart Nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+      listen: reload_nginx
+
+
