@@ -1,5 +1,4 @@
 #!/bin/bash
-
 BASE_DIR="/opt/heappe/heappe-admin-app"
 GIT_TAG=${GIT_TAG:-"main"}
 APP_DIR="${BASE_DIR}/branches/${GIT_TAG}"
