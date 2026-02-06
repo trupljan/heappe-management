@@ -46,7 +46,7 @@ AUTHENTICATION_BACKENDS = [
     #"heappe_ui.auth_backend.HeappeAuthBackend",
     "django.contrib.auth.backends.ModelBackend",  # fallback
 ]
-
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 # Application definition
 
