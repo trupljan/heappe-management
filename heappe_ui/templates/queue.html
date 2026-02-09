@@ -96,16 +96,21 @@
 
 
                 {% if True %}
-                <div class="col-md-4">
-                      <label class="form-label">Queue Group</label>
-                        <select id="groupId" name="ClusterNodeTypeAggregationId" class="form-select">
-                                <option value="" disabled>Select Queue Group</option>
-                                {% for group in queue_groups %}
-                                    <option value="{{ group.id }}" {% if node_type.cluster_node_type_aggregation.id == group.id %}selected{% endif %}>{{ group.name }}</option>
-                                {% endfor %}
-                            </select>
-                      </div>
-                    </div>
+               <div class="col-md-4">
+                    <label class="form-label">Queue Group</label>
+                    <select id="groupId" name="ClusterNodeTypeAggregationId" class="form-select">
+                        <option value="" {% if not node_type.cluster_node_type_aggregation.id %}selected{% endif %} disabled>
+                            Select Queue Group
+                        </option>
+                        
+                        {% for group in queue_groups %}
+                            <option value="{{ group.id }}" 
+                                {% if node_type.cluster_node_type_aggregation.id == group.id %}selected{% endif %}>
+                                {{ group.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
                 {% endif %}
 
             <div class="mt-4 d-flex justify-content-between">
