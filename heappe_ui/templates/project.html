@@ -184,8 +184,8 @@
                             <input type="text" class="form-control" id="ScratchStoragePath" name="ScratchStoragePath" value="" placeholder="Enter Scratch Storage Path">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label" for="PermanentStoragePath">Project Storage Path</label>
-                            <input type="text" class="form-control" id="PermanentStoragePath" name="PermanentStoragePath" value="" placeholder="Enter Storage Path">
+                            <label class="form-label" for="ProjectStoragePath">Project Storage Path</label>
+                            <input type="text" class="form-control" id="ProjectStoragePath" name="ProjectStoragePath" value="" placeholder="Enter Storage Path">
                         </div>
 
                         <div class="col-12">
@@ -220,7 +220,7 @@
                             <tr>
                                 <td>{{ assignment.cluster_name }}</td>
                                 <td>{{ assignment.scratch_storage_path }}</td>
-                                <td>{{ assignment.permanent_storage_path }}</td>
+                                <td>{{ assignment.project_storage_path }}</td>
                                 <td>
                                     <form method="post" style="display:inline;">
                                         {% csrf_token %}
