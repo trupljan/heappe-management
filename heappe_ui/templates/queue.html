@@ -72,6 +72,7 @@
                     <input type="text" class="form-control" name="Queue" value="{{ node_type.queue }}">
                 </div>
 
+                 {% if False %}
                 <div class="col-md-4">
                     <label class="form-label">Quality Of Service</label>
                     <input type="text" class="form-control" name="QualityOfService" value="{{ node_type.quality_of_service }}">
@@ -81,6 +82,7 @@
                     <label class="form-label">Cluster Allocation Name</label>
                     <input type="text" class="form-control" name="ClusterAllocationName" value="{{ node_type.cluster_allocation_name }}">
                 </div>
+                {% endif %}
 
                 <!-- filetransfer_methods select -->
                 <div class="col-md-4">
@@ -102,9 +104,9 @@
                         <option value="" {% if not node_type.cluster_node_type_aggregation.id %}selected{% endif %} disabled>
                             Select Queue Group
                         </option>
-                        
+
                         {% for group in queue_groups %}
-                            <option value="{{ group.id }}" 
+                            <option value="{{ group.id }}"
                                 {% if node_type.cluster_node_type_aggregation.id == group.id %}selected{% endif %}>
                                 {{ group.name }}
                             </option>
