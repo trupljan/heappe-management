@@ -1114,8 +1114,9 @@ def stream_logs(request):
 
                     html = f'<tr class="log-row {entry["border_class"]}"><td class="ps-4 py-3"><span class="badge {entry["text_class"]}">LIVE</span></td><td class="py-3 pe-4">{entry["content"]}</td></tr>'
 
-                    # Formát SSE: data: <obsah>\n\n
-                    yield f"data: {html.replace('\n', '')}\n\n"
+                    clean_html = html.replace('\n', '')
+
+                    yield f"data: {clean_html}\n\n"
 
     response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
