@@ -8,10 +8,6 @@
             <strong>Queue Groups</strong>
             <div class="ms-auto d-flex align-items-center">
             <a href="{% url 'queue_group_create' %}" class="btn btn-sm btn-success me-2">New Queue Group</a>
-                {% if queue_groups %}
-                    <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#assignQueueGroupModal">Assign Queue Group</button>
-                    
-                {% endif %}
                 <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
             </div>
         </div>
