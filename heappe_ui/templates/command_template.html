@@ -1,16 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
-  <div class="container justify-content-center">
-    <ul class="nav nav-pills">
-      <li class="nav-item">
-        <a class="nav-link" href="">Back to List</a>
-      </li>
-    </ul>
-  </div>
-</nav>
+
 
 <h1 class="mb-4 text-center">
   {% if command_template %}{{ command_template.Name }}{% else %}New Command Template{% endif %}
@@ -22,7 +13,7 @@
       This command template is shared across all projects and cannot be edited.
     </div>
     <div class="d-flex justify-content-center">
-      <a href="" class="btn btn-secondary">Back</a>
+      <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-secondary">Back</a>
     </div>
   {% else %}
     <!-- Command Template Form -->
@@ -121,7 +112,7 @@
             {% else %}
               <button type="submit" class="btn btn-primary">Create new</button>
             {% endif %}
-            <a href="" class="btn btn-secondary">Back</a>
+            <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-secondary">Back</a>
           </div>
         </form>
       </div>
