@@ -284,16 +284,22 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             self.logger.error(f"Failed to generate seed.njson file: {e}")
             raise RuntimeError(f"seed.njson file generation failed: {e}")
 
+    def _get_generators_for_version(self, version: str):
+        if version.startswith("V6.0."):
+            return generate_appsettings_v6_0_0, generate_appsettings_data_staging_v6_0_0
+        elif version.startswith("V6.1."):
+            return generate_appsettings_v6_1_0, generate_appsettings_data_staging_v6_1_0
+        elif version.startswith("V6.2.0"):
+            return generate_appsettings_v6_2_0, generate_appsettings_data_staging_v6_2_0
+        elif version.startswith("V6.2.1"):
+            return generate_appsettings_v6_2_1, generate_appsettings_data_staging_v6_2_1
+
+        raise ValueError(f"Unsupported version: {version}")
     def generate_appsettings_and_merge_with_old(self, old_appsettings: dict, version: str) -> dict:
         """Generate appsettings.json and merge with old settings."""
         # This is a placeholder for the actual implementation
         # You would generate new appsettings and then merge with old_appsettings
-        if version.startswith("V6.0."):
-            app_fn = generate_appsettings_v6_0_0
-        elif version.startswith("V6.1."):
-            app_fn = generate_appsettings_v6_1_0
-        elif version.startswith("V6.2."):
-            app_fn = generate_appsettings_v6_2_0
+        app_fn, _ = self._get_generators_for_version(version)
 
         new_appsettings = app_fn(
             instance_name="instance",
@@ -323,20 +329,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
 
         print(f"Generating appsettings for version: {version}")
 
-        if version.startswith("V6.0."):
-            app_fn = generate_appsettings_v6_0_0
-            data_fn = generate_appsettings_data_staging_v6_0_0
-        elif version.startswith("V6.1."):
-            app_fn = generate_appsettings_v6_1_0
-            data_fn = generate_appsettings_data_staging_v6_1_0
-        elif version.startswith("V6.2.0"):
-            app_fn = generate_appsettings_v6_2_0
-            data_fn = generate_appsettings_data_staging_v6_2_0
-        elif version.startswith("V6.2.1"):
-            app_fn = generate_appsettings_v6_2_1
-            data_fn = generate_appsettings_data_staging_v6_2_1
-        else:
-            raise ValueError(f"Unsupported version: {version}")
+        app_fn, data_fn = self._get_generators_for_version(version)
 
         appsettings = app_fn(
             instance_name=instance_name,
