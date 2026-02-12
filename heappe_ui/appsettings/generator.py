@@ -65,7 +65,7 @@ def generate_appsettings_v6_0_0(
             },
             "BusinessLogicSettings": {
                 "SharedAccountsPoolMode": True,
-                "AutomaticClusterAccountInitialization": True,
+                "AutoInitializeProjectCredentialsOnFirstUse": True,
                 "GeneratedFileTransferKeyLimitPerJob": 5,
                 "ValidityOfTemporaryTransferKeysInHours": 24,
                 "SessionExpirationInSeconds": 900,
@@ -249,7 +249,7 @@ def generate_appsettings_v6_1_0(
             },
             "BusinessLogicSettings": {
                 "SharedAccountsPoolMode": True,
-                "AutomaticClusterAccountInitialization": True,
+                "AutoInitializeProjectCredentialsOnFirstUse": True,
                 "GeneratedFileTransferKeyLimitPerJob": 5,
                 "ValidityOfTemporaryTransferKeysInHours": 24,
                 "SessionExpirationInSeconds": 900,
