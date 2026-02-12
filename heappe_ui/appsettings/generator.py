@@ -459,6 +459,18 @@ def generate_appsettings_v6_2_0(
 
     return appsettings
 
+def generate_appsettings_v6_2_1(
+        instance_name: str,
+        sa_password: str,
+        port: int = 5000,
+        automigrate: bool = True,
+        version: str = None,
+        deployed_ip: str = None):
+    appsettings = generate_appsettings_v6_1_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
+    #bgworker RoleAssignmentSyncCheck = 3600
+    appsettings['BackGroundThreadSettings']['RoleAssignmentSyncCheck'] = 3600
+    return appsettings
+
 def generate_appsettings_data_staging_v6_0_0(instance_name: str,
             sa_password: str,
             data_staging_token: str,
@@ -552,3 +564,10 @@ def generate_appsettings_data_staging_v6_2_0(instance_name: str,
             port: int = 5001,
             version: str = None):
     return generate_appsettings_data_staging_v6_0_0(instance_name,sa_password,data_staging_token,port,version)
+
+def generate_appsettings_data_staging_v6_2_1(instance_name: str,
+            sa_password: str,
+            data_staging_token: str,
+            port: int = 5001,
+            version: str = None):
+    return generate_appsettings_data_staging_v6_2_0(instance_name,sa_password,data_staging_token,port,version)

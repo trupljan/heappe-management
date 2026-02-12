@@ -18,6 +18,8 @@ from heappe_ui.appsettings.generator import (
     generate_appsettings_data_staging_v6_1_0,
     generate_appsettings_v6_2_0,
     generate_appsettings_data_staging_v6_2_0,
+    generate_appsettings_v6_2_1,
+    generate_appsettings_data_staging_v6_2_1,
 )
 
 from heappe_ui.models import InstanceCredentials
@@ -327,9 +329,12 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         elif version.startswith("V6.1."):
             app_fn = generate_appsettings_v6_1_0
             data_fn = generate_appsettings_data_staging_v6_1_0
-        elif version.startswith("V6.2."):
+        elif version.startswith("V6.2.0"):
             app_fn = generate_appsettings_v6_2_0
             data_fn = generate_appsettings_data_staging_v6_2_0
+        elif version.startswith("V6.2.1"):
+            app_fn = generate_appsettings_v6_2_1
+            data_fn = generate_appsettings_data_staging_v6_2_1
         else:
             raise ValueError(f"Unsupported version: {version}")
 
