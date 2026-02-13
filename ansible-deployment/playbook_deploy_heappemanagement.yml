@@ -32,19 +32,19 @@
     # --------------------------|-----------------------------------|------------------------------
     # nginx_server_name         | Server address or FQDN            | server_name heappe.com;
     # nginx_listen              | Port and protocol                 | listen 80; or listen 443 ssl;
-    # nginx_ssl_certificate     | Path to SSL certificate (.pem)    | /etc/ssl/certs/cert.pem
-    # nginx_ssl_certificate_key | Path to private SSL key (.key)    | /etc/ssl/private/key.key
+    # nginx_ssl_certificate     | Path to SSL certificate (.pem)    | ssl_certificate /etc/ssl/certs/cert.pem;
+    # nginx_ssl_certificate_key | Path to private SSL key (.key)    | ssl_certificate_key /etc/ssl/private/key.key;
     # ---------------------------------------------------------------------------------------------
 
-    nginx_server_name: "server_name ;" # <-- FILL IN DOMAIN OR IP HERE
+    nginx_server_name: "server_name <address-or-FQDN>;" # <-- FILL IN DOMAIN OR IP HERE
     
     # Select one of the options below (uncomment as needed):
     nginx_listen: "listen 80;" 
     # nginx_listen: "listen 443 ssl http2;"
 
     # If using SSL (port 443), specify the file paths:
-    nginx_ssl_certificate: ""
-    nginx_ssl_certificate_key: ""
+    nginx_ssl_certificate: "ssl_certificate <ssl-cert-path>;"
+    nginx_ssl_certificate_key: "ssl_certificate_key <ssl-key-path>;"
 
 # Setup HEAppE API endpoint
     heappe_nginx_location: "/api/"
