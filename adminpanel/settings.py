@@ -34,14 +34,16 @@ MANAGEMENT_PROXYPASS = os.getenv('MANAGEMENT_PROXYPASS', 'False').lower() in ('t
 
 DEBUG = IS_DEV
 
-if IS_DEV or MANAGEMENT_PROXYPASS:
-    # DEV
+
+if IS_DEV:
     FORCE_SCRIPT_NAME = None
     LOGIN_URL = '/login'
-else:
-    # PROD with nxinx reverse proxy
+elif MANAGEMENT_PROXYPASS:
     FORCE_SCRIPT_NAME = '/management'
     LOGIN_URL = '/management/login'
+else:
+    FORCE_SCRIPT_NAME = None
+    LOGIN_URL = '/login'
 
 AUTHENTICATION_BACKENDS = [
     #"heappe_ui.auth_backend.HeappeAuthBackend",
