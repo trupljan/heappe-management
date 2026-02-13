@@ -42,8 +42,8 @@ elif MANAGEMENT_PROXYPASS:
     FORCE_SCRIPT_NAME = '/management'
     LOGIN_URL = '/management/login'
 else:
-    FORCE_SCRIPT_NAME = None
-    LOGIN_URL = '/login'
+    FORCE_SCRIPT_NAME = '/management'
+    LOGIN_URL = '/management/login'
 
 AUTHENTICATION_BACKENDS = [
     #"heappe_ui.auth_backend.HeappeAuthBackend",
