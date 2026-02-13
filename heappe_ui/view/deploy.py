@@ -349,10 +349,12 @@ def handle_update_action(config, instance_name):
             "--profile", "sshagent",
             "--profile", "staging",
             "-p", instance_name,
-            "up", "-d"
+            "restart"
         ]
         restart_result = execute_docker_compose(restart_command, compose_dir)
         print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
+
+
 
         if restart_result.returncode != 0:
             return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
