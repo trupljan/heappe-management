@@ -65,7 +65,6 @@
   </div>
 </div>
 
-<!-- Add Formula Modal -->
 <div class="modal fade" id="addFormulaModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -78,48 +77,54 @@
         </div>
         <div class="modal-body">
           <div class="row">
-            <!-- Tokens (Operands + Operators) -->
-            <div class="col-4">
+            <div class="col-4 border-end">
               <h6>Tokens</h6>
               <div class="d-flex flex-wrap gap-1 mb-3">
-                <!-- Operands numbers-->
-                  {% for operand in ACCOUNTING_NUMBERS %}
-                        <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
-                    {% endfor %}
-               </div>
-               <div class="d-flex flex-wrap gap-1 mb-3">
-                <!-- Operands times-->
-                  {% for operand in ACCOUNTING_TIMES %}
-                        <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
-                    {% endfor %}
-               </div>
-                <div class="d-flex flex-wrap gap-1 mb-3">
-                <!-- Operators -->
-                    {% for operator in ACCOUNTING_OPERATORS %}
-                        <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
-                    {% endfor %}
+                {% for operand in ACCOUNTING_NUMBERS %}
+                  <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                {% endfor %}
               </div>
-              <small class="text-muted d-block mt-2">💡 Drag tokens into builder. Click token to remove. Drag to reorder.</small>
+              <div class="d-flex flex-wrap gap-1 mb-3">
+                {% for operand in ACCOUNTING_TIMES %}
+                  <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                {% endfor %}
+              </div>
+              <div class="d-flex flex-wrap gap-1 mb-3">
+                {% for operator in ACCOUNTING_OPERATORS %}
+                  <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
+                {% endfor %}
+              </div>
+
+              <hr>
+              <h6>Custom Value</h6>
+              <div class="input-group input-group-sm mb-2">
+                <input type="text" class="form-control custom-token-input" placeholder="e.g. 1.25 or Variable">
+                <button class="btn btn-dark add-custom-token-btn" type="button">Add</button>
+              </div>
+              <small class="text-muted d-block mt-2">💡 Drag tokens or type custom values. Click to remove, drag to reorder.</small>
             </div>
 
-            <!-- Drop Zone -->
             <div class="col-8">
               <h6>Formula Builder</h6>
-              <div id="addFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light" style="min-height:100px;"></div>
+              <div id="addFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light" style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
               <input type="hidden" name="Formula" id="addFormulaInput">
             </div>
           </div>
           <hr>
-          <div class="mb-3"><label>Validity From</label><input type="datetime-local" class="form-control" name="ValidityFrom"></div>
-          <div class="mb-3"><label>Validity To</label><input type="datetime-local" class="form-control" name="ValidityTo"></div>
+          <div class="row">
+            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control" name="ValidityFrom"></div>
+            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control" name="ValidityTo"></div>
+          </div>
         </div>
-        <div class="modal-footer"><button type="submit" class="btn btn-primary">Save</button><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button></div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        </div>
       </form>
     </div>
   </div>
 </div>
 
-<!-- Edit Formula Modal -->
 <div class="modal fade" id="editFormulaModal" tabindex="-1">
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
@@ -133,48 +138,53 @@
         </div>
         <div class="modal-body">
           <div class="row">
-            <!-- Tokens (Operands + Operators) -->
-            <div class="col-4">
+            <div class="col-4 border-end">
               <h6>Tokens</h6>
               <div class="d-flex flex-wrap gap-1 mb-3">
-                <!-- Operands numbers-->
-                  {% for operand in ACCOUNTING_NUMBERS %}
-                        <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
-                    {% endfor %}
-               </div>
-               <div class="d-flex flex-wrap gap-1 mb-3">
-                <!-- Operands times-->
-                  {% for operand in ACCOUNTING_TIMES %}
-                        <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
-                    {% endfor %}
-               </div>
-                <div class="d-flex flex-wrap gap-1 mb-3">
-                <!-- Operators -->
-                    {% for operator in ACCOUNTING_OPERATORS %}
-                        <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
-                    {% endfor %}
+                {% for operand in ACCOUNTING_NUMBERS %}
+                  <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                {% endfor %}
               </div>
-              <small class="text-muted d-block mt-2">💡 Drag tokens into builder. Click token to remove. Drag to reorder.</small>
+              <div class="d-flex flex-wrap gap-1 mb-3">
+                {% for operand in ACCOUNTING_TIMES %}
+                  <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                {% endfor %}
+              </div>
+              <div class="d-flex flex-wrap gap-1 mb-3">
+                {% for operator in ACCOUNTING_OPERATORS %}
+                  <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
+                {% endfor %}
+              </div>
+
+              <hr>
+              <h6>Custom Value</h6>
+              <div class="input-group input-group-sm mb-2">
+                <input type="text" class="form-control custom-token-input" placeholder="e.g. 100">
+                <button class="btn btn-dark add-custom-token-btn" type="button">Add</button>
+              </div>
             </div>
 
-            <!-- Drop Zone -->
             <div class="col-8">
               <h6>Formula Builder</h6>
-              <div id="editFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light" style="min-height:100px;"></div>
+              <div id="editFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light" style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
               <input type="hidden" name="Formula" id="editFormulaInput">
             </div>
           </div>
           <hr>
-          <div class="mb-3"><label>Validity From</label><input type="datetime-local" class="form-control" name="ValidityFrom" id="editValidityFrom"></div>
-          <div class="mb-3"><label>Validity To</label><input type="datetime-local" class="form-control" name="ValidityTo" id="editValidityTo"></div>
+          <div class="row">
+            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control" name="ValidityFrom" id="editValidityFrom"></div>
+            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control" name="ValidityTo" id="editValidityTo"></div>
+          </div>
         </div>
-        <div class="modal-footer"><button type="submit" class="btn btn-primary">Save Changes</button><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button></div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        </div>
       </form>
     </div>
   </div>
 </div>
 
-<!-- Assign Existing Formula Modal -->
 <div class="modal fade" id="assignFormulaModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -208,69 +218,64 @@ function initFormulaBuilder(dropZoneId, inputId) {
   const formulaInput = document.getElementById(inputId);
   let dragSrcEl = null;
 
-  // Zabránění výchozího chování při přetahování
   dropZone.addEventListener("dragover", (e) => e.preventDefault());
   dropZone.addEventListener("dragenter", (e) => e.preventDefault());
 
-  // Přidání tokenu při dropnutí zvenčí (z panelu tokenů)
   dropZone.addEventListener("drop", (e) => {
     e.preventDefault();
     const value = e.dataTransfer.getData("text/plain");
-    if (value && !dragSrcEl) { // Pokud nejde o přesun uvnitř drop zóny
+    // Pokud hodnota existuje a netaháme zrovna element už uvnitř dropzóny (dragSrcEl)
+    if (value && !dragSrcEl) {
       addToken(value);
     }
   });
 
-  // Funkce pro aktualizaci hodnoty formule ve skrytém inputu
   function updateFormula() {
     formulaInput.value = [...dropZone.querySelectorAll("span")]
       .map((s) => s.dataset.value)
       .join(" ");
   }
 
-  // Funkce pro přidání nového tokenu
   function addToken(value) {
-    if (!value) return;
+    if (!value || value.trim() === "") return;
     const span = document.createElement("span");
-    span.textContent = value + " ";
-    span.className = "badge bg-secondary me-1";
+    span.textContent = value;
+    // Vlastní hodnoty dostanou jinou barvu (info), pokud nejsou v predefined (volitelné)
+    span.className = "badge bg-secondary p-2 shadow-sm";
     span.dataset.value = value;
     span.draggable = true;
     span.style.cursor = "pointer";
     span.title = "Click to remove";
 
-    // Odebrání tokenu při kliknutí
     span.addEventListener("click", () => {
       span.remove();
       updateFormula();
     });
 
-    // Drag & drop pro přesouvání uvnitř drop zóny
     span.addEventListener("dragstart", (e) => {
       dragSrcEl = span;
       e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", span.dataset.value); // Pro kompatibilitu s přetahováním zvenčí
-      span.classList.add("dragging");
+      e.dataTransfer.setData("text/plain", span.dataset.value);
+      span.classList.add("opacity-50");
     });
 
     span.addEventListener("dragend", () => {
       dragSrcEl = null;
-      span.classList.remove("dragging");
+      span.classList.remove("opacity-50");
     });
 
     span.addEventListener("dragover", (e) => {
       e.preventDefault();
-      span.classList.add("border", "border-primary");
+      span.classList.add("border-start", "border-primary", "border-3");
     });
 
     span.addEventListener("dragleave", () => {
-      span.classList.remove("border", "border-primary");
+      span.classList.remove("border-start", "border-primary", "border-3");
     });
 
     span.addEventListener("drop", (e) => {
       e.preventDefault();
       if (dragSrcEl && dragSrcEl !== span) {
-        // Vložení tokenu před nebo za cílový token
         const allSpans = [...dropZone.querySelectorAll("span")];
         const targetIndex = allSpans.indexOf(span);
         const srcIndex = allSpans.indexOf(dragSrcEl);
@@ -281,7 +286,7 @@ function initFormulaBuilder(dropZoneId, inputId) {
         }
         updateFormula();
       }
-      span.classList.remove("border", "border-primary");
+      span.classList.remove("border-start", "border-primary", "border-3");
     });
 
     dropZone.appendChild(span);
@@ -299,17 +304,34 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Inicializace builderů pro přidání a úpravu formule
   const addBuilder = initFormulaBuilder("addFormulaDropZone", "addFormulaInput");
   const editBuilder = initFormulaBuilder("editFormulaDropZone", "editFormulaInput");
 
-  // Naplnění editovacího modálu daty při otevření
+  // Logika pro přidávání vlastních hodnot (Custom Tokens)
+  document.querySelectorAll(".add-custom-token-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      const modal = e.target.closest(".modal");
+      const input = modal.querySelector(".custom-token-input");
+      const value = input.value.trim();
+
+      if (value !== "") {
+        if (modal.id === "addFormulaModal") {
+          addBuilder.addToken(value);
+        } else {
+          editBuilder.addToken(value);
+        }
+        input.value = "";
+      }
+    });
+  });
+
   const editModal = document.getElementById("editFormulaModal");
   editModal.addEventListener("show.bs.modal", (event) => {
     const button = event.relatedTarget;
     document.getElementById("editFormulaId").value = button.getAttribute("data-id");
     document.getElementById("editValidityFrom").value = button.getAttribute("data-validity-from");
     document.getElementById("editValidityTo").value = button.getAttribute("data-validity-to");
+
     editBuilder.dropZone.innerHTML = "";
     const formula = button.getAttribute("data-formula") || "";
     formula.split(" ").forEach((value) => {
