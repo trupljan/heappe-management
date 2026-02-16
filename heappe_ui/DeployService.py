@@ -293,6 +293,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             return generate_appsettings_v6_2_0, generate_appsettings_data_staging_v6_2_0
         elif version.startswith("V6.2.1"):
             return generate_appsettings_v6_2_1, generate_appsettings_data_staging_v6_2_1
+        else:
+            return generate_appsettings_v6_2_1, generate_appsettings_data_staging_v6_2_1
 
         raise ValueError(f"Unsupported version: {version}")
     def generate_appsettings_and_merge_with_old(self, old_appsettings: dict, version: str) -> dict:
