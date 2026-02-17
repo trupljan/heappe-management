@@ -398,7 +398,8 @@ def project_assign_to_cluster(request: HttpRequest) -> HttpResponse:
         "ProjectId": project_id,
         "ClusterId": cluster_id,
         "ScratchStoragePath": request.POST.get("ScratchStoragePath", ""),
-        "PermanentStoragePath": request.POST.get("PermanentStoragePath", "")
+        "PermanentStoragePath": request.POST.get("PermanentStoragePath", ""),
+        "ProjectStoragePath": request.POST.get("ProjectStoragePath", "")
     }
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
