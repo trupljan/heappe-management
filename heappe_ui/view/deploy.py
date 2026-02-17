@@ -302,66 +302,68 @@ def handle_global_action(compose_dir, instance_name, action):
         'success' if result.returncode == 0 else 'danger'
     )
 
+
+import subprocess
+import os
+
+
 def handle_update_action(config, instance_name):
-    """Handle the update process and return the result."""
     service = HEAppEDeployService(config)
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
+    target = config.repo_branch
 
     try:
-        # git pull
-        git_command = ["git", "pull", "origin", config.repo_branch]
-        git_result = subprocess.run(
-            git_command,
+        fetch_command = ["git", "fetch", "origin", "--tags", "-f", "--prune"]
+        fetch_result = subprocess.run(
+            fetch_command,
             cwd=compose_dir,
             capture_output=True,
             text=True,
             check=False
         )
-        print(f"Git pull done: {git_result.returncode} {git_result.stdout} {git_result.stderr}")
+        if fetch_result.returncode != 0:
+            return fetch_result, f"Failed to fetch: {fetch_result.stderr}", 'danger'
+
+        git_result = subprocess.run(
+            ["git", "reset", "--hard", target],
+            cwd=compose_dir,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
         if git_result.returncode != 0:
-            return git_result, f"Failed to pull latest code: {git_result.stderr}", 'danger'
+            git_result = subprocess.run(
+                ["git", "reset", "--hard", f"origin/{target}"],
+                cwd=compose_dir,
+                capture_output=True,
+                text=True,
+                check=False
+            )
 
-        # update appsettings and .env
-        service.update_init(instance_name=instance_name, version=config.repo_branch)
+        if git_result.returncode != 0:
+            return git_result, f"Failed to sync code to {target}: {git_result.stderr}", 'danger'
 
-        # rebuild and restart containers
-        build_command = [
-            "docker", "compose",
-            "--profile", "db",
-            "--profile", "heappe",
-            "--profile", "initVault",
-            "--profile", "vault",
-            "--profile", "vaultagent",
-            "--profile", "sshagent",
-            "--profile", "staging",
-            "-p", instance_name,
-            "build",  "--no-cache"
+        service.update_init(instance_name=instance_name, version=target)
+
+        profiles = [
+            "--profile", "db", "--profile", "heappe", "--profile", "initVault",
+            "--profile", "vault", "--profile", "vaultagent", "--profile", "sshagent",
+            "--profile", "staging"
         ]
 
+        build_command = ["docker", "compose", *profiles, "-p", instance_name, "build", "--no-cache"]
+        subprocess.run(build_command, cwd=compose_dir, capture_output=True, text=True)
 
-        restart_command = [
-            "docker", "compose",
-            "--profile", "db",
-            "--profile", "heappe",
-            "--profile", "initVault",
-            "--profile", "vault",
-            "--profile", "vaultagent",
-            "--profile", "sshagent",
-            "--profile", "staging",
-            "-p", instance_name,
-            "restart"
-        ]
-        restart_result = execute_docker_compose(restart_command, compose_dir)
-        print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
-
-
+        up_command = ["docker", "compose", *profiles, "-p", instance_name, "up", "-d"]
+        restart_result = subprocess.run(up_command, cwd=compose_dir, capture_output=True, text=True)
 
         if restart_result.returncode != 0:
-            return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
+            return restart_result, f"Failed to start containers: {restart_result.stderr}", 'danger'
 
-        return restart_result, "Update completed successfully.", 'success'
+        return restart_result, f"Update to {target} completed successfully.", 'success'
+
     except Exception as e:
-        print(f"Update error: {str(e)}")
         return None, f"Update error: {str(e)}", 'danger'
 
 
