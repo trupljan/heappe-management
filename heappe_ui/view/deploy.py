@@ -328,66 +328,83 @@ import subprocess
 import os
 
 
-def handle_update_action(config, instance_name):
+def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
+    """Handle the deployment process and return the result."""
     service = HEAppEDeployService(config)
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
-    target = config.repo_branch
 
     try:
-        # Smazání lokálního tagu, aby se mohl stáhnout čerstvý ze serveru
-        subprocess.run(["git", "tag", "-d", target], cwd=compose_dir, capture_output=True)
 
-        fetch_command = [
-            "git", "fetch", "origin",
-            "+refs/tags/*:refs/tags/*",
-            "+refs/heads/*:refs/heads/*",
-            "--tags", "-f", "--prune"
+        for s in [s1, s2, s3, s4]:
+            if 's' in locals(): s.close()
+
+        admin_password = generate_secure_password()
+        vault_password = generate_secure_password()
+        sa_password = generate_secure_password()
+        data_staging_token = generate_secure_password()
+
+        instance_settings = service.deploy_init(
+            instance_name=instance_name,
+            username="admin",
+            password=admin_password,
+            vault_password=vault_password,
+            sa_password=sa_password,
+            data_staging_token=data_staging_token,
+            ports=ports,
+            overwrite_existing=True,
+            deployed_ip='localhost',
+            version=config.repo_branch
+        )['instance_settings']
+
+        build_command = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "initVault",
+            "--profile", "staging",
+            "-p", instance_name,
+            "build",  "--no-cache"
         ]
-        subprocess.run(fetch_command, cwd=compose_dir, capture_output=True)
+        build_result = execute_docker_compose(build_command, compose_dir)
+        print(f"Docker Compose build result done")
+        up_command = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "initVault",
+            "--profile", "staging",
+            "-p", instance_name,
+            "up", "-d"
+        ]
+        up_result = execute_docker_compose(up_command, compose_dir)
+        print(f"Docker Compose up done: {up_result.returncode} {up_result.stdout} {up_result.stderr}")
+        #wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
+        # Initialize the database with retries
 
-        # Reset přepíše jen soubory, které Git zná. Na .env nesáhne.
-        git_result = subprocess.run(
-            ["git", "reset", "--hard", f"origin/{target}"],
-            cwd=compose_dir,
-            capture_output=True,
-            text=True
-        )
+        run_with_retries(instance_name, ports, sa_password)
 
-        if git_result.returncode != 0:
-            subprocess.run(["git", "reset", "--hard", target], cwd=compose_dir, capture_output=True)
-
-
-        service.update_init(instance_name=instance_name, version=target)
-
-        profiles = [
-            "--profile", "db", "--profile", "heappe", "--profile", "initVault",
-            "--profile", "vault", "--profile", "vaultagent", "--profile", "sshagent",
-            "--profile", "staging"
+        restart_command = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "initVault",
+            "-p", instance_name,
+            "restart"
         ]
 
-        subprocess.run(["docker", "compose", *profiles, "-p", instance_name, "pull"], cwd=compose_dir)
+        wait_for_container_running(f"{instance_name}_heappe", timeout=300, interval=10)
+        wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
 
-        build_command = ["docker", "compose", *profiles, "-p", instance_name, "build", "--no-cache", "--pull"]
-        subprocess.run(build_command, cwd=compose_dir, capture_output=True, text=True)
-
-        subprocess.run(
-            ["docker", "compose", *profiles, "-p", instance_name, "up", "--no-start", "--force-recreate"],
-            cwd=compose_dir,
-            capture_output=True
-        )
-
-        restart_command = ["docker", "compose", *profiles, "-p", instance_name, "restart"]
-        restart_result = subprocess.run(restart_command, cwd=compose_dir, capture_output=True, text=True)
-
+        restart_result = execute_docker_compose(restart_command, compose_dir)
+        print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
         if restart_result.returncode != 0:
-            return restart_result, f"Failed to restart: {restart_result.stderr}", 'danger'
+            return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
 
-        subprocess.run(["docker", "image", "prune", "-f"], capture_output=True)
-
-        return restart_result, f"Update to {target} completed successfully.", 'success'
-
+        #set the instance as deployed in the database
+        from ..models import InstanceCredentials
+        instance_settings.is_deployed = True
+        instance_settings.save()
+        return restart_result, "Deployment completed successfully.", 'success'
     except Exception as e:
-        return None, f"Update error: {str(e)}", 'danger'
+        print(f"Deployment error: {str(e)}")
+        return None, f"Deployment error: {str(e)}", 'danger'
 
 
 def container_logs_view(request, container_id):
