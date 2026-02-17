@@ -57,7 +57,7 @@ if [ -n "$GIT_USER" ] && [ -n "$GIT_PASS" ] && [ "$GIT_URL" != "origin" ]; then
     REMOTE_CHANGED=true
 fi
 
-git fetch origin --tags --force --prune >> "$LOG_FILE" 2>&1
+git fetch origin "+refs/tags/*:refs/tags/*" --force --prune >> "$LOG_FILE" 2>&1
 check_error
 
 if git rev-parse --verify "origin/$GIT_TAG" >/dev/null 2>&1; then
