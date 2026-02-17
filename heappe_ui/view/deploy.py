@@ -355,7 +355,7 @@ def handle_update_action(config, instance_name):
         build_command = ["docker", "compose", *profiles, "-p", instance_name, "build", "--no-cache"]
         subprocess.run(build_command, cwd=compose_dir, capture_output=True, text=True)
 
-        up_command = ["docker", "compose", *profiles, "-p", instance_name, "up", "-d"]
+        up_command = ["docker", "compose", *profiles, "-p", instance_name, "restart"]
         restart_result = subprocess.run(up_command, cwd=compose_dir, capture_output=True, text=True)
 
         if restart_result.returncode != 0:
