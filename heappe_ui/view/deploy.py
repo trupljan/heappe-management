@@ -302,109 +302,67 @@ def handle_global_action(compose_dir, instance_name, action):
         'success' if result.returncode == 0 else 'danger'
     )
 
-
-import subprocess
-import os
-
-import subprocess
-import os
-
-import subprocess
-import os
-
-import subprocess
-import os
-
-import subprocess
-import os
-
-import subprocess
-import os
-
-import subprocess
-import os
-
-import subprocess
-import os
-
-
-def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
-    """Handle the deployment process and return the result."""
+def handle_update_action(config, instance_name):
+    """Handle the update process and return the result."""
     service = HEAppEDeployService(config)
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
 
     try:
+        # git pull
+        git_command = ["git", "pull", "origin", config.repo_branch]
+        git_result = subprocess.run(
+            git_command,
+            cwd=compose_dir,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+        print(f"Git pull done: {git_result.returncode} {git_result.stdout} {git_result.stderr}")
+        if git_result.returncode != 0:
+            return git_result, f"Failed to pull latest code: {git_result.stderr}", 'danger'
 
-        for s in [s1, s2, s3, s4]:
-            if 's' in locals(): s.close()
+        # update appsettings and .env
+        service.update_init(instance_name=instance_name, version=config.repo_branch)
 
-        admin_password = generate_secure_password()
-        vault_password = generate_secure_password()
-        sa_password = generate_secure_password()
-        data_staging_token = generate_secure_password()
-
-        instance_settings = service.deploy_init(
-            instance_name=instance_name,
-            username="admin",
-            password=admin_password,
-            vault_password=vault_password,
-            sa_password=sa_password,
-            data_staging_token=data_staging_token,
-            ports=ports,
-            overwrite_existing=True,
-            deployed_ip='localhost',
-            version=config.repo_branch
-        )['instance_settings']
-
+        # rebuild and restart containers
         build_command = [
             "docker", "compose",
             "--profile", "db",
+            "--profile", "heappe",
             "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
             "--profile", "staging",
             "-p", instance_name,
             "build",  "--no-cache"
         ]
-        build_result = execute_docker_compose(build_command, compose_dir)
-        print(f"Docker Compose build result done")
-        up_command = [
-            "docker", "compose",
-            "--profile", "db",
-            "--profile", "initVault",
-            "--profile", "staging",
-            "-p", instance_name,
-            "up", "-d"
-        ]
-        up_result = execute_docker_compose(up_command, compose_dir)
-        print(f"Docker Compose up done: {up_result.returncode} {up_result.stdout} {up_result.stderr}")
-        #wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
-        # Initialize the database with retries
 
-        run_with_retries(instance_name, ports, sa_password)
 
         restart_command = [
             "docker", "compose",
             "--profile", "db",
+            "--profile", "heappe",
             "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
             "-p", instance_name,
             "restart"
         ]
-
-        wait_for_container_running(f"{instance_name}_heappe", timeout=300, interval=10)
-        wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
-
         restart_result = execute_docker_compose(restart_command, compose_dir)
         print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
+
+
+
         if restart_result.returncode != 0:
             return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
 
-        #set the instance as deployed in the database
-        from ..models import InstanceCredentials
-        instance_settings.is_deployed = True
-        instance_settings.save()
-        return restart_result, "Deployment completed successfully.", 'success'
+        return restart_result, "Update completed successfully.", 'success'
     except Exception as e:
-        print(f"Deployment error: {str(e)}")
-        return None, f"Deployment error: {str(e)}", 'danger'
+        print(f"Update error: {str(e)}")
+        return None, f"Update error: {str(e)}", 'danger'
 
 
 def container_logs_view(request, container_id):
