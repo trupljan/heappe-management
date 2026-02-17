@@ -318,6 +318,9 @@ import os
 import subprocess
 import os
 
+import subprocess
+import os
+
 
 def handle_update_action(config, instance_name):
     service = HEAppEDeployService(config)
@@ -325,24 +328,18 @@ def handle_update_action(config, instance_name):
     target = config.repo_branch
 
     try:
+        subprocess.run(["git", "tag", "-d", target], cwd=compose_dir, capture_output=True)
+
         fetch_command = [
             "git", "fetch", "origin",
             "+refs/tags/*:refs/tags/*",
             "+refs/heads/*:refs/heads/*",
-            "--tags", "-f", "--prune"
+            "--tags", "-f", "--prune", "--prune-tags"
         ]
-        fetch_result = subprocess.run(
-            fetch_command,
-            cwd=compose_dir,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        if fetch_result.returncode != 0:
-            return fetch_result, f"Failed to fetch: {fetch_result.stderr}", 'danger'
+        subprocess.run(fetch_command, cwd=compose_dir, capture_output=True)
 
         git_result = subprocess.run(
-            ["git", "reset", "--hard", target],
+            ["git", "reset", "--hard", f"origin/{target}"],
             cwd=compose_dir,
             capture_output=True,
             text=True,
@@ -351,7 +348,7 @@ def handle_update_action(config, instance_name):
 
         if git_result.returncode != 0:
             git_result = subprocess.run(
-                ["git", "reset", "--hard", f"origin/{target}"],
+                ["git", "reset", "--hard", target],
                 cwd=compose_dir,
                 capture_output=True,
                 text=True,
@@ -359,7 +356,7 @@ def handle_update_action(config, instance_name):
             )
 
         if git_result.returncode != 0:
-            return git_result, f"Failed to sync code to {target}: {git_result.stderr}", 'danger'
+            return git_result, f"Failed to sync code: {git_result.stderr}", 'danger'
 
         subprocess.run(["git", "clean", "-fdx"], cwd=compose_dir, capture_output=True)
 
@@ -386,7 +383,7 @@ def handle_update_action(config, instance_name):
         restart_result = subprocess.run(restart_command, cwd=compose_dir, capture_output=True, text=True)
 
         if restart_result.returncode != 0:
-            return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
+            return restart_result, f"Failed to restart: {restart_result.stderr}", 'danger'
 
         subprocess.run(["docker", "image", "prune", "-f"], capture_output=True)
 
