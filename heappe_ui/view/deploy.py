@@ -324,6 +324,9 @@ import os
 import subprocess
 import os
 
+import subprocess
+import os
+
 
 def handle_update_action(config, instance_name):
     service = HEAppEDeployService(config)
@@ -331,37 +334,28 @@ def handle_update_action(config, instance_name):
     target = config.repo_branch
 
     try:
+        # Smazání lokálního tagu, aby se mohl stáhnout čerstvý ze serveru
         subprocess.run(["git", "tag", "-d", target], cwd=compose_dir, capture_output=True)
 
         fetch_command = [
             "git", "fetch", "origin",
             "+refs/tags/*:refs/tags/*",
             "+refs/heads/*:refs/heads/*",
-            "--tags", "-f", "--prune", "--prune-tags"
+            "--tags", "-f", "--prune"
         ]
         subprocess.run(fetch_command, cwd=compose_dir, capture_output=True)
 
+        # Reset přepíše jen soubory, které Git zná. Na .env nesáhne.
         git_result = subprocess.run(
             ["git", "reset", "--hard", f"origin/{target}"],
             cwd=compose_dir,
             capture_output=True,
-            text=True,
-            check=False
+            text=True
         )
 
         if git_result.returncode != 0:
-            git_result = subprocess.run(
-                ["git", "reset", "--hard", target],
-                cwd=compose_dir,
-                capture_output=True,
-                text=True,
-                check=False
-            )
+            subprocess.run(["git", "reset", "--hard", target], cwd=compose_dir, capture_output=True)
 
-        if git_result.returncode != 0:
-            return git_result, f"Failed to sync code: {git_result.stderr}", 'danger'
-
-        subprocess.run(["git", "clean", "-fdx"], cwd=compose_dir, capture_output=True)
 
         service.update_init(instance_name=instance_name, version=target)
 
@@ -371,23 +365,24 @@ def handle_update_action(config, instance_name):
             "--profile", "staging"
         ]
 
-        # Zastaveni a odstraneni kontejneru (uvolni volume a porty)
-        subprocess.run(["docker", "compose", *profiles, "-p", instance_name, "down"], cwd=compose_dir)
-
-        # Vynuceny pull a build bez kesi
         subprocess.run(["docker", "compose", *profiles, "-p", instance_name, "pull"], cwd=compose_dir)
 
         build_command = ["docker", "compose", *profiles, "-p", instance_name, "build", "--no-cache", "--pull"]
         subprocess.run(build_command, cwd=compose_dir, capture_output=True, text=True)
 
-        # Nove spusteni (vytvori uplne nove kontejnery z novych imagu)
-        up_command = ["docker", "compose", *profiles, "-p", instance_name, "up", "-d", "--force-recreate"]
-        restart_result = subprocess.run(up_command, cwd=compose_dir, capture_output=True, text=True)
+        subprocess.run(
+            ["docker", "compose", *profiles, "-p", instance_name, "up", "--no-start", "--force-recreate"],
+            cwd=compose_dir,
+            capture_output=True
+        )
+
+        restart_command = ["docker", "compose", *profiles, "-p", instance_name, "restart"]
+        restart_result = subprocess.run(restart_command, cwd=compose_dir, capture_output=True, text=True)
 
         if restart_result.returncode != 0:
-            return restart_result, f"Failed to start: {restart_result.stderr}", 'danger'
+            return restart_result, f"Failed to restart: {restart_result.stderr}", 'danger'
 
-        subprocess.run(["docker", "image", "prune", "-af"], capture_output=True)
+        subprocess.run(["docker", "image", "prune", "-f"], capture_output=True)
 
         return restart_result, f"Update to {target} completed successfully.", 'success'
 
