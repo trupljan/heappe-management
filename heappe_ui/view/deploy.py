@@ -315,6 +315,9 @@ import os
 import subprocess
 import os
 
+import subprocess
+import os
+
 
 def handle_update_action(config, instance_name):
     service = HEAppEDeployService(config)
@@ -322,9 +325,12 @@ def handle_update_action(config, instance_name):
     target = config.repo_branch
 
     try:
-        # Silná synchronizace tagů - prepisuje lokalni tagy temi ze serveru
-        fetch_command = ["git", "fetch", "origin", "+refs/tags/*:refs/tags/*", "+refs/heads/*:refs/heads/*", "--tags",
-                         "-f", "--prune"]
+        fetch_command = [
+            "git", "fetch", "origin",
+            "+refs/tags/*:refs/tags/*",
+            "+refs/heads/*:refs/heads/*",
+            "--tags", "-f", "--prune"
+        ]
         fetch_result = subprocess.run(
             fetch_command,
             cwd=compose_dir,
@@ -335,7 +341,6 @@ def handle_update_action(config, instance_name):
         if fetch_result.returncode != 0:
             return fetch_result, f"Failed to fetch: {fetch_result.stderr}", 'danger'
 
-        # Vynuceny reset na target (i kdyby to byl podvrzeny tag)
         git_result = subprocess.run(
             ["git", "reset", "--hard", target],
             cwd=compose_dir,
@@ -371,8 +376,11 @@ def handle_update_action(config, instance_name):
         build_command = ["docker", "compose", *profiles, "-p", instance_name, "build", "--no-cache", "--pull"]
         subprocess.run(build_command, cwd=compose_dir, capture_output=True, text=True)
 
-        subprocess.run(["docker", "compose", *profiles, "-p", instance_name, "up", "--no-start", "--force-recreate"],
-                       cwd=compose_dir)
+        subprocess.run(
+            ["docker", "compose", *profiles, "-p", instance_name, "up", "--no-start", "--force-recreate"],
+            cwd=compose_dir,
+            capture_output=True
+        )
 
         restart_command = ["docker", "compose", *profiles, "-p", instance_name, "restart"]
         restart_result = subprocess.run(restart_command, cwd=compose_dir, capture_output=True, text=True)
