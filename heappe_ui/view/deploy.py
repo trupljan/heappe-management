@@ -306,6 +306,9 @@ def handle_global_action(compose_dir, instance_name, action):
 import subprocess
 import os
 
+import subprocess
+import os
+
 
 def handle_update_action(config, instance_name):
     service = HEAppEDeployService(config)
@@ -313,7 +316,7 @@ def handle_update_action(config, instance_name):
     target = config.repo_branch
 
     try:
-        fetch_command = ["git", "fetch", "origin", "--tags", "-f", "--prune"]
+        fetch_command = ["git", "fetch", "origin", "+refs/tags/*:refs/tags/*", "--tags", "-f", "--prune"]
         fetch_result = subprocess.run(
             fetch_command,
             cwd=compose_dir,
@@ -344,6 +347,8 @@ def handle_update_action(config, instance_name):
         if git_result.returncode != 0:
             return git_result, f"Failed to sync code to {target}: {git_result.stderr}", 'danger'
 
+        subprocess.run(["git", "clean", "-fd"], cwd=compose_dir, capture_output=True)
+
         service.update_init(instance_name=instance_name, version=target)
 
         profiles = [
@@ -360,6 +365,8 @@ def handle_update_action(config, instance_name):
 
         if restart_result.returncode != 0:
             return restart_result, f"Failed to start containers: {restart_result.stderr}", 'danger'
+
+        subprocess.run(["docker", "image", "prune", "-f"], capture_output=True)
 
         return restart_result, f"Update to {target} completed successfully.", 'success'
 
