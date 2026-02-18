@@ -35,7 +35,7 @@ MANAGEMENT_PROXYPASS = os.getenv('MANAGEMENT_PROXYPASS', 'False').lower() in ('t
 DEBUG = IS_DEV
 
 
-if IS_DEV:
+if IS_DEV or MANAGEMENT_PROXYPASS == False:
     FORCE_SCRIPT_NAME = None
     LOGIN_URL = '/login'
 elif MANAGEMENT_PROXYPASS:
