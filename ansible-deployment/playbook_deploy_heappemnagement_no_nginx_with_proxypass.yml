@@ -236,7 +236,7 @@
           ExecStartPre={{ venv_dir }}/bin/python {{ app_dir }}/branches/{{ git_branch }}/manage.py shell -c "from django.contrib.auth import get_user_model; User=get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin')"
           
           Environment="PYTHONUNBUFFERED=1"
-          Environment="IS_DEV=false"
+          Environment="MANAGEMENT_PROXYPASS=true"
           
           # Start Gunicorn directly on app_port (8000)
           ExecStart={{ venv_dir }}/bin/gunicorn adminpanel.wsgi:application --workers 1 --bind {{ app_bind }} --timeout 360
