@@ -4,6 +4,7 @@ from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.urls import reverse
 import docker
 import subprocess
 import os
@@ -652,12 +653,14 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 action_status = 'info'
 
                 # --- JSON RESPONSE WITH REDIRECT ---
+
+                redirect_url = reverse('deploy_view', kwargs={'instance_name': instance_name})
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return JsonResponse({
                         'status': 'success',
                         'message': action_message,
                         'instance_name': instance_name,
-                        'redirect_url': f'/management/deploy/{instance_name}/'  # <-- CRITICAL: Tells JS where to go
+                        'redirect_url': redirect_url
                     })
 
             elif action == "update":
