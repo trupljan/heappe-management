@@ -18,7 +18,7 @@
         </div>
         <div>
             <span class="badge bg-white text-dark border shadow-sm px-3 py-2">
-                Entries loaded: {{ logs|length }}
+                Entries loaded: <span id="entryCount">{{ logs|length }}</span>
             </span>
         </div>
     </div>
@@ -68,7 +68,7 @@
 
         <div class="col-lg-9 col-xl-10">
             <div class="card border-0 shadow-sm" style="height: 80vh;">
-                <div class="card-header bg-white py-2 border-bottom d-flex justify-content-between">
+                <div class="card-header bg-white py-2 border-bottom d-flex justify-content-between align-items-center">
                     <span class="fw-bold small text-uppercase text-muted">Console Output</span>
                     <button class="btn btn-xs btn-light border btn-sm" onclick="scrollToBottom()">Scroll to Bottom</button>
                 </div>
@@ -90,11 +90,13 @@
 </div>
 
 <script>
+    let logOffset = 0;
+    let liveInterval = null;
     const logWindow = document.getElementById('logWindow');
     const tableBody = document.getElementById('logTableBody');
     const liveToggle = document.getElementById('liveStreamToggle');
     const liveStatus = document.getElementById('liveStatus');
-    let eventSource = null;
+    const entryCountDisplay = document.getElementById('entryCount');
 
     function scrollToBottom() {
         logWindow.scrollTop = logWindow.scrollHeight;
@@ -102,40 +104,42 @@
 
     window.onload = scrollToBottom;
 
-    liveToggle.addEventListener('change', function() {
-        if (this.checked) {
-            liveStatus.textContent = "Connecting...";
-            liveStatus.className = "small text-warning fw-bold mt-1";
+    async function pullLogs() {
+        try {
+            const response = await fetch(`/fetch-new-logs/?offset=${logOffset}`);
+            if (!response.ok) throw new Error('Network error');
 
-            eventSource = new EventSource("/stream-logs/");
+            const data = await response.json();
 
-            eventSource.onopen = function() {
-                liveStatus.innerHTML = '<i class="bi bi-circle-fill text-success small me-1"></i> Streaming live...';
-                liveStatus.className = "small text-success fw-bold mt-1";
-            };
+            if (data.html) {
+                tableBody.insertAdjacentHTML('beforeend', data.html);
+                logOffset = data.offset;
+                scrollToBottom();
 
-            eventSource.onmessage = function(e) {
-                const newRow = e.data;
-                tableBody.insertAdjacentHTML('beforeend', newRow);
-
-                if (logWindow.scrollTop + logWindow.clientHeight >= logWindow.scrollHeight - 100) {
-                    scrollToBottom();
-                }
-
-                if (tableBody.children.length > 5000) {
+                while (tableBody.children.length > 2000) {
                     tableBody.removeChild(tableBody.firstChild);
                 }
-            };
-
-            eventSource.onerror = function() {
-                liveStatus.textContent = "Connection lost. Retrying...";
-                liveStatus.className = "small text-danger fw-bold mt-1";
-            };
-        } else {
-            if (eventSource) {
-                eventSource.close();
-                eventSource = null;
+                entryCountDisplay.textContent = tableBody.children.length;
+            } else {
+                logOffset = data.offset;
             }
+        } catch (e) {
+            console.error("Polling error:", e);
+        }
+    }
+
+    liveToggle.addEventListener('change', function() {
+        if (this.checked) {
+            fetch('/fetch-new-logs/?offset=-1')
+                .then(r => r.json())
+                .then(data => {
+                    logOffset = data.offset;
+                    liveStatus.innerHTML = '<i class="bi bi-circle-fill text-success small me-1"></i> Polling live...';
+                    liveStatus.className = "small text-success fw-bold mt-1";
+                    liveInterval = setInterval(pullLogs, 2000);
+                });
+        } else {
+            if (liveInterval) clearInterval(liveInterval);
             liveStatus.textContent = "Disconnected";
             liveStatus.className = "small text-muted mt-1 fst-italic";
         }

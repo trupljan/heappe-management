@@ -71,7 +71,7 @@ urlpatterns = [
 
     path("logs/", views.log_viewer_view, name="logs"),
     path('logs/<str:container_id>/', views.container_logs_view, name='container_logs'),
-    path("stream-logs/", views.stream_logs, name="stream_logs"),
+    path("fetch-new-logs/", views.fetch_new_logs, name="fetch_new_logs"),
 
     path('api/check-updates/', views.check_for_updates, name='check_updates'),
     path('api/heappe-check/<str:min_version>/', views.heappe_check_api, name='heappe_check_api'),

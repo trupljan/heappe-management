@@ -1077,6 +1077,52 @@ def stream_logs(request):
     response['X-Accel-Buffering'] = 'no'
     return response
 
+
+import os
+import json
+from datetime import datetime
+from django.http import JsonResponse
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+
+
+@login_required
+def fetch_new_logs(request):
+    instance = request.session.get('chosen_instance', 'develop')
+    today = datetime.now().strftime('%Y-%m-%d')
+    log_path = get_log_file_path(instance, today)
+
+    try:
+        offset = int(request.GET.get('offset', 0))
+    except ValueError:
+        offset = 0
+
+    if not log_path or not os.path.exists(log_path):
+        return JsonResponse({'html': '', 'offset': offset})
+
+    new_rows = []
+    file_size = os.path.getsize(log_path)
+
+    if offset == -1:
+        return JsonResponse({'html': '', 'offset': file_size})
+
+    if offset > file_size:
+        offset = 0
+
+    with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+        f.seek(offset)
+        for line in f:
+            if line.strip():
+                parsed = parse_log_line(line)
+                new_rows.append(render_log_row(parsed))
+
+        new_offset = f.tell()
+
+    return JsonResponse({
+        'html': "".join(new_rows),
+        'offset': new_offset
+    })
+
 @login_required
 def heappe_check_api(request, min_version):
     try:
