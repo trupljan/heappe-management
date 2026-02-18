@@ -997,6 +997,25 @@ def get_log_file_path(instance, date_str):
 
 # --- VIEWS ---
 
+def parse_log_line(line):
+    timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
+    timestamp_str = timestamp_match.group(1) if timestamp_match else None
+
+    level = "INFO"
+    if "ERROR" in line or "Exception" in line:
+        level = "ERROR"
+    elif "WARN" in line:
+        level = "WARN"
+    elif "DEBUG" in line:
+        level = "DEBUG"
+
+    return {
+        'timestamp_str': timestamp_str,
+        'level': level,
+        'content': line
+    }
+
+
 @login_required
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
@@ -1018,9 +1037,12 @@ def log_viewer_view(request):
 
                     if parsed['timestamp_str']:
                         try:
-                            log_time_str = [p for p in parsed['timestamp_str'].split(' ') if ':' in p][0]
-                            if time_from and log_time_str < (time_from + ":00"): continue
-                            if time_to and log_time_str > (time_to + ":59"): continue
+                            time_part = parsed['timestamp_str'].split(' ')[1]
+
+                            if time_from and time_part < (time_from + ":00"):
+                                continue
+                            if time_to and time_part > (time_to + ":59"):
+                                continue
                         except (IndexError, ValueError):
                             pass
 
@@ -1046,7 +1068,6 @@ def log_viewer_view(request):
         'search_query': search_query,
         'instance': instance
     })
-
 @login_required
 def stream_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
