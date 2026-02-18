@@ -13,7 +13,6 @@ urlpatterns = [
 
     path("deploy/", views.deploy_view, name="deploy_view"),
     path("deploy/<str:instance_name>/", views.deploy_view, name="deploy_view"),
-    #path('logs/<str:container_id>/', views.container_logs_view, name='container_logs'),
     path('chose-instance/', views.chose_instance_view, name='chose_instance_view'),
     path('reconnect/', views.reconnect_view, name='reconnect_view'),
     path('container/<str:container_id>/file/<str:action>/', views.handle_file_action, name='container_file_action'),
@@ -69,10 +68,11 @@ urlpatterns = [
     path('api/check-repo/', views.check_repo_and_fetch_branches, name='check_repo_and_fetch_branches'),
     path('api/deploy-direct/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
     path('fetch-branches/', views.fetch_repo_branches, name='fetch_branches'),
-    #path('logfiles/', views.log_viewer_view, name='log_viewer_view'),
+
     path("logs/", views.log_viewer_view, name="logs"),
+    path('logs/<str:container_id>/', views.container_logs_view, name='container_logs'),
     path("stream-logs/", views.stream_logs, name="stream_logs"),
-    #path("logs/", views.logs_view, name="logs"),
+
     path('api/check-updates/', views.check_for_updates, name='check_updates'),
     path('api/heappe-check/<str:min_version>/', views.heappe_check_api, name='heappe_check_api'),
 

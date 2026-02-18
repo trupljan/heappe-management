@@ -3,207 +3,142 @@
 {% block title %}Log Analyzer - {{ instance }}{% endblock %}
 
 {% block head %}
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
 {% endblock %}
 
 {% block content %}
-<div class="dashboard-container min-vh-100 py-4">
-    <div class="container-fluid px-4">
+<div class="container-fluid px-4 py-4 min-vh-100" style="background: #f8f9fa;">
 
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h4 class="fw-bold text-dark mb-1">
-                    <i class="bi bi-speedometer2 text-primary me-2"></i>Log Analyzer
-                </h4>
-                <p class="text-muted small mb-0">Instance: <span class="fw-semibold text-dark">{{ instance|upper }}</span></p>
-            </div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="fw-bold text-dark mb-1">
+                <i class="bi bi-terminal text-primary me-2"></i>Log Viewer
+            </h4>
+            <p class="text-muted small mb-0">Instance: <b>{{ instance|upper }}</b></p>
+        </div>
+        <div>
+            <span class="badge bg-white text-dark border shadow-sm px-3 py-2">
+                Entries loaded: {{ logs|length }}
+            </span>
+        </div>
+    </div>
 
-            <div class="text-end">
-                <span class="badge bg-white text-secondary border shadow-sm px-3 py-2">
-                    <i class="bi bi-list-ol me-1"></i> <span id="entryCount">{{ logs|length }}</span> entries
-                </span>
+    <div class="row g-4">
+        <div class="col-lg-3 col-xl-2">
+            <div class="card border-0 shadow-sm p-3">
+                <form method="GET">
+                    <h6 class="text-uppercase text-muted fw-bold small mb-3">Time & Filter</h6>
+
+                    <div class="mb-2">
+                        <label class="small fw-bold text-secondary">Date</label>
+                        <input type="date" name="date" class="form-control form-control-sm" value="{{ selected_date }}">
+                    </div>
+
+                    <div class="row g-1 mb-3">
+                        <div class="col-6">
+                            <label class="small fw-bold text-secondary">From</label>
+                            <input type="time" name="time_from" class="form-control form-control-sm" value="{{ time_from }}">
+                        </div>
+                        <div class="col-6">
+                            <label class="small fw-bold text-secondary">To</label>
+                            <input type="time" name="time_to" class="form-control form-control-sm" value="{{ time_to }}">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="small fw-bold text-secondary">Search</label>
+                        <input type="text" name="search" class="form-control form-control-sm" placeholder="Error, ID..." value="{{ search_query }}">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 btn-sm fw-bold">Apply Filter</button>
+                    <a href="?" class="btn btn-outline-secondary w-100 btn-sm mt-2">Reset</a>
+                </form>
+
+                <hr>
+
+                <div class="d-flex align-items-center justify-content-between">
+                    <span class="small fw-bold text-danger">Live Tail</span>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="liveStreamToggle">
+                    </div>
+                </div>
+                <div id="liveStatus" class="small text-muted mt-1 fst-italic">Disconnected</div>
             </div>
         </div>
 
-        <div class="row g-4">
-            <div class="col-lg-3 col-xl-2">
-                <div class="card border-0 shadow-sm mb-4 card-hover">
-                    <div class="card-body p-4">
-                        <form method="GET">
-                            <h6 class="text-uppercase text-muted fw-bold small mb-3">Filter & Search</h6>
-                            <div class="mb-2">
-                                <label class="form-label small fw-bold text-secondary mb-1">DATE</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-calendar3"></i></span>
-                                    <input type="date" name="date" class="form-control bg-light border-start-0 ps-0" value="{{ selected_date }}">
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label small fw-bold text-secondary mb-1">KEYWORD</label>
-                                <div class="input-group input-group-sm">
-                                    <span class="input-group-text bg-light border-end-0"><i class="bi bi-search"></i></span>
-                                    <input type="text" name="search" class="form-control bg-light border-start-0 ps-0" placeholder="Text search..." value="{{ search_query }}">
-                                </div>
-                            </div>
-
-                            <div class="p-3 bg-light rounded mb-3 border">
-                                <label class="form-label small fw-bold text-secondary mb-2"><i class="bi bi-funnel"></i> CONTEXT</label>
-                                <div class="mb-2">
-                                    <input type="text" name="user" class="form-control form-control-sm" placeholder="User ID" value="{{ filter_user }}">
-                                </div>
-                                <div class="mb-0">
-                                    <input type="text" name="session" class="form-control form-control-sm font-monospace" placeholder="Session UUID" value="{{ filter_session }}" style="font-size: 0.75rem;">
-                                </div>
-                            </div>
-
-                            <h6 class="text-uppercase text-muted fw-bold small mb-3 mt-4">Display</h6>
-                            <div class="form-check form-switch mb-1">
-                                <input class="form-check-input" type="checkbox" name="feat_meta" value="on" id="featMeta" {% if features.meta %}checked{% endif %}>
-                                <label class="form-check-label small" for="featMeta">Smart Linking</label>
-                            </div>
-                            <div class="form-check form-switch mb-1">
-                                <input class="form-check-input" type="checkbox" name="feat_json" value="on" id="featJson" {% if features.json %}checked{% endif %}>
-                                <label class="form-check-label small" for="featJson">Pretty JSON</label>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-primary w-100 py-2 mt-3 fw-semibold shadow-sm">Apply</button>
-                        </form>
-
-                        <div class="mt-4 pt-3 border-top">
-                            <div class="d-flex align-items-center justify-content-between mb-2">
-                                <h6 class="text-uppercase text-danger fw-bold small mb-0">Live Tail</h6>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input live-switch" type="checkbox" id="liveStreamToggle">
-                                </div>
-                            </div>
-                            <div id="liveStatus" class="small text-muted">
-                                <i class="bi bi-circle-fill text-secondary me-1" style="font-size: 0.5rem;"></i> Disconnected
-                            </div>
-                        </div>
-                    </div>
+        <div class="col-lg-9 col-xl-10">
+            <div class="card border-0 shadow-sm" style="height: 80vh;">
+                <div class="card-header bg-white py-2 border-bottom d-flex justify-content-between">
+                    <span class="fw-bold small text-uppercase text-muted">Console Output</span>
+                    <button class="btn btn-xs btn-light border btn-sm" onclick="scrollToBottom()">Scroll to Bottom</button>
                 </div>
 
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body p-4">
-                        <h6 class="text-uppercase text-muted fw-bold small mb-3">Stats</h6>
-                        <div class="d-flex justify-content-between mb-2 small">
-                            <span class="text-danger fw-bold">Errors</span>
-                            <span class="badge bg-danger-subtle text-danger rounded-pill">{{ stats.ERROR }}</span>
-                        </div>
-                        <div class="d-flex justify-content-between small">
-                            <span class="text-warning-emphasis fw-bold">Warnings</span>
-                            <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill">{{ stats.WARN }}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-lg-9 col-xl-10">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-header bg-white border-bottom py-3 sticky-top shadow-sm d-flex justify-content-between align-items-center" style="z-index: 20;">
-                        <h6 class="mb-0 fw-bold text-dark">Console Output</h6>
-                    </div>
-                    <div class="card-body p-0 position-relative">
-                        <div class="log-window" id="logWindow">
-                            <table class="table table-hover mb-0 log-table">
-                                <tbody>
-                                    {% for entry in logs %}
-                                    <tr class="log-row {{ entry.border_class }}">
-                                        <td style="width: 120px;" class="ps-4 py-3 align-top bg-transparent">
-                                            <div class="d-flex flex-column">
-                                                <span class="badge {{ entry.text_class }} bg-light border fw-bold mb-1">{{ entry.level }}</span>
-                                                <span class="text-muted small" style="font-size: 0.65rem;">{{ entry.file }}</span>
-                                            </div>
-                                        </td>
-                                        <td class="py-3 pe-4">
-                                            {% if entry.metadata %}
-                                            <div class="mb-2 d-flex flex-wrap gap-2">
-                                                {% if entry.metadata.user_id %}
-                                                <span class="badge bg-light text-secondary border small">User: {{ entry.metadata.user_id }}</span>
-                                                {% endif %}
-                                            </div>
-                                            {% endif %}
-                                            <div class="log-content">{{ entry.content }}</div>
-                                        </td>
-                                    </tr>
-                                    {% empty %}
-                                    <tr><td colspan="2" class="text-center py-5 text-muted">No logs found.</td></tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+                <div class="card-body p-0" id="logWindow" style="overflow-y: auto; height: 100%; background: #fff;">
+                    <table class="table table-sm table-hover mb-0">
+                        <tbody id="logTableBody">
+                            {% for row_html in logs %}
+                                {{ row_html|safe }}
+                            {% empty %}
+                                <tr><td colspan="2" class="text-center py-5 text-muted">No logs found for this criteria.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<style>
-    :root { --bg-body: #f8f9fa; --font-ui: 'Inter', sans-serif; --font-code: 'JetBrains Mono', monospace; }
-    body { font-family: var(--font-ui); background: var(--bg-body); }
-    .log-window { height: 75vh; overflow-y: auto; background: #fff; }
-    .log-content { font-family: var(--font-code); font-size: 0.85rem; line-height: 1.5; white-space: pre-wrap; word-break: break-all; color: #1e293b; }
-    .time-badge { display: inline-block; padding: 0px 4px; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; color: #475569; font-size: 0.8em; margin-right: 6px; }
-    .json-block { background: #f8fafc; border-left: 3px solid #64748b; padding: 8px; margin-top: 6px; font-size: 0.8rem; overflow-x: auto; }
-    
-    tr.border-danger { border-left: 4px solid #dc3545 !important; background-color: rgba(220, 53, 69, 0.02); }
-    tr.border-warning { border-left: 4px solid #ffc107 !important; }
-    tr.border-info { border-left: 4px solid #0dcaf0 !important; }
-
-    .live-switch { width: 2.4rem !important; height: 1.2rem !important; cursor: pointer; }
-    .animate-pulse { animation: pulse-green 2s infinite; }
-    @keyframes pulse-green { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
-    .animate-fade-in { animation: fadeIn 0.4s ease-in; }
-    @keyframes fadeIn { from { background-color: #f0fff4; opacity: 0; } to { background-color: transparent; opacity: 1; } }
-</style>
-
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
-        const logWindow = document.getElementById('logWindow');
-        const logTableBody = logWindow.querySelector('tbody');
-        const liveToggle = document.getElementById('liveStreamToggle');
-        const liveStatus = document.getElementById('liveStatus');
-        let eventSource = null;
+    const logWindow = document.getElementById('logWindow');
+    const tableBody = document.getElementById('logTableBody');
+    const liveToggle = document.getElementById('liveStreamToggle');
+    const liveStatus = document.getElementById('liveStatus');
+    let eventSource = null;
 
-        // Auto-scroll on load
+    function scrollToBottom() {
         logWindow.scrollTop = logWindow.scrollHeight;
+    }
 
-        liveToggle.addEventListener('change', function() {
-            if (this.checked) {
-                liveStatus.innerHTML = '<i class="bi bi-circle-fill text-success animate-pulse me-1"></i> Live Tracking...';
-                liveStatus.className = 'small text-success fw-bold';
-                
-                eventSource = new EventSource("/stream-logs/"); // Ensure this URL matches your urls.py
+    window.onload = scrollToBottom;
 
-                eventSource.onmessage = function(e) {
-                    const rowHtml = e.data;
-                    logTableBody.insertAdjacentHTML('beforeend', rowHtml);
-                    
-                    // Auto-scroll logic
-                    logWindow.scrollTo({ top: logWindow.scrollHeight, behavior: 'smooth' });
+    liveToggle.addEventListener('change', function() {
+        if (this.checked) {
+            liveStatus.textContent = "Connecting...";
+            liveStatus.className = "small text-warning fw-bold mt-1";
 
-                    // Clean up to keep performance high
-                    if (logTableBody.children.length > 400) {
-                        logTableBody.removeChild(logTableBody.firstChild);
-                    }
-                };
+            eventSource = new EventSource("/stream-logs/");
 
-                eventSource.onerror = function() {
-                    liveStatus.innerHTML = '<i class="bi bi-exclamation-triangle text-danger me-1"></i> Connection Lost';
-                    liveStatus.className = 'small text-danger';
-                    liveToggle.checked = false;
-                    eventSource.close();
-                };
-            } else {
-                if (eventSource) eventSource.close();
-                liveStatus.innerHTML = '<i class="bi bi-circle-fill text-secondary me-1"></i> Disconnected';
-                liveStatus.className = 'small text-muted';
+            eventSource.onopen = function() {
+                liveStatus.innerHTML = '<i class="bi bi-circle-fill text-success small me-1"></i> Streaming live...';
+                liveStatus.className = "small text-success fw-bold mt-1";
+            };
+
+            eventSource.onmessage = function(e) {
+                const newRow = e.data;
+                tableBody.insertAdjacentHTML('beforeend', newRow);
+
+                if (logWindow.scrollTop + logWindow.clientHeight >= logWindow.scrollHeight - 100) {
+                    scrollToBottom();
+                }
+
+                if (tableBody.children.length > 5000) {
+                    tableBody.removeChild(tableBody.firstChild);
+                }
+            };
+
+            eventSource.onerror = function() {
+                liveStatus.textContent = "Connection lost. Retrying...";
+                liveStatus.className = "small text-danger fw-bold mt-1";
+            };
+        } else {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
             }
-        });
+            liveStatus.textContent = "Disconnected";
+            liveStatus.className = "small text-muted mt-1 fst-italic";
+        }
     });
 </script>
 {% endblock %}

@@ -891,33 +891,22 @@ from django.shortcuts import render
 from django.utils.html import escape
 from django.contrib.auth.decorators import login_required
 
-
-def colorize_log_line(content):
-    content = escape(content)
-
-    # Levels
-    if "ERROR" in content.upper():
-        color = "#ff6e6e"
-    elif "WARN" in content.upper():
-        color = "#f1fa8c"
-    elif "DEBUG" in content.upper():
-        color = "#8be9fd"
-    else:
-        color = "#50fa7b"
-
-    # Keywords & Formatting
-    content = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:,\d+)?|(?:\d{2}/){2}\d{4} \d{2}:\d{2}:\d{2})',
-                     r'<span style="color: #bd93f9; font-weight: bold;">\1</span>', content)
-    content = re.sub(r'(\[.*?\])', r'<span style="color: #6272a4;">\1</span>', content)
-    content = re.sub(r'(sbatch|bash|eval|ssh)', r'<span style="color: #ff79c6;">\1</span>', content)
-
-    return f'<div style="color: {color}">{content}</div>'
-
+import os
+import re
+import time
+import json
+from datetime import datetime
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
+from django.http import StreamingHttpResponse
+from django.template.loader import render_to_string
 
 import os
 import re
-import json
 import time
+import json
 from datetime import datetime
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -926,131 +915,167 @@ from django.utils.safestring import mark_safe
 from django.http import StreamingHttpResponse
 
 
-def format_json_match(match):
-    """Formats found JSON into an HTML block."""
-    try:
-        data = json.loads(match.group(0))
-        formatted = json.dumps(data, indent=2)
-        return f'<div class="json-block">{escape(formatted)}</div>'
-    except:
-        return match.group(0)
+# --- HELPERS ---
 
+def parse_log_line(line):
+    timestamp_match = re.search(r'^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
+    timestamp_str = timestamp_match.group(1) if timestamp_match else None
 
-def process_log_entry(raw_content, file_name, features):
-    """Processes a single log entry."""
-    clean_content = raw_content
-    if clean_content.startswith(file_name):
-        clean_content = clean_content.replace(file_name, "", 1)
-
-    content_upper = clean_content.upper()[:50]
     level = "INFO"
+    if "ERROR" in line or "Exception" in line:
+        level = "ERROR"
+    elif "WARN" in line:
+        level = "WARN"
+    elif "DEBUG" in line:
+        level = "DEBUG"
+
+    return {
+        'timestamp_str': timestamp_str,
+        'level': level,
+        'content': line
+    }
+
+
+def render_log_row(entry):
     border_class = "border-info"
     text_class = "text-info"
-
-    if any(word in content_upper for word in ["ERROR", "FATAL", "EXCEPTION"]):
-        level = "ERROR";
+    if entry['level'] == "ERROR":
         border_class = "border-danger";
         text_class = "text-danger"
-    elif "WARN" in content_upper:
-        level = "WARN";
+    elif entry['level'] == "WARN":
         border_class = "border-warning";
         text_class = "text-warning"
-    elif "DEBUG" in content_upper:
-        level = "DEBUG";
+    elif entry['level'] == "DEBUG":
         border_class = "border-secondary";
         text_class = "text-muted"
 
-    metadata = {}
-    formatted_content = escape(clean_content)
+    formatted_content = escape(entry['content'])
 
-    if features.get('colors'):
-        formatted_content = re.sub(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
-                                   r'<span class="time-badge">\1</span>',
-                                   formatted_content)
-        formatted_content = re.sub(r'(\d{2}:\d{2}:\d{2})\s+([a-zA-Z0-9\._]+)\s+-',
-                                   r'\1 <strong class="text-primary">\2</strong> -',
-                                   formatted_content)
+    # Highlight time
+    formatted_content = re.sub(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
+                               r'<span class="time-badge" style="background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:4px;color:#64748b;margin-right:8px;font-size:0.85em">\1</span>',
+                               formatted_content)
 
-    if features.get('meta'):
-        session_match = re.search(r'sessionCode["\s:]+([a-f0-9-]{36})', clean_content, re.IGNORECASE)
-        if session_match: metadata['session'] = session_match.group(1)
-        user_match = re.search(r'UserId[:\s]+(\d+)', clean_content, re.IGNORECASE) or \
-                     re.search(r'\[User:(\d+)\]', clean_content, re.IGNORECASE)
-        if user_match: metadata['user_id'] = user_match.group(1)
-        action_match = re.search(r'Action: ([a-zA-Z0-9\._]+)', clean_content)
-        if action_match: metadata['action'] = action_match.group(1).split('.')[-1]
+    # Format JSON if present
+    if "{" in formatted_content and "}" in formatted_content:
+        def json_repl(match):
+            try:
+                raw_json = match.group(0).replace('&quot;', '"')
+                parsed = json.loads(raw_json)
+                pretty = json.dumps(parsed, indent=2)
+                return f'<div class="json-block" style="background:#f8fafc;border-left:3px solid #cbd5e1;padding:5px;margin:5px 0;white-space:pre;font-size:0.8em;color:#334155">{escape(pretty)}</div>'
+            except:
+                return match.group(0)
 
-    if features.get('json') and ("Arguments:" in formatted_content or "Headers:" in formatted_content):
-        formatted_content = re.sub(r'(\{.*?\})', format_json_match, formatted_content)
+        formatted_content = re.sub(r'(\{.*?\})', json_repl, formatted_content)
 
-    return {
-        'file': file_name,
-        'content': mark_safe(formatted_content),
-        'level': level,
-        'border_class': border_class,
-        'text_class': text_class,
-        'metadata': metadata,
-        'raw': clean_content
-    }
+    return f"""
+    <tr class="log-row {border_class}" style="border-left: 4px solid;">
+        <td style="width: 100px; vertical-align: top;" class="ps-3 py-2">
+            <span class="badge {text_class} bg-light border fw-bold">{entry['level']}</span>
+        </td>
+        <td class="py-2 pe-3">
+            <div class="log-content" style="font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;">{formatted_content}</div>
+        </td>
+    </tr>
+    """
 
+
+def get_log_file_path(instance, date_str):
+    base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
+    date_formatted = date_str.replace("-", "_")
+
+    if not os.path.exists(base_path):
+        return None
+
+    files = sorted([f for f in os.listdir(base_path) if f.startswith(date_formatted) and f.endswith(".log")])
+
+    if files:
+        return os.path.join(base_path, files[-1])
+    return None
+
+
+# --- VIEWS ---
 
 @login_required
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
-    log_base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
-    selected_date = request.GET.get('date', datetime.now().strftime('%Y-%m-%d'))
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    selected_date = request.GET.get('date', today)
+    time_from = request.GET.get('time_from', '')
+    time_to = request.GET.get('time_to', '')
     search_query = request.GET.get('search', '').lower()
-    filter_session = request.GET.get('session', '').strip()
-    filter_user = request.GET.get('user', '').strip()
 
-    is_filtered = len(request.GET) > 0
-    features = {
-        'colors': request.GET.get('feat_colors') == 'on' if is_filtered else True,
-        'meta': request.GET.get('feat_meta') == 'on' if is_filtered else True,
-        'json': request.GET.get('feat_json') == 'on' if is_filtered else True
-    }
+    log_path = get_log_file_path(instance, selected_date)
+    logs = []
+    stats = {"ERROR": 0, "WARN": 0}
 
-    stats = {"ERROR": 0, "WARN": 0, "INFO": 0, "DEBUG": 0}
-    all_entries = []
+    if log_path and os.path.exists(log_path):
+        try:
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    parsed = parse_log_line(line)
 
-    if os.path.exists(log_base_path):
-        f_date = selected_date.replace("-", "_")
-        log_files = sorted([f for f in os.listdir(log_base_path) if f.startswith(f_date) and f.endswith(".log")])
-        log_start_pattern = re.compile(r'^.*?((INFO|WARN|ERROR|DEBUG|TRACE|FATAL)\s+)')
+                    # Time Filter
+                    if parsed['timestamp_str']:
+                        log_time_str = parsed['timestamp_str'].split(' ')[1]
+                        if time_from and log_time_str < (time_from + ":00"): continue
+                        if time_to and log_time_str > (time_to + ":59"): continue
 
-        for file_name in log_files:
-            try:
-                file_path = os.path.join(log_base_path, file_name)
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                    current_raw = ""
-                    for line in f:
-                        if log_start_pattern.match(line):
-                            if current_raw:
-                                process_and_add(all_entries, stats, current_raw, file_name, features, search_query,
-                                                filter_session, filter_user)
-                            current_raw = line
-                        else:
-                            current_raw += line
-                    if current_raw:
-                        process_and_add(all_entries, stats, current_raw, file_name, features, search_query,
-                                        filter_session, filter_user)
-            except:
-                continue
+                    # Search Filter
+                    if search_query and search_query not in line.lower():
+                        continue
+
+                    if parsed['level'] in stats:
+                        stats[parsed['level']] += 1
+
+                    logs.append(render_log_row(parsed))
+        except Exception as e:
+            logs.append(f"<tr><td colspan='2'>Error reading log: {str(e)}</td></tr>")
+
+    if len(logs) > 3000:
+        logs = logs[-3000:]
 
     return render(request, 'file_log_viewer.html', {
-        'logs': all_entries, 'stats': stats, 'selected_date': selected_date,
-        'search_query': search_query, 'filter_session': filter_session,
-        'filter_user': filter_user, 'features': features, 'instance': instance
+        'logs': logs,
+        'stats': stats,
+        'selected_date': selected_date,
+        'time_from': time_from,
+        'time_to': time_to,
+        'search_query': search_query,
+        'instance': instance
     })
 
 
-def process_and_add(entries_list, stats, raw, file_name, features, search, f_session, f_user):
-    if search and search not in raw.lower(): return
-    entry = process_log_entry(raw, file_name, features)
-    if f_session and f_session not in entry['metadata'].get('session', ''): return
-    if f_user and f_user != entry['metadata'].get('user_id'): return
-    entries_list.append(entry)
-    stats[entry['level']] = stats.get(entry['level'], 0) + 1
+@login_required
+def stream_logs(request):
+    instance = request.session.get('chosen_instance', 'develop')
+    today = datetime.now().strftime('%Y-%m-%d')
+    log_path = get_log_file_path(instance, today)
+
+    def event_stream():
+        if not log_path or not os.path.exists(log_path):
+            yield "data: <tr><td colspan='2'>Log file not found.</td></tr>\n\n"
+            return
+
+        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+            f.seek(0, os.SEEK_END)
+
+            while True:
+                line = f.readline()
+                if line:
+                    parsed = parse_log_line(line)
+                    html_row = render_log_row(parsed)
+                    clean_html = html_row.replace('\n', '')
+                    yield f"data: {clean_html}\n\n"
+                else:
+                    time.sleep(0.5)
+
+    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response
 
 @login_required
 def heappe_check_api(request, min_version):
