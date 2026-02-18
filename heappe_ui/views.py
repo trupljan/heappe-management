@@ -918,7 +918,7 @@ from django.http import StreamingHttpResponse
 # --- HELPERS ---
 
 def parse_log_line(line):
-    timestamp_match = re.search(r'^(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
+    timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
     timestamp_str = timestamp_match.group(1) if timestamp_match else None
 
     level = "INFO"
@@ -935,6 +935,109 @@ def parse_log_line(line):
         'content': line
     }
 
+
+def render_log_row(entry):
+    border_class = "border-info"
+    text_class = "text-info"
+    if entry['level'] == "ERROR":
+        border_class = "border-danger";
+        text_class = "text-danger"
+    elif entry['level'] == "WARN":
+        border_class = "border-warning";
+        text_class = "text-warning"
+
+    formatted_content = escape(entry['content'])
+
+    formatted_content = re.sub(
+        r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
+        r'<span class="time-badge" style="background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:4px;color:#64748b;margin-right:8px;font-size:0.85em">\1</span>',
+        formatted_content
+    )
+
+    def json_repl(match):
+        try:
+            raw_json = match.group(0).replace('&quot;', '"').replace('&#x27;', "'")
+            parsed = json.loads(raw_json)
+            pretty = json.dumps(parsed, indent=2)
+            return f'<div class="json-block" style="background:#f8fafc;border-left:3px solid #0dcaf0;padding:8px;margin:8px 0;white-space:pre;font-size:0.85em;color:#1e293b;border-radius:0 4px 4px 0;">{escape(pretty)}</div>'
+        except:
+            return match.group(0)
+
+    formatted_content = re.sub(r'(\{.*?\})', json_repl, formatted_content, flags=re.DOTALL)
+
+    return f"""
+    <tr class="log-row {border_class}" style="border-left: 4px solid;">
+        <td style="width: 100px; vertical-align: top;" class="ps-3 py-2">
+            <span class="badge {text_class} bg-light border fw-bold">{entry['level']}</span>
+        </td>
+        <td class="py-2 pe-3">
+            <div class="log-content" style="font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;">{formatted_content}</div>
+        </td>
+    </tr>
+    """
+
+
+@login_required
+def log_viewer_view(request):
+    instance = request.session.get('chosen_instance', 'develop')
+    today = datetime.now().strftime('%Y-%m-%d')
+    selected_date = request.GET.get('date', today)
+    time_from = request.GET.get('time_from', '')
+    time_to = request.GET.get('time_to', '')
+    search_query = request.GET.get('search', '').lower()
+
+    log_path = get_log_file_path(instance, selected_date)
+    logs = []
+    stats = {"ERROR": 0, "WARN": 0}
+
+    if log_path and os.path.exists(log_path):
+        try:
+            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                buffer = []
+                for line in f:
+                    if re.search(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}', line):
+                        if buffer:
+                            combined_line = "".join(buffer)
+                            parsed = parse_log_line(combined_line)
+
+                            show_row = True
+                            if parsed['timestamp_str']:
+                                try:
+                                    time_part = parsed['timestamp_str'].split(' ')[1]
+                                    if time_from and time_part < (time_from + ":00"): show_row = False
+                                    if time_to and time_part > (time_to + ":59"): show_row = False
+                                except:
+                                    pass
+
+                            if search_query and search_query not in combined_line.lower(): show_row = False
+
+                            if show_row:
+                                if parsed['level'] in stats: stats[parsed['level']] += 1
+                                logs.append(render_log_row(parsed))
+                        buffer = [line]
+                    else:
+                        buffer.append(line)
+
+                if buffer:
+                    combined_line = "".join(buffer)
+                    parsed = parse_log_line(combined_line)
+                    logs.append(render_log_row(parsed))
+
+        except Exception as e:
+            logs.append(f"<tr><td colspan='2'>Error: {str(e)}</td></tr>")
+
+    if len(logs) > 3000:
+        logs = logs[-3000:]
+
+    return render(request, 'file_log_viewer.html', {
+        'logs': logs,
+        'stats': stats,
+        'selected_date': selected_date,
+        'time_from': time_from,
+        'time_to': time_to,
+        'search_query': search_query,
+        'instance': instance
+    })
 
 def render_log_row(entry):
     border_class = "border-info"
@@ -1015,59 +1118,6 @@ def parse_log_line(line):
         'content': line
     }
 
-
-@login_required
-def log_viewer_view(request):
-    instance = request.session.get('chosen_instance', 'develop')
-    today = datetime.now().strftime('%Y-%m-%d')
-    selected_date = request.GET.get('date', today)
-    time_from = request.GET.get('time_from', '')
-    time_to = request.GET.get('time_to', '')
-    search_query = request.GET.get('search', '').lower()
-
-    log_path = get_log_file_path(instance, selected_date)
-    logs = []
-    stats = {"ERROR": 0, "WARN": 0}
-
-    if log_path and os.path.exists(log_path):
-        try:
-            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                for line in f:
-                    parsed = parse_log_line(line)
-
-                    if parsed['timestamp_str']:
-                        try:
-                            time_part = parsed['timestamp_str'].split(' ')[1]
-
-                            if time_from and time_part < (time_from + ":00"):
-                                continue
-                            if time_to and time_part > (time_to + ":59"):
-                                continue
-                        except (IndexError, ValueError):
-                            pass
-
-                    if search_query and search_query not in line.lower():
-                        continue
-
-                    if parsed['level'] in stats:
-                        stats[parsed['level']] += 1
-
-                    logs.append(render_log_row(parsed))
-        except Exception as e:
-            logs.append(f"<tr><td colspan='2'>Error reading log: {str(e)}</td></tr>")
-
-    if len(logs) > 3000:
-        logs = logs[-3000:]
-
-    return render(request, 'file_log_viewer.html', {
-        'logs': logs,
-        'stats': stats,
-        'selected_date': selected_date,
-        'time_from': time_from,
-        'time_to': time_to,
-        'search_query': search_query,
-        'instance': instance
-    })
 @login_required
 def stream_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
