@@ -1000,7 +1000,6 @@ def get_log_file_path(instance, date_str):
 @login_required
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
-
     today = datetime.now().strftime('%Y-%m-%d')
     selected_date = request.GET.get('date', today)
     time_from = request.GET.get('time_from', '')
@@ -1017,13 +1016,14 @@ def log_viewer_view(request):
                 for line in f:
                     parsed = parse_log_line(line)
 
-                    # Time Filter
                     if parsed['timestamp_str']:
-                        log_time_str = parsed['timestamp_str'].split(' ')[1]
-                        if time_from and log_time_str < (time_from + ":00"): continue
-                        if time_to and log_time_str > (time_to + ":59"): continue
+                        try:
+                            log_time_str = [p for p in parsed['timestamp_str'].split(' ') if ':' in p][0]
+                            if time_from and log_time_str < (time_from + ":00"): continue
+                            if time_to and log_time_str > (time_to + ":59"): continue
+                        except (IndexError, ValueError):
+                            pass
 
-                    # Search Filter
                     if search_query and search_query not in line.lower():
                         continue
 
@@ -1046,7 +1046,6 @@ def log_viewer_view(request):
         'search_query': search_query,
         'instance': instance
     })
-
 
 @login_required
 def stream_logs(request):
