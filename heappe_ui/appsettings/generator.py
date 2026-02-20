@@ -469,6 +469,15 @@ def generate_appsettings_v6_2_1(
     appsettings = generate_appsettings_v6_1_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
     #bgworker RoleAssignmentSyncCheck = 3600
     appsettings['BackGroundThreadSettings']['RoleAssignmentSyncCheck'] = 3600
+    appsettings['RoleAssignments'] = {
+        "Administrators": ["admin", "sys_admin"],
+        "Maintainers": ["sys_maintainer"],
+        "Submitters": ["sys_submitter"],
+        "GroupReporters": ["sys_reporter"],
+        "Reporters": ["sys_reporter"],
+        "ManagementAdmins": ["sys_mgmtadmin"],
+        "Managers": ["sys_manager"]
+    }
     return appsettings
 
 def generate_appsettings_data_staging_v6_0_0(instance_name: str,
@@ -570,4 +579,5 @@ def generate_appsettings_data_staging_v6_2_1(instance_name: str,
             data_staging_token: str,
             port: int = 5001,
             version: str = None):
+
     return generate_appsettings_data_staging_v6_2_0(instance_name,sa_password,data_staging_token,port,version)
