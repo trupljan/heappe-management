@@ -977,6 +977,36 @@ def render_log_row(entry):
     """
 
 
+import re
+import os
+from datetime import datetime
+from collections import deque
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+
+
+def process_log_entry(buffer, logs, stats, time_from, time_to, search_query):
+    combined_line = "".join(buffer)
+    parsed = parse_log_line(combined_line)
+
+    show_row = True
+    if parsed['timestamp_str']:
+        try:
+            time_part = parsed['timestamp_str'].split(' ')[1]
+            if time_from and time_part < (time_from + ":00"): show_row = False
+            if time_to and time_part > (time_to + ":59"): show_row = False
+        except:
+            pass
+
+    if search_query and search_query not in combined_line.lower():
+        show_row = False
+
+    if show_row:
+        if parsed['level'] in stats:
+            stats[parsed['level']] += 1
+        logs.append(render_log_row(parsed))
+
+
 @login_required
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
@@ -987,7 +1017,7 @@ def log_viewer_view(request):
     search_query = request.GET.get('search', '').lower()
 
     log_path = get_log_file_path(instance, selected_date)
-    logs = []
+    logs = deque(maxlen=3000)
     stats = {"ERROR": 0, "WARN": 0}
 
     if log_path and os.path.exists(log_path):
@@ -997,40 +1027,18 @@ def log_viewer_view(request):
                 for line in f:
                     if re.search(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}', line):
                         if buffer:
-                            combined_line = "".join(buffer)
-                            parsed = parse_log_line(combined_line)
-
-                            show_row = True
-                            if parsed['timestamp_str']:
-                                try:
-                                    time_part = parsed['timestamp_str'].split(' ')[1]
-                                    if time_from and time_part < (time_from + ":00"): show_row = False
-                                    if time_to and time_part > (time_to + ":59"): show_row = False
-                                except:
-                                    pass
-
-                            if search_query and search_query not in combined_line.lower(): show_row = False
-
-                            if show_row:
-                                if parsed['level'] in stats: stats[parsed['level']] += 1
-                                logs.append(render_log_row(parsed))
+                            process_log_entry(buffer, logs, stats, time_from, time_to, search_query)
                         buffer = [line]
                     else:
                         buffer.append(line)
 
                 if buffer:
-                    combined_line = "".join(buffer)
-                    parsed = parse_log_line(combined_line)
-                    logs.append(render_log_row(parsed))
-
+                    process_log_entry(buffer, logs, stats, time_from, time_to, search_query)
         except Exception as e:
             logs.append(f"<tr><td colspan='2'>Error: {str(e)}</td></tr>")
 
-    if len(logs) > 3000:
-        logs = logs[-3000:]
-
     return render(request, 'file_log_viewer.html', {
-        'logs': logs,
+        'logs': list(logs),
         'stats': stats,
         'selected_date': selected_date,
         'time_from': time_from,
