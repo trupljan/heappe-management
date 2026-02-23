@@ -339,6 +339,8 @@ def handle_update_action(config, instance_name):
             "build",  "--no-cache"
         ]
 
+        build_result = execute_docker_compose(build_command, compose_dir)
+        print(f"Docker Compose build result done: {build_result.returncode} {build_result.stdout} {build_result.stderr}")
 
         restart_command = [
             "docker", "compose",
