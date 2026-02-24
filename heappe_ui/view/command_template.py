@@ -178,7 +178,7 @@ def command_template_delete(request: HttpRequest, command_template_id: int) -> H
         "Failed to delete Command Template"
     )
 
-    return redirect("project_detail", project_id=project_id, tab="commandtemplates")
+    return redirect(f"/projects/{project_id}/?tab=commandtemplates")
 
 
 @login_required
