@@ -288,6 +288,7 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="update_assignment">
         <input type="hidden" id="editClusterId" name="ClusterId">
+        <input type="hidden" name="ProjectId" value="{{ project.id }}">  
         <div class="modal-header">
           <h5 class="modal-title">Edit Assignment: <span id="editClusterNameDisplay"></span></h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
