@@ -424,7 +424,7 @@ def update_assignment(request: HttpRequest) -> HttpResponse:
         "Failed to update assignment"
     )
     # Redirect to cluster_detail with cluster_id and tab as a query parameter
-    return redirect(f"{reverse('cluster_detail', kwargs={'cluster_id': cluster_id})}?tab=projects")
+    return redirect("project_detail", project_id=project_id)
 
 @login_required
 def delete_assignment(request: HttpRequest, project_id: int) -> HttpResponse:

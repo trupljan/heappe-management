@@ -152,6 +152,10 @@
                                 <label class="form-label">Scratch Path</label>
                                 <input type="text" class="form-control" name="ScratchStoragePath">
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Project Path</label>
+                                <input type="text" class="form-control" name="ProjectStoragePath">
+                            </div>
                             <div class="col-12">
                                 <button type="submit" class="btn btn-primary mt-2">Assign Cluster</button>
                             </div>
@@ -186,6 +190,7 @@
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="delete_assignment">
                                         <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
+                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
                                         <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Remove?')">Remove</button>
                                     </form>
                                 </td>
@@ -353,7 +358,7 @@ function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPat
         document.getElementById('editClusterNameDisplay').innerText = clusterName;
         document.getElementById('editScratchPath').value = scratchPath;
         document.getElementById('editProjectPath').value = projectPath;
-        
+
         var myModal = new bootstrap.Modal(document.getElementById('editAssignmentModal'));
         myModal.show();
     } else {
