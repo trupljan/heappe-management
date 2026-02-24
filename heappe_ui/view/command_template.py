@@ -104,6 +104,7 @@ def command_template_modify(request: HttpRequest, command_template_id: int) -> H
     )
     return redirect("command_template_detail", command_template_id=command_template_id)
 
+
 @login_required
 def command_template_create(request: HttpRequest, project_id: int) -> HttpResponse:
     if request.method == "POST":
@@ -115,7 +116,8 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
             "ExtendedAllocationCommand": request.POST.get("ExtendedAllocationCommand"),
             "ExecutableFile": request.POST.get("ExecutableFile"),
             "PreparationScript": request.POST.get("PreparationScript"),
-            "ClusterNodeTypeId": int(request.POST.get("ClusterNodeTypeId")) if request.POST.get("ClusterNodeTypeId") else None,
+            "ClusterNodeTypeId": int(request.POST.get("ClusterNodeTypeId")) if request.POST.get(
+                "ClusterNodeTypeId") else None,
             "IsEnabled": request.POST.get("IsEnabled") == "on",
             "TemplateParameters": request.POST.getlist("TemplateParameters")  # This should be a list of dicts
         }
@@ -134,30 +136,35 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
     project = controller.heappe_management_project_get(
         Id=project_id, SessionCode=request.session_code
     ).to_dict()
+
     # get project to cluster references from
     clusters = [c.to_dict() for c in controller.heappe_management_clusters_get(SessionCode=request.session_code)]
     response = controller.heappe_management_project_assignment_to_clusters_get(
         ProjectId=project_id, SessionCode=request.session_code
     )
     project_assignments = [pa.to_dict() for pa in response]
-    # add cluster details fror project assignments
+
+    # add cluster details for project assignments
     for assignment in project_assignments:
         for cluster in clusters:
             if cluster['id'] == assignment['cluster_id']:
                 assignment['cluster_name'] = cluster['name']
                 break
 
-
-
     cluster_node_types = []
     for assignment in project_assignments:
-        cluster = controller.heappe_management_cluster_get(Id=assignment['cluster_id'], SessionCode=request.session_code)
-        node_types = cluster.node_types
-        cluster_node_types.extend([ntype.to_dict() for ntype in node_types])
+        cluster = controller.heappe_management_cluster_get(Id=assignment['cluster_id'],
+                                                           SessionCode=request.session_code)
 
+        cluster_name = assignment.get('cluster_name', getattr(cluster, 'name', 'Unknown'))
 
+        for ntype in cluster.node_types:
+            ntype_dict = ntype.to_dict()
+            ntype_dict['cluster_name'] = cluster_name
+            cluster_node_types.append(ntype_dict)
 
-    return render(request, 'command_template.html', {'node_types': cluster_node_types, 'project_id': project_id, 'project': project})
+    return render(request, 'command_template.html',
+                  {'node_types': cluster_node_types, 'project_id': project_id, 'project': project})
 
 
 @login_required
