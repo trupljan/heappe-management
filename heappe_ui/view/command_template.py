@@ -163,12 +163,9 @@ def command_template_delete(request: HttpRequest, command_template_id: int) -> H
         )
         project_id = template.project_id
     except Exception:
-        project_id = request.GET.get('project_id')  # fallback z URL
+        project_id = request.GET.get('project_id')
 
-    payload_data = {
-        "CommandTemplateId": command_template_id,
-    }
-
+    payload_data = {"CommandTemplateId": command_template_id}
     payload = _create_payload(request.session_code, payload_data)
 
     _handle_api_call(
@@ -178,7 +175,13 @@ def command_template_delete(request: HttpRequest, command_template_id: int) -> H
         "Failed to delete Command Template"
     )
 
-    return redirect(f"/projects/{project_id}/?tab=commandtemplates")
+    if project_id:
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    return redirect("project_list")
+
 
 
 @login_required
