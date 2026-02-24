@@ -153,10 +153,10 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
     return render(request, 'command_template.html', {'node_types': cluster_node_types, 'project_id': project_id, 'project': project})
 
 @login_required
-def command_template_delete(request: HttpRequest, commandTemplateId: int) -> HttpResponse:
+def command_template_delete(request: HttpRequest, command_template_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     payload_data = {
-        "Id": commandTemplateId,
+        "Id": command_template_id,
     }
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
