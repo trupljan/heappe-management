@@ -1,19 +1,20 @@
 <style>
-  /* Modernizace a animace */
-  .copy-btn { transition: all 0.2s ease-in-out; }
-  .copy-btn:hover { transform: translateY(-1px); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
-  .copy-badge { animation: fadeIn 0.3s ease-in; font-size: 0.8em;}
+  /* Základní styly pro lepší vzhled */
+  .copy-btn { font-size: 0.85rem; font-weight: 500; }
+  .copy-badge { animation: fadeIn 0.3s ease-in; font-size: 0.75em; }
 
-  /* Vylepšení tabulek a karet */
+  /* Karty a tabulky */
   .card { border: none; border-radius: 0.5rem; transition: box-shadow 0.3s; }
   .card:hover { box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05) !important; }
-  .table-actions { min-width: 160px; }
-  .key-preview { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 0.85em; color: #d63384; background-color: #f8f9fa; padding: 2px 4px; border-radius: 4px; }
 
-  /* Dropdown v tabulkách */
-  .dropdown-item form { display: block; width: 100%; }
-  .dropdown-item button { width: 100%; text-align: left; background: none; border: none; padding: 0.25rem 1rem; }
-  .dropdown-item:hover { background-color: #f8f9fa; }
+  /* Styl pro klíče - textový, žádné ikonky */
+  .key-row { background-color: #f8f9fa; border-radius: 4px; padding: 6px 10px; margin-bottom: 6px; border: 1px solid #e9ecef; }
+  .key-label { font-weight: bold; font-size: 0.8rem; color: #495057; display: inline-block; min-width: 70px; }
+  .key-code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85rem; color: #d63384; margin-right: 10px; }
+
+  /* Tlačítka v akcích */
+  .action-stack .btn { text-align: left; margin-bottom: 4px; }
+  .action-stack .btn:last-child { margin-bottom: 0; }
 
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 </style>
@@ -64,7 +65,7 @@
                 <h1 class="h3 mb-0">{% if project %}{{ project.Name }}{% else %}Create Project{% endif %}</h1>
                 {% if project %}
                 <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">
-                    <i class="bi bi-arrow-clockwise"></i> Reload
+                    Reload
                 </button>
                 {% endif %}
             </div>
@@ -374,112 +375,105 @@
                 <div class="card-body p-0">
                     {% if project_accounts %}
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
+                        <table class="table table-hover align-top mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th class="ps-4">Username</th>
-                                    <th>Key Info</th>
-                                    <th>Public Keys</th>
-                                    <th class="text-center">Status</th>
-                                    <th class="text-end pe-4">Actions</th>
+                                    <th class="ps-4" style="width: 15%;">Username / Type</th>
+                                    <th style="width: 50%;">Public Keys</th>
+                                    <th class="text-center" style="width: 10%;">Init</th>
+                                    <th class="text-end pe-4" style="width: 25%;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for account in project_accounts %}
                                 <tr>
-                                    <td class="ps-4">
+                                    <td class="ps-4 py-3">
                                         <div class="fw-bold fs-5">{{ account.username }}</div>
+                                        <span class="badge bg-light text-dark border mt-1">{{ account.key_type_name }}</span>
                                     </td>
-                                    <td>
-                                        <span class="badge bg-light text-dark border">{{ account.key_type_name }}</span>
-                                    </td>
-                                    <td>
-                                        <div class="mb-2">
-                                            <span class="badge bg-secondary me-1" style="width: 60px;">OpenSSH</span>
-                                            <span class="key-preview user-select-all me-2">
-                                                {{ account.public_key_open_ssh|slice:":12" }}...{{ account.public_key_open_ssh|slice:"-12:" }}
-                                            </span>
-                                            <button class="btn btn-link p-0 text-decoration-none copy-btn"
-                                                    onclick="copyToClipboard('{{ account.public_key_open_ssh|escapejs }}', 'open_ssh_feedback_{{ account.id }}')"
-                                                    title="Copy OpenSSH Key">
-                                                📋
-                                            </button>
-                                            <span id="open_ssh_feedback_{{ account.id }}" class="badge bg-success ms-1 d-none copy-badge">Copied</span>
+                                    <td class="py-3">
+                                        <div class="key-row d-flex align-items-center justify-content-between">
+                                            <div class="d-flex align-items-center overflow-hidden">
+                                                <span class="key-label">OpenSSH</span>
+                                                <span class="key-code text-truncate">
+                                                    {{ account.public_key_open_ssh|slice:":15" }}...{{ account.public_key_open_ssh|slice:"-15:" }}
+                                                </span>
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <button class="btn btn-sm btn-white border copy-btn"
+                                                        onclick="copyToClipboard('{{ account.public_key_open_ssh|escapejs }}', 'open_ssh_feedback_{{ account.id }}')">
+                                                    Copy
+                                                </button>
+                                                <span id="open_ssh_feedback_{{ account.id }}" class="badge bg-success ms-2 d-none copy-badge">Copied!</span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <span class="badge bg-secondary me-1" style="width: 60px;">PEM</span>
-                                            <span class="key-preview user-select-all me-2">
-                                                {{ account.public_key_pem|slice:":12" }}...{{ account.public_key_pem|slice:"-12:" }}
-                                            </span>
-                                            <button class="btn btn-link p-0 text-decoration-none copy-btn"
-                                                    onclick="copyToClipboard('{{ account.public_key_pem|escapejs }}', 'pem_feedback_{{ account.id }}')"
-                                                    title="Copy PEM Key">
-                                                📋
-                                            </button>
-                                            <span id="pem_feedback_{{ account.id }}" class="badge bg-success ms-1 d-none copy-badge">Copied</span>
+
+                                        <div class="key-row d-flex align-items-center justify-content-between mb-0">
+                                            <div class="d-flex align-items-center overflow-hidden">
+                                                <span class="key-label">PEM</span>
+                                                <span class="key-code text-truncate">
+                                                    {{ account.public_key_pem|slice:":15" }}...{{ account.public_key_pem|slice:"-15:" }}
+                                                </span>
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <button class="btn btn-sm btn-white border copy-btn"
+                                                        onclick="copyToClipboard('{{ account.public_key_pem|escapejs }}', 'pem_feedback_{{ account.id }}')">
+                                                    Copy
+                                                </button>
+                                                <span id="pem_feedback_{{ account.id }}" class="badge bg-success ms-2 d-none copy-badge">Copied!</span>
+                                            </div>
                                         </div>
                                     </td>
-                                    <td class="text-center">
+                                    <td class="text-center py-3">
                                         {% if account.is_initialized %}
-                                            <span class="badge rounded-pill bg-success" data-bs-toggle="tooltip" title="Initialized">Active</span>
+                                            <div class="text-success fw-bold">Active</div>
+                                            <small class="text-muted">●</small>
                                         {% else %}
-                                            <span class="badge rounded-pill bg-danger" data-bs-toggle="tooltip" title="Not Initialized">Inactive</span>
+                                            <div class="text-danger fw-bold">Inactive</div>
+                                            <small class="text-muted">●</small>
                                         {% endif %}
                                     </td>
-                                    <td class="text-end pe-4">
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-outline-dark dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                                Manage
+                                    <td class="text-end pe-4 py-3">
+                                        <div class="d-grid gap-2 action-stack">
+                                            <form method="post" class="w-100">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="test_hpc_access">
+                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                <input type="hidden" name="username" value="{{ account.username }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-info w-100">Test Access</button>
+                                            </form>
+
+                                            <button type="button" class="btn btn-sm btn-outline-warning w-100"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#regenerateSshKeyModal"
+                                                    onclick="setUsernameInModal('{{ account.username }}')">
+                                                Regenerate Key
                                             </button>
-                                            <ul class="dropdown-menu dropdown-menu-end shadow">
-                                                <li>
-                                                    <form method="post">
-                                                        {% csrf_token %}
-                                                        <input type="hidden" name="action" value="test_hpc_access">
-                                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                        <input type="hidden" name="username" value="{{ account.username }}">
-                                                        <button type="submit" class="dropdown-item">Test Access</button>
-                                                    </form>
-                                                </li>
-                                                <li>
-                                                    <form method="post">
-                                                        {% csrf_token %}
-                                                        <input type="hidden" name="action" value="initialize_hpc_account">
-                                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                        <input type="hidden" name="Username" value="{{ account.username }}">
-                                                        <button type="submit" class="dropdown-item">Initialize Account</button>
-                                                    </form>
-                                                </li>
-                                                <li><hr class="dropdown-divider"></li>
-                                                <li>
-                                                    <button type="button" class="dropdown-item"
-                                                            data-bs-toggle="modal"
-                                                            data-bs-target="#regenerateSshKeyModal"
-                                                            onclick="setUsernameInModal('{{ account.username }}')">
-                                                        Regenerate Key...
-                                                    </button>
-                                                </li>
-                                                {% if v610_check %}
-                                                <li>
-                                                    <button type="button" class="dropdown-item"
-                                                            data-bs-toggle="modal"
-                                                            data-bs-target="#renameAccountModal"
-                                                            onclick="setRenameAccountUsername('{{ account.username }}')">
-                                                        Rename / Password...
-                                                    </button>
-                                                </li>
-                                                {% endif %}
-                                                <li><hr class="dropdown-divider"></li>
-                                                <li>
-                                                    <form method="post">
-                                                        {% csrf_token %}
-                                                        <input type="hidden" name="action" value="delete_hpc_account">
-                                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                        <input type="hidden" name="username" value="{{ account.username }}">
-                                                        <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to delete this HPC account?')">Delete Account</button>
-                                                    </form>
-                                                </li>
-                                            </ul>
+
+                                            {% if v610_check %}
+                                            <button type="button" class="btn btn-sm btn-outline-dark w-100"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#renameAccountModal"
+                                                    onclick="setRenameAccountUsername('{{ account.username }}')">
+                                                Rename / Password
+                                            </button>
+                                            {% endif %}
+
+                                            <form method="post" class="w-100">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="initialize_hpc_account">
+                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                <input type="hidden" name="Username" value="{{ account.username }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-secondary w-100">Initialize</button>
+                                            </form>
+
+                                            <form method="post" class="w-100">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="delete_hpc_account">
+                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                <input type="hidden" name="username" value="{{ account.username }}">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger w-100" onclick="return confirm('Are you sure you want to delete this HPC account?')">Delete</button>
+                                            </form>
                                         </div>
                                     </td>
                                 </tr>
