@@ -291,6 +291,9 @@
                                         {% for ntype in node_types %}
                                             {% if ntype.id == template.cluster_node_type_id %}
                                                 {{ ntype.name }}
+                                                {% if ntype.cluster_name %}
+                                                    <br><small class="text-muted">{{ ntype.cluster_name }}</small>
+                                                {% endif %}
                                             {% endif %}
                                         {% endfor %}
                                     </td>
@@ -316,7 +319,7 @@
                                         <!-- delete command template href url command_template_delete-->
                                        <form method="post" action="{% url 'command_template_delete' template.id %}" style="display:inline;">
                                             {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm btn-danger" 
+                                            <button type="submit" class="btn btn-sm btn-danger"
                                                     onclick="return confirm('Are you sure you want to delete this template?')">
                                                 Delete
                                             </button>

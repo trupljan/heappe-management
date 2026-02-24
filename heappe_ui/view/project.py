@@ -87,9 +87,16 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
         for ct in command_templates:
             node_type_id = ct.get('cluster_node_type_id')
             if node_type_id and node_type_id not in dict_ntypes:
-                dict_ntypes[node_type_id] = controller.heappe_management_cluster_node_type_get(
+                ntype_data = controller.heappe_management_cluster_node_type_get(
                     Id=node_type_id, SessionCode=request.session_code
                 ).to_dict()
+
+                for cluster in clusters:
+                    if any(nt.id == node_type_id for nt in cluster.get('node_types', [])):
+                        ntype_data['cluster_name'] = cluster['name']
+                        break
+
+                dict_ntypes[node_type_id] = ntype_data
 
 
         project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
