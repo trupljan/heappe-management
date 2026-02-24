@@ -212,7 +212,8 @@
                                 <th scope="col">Cluster Name</th>
                                 <th scope="col">Scratch Storage Path</th>
                                 <th scope="col">Project Storage Path</th>
-                                <th scope="col">Action</th>
+                                <th scope="col">Edit</th>
+                                <th scope="col">Delete</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -248,7 +249,21 @@
     </div>
     {% endif %}
 </div>
+
+    <script>
+
+function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
+    document.getElementById('editClusterId').value = clusterId;
+    document.getElementById('editClusterNameDisplay').innerText = clusterName;
+    document.getElementById('editScratchPath').value = scratchPath;
+    document.getElementById('editProjectPath').value = projectPath;
+
+    new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
+}
+    </script>
 {% endif %}
+
+
 
 </div>
       {% elif active_tab == 'commandtemplates' %}
@@ -689,15 +704,6 @@ document.addEventListener('DOMContentLoaded', function () {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 });
-
-function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
-    document.getElementById('editClusterId').value = clusterId;
-    document.getElementById('editClusterNameDisplay').innerText = clusterName;
-    document.getElementById('editScratchPath').value = scratchPath;
-    document.getElementById('editProjectPath').value = projectPath;
-
-    new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
-}
 
 function setUsernameInModal(username) {
     document.getElementById('modal-username').value = username;
