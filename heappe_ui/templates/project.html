@@ -235,6 +235,7 @@
                                                         {% csrf_token %}
                                                         <input type="hidden" name="action" value="delete_assignment">
                                                         <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
+                                                        <input type="hidden" name="redirectTo" value="project_detail">
                                                         <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to remove this assignment?')">Remove Assignment</button>
                                                     </form>
                                                 </li>
