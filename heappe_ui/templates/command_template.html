@@ -101,7 +101,7 @@
         {% for node_type in cluster.list %}
           <option value="{{ node_type.id }}" 
             {% if command_template.cluster_node_type_id|default:0 == node_type.id %}selected{% endif %}>
-            {{ node_type.name }} (ID: {{ node_type.id }})
+            {{ node_type.name }} (Cluster: {{ cluster.grouper }})
           </option>
         {% endfor %}
       </optgroup>
