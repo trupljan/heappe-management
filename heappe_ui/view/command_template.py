@@ -39,10 +39,17 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
 
     cluster_node_types = []
     for assignment in project_assignments:
-        cluster = controller.heappe_management_cluster_get(Id=assignment['cluster_id'],
-                                                           SessionCode=request.session_code)
-        node_types = cluster.node_types
-        cluster_node_types.extend([ntype.to_dict() for ntype in node_types])
+        cluster = controller.heappe_management_cluster_get(
+            Id=assignment['cluster_id'],
+            SessionCode=request.session_code
+        )
+
+        cluster_name = assignment.get('cluster_name', cluster.name)
+
+        for ntype in cluster.node_types:
+            ntype_dict = ntype.to_dict()
+            ntype_dict['cluster_name'] = cluster_name
+            cluster_node_types.append(ntype_dict)
 
     return render(request, "command_template.html", {
         "command_template": command_template,

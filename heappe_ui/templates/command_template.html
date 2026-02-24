@@ -89,16 +89,25 @@
             </div>
             {% endif %}
             <div class="col-md-3">
-              <label class="form-label">Cluster Node Type</label>
-              <select class="form-control" name="ClusterNodeTypeId">
-                <option value="0" {% if command_template.cluster_node_type_id|default:0 == 0 %}selected{% endif %}>-- Select Node Type --</option>
-                {% for node_type in node_types %}
-                  <option value="{{ node_type.id }}" {% if command_template.cluster_node_type_id|default:0 == node_type.id %}selected{% endif %}>
-                    {{ node_type.name }}
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
+  <label class="form-label">Cluster Node Type</label>
+  <select class="form-control" name="ClusterNodeTypeId">
+    <option value="0" {% if command_template.cluster_node_type_id|default:0 == 0 %}selected{% endif %}>-- Select Node Type --</option>
+    
+    {# Seskupení podle názvu clusteru #}
+    {% regroup node_types by cluster_name as cluster_list %}
+    
+    {% for cluster in cluster_list %}
+      <optgroup label="Cluster: {{ cluster.grouper }}">
+        {% for node_type in cluster.list %}
+          <option value="{{ node_type.id }}" 
+            {% if command_template.cluster_node_type_id|default:0 == node_type.id %}selected{% endif %}>
+            {{ node_type.name }} (ID: {{ node_type.id }})
+          </option>
+        {% endfor %}
+      </optgroup>
+    {% endfor %}
+  </select>
+</div>
           {% if false %}
             <div class="col-md-3">
               <label class="form-label">Created From Generic Template ID</label>
