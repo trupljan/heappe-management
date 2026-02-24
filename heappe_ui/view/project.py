@@ -12,11 +12,8 @@ KEY_TYPE_CHOICES = {
 }
 
 
-
-
-
 @login_required
-def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> HttpResponse:
+def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> HttpResponse:
     filter_type = request.GET.get("project_filter", "own")
     controller = hp.ManagementApi(request.api_instance)
     controller_health = hp.HealthApi(request.api_instance)
@@ -25,14 +22,14 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
     else:
         tab = request.GET.get("tab", "detail")
 
-    clusters = [c.to_dict() for c in controller.heappe_management_clusters_get(SessionCode=request.session_code)]
+    clusters_raw = controller.heappe_management_clusters_get(SessionCode=request.session_code)
+    clusters = [c.to_dict() for c in clusters_raw]
     not_assigned_clusters = clusters.copy()
     command_templates, project_accounts, project_data, project_assignments = [], [], None, []
     adaptor_users = []
     adaptor_users_not_in_project = []
     ui_features = {}
 
-    #if post
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "update_project":
@@ -54,7 +51,6 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
         if action == "delete_hpc_account":
             return delete_hpc_account(request)
 
-
     if project_id:
         project_data = controller.heappe_management_project_get(
             Id=project_id, SessionCode=request.session_code
@@ -65,22 +61,20 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
 
         try:
             adaptor_users = [e.to_dict() for e in controller.heappe_management_adaptor_users_in_project_get(
-                SessionCode=request.session_code, 
+                SessionCode=request.session_code,
                 ProjectId=project_id
             )]
             all_adaptor_users = [e.to_dict() for e in controller.heappe_management_adaptor_users_get(
                 SessionCode=request.session_code
             )]
             existing_user_ids = {user['id'] for user in adaptor_users}
-
             adaptor_users_not_in_project = [
                 user for user in all_adaptor_users
                 if user['id'] not in existing_user_ids
             ]
-
             ui_features['adaptor_users'] = True
             ui_features['adaptor_users_not_in_project'] = True
-        except Exception as e:
+        except Exception:
             adaptor_users = []
 
         dict_ntypes = {}
@@ -91,13 +85,11 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
                     Id=node_type_id, SessionCode=request.session_code
                 ).to_dict()
 
-                for cluster in clusters:
-                    if any(nt.id == node_type_id for nt in cluster.get('node_types', [])):
-                        ntype_data['cluster_name'] = cluster['name']
+                for c_obj in clusters_raw:
+                    if any(nt.id == node_type_id for nt in c_obj.node_types):
+                        ntype_data['cluster_name'] = c_obj.name
                         break
-
                 dict_ntypes[node_type_id] = ntype_data
-
 
         project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
             ProjectId=project_id, SessionCode=request.session_code
@@ -106,61 +98,34 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str=None) -> Htt
         for pa in project_accounts:
             pa['key_type_name'] = KEY_TYPE_CHOICES.get(pa.get('key_type'), 'Unknown')
             try:
-                #result = test_cluster_authentication_credential_HPC_access_manual(request, project_id, pa['username'])
-                #if result is None:
-                #    pa['has_access']  = False
-                #else:
-                #    pa['has_access'] = True
-
-                controller = hp.ManagementApi(request.api_instance)
                 result = _handle_api_call(
                     request,
-                    lambda: controller.heappe_management_cluster_account_status_get(ProjectId=project_id,
-                                                                                             Username=pa['username'],
-                                                                                             SessionCode=request.session_code),
-                    "Cluster account is initialized",
-                    "Cluster account is not initialized",
-                    silent=True
+                    lambda: controller.heappe_management_cluster_account_status_get(
+                        ProjectId=project_id, Username=pa['username'], SessionCode=request.session_code
+                    ),
+                    "OK", "FAIL", silent=True
                 )
-                init_fail = 0
-                init_ok = 0
-                for status in result:
-                    if status.is_initialized:
-                        init_ok = init_ok + 1
-                    else:
-                        init_fail = init_fail + 1
-
-                if init_fail == 0 and init_ok > 0:
-                    pa['is_initialized'] = True
-                else:
-                    pa['is_initialized'] = False
-
+                init_ok = sum(1 for status in result if status.is_initialized)
+                init_fail = len(result) - init_ok
+                pa['is_initialized'] = (init_fail == 0 and init_ok > 0)
             except Exception as e:
                 print(e)
-
-
-
-
 
         response = controller.heappe_management_project_assignment_to_clusters_get(
             ProjectId=project_id, SessionCode=request.session_code
         )
         project_assignments = [pa.to_dict() for pa in response]
-        # add cluster details fror project assignments
         for assignment in project_assignments:
             for cluster in clusters:
                 if cluster['id'] == assignment['cluster_id']:
                     assignment['cluster_name'] = cluster['name']
-                    not_assigned_clusters.remove(cluster)
+                    if cluster in not_assigned_clusters:
+                        not_assigned_clusters.remove(cluster)
                     break
 
     if filter_type == "shared":
         command_templates = [ct for ct in command_templates if ct['project_id'] == 0]
-    elif filter_type == "all":
-        # žádná změna, necháme všechny v listu
-        pass
-    else:
-        # "own" nebo default - vyfiltrovat, kde project_id není 0
+    elif filter_type != "all":
         command_templates = [ct for ct in command_templates if ct['project_id'] != 0]
 
     return render(request, "project.html", {
