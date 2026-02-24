@@ -54,6 +54,7 @@ urlpatterns = [
     path('command-templates/<int:project_id>/new/', views.command_template_create, name='command_template_create'),
     path('command-templates/<int:command_template_id>/', views.command_template_detail, name='command_template_detail'),
     path('command-templates/<int:command_template_id>/modify/', views.command_template_modify, name='command_template_modify'),
+    path('command-templates/<int:command_template_id>/delete/', views.command_template_delete, name='command_template_delete'),
 
     path('update-app/', views.update_app, name='update_app'),
 
