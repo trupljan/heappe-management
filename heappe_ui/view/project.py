@@ -38,6 +38,8 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             return project_assign_to_cluster_with_project_id(request, project_id)
         if action == "delete_assignment":
             return delete_assignment(request, project_id)
+        if action == "update_assignment":
+            return update_assignment(request)
         if action == "test_hpc_access":
             return test_cluster_authentication_credential_HPC_access(request)
         if action == "initialize_hpc_account":
@@ -403,6 +405,26 @@ def project_assign_to_cluster_with_project_id(request: HttpRequest, project_id) 
     # Redirect to cluster_detail with cluster_id and tab as a query parameter
     return redirect("project_detail", project_id=project_id)
 
+def update_assignment(request: HttpRequest) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    project_id = int(request.POST.get("ProjectId"))
+    cluster_id = int(request.POST.get("ClusterId"))
+    payload_data = {
+        "ProjectId": project_id,
+        "ClusterId": cluster_id,
+        "ScratchStoragePath": request.POST.get("ScratchStoragePath", ""),
+        "PermanentStoragePath": request.POST.get("PermanentStoragePath", ""),
+        "ProjectStoragePath": request.POST.get("ProjectStoragePath", "")
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_project_assignment_to_cluster_put(**payload),
+        "Assignment updated successfully!",
+        "Failed to update assignment"
+    )
+    # Redirect to cluster_detail with cluster_id and tab as a query parameter
+    return redirect(f"{reverse('cluster_detail', kwargs={'cluster_id': cluster_id})}?tab=projects")
 
 @login_required
 def delete_assignment(request: HttpRequest, project_id: int) -> HttpResponse:
