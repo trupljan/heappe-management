@@ -39,7 +39,6 @@
     <h1 class="mb-4 text-center">
         {% if project %}{{ project.Name }}{% else %}Create Project{% endif %}
     </h1>
-
     <div class="card mb-4 w-75 mx-auto shadow-sm">
         <div class="card-header d-flex align-items-center">
             <strong>Project Information</strong>
@@ -58,156 +57,25 @@
                         <input type="number" class="form-control" value="{{ project.id }}" readonly disabled>
                     </div>
                     {% endif %}
-
                     <div class="col-md-6">
                         <label class="form-label">Name</label>
                         <input type="text" class="form-control" name="Name" value="{{ project.name|default:'' }}">
                     </div>
-
                     <div class="col-md-6">
                         <label class="form-label">PI Email</label>
-                        <input type="email" class="form-control" name="PIEmail" value="{{ project.PIEmail|default:'' }}"
-                               {% if project %}readonly disabled{% endif %}>
+                        <input type="email" class="form-control" name="PIEmail" value="{{ project.PIEmail|default:'' }}" {% if project %}readonly disabled{% endif %}>
                     </div>
-
-                    {% if v620_check and project %}
-                    <div class="col-md-6">
-                        <label class="form-label">KeyScripts Directory Path</label>
-                        <input type="text" class="form-control" name="KeyScriptsDirectoryPath" readonly disabled value="{{ project.key_scripts_directory_path|default:'' }}">
-                    </div>
-                    {% endif %}
-
                     <div class="col-12">
                         <label class="form-label">Description</label>
                         <textarea class="form-control" name="Description" rows="3">{{ project.description|default:'' }}</textarea>
                     </div>
-
-                    <div class="col-md-6">
-                        <label class="form-label">Accounting String</label>
-                        <input type="text" class="form-control" name="AccountingString"
-                               value="{{ project.accounting_string|default:'' }}"
-                               {% if project %}readonly disabled{% endif %}>
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">Start Date</label>
-                        <input type="datetime-local" class="form-control" name="StartDate" value="{{ project.start_date }}">
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label">End Date</label>
-                        <input type="datetime-local" class="form-control" name="EndDate" value="{{ project.end_date }}">
-                    </div>
-
-                    <div class="col-md-3">
-                        <label class="form-label" for="UsageType">Usage Type</label>
-                        <select class="form-select" id="UsageType" name="UsageType">
-                            <option value="" disabled selected>Select usage type</option>
-                            <option value="1" {% if project.usage_type == 1 %}selected{% endif %}>NodeHours</option>
-                            <option value="2" {% if project.usage_type == 2 %}selected{% endif %}>CoreHours</option>
-                        </select>
-                    </div>
-
-                    <div class="col-md-6 d-flex align-items-center mt-4">
-                        <div class="form-check">
-                            <input type="checkbox" class="form-check-input" id="isOneToOneMapping" name="IsOneToOneMapping"
-                                   {% if project.is_one_to_one_mapping %}checked{% endif %}>
-                            <label for="isOneToOneMapping" class="form-check-label">Map directly external users (1:1)</label>
-                        </div>
-                    </div>
                 </div>
-
-                <div class="mt-4 d-flex justify-content-between">
-                    {% if project %}
-                        <button type="submit" class="btn btn-primary" name="action" value="update_project">Update Project</button>
-                    {% else %}
-                        <button type="submit" class="btn btn-success" name="action" value="create_project">Create Project</button>
-                    {% endif %}
-                    <button type="button" class="btn btn-secondary" onclick="history.back()">Back</button>
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Save Project</button>
                 </div>
             </form>
         </div>
     </div>
-
-    {% if project %}
-    <div class="row g-4 w-75 mx-auto">
-        <div class="col-md-6">
-            <div class="card mb-4 shadow-sm">
-                <div class="card-header"><strong>Assign Project to Cluster</strong></div>
-                <div class="card-body">
-                    <form method="post">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="project_assign_to_cluster">
-                        <div class="row g-3">
-                            <div class="col-12">
-                                <label class="form-label">Select Cluster</label>
-                                <select class="form-select" name="ClusterId" required>
-                                    <option value="" disabled selected>Select a cluster</option>
-                                    {% for cluster in not_assigned_clusters %}
-                                        <option value="{{ cluster.id }}">{{ cluster.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Scratch Path</label>
-                                <input type="text" class="form-control" name="ScratchStoragePath" placeholder="/scratch/...">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">Project Path</label>
-                                <input type="text" class="form-control" name="ProjectStoragePath" placeholder="/project/...">
-                            </div>
-                            <div class="col-12">
-                                <button type="submit" class="btn btn-primary mt-2">Assign Cluster</button>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        {% if project_assignments %}
-        <div class="col-md-6">
-            <div class="card mb-4 shadow-sm">
-                <div class="card-header"><strong>Assigned Clusters</strong></div>
-                <div class="card-body">
-                    <div class="table-responsive">
-                        <table class="table table-hover table-bordered">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Cluster</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for assignment in project_assignments %}
-                                <tr>
-                                    <td>
-                                        <strong>{{ assignment.cluster_name }}</strong><br>
-                                        <small class="text-muted">S: {{ assignment.scratch_storage_path }}</small>
-                                    </td>
-                                    <td>
-                                        <button type="button" class="btn btn-outline-warning btn-sm"
-                                                onclick="openEditAssignmentModal('{{ assignment.cluster_id }}', '{{ assignment.cluster_name|escapejs }}', '{{ assignment.scratch_storage_path|escapejs }}', '{{ assignment.project_storage_path|escapejs }}')">
-                                            Edit
-                                        </button>
-                                        <form method="post" style="display:inline;">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="action" value="delete_assignment">
-                                            <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
-                                            <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Remove?')">Remove</button>
-                                        </form>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-    {% endif %}
 
     {% elif active_tab == 'commandtemplates' %}
     <div class="card mb-4 w-90 mx-auto shadow-sm">
@@ -228,12 +96,9 @@
         </div>
         <div class="card-body">
             {% if command_templates %}
-            <div class="table-responsive">
                 <table class="table table-striped align-middle">
                     <thead class="table-light">
-                        <tr>
-                            <th>ID</th><th>Name</th><th>Executable</th><th>Queue</th><th>Enabled</th><th>Actions</th>
-                        </tr>
+                        <tr><th>ID</th><th>Name</th><th>Executable</th><th>Queue</th><th>Enabled</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                         {% for template in command_templates %}
@@ -243,29 +108,23 @@
                             <td><code>{{ template.executable_file }}</code></td>
                             <td>
                                 {% for ntype in node_types %}
-                                    {% if ntype.id == template.cluster_node_type_id %}
-                                        {{ ntype.name }}<br><small class="text-muted">{{ ntype.cluster_name }}</small>
-                                    {% endif %}
+                                    {% if ntype.id == template.cluster_node_type_id %}{{ ntype.name }}{% endif %}
                                 {% endfor %}
                             </td>
                             <td>{% if template.is_enabled %}✅{% else %}❌{% endif %}</td>
                             <td>
                                 <a href="{% url 'command_template_detail' template.id %}" class="btn btn-sm btn-primary">Detail</a>
-                                {% if template.project_id != 0 %}
-                                    <a href="{% url 'submit_job_view' template.id %}" class="btn btn-sm btn-secondary">Test Job</a>
-                                {% endif %}
                                 <form method="post" action="{% url 'command_template_delete' template.id %}" style="display:inline;">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete template?')">Delete</button>
+                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete?')">Delete</button>
                                 </form>
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
-            </div>
             {% else %}
-            <p>No command templates available.</p>
+                <p>No templates available.</p>
             {% endif %}
         </div>
     </div>
@@ -273,7 +132,7 @@
     {% elif active_tab == 'accounts' %}
     <div class="card mb-4 w-90 mx-auto shadow-sm">
         <div class="card-header d-flex align-items-center">
-            <strong>HPC Accounts (SSH Keys)</strong>
+            <strong>HPC Accounts</strong>
             <div class="ms-auto">
                 <button type="button" class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addHpcAccountModal">Add New</button>
                 <button class="btn btn-sm btn-outline-secondary" onclick="location.reload();">Reload</button>
@@ -285,7 +144,12 @@
                 <table class="table table-striped align-middle">
                     <thead class="table-light">
                         <tr>
-                            <th>Username</th><th>Key Type</th><th>OpenSSH Key</th><th>Init</th><th>Actions</th>
+                            <th>Username</th>
+                            <th>Key Type</th>
+                            <th>OpenSSH Key</th>
+                            <th>PEM Key</th>
+                            <th>Init</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -295,32 +159,45 @@
                             <td><small>{{ account.key_type_name }}</small></td>
                             <td>
                                 <div class="d-flex align-items-center">
-                                    <code class="text-truncate me-2" style="max-width: 120px;">{{ account.public_key_open_ssh }}</code>
+                                    <code class="text-truncate me-2" style="max-width: 100px;">{{ account.public_key_open_ssh }}</code>
                                     <button class="btn btn-outline-primary btn-sm copy-btn" onclick="copyToClipboard('{{ account.public_key_open_ssh|escapejs }}', 'ssh_feed_{{ account.id }}')">Copy</button>
                                     <span id="ssh_feed_{{ account.id }}" class="badge bg-success ms-1 d-none copy-badge">OK</span>
                                 </div>
                             </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <code class="text-truncate me-2" style="max-width: 100px;">{{ account.public_key_pem }}</code>
+                                    <button class="btn btn-outline-primary btn-sm copy-btn" onclick="copyToClipboard('{{ account.public_key_pem|escapejs }}', 'pem_feed_{{ account.id }}')">Copy</button>
+                                    <span id="pem_feed_{{ account.id }}" class="badge bg-success ms-1 d-none copy-badge">OK</span>
+                                </div>
+                            </td>
                             <td>{% if account.is_initialized %}<span class="text-success">●</span>{% else %}<span class="text-danger">●</span>{% endif %}</td>
-                            <td style="min-width: 180px;">
-                                <div class="btn-group-vertical w-100">
-                                    <form method="post" class="mb-1">
+                            <td style="min-width: 200px;">
+                                <div class="d-grid gap-1">
+                                    <form method="post">
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="test_hpc_access">
+                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
                                         <input type="hidden" name="username" value="{{ account.username }}">
-                                        <button type="submit" class="btn btn-sm btn-info w-100">Test Access</button>
+                                        <button type="submit" class="btn btn-xs btn-info w-100 btn-sm">Test Access</button>
                                     </form>
-                                    <button type="button" class="btn btn-sm btn-warning mb-1" data-bs-toggle="modal" data-bs-target="#regenerateSshKeyModal" onclick="setUsernameInModal('{{ account.username }}')">Regenerate Key</button>
-                                    <form method="post" class="mb-1">
+                                    <button type="button" class="btn btn-sm btn-warning w-100" data-bs-toggle="modal" data-bs-target="#regenerateSshKeyModal" onclick="setUsernameInModal('{{ account.username }}')">Regenerate Key</button>
+                                    {% if v610_check %}
+                                    <button type="button" class="btn btn-sm btn-dark w-100" data-bs-toggle="modal" data-bs-target="#renameAccountModal" onclick="setRenameAccountUsername('{{ account.username }}')">Rename & Pwd</button>
+                                    {% endif %}
+                                    <form method="post">
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="initialize_hpc_account">
+                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
                                         <input type="hidden" name="Username" value="{{ account.username }}">
                                         <button type="submit" class="btn btn-sm btn-secondary w-100">Initialize</button>
                                     </form>
                                     <form method="post">
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="delete_hpc_account">
+                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
                                         <input type="hidden" name="username" value="{{ account.username }}">
-                                        <button type="submit" class="btn btn-sm btn-danger w-100" onclick="return confirm('Delete account?')">Delete</button>
+                                        <button type="submit" class="btn btn-sm btn-danger w-100" onclick="return confirm('Are you sure?')">Delete</button>
                                     </form>
                                 </div>
                             </td>
@@ -330,41 +207,16 @@
                 </table>
             </div>
             {% else %}
-            <p>No SSH accounts configured.</p>
+            <p class="mb-0">No SSH accounts available.</p>
             {% endif %}
         </div>
     </div>
-    {% endif %}
-</div>
 
-<div class="modal fade" id="editAssignmentModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="update_assignment">
-        <input type="hidden" id="editClusterId" name="ClusterId">
-        <div class="modal-header">
-          <h5 class="modal-title">Edit Assignment: <span id="editClusterNameDisplay"></span></h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Scratch Storage Path</label>
-            <input type="text" class="form-control" id="editScratchPath" name="ScratchStoragePath">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Project Storage Path</label>
-            <input type="text" class="form-control" id="editProjectPath" name="ProjectStoragePath">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Changes</button>
-        </div>
-      </form>
+    {% elif active_tab == 'adaptor_users' %}
+    <div class="container">
+        {% include "adaptor_users_table.html" %}
     </div>
-  </div>
+    {% endif %}
 </div>
 
 <div class="modal fade" id="addHpcAccountModal" tabindex="-1" aria-hidden="true">
@@ -373,15 +225,40 @@
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="create_new_hpc_account">
+        <input type="hidden" name="ProjectId" value="{{ project.id }}">
         <div class="modal-header"><h5>Add New HPC Account</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
           <div class="mb-3">
             <label class="form-label">Username</label>
-            <input type="text" class="form-control" name="username" required placeholder="e.g. jdoe123">
+            <input type="text" class="form-control" name="username" required>
           </div>
-          <div class="form-text">Note: Password is optional and usually not required for SSH key auth.</div>
+          <div class="mb-3">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleField('password-field-add')">Show Password Field (Optional)</button>
+            <div id="password-field-add" style="display: none;" class="mt-2">
+                <input type="password" class="form-control" name="password" placeholder="Password">
+            </div>
+          </div>
         </div>
-        <div class="modal-footer"><button type="submit" class="btn btn-primary">Create</button></div>
+        <div class="modal-footer"><button type="submit" class="btn btn-primary">Create Account</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="renameAccountModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="rename_hpc_account">
+        <input type="hidden" id="oldUsername" name="oldUsername">
+        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+        <div class="modal-header"><h5>Rename Account / Change Password</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-3"><label class="form-label">New Username</label><input type="text" class="form-control" name="NewUsername" required id="renameDisplayOld"></div>
+          <div class="mb-3"><label class="form-label">New Password (Optional)</label><input type="password" class="form-control" name="NewPassword"></div>
+        </div>
+        <div class="modal-footer"><button type="submit" class="btn btn-primary">Save Changes</button></div>
       </form>
     </div>
   </div>
@@ -393,42 +270,42 @@
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="regenerate_ssh_key">
-        <input type="hidden" name="username" id="modal-username">
+        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+        <input type="hidden" name="username" id="modal-username-regen">
         <div class="modal-header"><h5>Regenerate SSH Key</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
         <div class="modal-body">
-            <p>Are you sure you want to regenerate the key for <strong id="display-username"></strong>?</p>
-            <p class="text-danger small">Warning: The old public key will no longer work.</p>
+            <p>Regenerate key for: <strong id="display-username-regen"></strong>?</p>
+            <div class="mb-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleField('regen-pwd-field')">Show Password Field (If required)</button>
+                <div id="regen-pwd-field" style="display: none;" class="mt-2">
+                    <input type="password" class="form-control" name="password" placeholder="HPC Password">
+                </div>
+            </div>
         </div>
-        <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-warning">Regenerate</button>
-        </div>
+        <div class="modal-footer"><button type="submit" class="btn btn-warning">Regenerate Now</button></div>
       </form>
     </div>
   </div>
 </div>
 
 <script>
-function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
-    document.getElementById('editClusterId').value = clusterId;
-    document.getElementById('editClusterNameDisplay').innerText = clusterName;
-    document.getElementById('editScratchPath').value = scratchPath;
-    document.getElementById('editProjectPath').value = projectPath;
-    new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
+function setUsernameInModal(un) {
+    document.getElementById('modal-username-regen').value = un;
+    document.getElementById('display-username-regen').innerText = un;
 }
-
-function setUsernameInModal(username) {
-    document.getElementById('modal-username').value = username;
-    document.getElementById('display-username').innerText = username;
+function setRenameAccountUsername(un) {
+    document.getElementById('oldUsername').value = un;
+    document.getElementById('renameDisplayOld').value = un;
 }
-
-function copyToClipboard(text, feedbackId) {
+function toggleField(id) {
+    const el = document.getElementById(id);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+function copyToClipboard(text, fid) {
     navigator.clipboard.writeText(text).then(() => {
-        const feedback = document.getElementById(feedbackId);
-        if (feedback) {
-            feedback.classList.remove('d-none');
-            setTimeout(() => feedback.classList.add('d-none'), 1500);
-        }
+        const el = document.getElementById(fid);
+        el.classList.remove('d-none');
+        setTimeout(() => el.classList.add('d-none'), 1500);
     });
 }
 </script>
