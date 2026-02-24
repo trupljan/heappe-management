@@ -223,18 +223,10 @@
                                 <td>{{ assignment.project_storage_path }}</td>
                                 <td>
                                     <div class="d-flex gap-1">
-                                        <button type="button" class="btn btn-warning btn-sm" 
+                                        <button type="button" class="btn btn-warning btn-sm"
                                                 onclick="openEditAssignmentModal('{{ assignment.cluster_id }}', '{{ assignment.cluster_name|escapejs }}', '{{ assignment.scratch_storage_path|escapejs }}', '{{ assignment.project_storage_path|escapejs }}')">
                                             Edit
                                         </button>
-                                
-                                        <form method="post" style="display:inline;">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="action" value="delete_assignment">
-                                            <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
-                                            <input type="hidden" name="redirectTo" value="project_detail">
-                                            <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?')">Remove</button>
-                                        </form>
                                     </div>
                                 </td>
                                 <td>
@@ -644,7 +636,7 @@ function openRenameAccountModal(id, username) {
     </div>
   </div>
 </div>
-      
+
 <div class="modal fade" id="editAssignmentModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -652,7 +644,7 @@ function openRenameAccountModal(id, username) {
         {% csrf_token %}
         <input type="hidden" name="action" value="update_assignment">
         <input type="hidden" id="editClusterId" name="ClusterId">
-        
+
         <div class="modal-header">
           <h5 class="modal-title">Edit Assignment: <span id="editClusterNameDisplay"></span></h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -674,17 +666,9 @@ function openRenameAccountModal(id, username) {
       </form>
     </div>
   </div>
-</div>      
+</div>
 
 <script>
-function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
-    document.getElementById('editClusterId').value = clusterId;
-    document.getElementById('editClusterNameDisplay').innerText = clusterName;
-    document.getElementById('editScratchPath').value = scratchPath;
-    document.getElementById('editProjectPath').value = projectPath;
-    
-    new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
-}
 
 function toggleRegeneratePasswordField() {
     var passwordField = document.getElementById('regenerate-password-field');
@@ -705,6 +689,15 @@ document.addEventListener('DOMContentLoaded', function () {
         return new bootstrap.Tooltip(tooltipTriggerEl);
     });
 });
+
+function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
+    document.getElementById('editClusterId').value = clusterId;
+    document.getElementById('editClusterNameDisplay').innerText = clusterName;
+    document.getElementById('editScratchPath').value = scratchPath;
+    document.getElementById('editProjectPath').value = projectPath;
+
+    new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
+}
 
 function setUsernameInModal(username) {
     document.getElementById('modal-username').value = username;
