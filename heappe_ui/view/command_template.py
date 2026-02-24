@@ -161,7 +161,7 @@ def command_template_delete(request: HttpRequest, command_template_id: int) -> H
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
         request,
-        lambda: controller.heappe_management_command_template_delete(**payload),
+        lambda: controller.heappe_management_remove_command_template_delete(**payload),
         "Command Template deleted successfully!",
         "Failed to delete Command Template"
     )
