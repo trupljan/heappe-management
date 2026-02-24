@@ -152,20 +152,33 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
 
     return render(request, 'command_template.html', {'node_types': cluster_node_types, 'project_id': project_id, 'project': project})
 
+
 @login_required
 def command_template_delete(request: HttpRequest, command_template_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
+
+    try:
+        template = controller.heappe_management_command_template_get(
+            Id=command_template_id, SessionCode=request.session_code
+        )
+        project_id = template.project_id
+    except Exception:
+        project_id = request.GET.get('project_id')  # fallback z URL
+
     payload_data = {
-        "Id": command_template_id,
+        "CommandTemplateId": command_template_id,
     }
+
     payload = _create_payload(request.session_code, payload_data)
-    result = _handle_api_call(
+
+    _handle_api_call(
         request,
         lambda: controller.heappe_management_remove_command_template_delete(**payload),
         "Command Template deleted successfully!",
         "Failed to delete Command Template"
     )
-    return redirect("project_detail", project_id=result['project_id'], tab="command_templates")
+
+    return redirect("project_detail", project_id=project_id, tab="commandtemplates")
 
 
 @login_required
