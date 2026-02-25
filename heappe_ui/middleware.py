@@ -1,5 +1,3 @@
-import sys
-import json
 import time
 from heappe_ui.auth_backend import HeappeAuthBackend
 import py4heappe.heappe_v6.core as hp
@@ -20,17 +18,21 @@ class HeappeSessionMiddleware:
             session_code = request.session.get("heappe_session_code")
 
             if force_reauth or (now - last_auth > 300) or not session_code:
-                print(f"[middleware] Re-authenticating {request.user.username}...")
                 auth_backend = HeappeAuthBackend()
                 auth_backend.re_authenticate(request)
 
-                request.session["heappe_last_auth"] = now
-                request.session["force_reauth"] = False
                 session_code = request.session.get("heappe_session_code")
 
-            request.api_instance = hp.ApiClient(HeappeAuthBackend.configuration)
-            request.session_code = session_code
-            request.host = request.session.get("heappe_host")
+            user_config = hp.Configuration()
+            host = request.session.get("heappe_host")
+
+            if host:
+                user_config.host = 'http://' + host if not host.startswith('http') else host
+                user_config.verify_ssl = True
+
+                request.api_instance = hp.ApiClient(user_config)
+                request.session_code = session_code
+                request.host = host
 
         except Exception as e:
             print(f"[middleware] Error in HeappeSessionMiddleware: {e}")
