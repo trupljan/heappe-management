@@ -470,6 +470,7 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
     project_id = int(request.POST.get("ProjectId"))
     username = request.POST.get("username")
 
+    # Get data from the helper
     response_data = _handle_api_call(
         request,
         lambda: controller.heappe_management_test_cluster_access_for_account_get(
@@ -482,17 +483,18 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
         silent=True
     )
 
+    # response_data is now [{'cluster_name': 'Barbora', 'is_cluster_accessible': True}]
     if isinstance(response_data, list):
         for cluster in response_data:
-            # Keys matched to your console output: 'cluster_name' and 'is_cluster_accessible'
             name = cluster.get('cluster_name', 'Unknown')
             is_accessible = cluster.get('is_cluster_accessible', False)
 
             if is_accessible:
                 messages.success(request, f"Cluster {name}: Access verified.")
             else:
-                messages.error(request, f"Cluster {name}: Access denied for user {username}.")
+                messages.error(request, f"Cluster {name}: Access denied.")
 
+    # Ensure redirect happens no matter what
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
 

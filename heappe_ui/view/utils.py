@@ -87,6 +87,8 @@ def _handle_api_call(
             messages.error(request, f"{error_message}: {str(e)}")
         # Return empty list so the view loop doesn't fail
         return []
+
+
 def login_view(request):
     if request.method == "POST":
         host = request.POST.get("host")
