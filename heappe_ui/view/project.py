@@ -16,119 +16,119 @@ KEY_TYPE_CHOICES = {
 def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> HttpResponse:
     filter_type = request.GET.get("project_filter", "own")
     controller = hp.ManagementApi(request.api_instance)
-    controller_health = hp.HealthApi(request.api_instance)
+    session_code = request.session_code
+
     if _tab is not None:
         tab = _tab
     else:
         tab = request.GET.get("tab", "detail")
 
-    clusters_raw = controller.heappe_management_clusters_get(SessionCode=request.session_code)
-    clusters = [c.to_dict() for c in clusters_raw]
-    not_assigned_clusters = clusters.copy()
-    command_templates, project_accounts, project_data, project_assignments = [], [], None, []
-    adaptor_users = []
-    adaptor_users_not_in_project = []
-    ui_features = {}
-
+    # POST handling
     if request.method == "POST":
         action = request.POST.get("action")
-        if action == "update_project":
-            return project_update(request, project_id)
-        if action == "project_assign_to_cluster":
-            return project_assign_to_cluster_with_project_id(request, project_id)
-        if action == "delete_assignment":
-            return delete_assignment(request, project_id)
-        if action == "update_assignment":
-            return update_assignment(request)
-        if action == "test_hpc_access":
-            return test_cluster_authentication_credential_HPC_access(request)
-        if action == "initialize_hpc_account":
-            return initialize_hpc_account(request)
-        if action == "create_new_hpc_account":
-            return create_new_hpc_account(request)
-        if action == "regenerate_ssh_key":
-            return regenerate_ssh_key(request)
-        if action == "rename_hpc_account":
-            return rename_hpc_account(request)
-        if action == "delete_hpc_account":
-            return delete_hpc_account(request)
+        if action == "update_project": return project_update(request, project_id)
+        if action == "project_assign_to_cluster": return project_assign_to_cluster_with_project_id(request, project_id)
+        if action == "delete_assignment": return delete_assignment(request, project_id)
+        if action == "update_assignment": return update_assignment(request)
+        if action == "test_hpc_access": return test_cluster_authentication_credential_HPC_access(request)
+        if action == "initialize_hpc_account": return initialize_hpc_account(request)
+        if action == "create_new_hpc_account": return create_new_hpc_account(request)
+        if action == "regenerate_ssh_key": return regenerate_ssh_key(request)
+        if action == "rename_hpc_account": return rename_hpc_account(request)
+        if action == "delete_hpc_account": return delete_hpc_account(request)
 
-    if project_id:
-        project_data = controller.heappe_management_project_get(
-            Id=project_id, SessionCode=request.session_code
-        ).to_dict()
-        command_templates = [ct.to_dict() for ct in controller.heappe_management_command_templates_get(
-            ProjectId=project_id, SessionCode=request.session_code
-        )]
+    # 1. Načtení základních dat (Clustery a Projekt)
+    clusters_raw = controller.heappe_management_clusters_get(SessionCode=session_code)
+    clusters = [c.to_dict() for c in clusters_raw]
+    cluster_lookup = {c['id']: c for c in clusters}
 
-        try:
-            adaptor_users = [e.to_dict() for e in controller.heappe_management_adaptor_users_in_project_get(
-                SessionCode=request.session_code,
-                ProjectId=project_id
-            )]
-            all_adaptor_users = [e.to_dict() for e in controller.heappe_management_adaptor_users_get(
-                SessionCode=request.session_code
-            )]
-            existing_user_ids = {user['id'] for user in adaptor_users}
-            adaptor_users_not_in_project = [
-                user for user in all_adaptor_users
-                if user['id'] not in existing_user_ids
-            ]
-            ui_features['adaptor_users'] = True
-            ui_features['adaptor_users_not_in_project'] = True
-        except Exception:
-            adaptor_users = []
+    project_data = controller.heappe_management_project_get(
+        Id=project_id, SessionCode=session_code
+    ).to_dict()
 
-        dict_ntypes = {}
-        for ct in command_templates:
-            node_type_id = ct.get('cluster_node_type_id')
-            if node_type_id and node_type_id not in dict_ntypes:
-                ntype_data = controller.heappe_management_cluster_node_type_get(
-                    Id=node_type_id, SessionCode=request.session_code
-                ).to_dict()
+    # 2. Optimalizované Command Templates (Hromadné stažení)
+    # Voláme bez ProjectId, abychom dostali vše (vlastní i sdílené)
+    all_templates_raw = controller.heappe_management_command_templates_get(SessionCode=session_code)
+    all_templates = [ct.to_dict() for ct in all_templates_raw]
 
-                for c_obj in clusters_raw:
-                    if any(nt.id == node_type_id for nt in c_obj.node_types):
-                        ntype_data['cluster_name'] = c_obj.name
-                        break
-                dict_ntypes[node_type_id] = ntype_data
-
-        project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
-            ProjectId=project_id, SessionCode=request.session_code
-        )]
-
-        for pa in project_accounts:
-            pa['key_type_name'] = KEY_TYPE_CHOICES.get(pa.get('key_type'), 'Unknown')
-            try:
-                result = _handle_api_call(
-                    request,
-                    lambda: controller.heappe_management_cluster_account_status_get(
-                        ProjectId=project_id, Username=pa['username'], SessionCode=request.session_code
-                    ),
-                    "OK", "FAIL", silent=True
-                )
-                init_ok = sum(1 for status in result if status.is_initialized)
-                init_fail = len(result) - init_ok
-                pa['is_initialized'] = (init_fail == 0 and init_ok > 0)
-            except Exception as e:
-                print(e)
-
-        response = controller.heappe_management_project_assignment_to_clusters_get(
-            ProjectId=project_id, SessionCode=request.session_code
-        )
-        project_assignments = [pa.to_dict() for pa in response]
-        for assignment in project_assignments:
-            for cluster in clusters:
-                if cluster['id'] == assignment['cluster_id']:
-                    assignment['cluster_name'] = cluster['name']
-                    if cluster in not_assigned_clusters:
-                        not_assigned_clusters.remove(cluster)
-                    break
-
+    # Filtrace v paměti podle filter_type
     if filter_type == "shared":
-        command_templates = [ct for ct in command_templates if ct['project_id'] == 0]
-    elif filter_type != "all":
-        command_templates = [ct for ct in command_templates if ct['project_id'] != 0]
+        command_templates = [ct for ct in all_templates if ct['project_id'] == 0]
+    elif filter_type == "own":
+        command_templates = [ct for ct in all_templates if ct['project_id'] == project_id]
+    else:  # "all"
+        command_templates = [ct for ct in all_templates if ct['project_id'] in (0, project_id)]
+
+    # 3. Načtení Node Types pouze pro šablony, které budeme zobrazovat
+    dict_ntypes = {}
+    needed_node_ids = {ct.get('cluster_node_type_id') for ct in command_templates if ct.get('cluster_node_type_id')}
+
+    for node_id in needed_node_ids:
+        try:
+            ntype_data = controller.heappe_management_cluster_node_type_get(
+                Id=node_id, SessionCode=session_code
+            ).to_dict()
+
+            # Najdeme jméno clusteru pro tento node type
+            for c_obj in clusters_raw:
+                if any(nt.id == node_id for nt in c_obj.node_types):
+                    ntype_data['cluster_name'] = c_obj.name
+                    break
+            dict_ntypes[node_id] = ntype_data
+        except Exception:
+            continue
+
+    # 4. Project Accounts & SSH Keys s cachingem statusu
+    project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
+        ProjectId=project_id, SessionCode=session_code
+    )]
+
+    user_status_cache = {}  # Cache: username -> bool (is_initialized)
+    for pa in project_accounts:
+        pa['key_type_name'] = KEY_TYPE_CHOICES.get(pa.get('key_type'), 'Unknown')
+        username = pa.get('username')
+
+        if username not in user_status_cache:
+            try:
+                # Voláme status pro uživatele jen jednou
+                status_results = controller.heappe_management_cluster_account_status_get(
+                    ProjectId=project_id, Username=username, SessionCode=session_code
+                )
+                init_ok = sum(1 for s in status_results if s.is_initialized)
+                user_status_cache[username] = (len(status_results) > 0 and init_ok == len(status_results))
+            except Exception:
+                user_status_cache[username] = False
+
+        pa['is_initialized'] = user_status_cache[username]
+
+    # 5. Adaptor Users
+    adaptor_users, adaptor_users_not_in_project, ui_features = [], [], {}
+    try:
+        adaptor_users = [u.to_dict() for u in controller.heappe_management_adaptor_users_in_project_get(
+            SessionCode=session_code, ProjectId=project_id
+        )]
+        all_adaptor_users = [u.to_dict() for u in controller.heappe_management_adaptor_users_get(
+            SessionCode=session_code
+        )]
+        existing_ids = {u['id'] for u in adaptor_users}
+        adaptor_users_not_in_project = [u for u in all_adaptor_users if u['id'] not in existing_ids]
+        ui_features.update({'adaptor_users': True, 'adaptor_users_not_in_project': True})
+    except Exception:
+        pass
+
+    # 6. Cluster Assignments
+    assignments_raw = controller.heappe_management_project_assignment_to_clusters_get(
+        ProjectId=project_id, SessionCode=session_code
+    )
+    project_assignments = [a.to_dict() for a in assignments_raw]
+    not_assigned_clusters = clusters.copy()
+
+    for assignment in project_assignments:
+        c_id = assignment['cluster_id']
+        if c_id in cluster_lookup:
+            assignment['cluster_name'] = cluster_lookup[c_id]['name']
+            # Efektivní odstranění ze seznamu nepřiřazených
+            not_assigned_clusters = [c for c in not_assigned_clusters if c['id'] != c_id]
 
     return render(request, "project.html", {
         "project": project_data,
