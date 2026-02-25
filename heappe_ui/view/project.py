@@ -463,26 +463,34 @@ def test_cluster_authentication_credential_HPC_access_manual(request: HttpReques
 
 from django.contrib import messages
 
+
 @login_required
 def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
     username = request.POST.get("username")
 
-    api_response = controller.heappe_management_test_cluster_access_for_account_get(
-        ProjectId=project_id,
-        Username=username,
-        SessionCode=request.session_code
+    response_data = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_test_cluster_access_for_account_get(
+            ProjectId=project_id,
+            Username=username,
+            SessionCode=request.session_code
+        ),
+        success_message="",
+        error_message="Failed to test cluster access",
+        silent=True
     )
 
-    for cluster in api_response:
-        status = "has access" if cluster.IsClusterAccessible else "hasn't access"
-        msg_type = messages.SUCCESS if cluster.IsClusterAccessible else messages.ERROR
-        messages.add_message(
-            request,
-            msg_type,
-            f"Cluster {cluster.ClusterName}: {status}."
-        )
+    if isinstance(response_data, list):
+        for cluster in response_data:
+            name = cluster.get('ClusterName', 'Unknown Cluster')
+            is_accessible = cluster.get('IsClusterAccessible', False)
+
+            if is_accessible:
+                messages.success(request, f"Cluster {name}: Access verified.")
+            else:
+                messages.error(request, f"Cluster {name}: Access denied for user {username}.")
 
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
