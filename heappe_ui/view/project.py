@@ -482,20 +482,16 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
         silent=True
     )
 
-    # Print to console
-    print("--- API Response Start ---")
-    print(response_data)
-    print("--- API Response End ---")
-
     if isinstance(response_data, list):
         for cluster in response_data:
-            name = cluster.get('ClusterName', 'Unknown')
-            accessible = cluster.get('IsClusterAccessible', False)
+            # Keys matched to your console output: 'cluster_name' and 'is_cluster_accessible'
+            name = cluster.get('cluster_name', 'Unknown')
+            is_accessible = cluster.get('is_cluster_accessible', False)
 
-            if accessible:
-                messages.success(request, f"Cluster {name}: Access granted.")
+            if is_accessible:
+                messages.success(request, f"Cluster {name}: Access verified.")
             else:
-                messages.error(request, f"Cluster {name}: Access denied.")
+                messages.error(request, f"Cluster {name}: Access denied for user {username}.")
 
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
