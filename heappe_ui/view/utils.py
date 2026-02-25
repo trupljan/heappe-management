@@ -73,15 +73,20 @@ def _handle_api_call(
         if not silent and success_message:
             messages.success(request, success_message)
 
-        # Check if it's a response object with .json(), otherwise return as is
-        if hasattr(result, 'json') and callable(getattr(result, 'json')):
+        # Based on your logs, the SDK already returns a list
+        if isinstance(result, list):
+            return result
+
+        # Fallback for raw response objects
+        if hasattr(result, 'json'):
             return result.json()
+
         return result
     except Exception as e:
         if not silent:
             messages.error(request, f"{error_message}: {str(e)}")
-        print(f"Error: {error_message}: {e}")
-        return None  # Explicitly return None on failure
+        # Return empty list so the view loop doesn't fail
+        return []
 def login_view(request):
     if request.method == "POST":
         host = request.POST.get("host")
