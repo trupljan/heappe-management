@@ -92,8 +92,8 @@ def generate_appsettings_v6_0_0(
                     "ConnectionPoolMaxUnusedInterval": 1800
                 },
                 "SshClientSettings": {
-                    "ConnectionRetryAttempts": 10,
-                    "ConnectionTimeout": 30000
+                    "ConnectionRetryAttempts": 3,
+                    "ConnectionTimeout": 10000
                 },
                 "ScriptsSettings": {
                     "ClusterScriptsRepository": "https://github.com/It4innovations/HEAppE-scripts.git",
@@ -276,8 +276,8 @@ def generate_appsettings_v6_1_0(
                     "ConnectionPoolMaxUnusedInterval": 1800
                 },
                 "SshClientSettings": {
-                    "ConnectionRetryAttempts": 10,
-                    "ConnectionTimeout": 30000
+                    "ConnectionRetryAttempts": 3,
+                    "ConnectionTimeout": 10000
                 },
                 "ScriptsSettings": {
                     "ClusterScriptsRepository": "https://github.com/It4innovations/HEAppE-scripts.git",
