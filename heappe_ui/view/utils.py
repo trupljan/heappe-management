@@ -60,32 +60,30 @@ def _create_payload(session_code: str, data: Dict[str, Any], id_field: Optional[
     return payload
 
 
-def _handle_api_call(
-        request: HttpRequest,
-        api_call: callable,
-        success_message: str,
-        error_message: str,
-        silent: bool = False,
-        redirect_url: Optional[str] = None
-) -> Any:
+def _handle_api_call(request, api_call, success_message, error_message, silent=False):
     try:
+        print("DEBUG: Executing api_call...")
         result = api_call()
+        print(f"DEBUG: api_call success. Type: {type(result)}")
+
         if not silent and success_message:
             messages.success(request, success_message)
 
-        # Based on your logs, the SDK already returns a list
-        if isinstance(result, list):
+        # Handling different response types
+        if isinstance(result, (list, dict)):
+            print("DEBUG: Result is already list/dict.")
             return result
 
-        # Fallback for raw response objects
         if hasattr(result, 'json'):
+            print("DEBUG: Result has .json() method. Parsing...")
             return result.json()
 
+        print("DEBUG: Returning result as-is.")
         return result
     except Exception as e:
+        print(f"DEBUG: EXCEPTION in _handle_api_call: {str(e)}")
         if not silent:
             messages.error(request, f"{error_message}: {str(e)}")
-        # Return empty list so the view loop doesn't fail
         return []
 
 

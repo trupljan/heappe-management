@@ -466,36 +466,55 @@ from django.contrib import messages
 
 @login_required
 def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
-    controller = hp.ManagementApi(request.api_instance)
-    project_id = int(request.POST.get("ProjectId"))
+    project_id = request.POST.get("ProjectId")
     username = request.POST.get("username")
 
-    # Get data from the helper
-    response_data = _handle_api_call(
-        request,
-        lambda: controller.heappe_management_test_cluster_access_for_account_get(
-            ProjectId=project_id,
-            Username=username,
-            SessionCode=request.session_code
-        ),
-        success_message="",
-        error_message="Access test failed",
-        silent=True
-    )
+    print(f"DEBUG: View start. ProjectId: {project_id}, Username: {username}")
 
-    # response_data is now [{'cluster_name': 'Barbora', 'is_cluster_accessible': True}]
-    if isinstance(response_data, list):
-        for cluster in response_data:
-            name = cluster.get('cluster_name', 'Unknown')
-            is_accessible = cluster.get('is_cluster_accessible', False)
+    try:
+        controller = hp.ManagementApi(request.api_instance)
 
-            if is_accessible:
-                messages.success(request, f"Cluster {name}: Access verified.")
-            else:
-                messages.error(request, f"Cluster {name}: Access denied.")
+        # Call the helper
+        response_data = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_test_cluster_access_for_account_get(
+                ProjectId=int(project_id) if project_id else 0,
+                Username=username,
+                SessionCode=request.session_code
+            ),
+            success_message="",
+            error_message="Access test failed",
+            silent=True
+        )
 
-    # Ensure redirect happens no matter what
+        print(f"DEBUG: response_data received: {response_data}")
+
+        if isinstance(response_data, list):
+            for cluster in response_data:
+                print(f"DEBUG: Processing cluster item: {cluster}")
+
+                # Check if it's a dict or an object with attributes
+                if isinstance(cluster, dict):
+                    name = cluster.get('cluster_name', 'Unknown')
+                    is_accessible = cluster.get('is_cluster_accessible', False)
+                else:
+                    # Fallback if the SDK returns objects instead of dicts
+                    name = getattr(cluster, 'cluster_name', 'Unknown')
+                    is_accessible = getattr(cluster, 'is_cluster_accessible', False)
+
+                if is_accessible:
+                    messages.success(request, f"Cluster {name}: Access verified.")
+                else:
+                    messages.error(request, f"Cluster {name}: Access denied.")
+        else:
+            print(f"DEBUG: response_data was not a list, it was: {type(response_data)}")
+
+    except Exception as e:
+        print(f"DEBUG: CRITICAL EXCEPTION in view: {str(e)}")
+        messages.error(request, f"Internal error: {str(e)}")
+
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
+    print(f"DEBUG: Redirecting to {reload_url}")
     return redirect(reload_url)
 
 @login_required
