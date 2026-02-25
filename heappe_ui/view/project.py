@@ -478,30 +478,24 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
             SessionCode=request.session_code
         ),
         success_message="",
-        error_message="Failed to test cluster access",
+        error_message="Access test failed",
         silent=True
     )
 
-    # Check if response_data is valid and iterable
-    if response_data is not None:
+    # Print to console
+    print("--- API Response Start ---")
+    print(response_data)
+    print("--- API Response End ---")
+
+    if isinstance(response_data, list):
         for cluster in response_data:
-            # Handle both dictionary or object attributes depending on your client config
-            if hasattr(cluster, 'to_dict'):
-                cluster = cluster.to_dict()
+            name = cluster.get('ClusterName', 'Unknown')
+            accessible = cluster.get('IsClusterAccessible', False)
 
-            name = cluster.get('ClusterName') if isinstance(cluster, dict) else getattr(cluster, 'cluster_name',
-                                                                                        'Unknown')
-            is_accessible = cluster.get('IsClusterAccessible') if isinstance(cluster, dict) else getattr(cluster,
-                                                                                                         'is_cluster_accessible',
-                                                                                                         False)
-
-            if is_accessible:
-                messages.success(request, f"Cluster {name}: Access verified.")
+            if accessible:
+                messages.success(request, f"Cluster {name}: Access granted.")
             else:
-                messages.error(request, f"Cluster {name}: Access denied for user {username}.")
-    else:
-        # Fallback if _handle_api_call returned None due to an exception
-        messages.error(request, "Could not retrieve cluster access status.")
+                messages.error(request, f"Cluster {name}: Access denied.")
 
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
