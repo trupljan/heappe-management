@@ -461,18 +461,29 @@ def test_cluster_authentication_credential_HPC_access_manual(request: HttpReques
     )
     return result
 
+from django.contrib import messages
+
 @login_required
 def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
     username = request.POST.get("username")
 
-    result = _handle_api_call(
-        request,
-        lambda: controller.heappe_management_test_cluster_access_for_account_get(ProjectId=project_id, Username=request.POST.get("username"), SessionCode=request.session_code),
-        "Cluster authentication credential has access to HPC.",
-        "Cluster authentication credential does not have access to HPC."
+    api_response = controller.heappe_management_test_cluster_access_for_account_get(
+        ProjectId=project_id,
+        Username=username,
+        SessionCode=request.session_code
     )
+
+    for cluster in api_response:
+        status = "has access" if cluster.IsClusterAccessible else "hasn't access"
+        msg_type = messages.SUCCESS if cluster.IsClusterAccessible else messages.ERROR
+        messages.add_message(
+            request,
+            msg_type,
+            f"Cluster {cluster.ClusterName}: {status}."
+        )
+
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
 
