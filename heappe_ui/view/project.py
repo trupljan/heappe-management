@@ -48,7 +48,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
 
     # 2. Optimalizované Command Templates (Hromadné stažení)
     # Voláme bez ProjectId, abychom dostali vše (vlastní i sdílené)
-    all_templates_raw = controller.heappe_management_command_templates_get(SessionCode=session_code)
+    all_templates_raw = controller.heappe_management_command_templates_get(SessionCode=session_code, ProjectId=project_id)
     all_templates = [ct.to_dict() for ct in all_templates_raw]
 
     # Filtrace v paměti podle filter_type
