@@ -59,29 +59,29 @@ def _create_payload(session_code: str, data: Dict[str, Any], id_field: Optional[
         payload["body"]["Id"] = data[id_field]
     return payload
 
+
 def _handle_api_call(
-    request: HttpRequest,
-    api_call: callable,
-    success_message: str,
-    error_message: str,
-    silent: bool=False,
-    redirect_url: Optional[str] = None
-) -> HttpResponse:
-    """Handle API call with error handling and messaging."""
+        request: HttpRequest,
+        api_call: callable,
+        success_message: str,
+        error_message: str,
+        silent: bool = False,
+        redirect_url: Optional[str] = None
+) -> Any:
     try:
         result = api_call()
-        if silent is False:
+        if not silent and success_message:
             messages.success(request, success_message)
-        try:
+
+        # Check if it's a response object with .json(), otherwise return as is
+        if hasattr(result, 'json') and callable(getattr(result, 'json')):
             return result.json()
-        except Exception as e:
-            return result
+        return result
     except Exception as e:
-        if silent is False:
+        if not silent:
             messages.error(request, f"{error_message}: {str(e)}")
         print(f"Error: {error_message}: {e}")
-
-
+        return None  # Explicitly return None on failure
 def login_view(request):
     if request.method == "POST":
         host = request.POST.get("host")
