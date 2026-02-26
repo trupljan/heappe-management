@@ -20,19 +20,17 @@
             <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-users-cog me-2 text-primary"></i>External User Management</h4>
             {% if project %}
                 <span class="text-muted small">Managing access for project: <strong class="text-primary">{{ project.name }}</strong> (ID: {{ project.id }})</span>
-            {% else %}
-                <span class="text-muted small">Please select a project to manage user roles.</span>
             {% endif %}
         </div>
-        <div class="d-flex align-items-center gap-3">
-            <div class="text-end">
-                <label class="d-block small fw-bold text-uppercase text-muted mb-1" style="font-size: 0.65rem;">Switch Project Context</label>
-                <select id="projectSelector" class="form-select border-primary fw-bold" data-base-url="{% url 'manage_project_adaptor_users_base' %}" style="min-width: 250px;">
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-success btn-sm fw-bold px-3" data-bs-toggle="modal" data-bs-target="#createUserModal">
+                <i class="fas fa-user-plus me-1"></i> Quick Create User
+            </button>
+            <div class="text-end ms-2">
+                <select id="projectSelector" class="form-select border-primary fw-bold form-select-sm" data-base-url="{% url 'manage_project_adaptor_users_base' %}" style="min-width: 200px;">
                     <option value="">-- Choose Project --</option>
                     {% for p in all_projects %}
-                    <option value="{{ p.id }}" {% if project and p.id == project.id %}selected{% endif %}>
-                        {{ p.name }} (ID: {{ p.id }})
-                    </option>
+                    <option value="{{ p.id }}" {% if project and p.id == project.id %}selected{% endif %}>{{ p.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -44,59 +42,48 @@
         <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 border-bottom">
             <ul class="nav nav-tabs card-header-tabs border-bottom-0" id="userTabs" role="tablist">
                 <li class="nav-item">
-                    <button class="nav-link active text-uppercase" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button" role="tab">
-                        In Project (<span>{{ adaptor_users|length }}</span>)
-                    </button>
+                    <button class="nav-link active text-uppercase" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button" role="tab">In Project ({{ adaptor_users|length }})</button>
                 </li>
                 <li class="nav-item">
-                    <button class="nav-link text-uppercase" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button" role="tab">
-                        Available Accounts (<span>{{ available_users|length }}</span>)
-                    </button>
+                    <button class="nav-link text-uppercase" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button" role="tab">Available Accounts ({{ available_users|length }})</button>
                 </li>
             </ul>
-            <div class="btn-group">
-                <a href="{% url 'adaptor_user_create' %}" class="btn btn-primary btn-sm px-3 fw-bold">
-                    <i class="fas fa-plus me-1"></i> Create New Service Account
-                </a>
-            </div>
         </div>
 
         <div class="card-body p-0">
             <div class="tab-content">
                 <div class="tab-pane fade show active" id="in-project-pane" role="tabpanel">
-                    <div class="table-responsive">
-                        <table id="tableIn" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                    <div class="table-responsive px-3 py-3">
+                        <table id="tableIn" class="table table-hover align-middle mb-0">
                             <thead class="table-light text-muted small text-uppercase">
                                 <tr>
-                                    <th class="ps-4" style="width: 30%;">Username</th>
-                                    <th style="width: 50%;">Assigned Roles</th>
-                                    <th class="text-end pe-4" style="width: 20%;">Action</th>
+                                    <th>Username</th>
+                                    <th>Roles</th>
+                                    <th class="text-end">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for user in adaptor_users %}
                                 <tr>
-                                    <td class="ps-4 fw-bold text-dark">{{ user.username }}</td>
+                                    <td class="fw-bold">{{ user.username }}</td>
                                     <td>
                                         <div class="d-flex flex-wrap gap-2">
                                             {% for role in user.roles %}
                                             <div class="role-badge">
                                                 <span class="role-name">{{ role }}</span>
-                                                <form method="POST" class="ms-2 m-0 p-0">
+                                                <form method="POST" class="m-0">
                                                     {% csrf_token %}
                                                     <input type="hidden" name="action" value="unassign">
                                                     <input type="hidden" name="username" value="{{ user.username }}">
                                                     <input type="hidden" name="role_name" value="{{ role }}">
-                                                    <button type="submit" class="btn-close" style="font-size: 0.5rem;" onclick="return confirm('Remove {{ role }} from {{ user.username }}?');"></button>
+                                                    <button type="submit" class="btn-close" style="font-size: 0.5rem;" onclick="return confirm('Remove {{ role }}?');"></button>
                                                 </form>
                                             </div>
                                             {% endfor %}
                                         </div>
                                     </td>
-                                    <td class="text-end pe-4">
-                                        <a href="{% url 'adaptor_user_detail' user.username %}" class="btn btn-sm btn-outline-secondary py-1 px-3">
-                                            <i class="fas fa-edit me-1"></i> Detail
-                                        </a>
+                                    <td class="text-end">
+                                        <a href="{% url 'adaptor_user_detail' user.username %}" class="btn btn-sm btn-outline-secondary px-3">Edit Detail</a>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -106,38 +93,31 @@
                 </div>
 
                 <div class="tab-pane fade" id="available-pane" role="tabpanel">
-                    <div class="table-responsive">
-                        <table id="tableOut" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                    <div class="table-responsive px-3 py-3">
+                        <table id="tableOut" class="table table-hover align-middle mb-0">
                             <thead class="table-light text-muted small text-uppercase">
                                 <tr>
-                                    <th class="ps-4">Username</th>
-                                    <th class="text-end pe-4">Assign to Project</th>
+                                    <th>Username</th>
+                                    <th class="text-end">Assign</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for user in available_users %}
                                 <tr>
-                                    <td class="ps-4 fw-bold text-dark">{{ user.username }}</td>
-                                    <td class="text-end pe-4">
-                                        <form method="POST" class="d-inline-block m-0 p-0">
+                                    <td class="fw-bold">{{ user.username }}</td>
+                                    <td class="text-end">
+                                        <form method="POST" class="input-group input-group-sm justify-content-end">
                                             {% csrf_token %}
                                             <input type="hidden" name="action" value="assign">
                                             <input type="hidden" name="username" value="{{ user.username }}">
-                                            <div class="input-group input-group-sm d-flex justify-content-end" style="min-width: 280px;">
-                                                <select name="role_id" class="form-select border-secondary-subtle w-auto" required>
-                                                    <option value="" selected disabled>-- Select Role --</option>
-                                                    <option value="1">Administrator</option>
-                                                    <option value="2">Maintainer</option>
-                                                    <option value="3">Submitter</option>
-                                                    <option value="4">GroupReporter</option>
-                                                    <option value="5">Reporter</option>
-                                                    <option value="6">ManagementAdmin</option>
-                                                    <option value="7">Manager</option>
-                                                </select>
-                                                <button type="submit" class="btn btn-primary fw-bold">
-                                                    <i class="fas fa-plus me-1"></i> Add
-                                                </button>
-                                            </div>
+                                            <select name="role_id" class="form-select w-auto" required>
+                                                <option value="" disabled selected>Role...</option>
+                                                <option value="3">Submitter</option>
+                                                <option value="1">Admin</option>
+                                                <option value="2">Maintainer</option>
+                                                <option value="7">Manager</option>
+                                            </select>
+                                            <button type="submit" class="btn btn-primary px-3">Add</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -152,24 +132,49 @@
     {% endif %}
 </div>
 
+<div class="modal fade" id="createUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content text-dark">
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_user">
+                <div class="modal-header bg-dark text-white py-2">
+                    <h5 class="modal-title small fw-bold">CREATE NEW SERVICE ACCOUNT</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">USERNAME / EMAIL</label>
+                        <input type="text" name="new_username" class="form-control form-control-sm" required placeholder="e.g. service_acc_01">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold">PASSWORD</label>
+                        <input type="password" name="new_password" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="alert alert-info py-2 small border-0 mb-0">
+                        <i class="fas fa-info-circle me-1"></i> Account is created globally and must then be assigned to a project in the <strong>Available</strong> tab.
+                    </div>
+                </div>
+                <div class="modal-footer bg-light py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4">Create Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
     $(document).ready(function() {
-        const t1 = $('#tableIn').DataTable({
-            pageLength: 15,
-            language: { search: "", searchPlaceholder: "Filter assigned users..." },
-            autoWidth: false,
-            order: [[0, 'asc']]
-        });
+        const t1 = $('#tableIn').DataTable({ pageLength: 15, language: { search: "" } });
+        const t2 = $('#tableOut').DataTable({ pageLength: 15, language: { search: "" } });
 
-        const t2 = $('#tableOut').DataTable({
-            pageLength: 15,
-            language: { search: "", searchPlaceholder: "Search available accounts..." },
-            autoWidth: false,
-            order: [[0, 'asc']]
+        $('#projectSelector').on('change', function() {
+            if (this.value) window.location.href = this.getAttribute('data-base-url') + this.value + '/';
         });
 
         $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
@@ -181,17 +186,8 @@
         const activeTab = sessionStorage.getItem('activeUserTab');
         if (activeTab) {
             const tabButton = document.querySelector(`button[data-bs-target="${activeTab}"]`);
-            if (tabButton) {
-                new bootstrap.Tab(tabButton).show();
-            }
+            if (tabButton) new bootstrap.Tab(tabButton).show();
         }
-
-        $('#projectSelector').on('change', function() {
-            if (this.value) {
-                const baseUrl = this.getAttribute('data-base-url');
-                window.location.href = baseUrl + this.value + '/';
-            }
-        });
 
         $('form').on('submit', function() {
             const btn = $(this).find('button[type="submit"]');
