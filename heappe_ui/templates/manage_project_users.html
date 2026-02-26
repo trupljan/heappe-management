@@ -7,11 +7,15 @@
     table.dataTable { border-collapse: collapse !important; width: 100% !important; }
     .dataTables_wrapper { padding: 1rem 1.5rem; }
     .dataTables_filter input { border: 1px solid #dee2e6; border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; margin-bottom: 10px; }
+
     .nav-tabs .nav-link { font-size: 0.85rem; color: #6c757d; border: none; border-bottom: 2px solid transparent; padding: 0.8rem 1.2rem; transition: 0.3s; cursor: pointer; }
     .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; background: none; font-weight: bold; }
     .card-header-tabs { margin-bottom: -10px; }
+
     .role-badge { min-width: 120px; background: white; border-radius: 4px; border: 1px solid #dee2e6; padding: 4px 8px; display: inline-flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
     .role-name { font-size: 0.7rem; font-weight: bold; color: #0d6efd; text-transform: uppercase; }
+
+    .btn-xs { padding: 0.1rem 0.25rem; font-size: 0.75rem; }
 </style>
 
 <div class="container-fluid mt-3">
@@ -19,18 +23,21 @@
         <div>
             <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-users-cog me-2 text-primary"></i>External User Management</h4>
             {% if project %}
-                <span class="text-muted small">Project: <strong class="text-primary">{{ project.name }}</strong> (ID: {{ project.id }})</span>
+                <span class="text-muted small">Managing access for project: <strong class="text-primary">{{ project.name }}</strong> (ID: {{ project.id }})</span>
+            {% else %}
+                <span class="text-muted small">Please select a project context to manage permissions.</span>
             {% endif %}
         </div>
         <div class="d-flex align-items-center gap-2">
-            <button type="button" class="btn btn-success btn-sm fw-bold px-3" data-bs-toggle="modal" data-bs-target="#createUserModal">
+            <button type="button" class="btn btn-success btn-sm fw-bold px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createUserModal">
                 <i class="fas fa-user-plus me-1"></i> Quick Create User
             </button>
+
             <div class="text-end ms-2">
-                <select id="projectSelector" class="form-select border-primary fw-bold form-select-sm" data-base-url="{% url 'manage_project_adaptor_users_base' %}" style="min-width: 200px;">
-                    <option value="">-- Choose Project --</option>
+                <select id="projectSelector" class="form-select border-primary fw-bold form-select-sm shadow-sm" data-base-url="{% url 'manage_project_adaptor_users_base' %}" style="min-width: 220px;">
+                    <option value="">-- Switch Project Context --</option>
                     {% for p in all_projects %}
-                    <option value="{{ p.id }}" {% if project and p.id == project.id %}selected{% endif %}>{{ p.name }}</option>
+                    <option value="{{ p.id }}" {% if project and p.id == project.id %}selected{% endif %}>{{ p.name }} (ID: {{ p.id }})</option>
                     {% endfor %}
                 </select>
             </div>
@@ -42,10 +49,14 @@
         <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 border-bottom">
             <ul class="nav nav-tabs card-header-tabs border-bottom-0" id="userTabs" role="tablist">
                 <li class="nav-item">
-                    <button class="nav-link active text-uppercase" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button" role="tab">In Project ({{ adaptor_users|length }})</button>
+                    <button class="nav-link active text-uppercase" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button" role="tab">
+                        In Project ({{ adaptor_users|length }})
+                    </button>
                 </li>
                 <li class="nav-item">
-                    <button class="nav-link text-uppercase" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button" role="tab">Available Accounts ({{ available_users|length }})</button>
+                    <button class="nav-link text-uppercase" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button" role="tab">
+                        Available Accounts ({{ available_users|length }})
+                    </button>
                 </li>
             </ul>
         </div>
@@ -54,36 +65,38 @@
             <div class="tab-content">
                 <div class="tab-pane fade show active" id="in-project-pane" role="tabpanel">
                     <div class="table-responsive px-3 py-3">
-                        <table id="tableIn" class="table table-hover align-middle mb-0">
+                        <table id="tableIn" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
                             <thead class="table-light text-muted small text-uppercase">
                                 <tr>
-                                    <th>Username</th>
-                                    <th>Roles</th>
-                                    <th class="text-end">Action</th>
+                                    <th style="width: 30%;">Username</th>
+                                    <th style="width: 50%;">Roles</th>
+                                    <th class="text-end" style="width: 20%;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for user in adaptor_users %}
                                 <tr>
-                                    <td class="fw-bold">{{ user.username }}</td>
+                                    <td class="fw-bold text-dark">{{ user.username }}</td>
                                     <td>
                                         <div class="d-flex flex-wrap gap-2">
                                             {% for role in user.roles %}
                                             <div class="role-badge">
                                                 <span class="role-name">{{ role }}</span>
-                                                <form method="POST" class="m-0">
+                                                <form method="POST" class="m-0 p-0 d-inline">
                                                     {% csrf_token %}
                                                     <input type="hidden" name="action" value="unassign">
                                                     <input type="hidden" name="username" value="{{ user.username }}">
                                                     <input type="hidden" name="role_name" value="{{ role }}">
-                                                    <button type="submit" class="btn-close" style="font-size: 0.5rem;" onclick="return confirm('Remove {{ role }}?');"></button>
+                                                    <button type="submit" class="btn-close" style="font-size: 0.5rem;" title="Remove role" onclick="return confirm('Remove {{ role }} from {{ user.username }}?');"></button>
                                                 </form>
                                             </div>
                                             {% endfor %}
                                         </div>
                                     </td>
                                     <td class="text-end">
-                                        <a href="{% url 'adaptor_user_detail' user.username %}" class="btn btn-sm btn-outline-secondary px-3">Edit Detail</a>
+                                        <a href="{% url 'adaptor_user_detail' user.username %}" class="btn btn-sm btn-outline-secondary px-3 py-1">
+                                            <i class="fas fa-id-card me-1"></i> Detail
+                                        </a>
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -94,30 +107,31 @@
 
                 <div class="tab-pane fade" id="available-pane" role="tabpanel">
                     <div class="table-responsive px-3 py-3">
-                        <table id="tableOut" class="table table-hover align-middle mb-0">
+                        <table id="tableOut" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
                             <thead class="table-light text-muted small text-uppercase">
                                 <tr>
                                     <th>Username</th>
-                                    <th class="text-end">Assign</th>
+                                    <th class="text-end">Assign to Project</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for user in available_users %}
                                 <tr>
-                                    <td class="fw-bold">{{ user.username }}</td>
+                                    <td class="fw-bold text-dark">{{ user.username }}</td>
                                     <td class="text-end">
                                         <form method="POST" class="input-group input-group-sm justify-content-end">
                                             {% csrf_token %}
                                             <input type="hidden" name="action" value="assign">
                                             <input type="hidden" name="username" value="{{ user.username }}">
-                                            <select name="role_id" class="form-select w-auto" required>
-                                                <option value="" disabled selected>Role...</option>
-                                                <option value="3">Submitter</option>
-                                                <option value="1">Admin</option>
+                                            <select name="role_id" class="form-select border-secondary-subtle w-auto" required>
+                                                <option value="" disabled selected>Select Role...</option>
+                                                <option value="1">Administrator</option>
                                                 <option value="2">Maintainer</option>
+                                                <option value="3">Submitter</option>
+                                                <option value="5">Reporter</option>
                                                 <option value="7">Manager</option>
                                             </select>
-                                            <button type="submit" class="btn btn-primary px-3">Add</button>
+                                            <button type="submit" class="btn btn-primary px-3 fw-bold">Add to Project</button>
                                         </form>
                                     </td>
                                 </tr>
@@ -132,9 +146,9 @@
     {% endif %}
 </div>
 
-<div class="modal fade" id="createUserModal" tabindex="-1" aria-hidden="true">
+<div class="modal fade" id="createUserModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog">
-        <div class="modal-content text-dark">
+        <div class="modal-content text-dark shadow-lg">
             <form id="quickCreateForm" method="POST" action="{% url 'adaptor_user_create' %}" target="hidden_iframe">
                 {% csrf_token %}
                 <div class="modal-header bg-dark text-white py-2">
@@ -143,11 +157,11 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">USERNAME / IDENTIFIER</label>
+                        <label class="form-label small fw-bold text-uppercase">Username / Identifier</label>
                         <input type="text" name="Username" class="form-control form-control-sm" required placeholder="system-bot-01">
                     </div>
-                    <div class="alert alert-info py-2 small mb-0">
-                        <i class="fas fa-info-circle me-1"></i> API klíč se po vytvoření zobrazí v horní části stránky v panelu oznámení.
+                    <div class="alert alert-info py-2 small mb-0 border-0 shadow-sm">
+                        <i class="fas fa-info-circle me-1"></i> The <strong>API Key</strong> will be displayed in the notification banner at the top of the screen once created.
                     </div>
                 </div>
                 <div class="modal-footer bg-light py-2">
@@ -159,7 +173,7 @@
     </div>
 </div>
 
-<iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(this.contentWindow.location.href.indexOf('new') === -1 && this.contentWindow.location.href !== 'about:blank') { sessionStorage.setItem('activeUserTab', '#available-pane'); location.reload(); }"></iframe>
+<iframe name="hidden_iframe" id="hidden_iframe" style="display:none;"></iframe>
 
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
@@ -167,18 +181,32 @@
 
 <script>
     $(document).ready(function() {
-        const t1 = $('#tableIn').DataTable({ pageLength: 15, language: { search: "" } });
-        const t2 = $('#tableOut').DataTable({ pageLength: 15, language: { search: "" } });
+        // Init DataTables with English localized labels
+        const t1 = $('#tableIn').DataTable({ pageLength: 15, language: { search: "", searchPlaceholder: "Filter users..." } });
+        const t2 = $('#tableOut').DataTable({ pageLength: 15, language: { search: "", searchPlaceholder: "Search available accounts..." } });
 
+        // Project Switcher
         $('#projectSelector').on('change', function() {
-            if (this.value) window.location.href = this.getAttribute('data-base-url') + this.value + '/';
+            if (this.value) {
+                const baseUrl = this.getAttribute('data-base-url');
+                window.location.href = baseUrl + this.value + '/';
+            }
         });
 
-        // Loading state na tlačítku
+        // Prevent infinite loading: Detect iframe activity
         $('#quickCreateForm').on('submit', function() {
-            $('#submitCreateBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Processing...');
+            $('#submitCreateBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Creating...');
         });
 
+        document.getElementById('hidden_iframe').onload = function() {
+            // If the create button was clicked, we reload the parent to show the generated API key
+            if ($('#submitCreateBtn').is(':disabled')) {
+                sessionStorage.setItem('activeUserTab', '#available-pane');
+                window.location.reload();
+            }
+        };
+
+        // Tab persistence across reloads
         $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
             t1.columns.adjust();
             t2.columns.adjust();
