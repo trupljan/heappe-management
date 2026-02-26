@@ -1271,3 +1271,67 @@ def stream_logs(request):
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'
     return response
+
+
+@login_required
+def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    session_code = request.session_code
+
+    all_projects = [p.to_dict() for p in controller.heappe_management_projects_get(SessionCode=session_code)]
+
+    project_data = None
+    adaptor_users_in_project = []
+    available_users = []
+
+    if project_id:
+        project_data = next((p for p in all_projects if p['id'] == project_id), None)
+        if not project_data:
+            try:
+                project_data = controller.heappe_management_project_get(Id=project_id,
+                                                                        SessionCode=session_code).to_dict()
+            except Exception:
+                pass
+
+        if project_data:
+            try:
+                adaptor_users_in_project = [u.to_dict() for u in
+                                            controller.heappe_management_adaptor_users_in_project_get(
+                                                SessionCode=session_code, ProjectId=project_id
+                                            )]
+            except Exception:
+                pass
+
+            all_adaptor_users = [u.to_dict() for u in
+                                 controller.heappe_management_adaptor_users_get(SessionCode=session_code)]
+            existing_usernames = {u['username'] for u in adaptor_users_in_project}
+            available_users = [u for u in all_adaptor_users if u['username'] not in existing_usernames]
+
+    if request.method == "POST" and project_id:
+        action = request.POST.get("action")
+        if action == "assign":
+            username = request.POST.get("username")
+            role_id = int(request.POST.get("role_id"))
+            payload = _create_payload(session_code, {"Username": username, "ProjectId": project_id, "Role": role_id})
+            _handle_api_call(request,
+                             lambda: controller.heappe_management_assign_adaptor_user_to_project_post(**payload),
+                             f"User {username} assigned.", "Assignment failed.")
+
+        elif action == "unassign":
+            username = request.POST.get("username")
+            role_name = request.POST.get("role_name")
+            role_id = ADAPTOR_USER_STR_TO_INT.get(role_name, 3)
+            payload = _create_payload(session_code, {"Username": username, "ProjectId": project_id, "Role": role_id})
+            _handle_api_call(request,
+                             lambda: controller.heappe_management_remove_adaptor_user_from_project_delete(**payload),
+                             f"User {username} removed.", "Removal failed.")
+
+        return redirect("manage_project_adaptor_users", project_id=project_id)
+
+    return render(request, "manage_project_users.html", {
+        "project": project_data,
+        "all_projects": all_projects,
+        "adaptor_users": adaptor_users_in_project,
+        "available_users": available_users,
+        "roles_mapping": ADAPTOR_USER_STR_TO_INT
+    })

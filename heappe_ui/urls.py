@@ -81,5 +81,7 @@ urlpatterns = [
     path('adaptor_users/new/', views.adaptor_user_create, name='adaptor_user_create'),
     path('adaptor_users/<str:adaptor_user_username>/', views.adaptor_user_detail, name='adaptor_user_detail'),
     path('adaptor_users/unassign/<str:adaptor_user_username>/', views.adaptor_user_unassign_from_project, name='adaptor_user_unassign_from_project'),
-    path('adaptor_users/assign/<str:adaptor_user_username>/', views.adaptor_user_assign_to_project, name='adaptor_user_assign_to_project')
+    path('adaptor_users/assign/<str:adaptor_user_username>/', views.adaptor_user_assign_to_project, name='adaptor_user_assign_to_project'),
+    path('manage-external-users/', views.manage_project_adaptor_users, name='manage_project_adaptor_users_base'),
+    path('manage-external-users/<int:project_id>/', views.manage_project_adaptor_users, name='manage_project_adaptor_users'),
 ]

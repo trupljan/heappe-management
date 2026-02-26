@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4 align-items-end">
+        <div class="col-md-7">
+            <h2 class="mb-0 text-primary">
+                <i class="fas fa-users-cog me-2"></i>External User Management
+            </h2>
+            <p class="text-muted mb-0">Assign and manage Service Accounts for selected projects</p>
+        </div>
+        <div class="col-md-5">
+            <div class="card bg-light border-0 shadow-sm p-3">
+                <label class="form-label small fw-bold text-uppercase text-muted mb-1">Select Project Context</label>
+                <select class="form-select form-select-lg border-primary" onchange="if(this.value) window.location.href='/manage-project-users/' + this.value + '/'">
+                    <option value="">-- Choose Project --</option>
+                    {% for p in all_projects %}
+                    <option value="{{ p.id }}" {% if project and p.id == project.id %}selected{% endif %}>
+                        {{ p.name }} (ID: {{ p.id }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+
+    {% if project %}
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 text-dark">
+                        Users assigned to <strong>{{ project.name }}</strong>
+                    </h5>
+                    <span class="badge bg-secondary">{{ adaptor_users|length }} Users</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive text-dark">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Username</th>
+                                    <th>Assigned Roles</th>
+                                    <th class="text-end pe-4">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in adaptor_users %}
+                                <tr>
+                                    <td class="ps-4 align-middle">
+                                        <div class="d-flex align-items-center">
+                                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
+                                                <i class="fas fa-user-shield small"></i>
+                                            </div>
+                                            <span class="fw-bold">{{ user.username }}</span>
+                                        </div>
+                                    </td>
+                                    <td class="align-middle">
+                                        {% for role in user.roles %}
+                                        <span class="badge bg-info text-dark fw-normal me-1">{{ role }}</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td class="text-end pe-4 align-middle">
+                                        {% for role in user.roles %}
+                                        <form method="POST" class="d-inline">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="unassign">
+                                            <input type="hidden" name="username" value="{{ user.username }}">
+                                            <input type="hidden" name="role_name" value="{{ role }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Remove role {{ role }} from {{ user.username }}?')">
+                                                <i class="fas fa-user-minus me-1"></i> {{ role }}
+                                            </button>
+                                        </form>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center py-5 text-muted">
+                                        <i class="fas fa-info-circle me-1"></i> No external users are currently assigned to this project.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 mb-4">
+                <div class="card-header bg-primary text-white py-3">
+                    <h6 class="mb-0 text-uppercase fw-bold"><i class="fas fa-plus-circle me-2"></i>Assign New User</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="assign">
+
+                        <div class="mb-4">
+                            <label class="form-label small fw-bold text-dark text-uppercase">1. Service Account</label>
+                            <select name="username" class="form-select" required>
+                                <option value="" disabled selected>-- Select user --</option>
+                                {% for u in available_users %}
+                                <option value="{{ u.username }}">{{ u.username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label small fw-bold text-dark text-uppercase">2. Project Role</label>
+                            <select name="role_id" class="form-select" required>
+                                <option value="" disabled selected>-- Select role --</option>
+                                <option value="1">Administrator</option>
+                                <option value="2">Maintainer</option>
+                                <option value="3">Submitter</option>
+                                <option value="4">GroupReporter</option>
+                                <option value="5">Reporter</option>
+                                <option value="6">ManagementAdmin</option>
+                                <option value="7">Manager</option>
+                            </select>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">
+                            <i class="fas fa-user-plus me-2"></i> Add to Project
+                        </button>
+                    </form>
+                </div>
+                <div class="card-footer bg-light border-0 text-center py-3">
+                    <a href="{% url 'adaptor_user_create' %}" class="small text-decoration-none text-muted">
+                        <i class="fas fa-plus me-1"></i> Create a new global Service Account
+                    </a>
+                </div>
+            </div>
+
+            <div class="alert alert-secondary border-0 small">
+                <h6 class="alert-heading fw-bold"><i class="fas fa-info-circle me-1"></i> Info</h6>
+                One user can have multiple roles in a single project. Removing a role only affects project access, not the account itself.
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="row justify-content-center mt-5">
+        <div class="col-md-6 text-center">
+            <div class="p-5 bg-white rounded shadow-sm">
+                <div class="mb-4 text-light">
+                    <i class="fas fa-project-diagram fa-5x"></i>
+                </div>
+                <h4 class="text-dark">No Project Selected</h4>
+                <p class="text-muted">Select a project from the dropdown menu to manage user permissions and roles.</p>
+                <a href="{% url 'project_list' %}" class="btn btn-outline-secondary btn-sm">
+                    Back to Project List
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
