@@ -19,7 +19,7 @@
         <div>
             <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-users-cog me-2 text-primary"></i>External User Management</h4>
             {% if project %}
-                <span class="text-muted small">Managing access for project: <strong class="text-primary">{{ project.name }}</strong> (ID: {{ project.id }})</span>
+                <span class="text-muted small">Project: <strong class="text-primary">{{ project.name }}</strong> (ID: {{ project.id }})</span>
             {% endif %}
         </div>
         <div class="d-flex align-items-center gap-2">
@@ -135,31 +135,31 @@
 <div class="modal fade" id="createUserModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content text-dark">
-            <form id="ajaxCreateUserForm" method="POST" action="{% url 'adaptor_user_create' %}">
+            <form id="quickCreateForm" method="POST" action="{% url 'adaptor_user_create' %}" target="hidden_iframe">
                 {% csrf_token %}
                 <div class="modal-header bg-dark text-white py-2">
-                    <h5 class="modal-title small fw-bold">CREATE NEW SERVICE ACCOUNT</h5>
+                    <h5 class="modal-title small fw-bold">QUICK CREATE SERVICE ACCOUNT</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div id="modalAlertContainer"></div>
                     <div class="mb-3">
-                        <label class="form-label small fw-bold">USERNAME / EMAIL</label>
-                        <input type="text" name="Username" class="form-control form-control-sm" required placeholder="e.g. service_acc_01">
+                        <label class="form-label small fw-bold">USERNAME / IDENTIFIER</label>
+                        <input type="text" name="Username" class="form-control form-control-sm" required placeholder="system-bot-01">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label small fw-bold">PASSWORD</label>
-                        <input type="password" name="Password" class="form-control form-control-sm" required>
+                    <div class="alert alert-info py-2 small mb-0">
+                        <i class="fas fa-info-circle me-1"></i> API klíč se po vytvoření zobrazí v horní části stránky v panelu oznámení.
                     </div>
                 </div>
                 <div class="modal-footer bg-light py-2">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4" id="submitCreateUser">Create Account</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4" id="submitCreateBtn">Create Account</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<iframe name="hidden_iframe" id="hidden_iframe" style="display:none;" onload="if(this.contentWindow.location.href.indexOf('new') === -1 && this.contentWindow.location.href !== 'about:blank') { sessionStorage.setItem('activeUserTab', '#available-pane'); location.reload(); }"></iframe>
 
 <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
@@ -174,30 +174,9 @@
             if (this.value) window.location.href = this.getAttribute('data-base-url') + this.value + '/';
         });
 
-        // AJAX odeslání na tvůj existující endpoint
-        $('#ajaxCreateUserForm').on('submit', function(e) {
-            e.preventDefault();
-            const $form = $(this);
-            const $btn = $('#submitCreateUser');
-
-            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Processing...');
-
-            $.ajax({
-                url: $form.attr('action'),
-                method: 'POST',
-                data: $form.serialize(),
-                headers: {'X-Requested-With': 'XMLHttpRequest'},
-                success: function(response) {
-                    // Po úspěchu reload pro promítnutí nového uživatele do Available tabulky
-                    sessionStorage.setItem('activeUserTab', '#available-pane');
-                    location.reload();
-                },
-                error: function(xhr) {
-                    $btn.prop('disabled', false).text('Create Account');
-                    const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Error during creation';
-                    $('#modalAlertContainer').html(`<div class="alert alert-danger py-2 small">${errorMsg}</div>`);
-                }
-            });
+        // Loading state na tlačítku
+        $('#quickCreateForm').on('submit', function() {
+            $('#submitCreateBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Processing...');
         });
 
         $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
