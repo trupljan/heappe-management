@@ -135,29 +135,26 @@
 <div class="modal fade" id="createUserModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content text-dark">
-            <form method="POST">
+            <form id="ajaxCreateUserForm" method="POST" action="{% url 'adaptor_user_create' %}">
                 {% csrf_token %}
-                <input type="hidden" name="action" value="create_user">
                 <div class="modal-header bg-dark text-white py-2">
                     <h5 class="modal-title small fw-bold">CREATE NEW SERVICE ACCOUNT</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
+                    <div id="modalAlertContainer"></div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">USERNAME / EMAIL</label>
-                        <input type="text" name="new_username" class="form-control form-control-sm" required placeholder="e.g. service_acc_01">
+                        <input type="text" name="Username" class="form-control form-control-sm" required placeholder="e.g. service_acc_01">
                     </div>
                     <div class="mb-3">
                         <label class="form-label small fw-bold">PASSWORD</label>
-                        <input type="password" name="new_password" class="form-control form-control-sm" required>
-                    </div>
-                    <div class="alert alert-info py-2 small border-0 mb-0">
-                        <i class="fas fa-info-circle me-1"></i> Account is created globally and must then be assigned to a project in the <strong>Available</strong> tab.
+                        <input type="password" name="Password" class="form-control form-control-sm" required>
                     </div>
                 </div>
                 <div class="modal-footer bg-light py-2">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4">Create Account</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold px-4" id="submitCreateUser">Create Account</button>
                 </div>
             </form>
         </div>
@@ -177,6 +174,32 @@
             if (this.value) window.location.href = this.getAttribute('data-base-url') + this.value + '/';
         });
 
+        // AJAX odeslání na tvůj existující endpoint
+        $('#ajaxCreateUserForm').on('submit', function(e) {
+            e.preventDefault();
+            const $form = $(this);
+            const $btn = $('#submitCreateUser');
+
+            $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span> Processing...');
+
+            $.ajax({
+                url: $form.attr('action'),
+                method: 'POST',
+                data: $form.serialize(),
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                success: function(response) {
+                    // Po úspěchu reload pro promítnutí nového uživatele do Available tabulky
+                    sessionStorage.setItem('activeUserTab', '#available-pane');
+                    location.reload();
+                },
+                error: function(xhr) {
+                    $btn.prop('disabled', false).text('Create Account');
+                    const errorMsg = xhr.responseJSON ? xhr.responseJSON.message : 'Error during creation';
+                    $('#modalAlertContainer').html(`<div class="alert alert-danger py-2 small">${errorMsg}</div>`);
+                }
+            });
+        });
+
         $('button[data-bs-toggle="tab"]').on('shown.bs.tab', function (e) {
             t1.columns.adjust();
             t2.columns.adjust();
@@ -188,11 +211,6 @@
             const tabButton = document.querySelector(`button[data-bs-target="${activeTab}"]`);
             if (tabButton) new bootstrap.Tab(tabButton).show();
         }
-
-        $('form').on('submit', function() {
-            const btn = $(this).find('button[type="submit"]');
-            btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm"></span>');
-        });
     });
 </script>
 {% endblock %}
