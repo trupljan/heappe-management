@@ -322,6 +322,7 @@ def handle_update_action(config, instance_name):
         if git_result.returncode != 0:
             return git_result, f"Failed to pull latest code: {git_result.stderr}", 'danger'
 
+        print("Git pull successful, proceeding with update, building containers with new code...")
         # update appsettings and .env
         service.update_init(instance_name=instance_name, version=config.repo_branch)
 
@@ -341,6 +342,8 @@ def handle_update_action(config, instance_name):
 
         build_result = execute_docker_compose(build_command, compose_dir)
         print(f"Docker Compose build result done: {build_result.returncode} {build_result.stdout} {build_result.stderr}")
+
+        print("Build completed, restarting containers with new code...")
 
         restart_command = [
             "docker", "compose",
