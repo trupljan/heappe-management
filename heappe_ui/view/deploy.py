@@ -336,7 +336,7 @@ def handle_update_action(config, instance_name):
             "--profile", "sshagent",
             "--profile", "staging",
             "-p", instance_name,
-            "build",  "--no-cache"
+            "build"
         ]
 
         build_result = execute_docker_compose(build_command, compose_dir)
