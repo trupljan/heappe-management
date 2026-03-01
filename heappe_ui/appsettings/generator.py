@@ -316,14 +316,14 @@ def generate_appsettings_v6_1_0(
                 "ClientWhitelist": ["127.0.0.1"],
                 "DisableRateLimitHeaders": False,
                 "GeneralRules": [
-                    {"Endpoint": "*", "Period": "1h", "Limit": 1000}
+                    {"Endpoint": "*", "Period": "1h", "Limit": 100000}
                 ]
             },
             "IpRateLimitPolicies": {
                 "IpRules": [
                     {
                         "Ip": "127.0.0.1",
-                        "Rules": [{"Endpoint": "*", "Period": "1h", "Limit": 1000}]
+                        "Rules": [{"Endpoint": "*", "Period": "1h", "Limit": 100000}]
                     }
                 ]
             },
@@ -355,9 +355,11 @@ def generate_appsettings_v6_1_0(
                     "ExtendedUserInfoEndpoint": "/api/UserInfo/Extended",
                     "HEAppEGroupNamePrefix": "LEXIS ",
                     "HEAppEUserPrefix": "LEXIS_<USERNAME>",
+                    "CommandTemplatePermissions": "/api/Heappe/CommandTemplatePermissions/",
+                    "CheckCommandTemplatePermissions": False,
                     "RoleMapping": {
-                        "Submitter": "heappe_exec",
-                        "Manager": "heappe_manager"
+                        "Submitter": "perm:heappe:exec",
+                        "Manager": "perm:heappe:manager"
                     }
                 }
             },
