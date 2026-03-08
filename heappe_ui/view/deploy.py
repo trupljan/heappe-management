@@ -5,8 +5,6 @@ from .utils import _create_payload, _handle_api_call, login_view, login_required
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-import docker
-import subprocess
 import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
@@ -16,9 +14,6 @@ from ..models import InstanceCredentials
 
 
 def get_port_with_fallback(start_port=8080, max_tries=100):
-    """
-    Zkusí port start_port. Pokud je obsazený, zkusí start_port + 1 atd.
-    """
     for port in range(start_port, start_port + max_tries):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
@@ -31,7 +26,7 @@ def get_port_with_fallback(start_port=8080, max_tries=100):
             s.close()
             continue
 
-    raise OSError(f"Nepodařilo se najít volný port v rozsahu {start_port}-{start_port + max_tries}")
+    raise OSError(f" No free port found in range {start_port}-{start_port + max_tries - 1}.")
 
 import subprocess
 

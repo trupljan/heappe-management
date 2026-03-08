@@ -246,20 +246,105 @@ def submit_job_view(request, command_template_id:int):
 
 
 @login_required
-def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
+def job_status_view(request: HttpRequest, job_id: int) -> HttpResponse:
     controller = hp.JobManagementApi(request.api_instance)
 
-    result = _handle_api_call(
-        request,
-        lambda: controller.heappe_job_management_current_info_for_job_get(SubmittedJobInfoId=job_id, SessionCode=request.session_code),
-        "OK",
-        "FAIL"
-    )
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "cancel_job":
+            payload_data = {"SubmittedJobInfoId": job_id}
+            payload = _create_payload(request.session_code, payload_data)
+            _handle_api_call(
+                request,
+                lambda: controller.heappe_job_management_cancel_job_put(**payload),
+                "Job canceled successfully!",
+                "Failed to cancel job"
+            )
+            return redirect("job_status_view", job_id=job_id)
+        elif action == "delete_job":
+            payload_data = {"SubmittedJobInfoId": job_id}
+            payload = _create_payload(request.session_code, payload_data)
+            _handle_api_call(
+                request,
+                lambda: controller.heappe_job_management_delete_job_delete(**payload),
+                "Job deleted successfully!",
+                "Failed to delete job"
+            )
+            return redirect("dashboard_view")
 
-    context = {
-        "job": result
-    }
-    return render(request, "job_status.html", context)
+    try:
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_job_management_current_info_for_job_get(SubmittedJobInfoId=job_id, SessionCode=request.session_code),
+            "OK",
+            "FAIL",
+            silent=True
+        )
+
+        if not result:
+            messages.error(request, f"Job with ID {job_id} not found or access denied.")
+            return redirect("dashboard_view")
+
+        context = {
+            "job": result
+        }
+        return render(request, "job_status.html", context)
+    except Exception as e:
+        messages.error(request, f"Error fetching job info: {str(e)}")
+        return redirect("dashboard_view")
+
+from django.http import JsonResponse
+
+@login_required
+def job_task_file_view(request: HttpRequest, job_id: int, task_id: int, file_name: str) -> JsonResponse:
+    try:
+        controller = hp.FileTransferApi(request.api_instance)
+        
+        payload_data = {
+            "SubmittedTaskInfoId": task_id,
+            "FileName": file_name
+        }
+        payload = _create_payload(request.session_code, payload_data)
+
+        # Download Parts Of Job Files From Cluster requires a slightly different payload.
+        # It takes a list of requested files
+        download_payload_data = {
+            "SubmittedJobInfoId": job_id,
+            "PartsOfJobFiles": [
+                {
+                    "SubmittedTaskInfoId": task_id,
+                    "RelativePath": file_name,
+                    "Offset": 0,
+                    "FileType": 0 # Unknown? stdout might just be a relative path
+                }
+            ]
+        }
+        download_payload = _create_payload(request.session_code, download_payload_data)
+
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_file_transfer_download_parts_of_job_files_from_cluster_post(**download_payload),
+            "OK",
+            "FAIL",
+            silent=True
+        )
+
+        content = "No content available."
+        
+        # In typical PY4HEAppE SDK, result is a list of JobFileContentExt
+        if isinstance(result, list) and len(result) > 0:
+            if isinstance(result[0], dict):
+                content = result[0].get("Content", "")
+            else:
+                content = getattr(result[0], "content", "")
+                
+        if not content:
+            content = "File is empty or currently not available."
+
+        return JsonResponse({"status": "success", "content": content})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
 
 
 
@@ -610,3 +695,116 @@ def delete_hpc_account(request: HttpRequest) -> HttpResponse:
     )
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
+from heappe_ui.view.imports import *
+from heappe_ui.view.utils import *
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from heappe_ui.view.adaptor_user import ADAPTOR_USER_STR_TO_INT
+# fallback imports if not there
+
+@login_required
+def assign_project_to_cluster(request: HttpRequest) -> HttpResponse:
+    if request.method == "POST":
+        controller = hp.ManagementApi(request.api_instance)
+        action = request.POST.get("action")
+        if action == "assign_cluster":
+            payload_data = {
+                "ProjectId": int(request.POST.get("ProjectId")),
+                "ClusterId": int(request.POST.get("ClusterId")),
+                "ScratchStoragePath": request.POST.get("ScratchStoragePath", ""),
+                "PermanentStoragePath": request.POST.get("PermanentStoragePath", ""),
+                "ProjectStoragePath": request.POST.get("ProjectStoragePath", "")
+            }
+            payload = _create_payload(request.session_code, payload_data)
+            return _handle_api_call(
+                request,
+                lambda: controller.heappe_management_project_assignment_to_cluster_post(**payload),
+                "Project assigned to cluster successfully!",
+                "Failed to assign project to cluster",
+                redirect_url=f"/clusters/{int(request.POST.get('ClusterId'))}/?tab=projects"
+            )
+    return render(request, "assign_project_to_cluster.html")
+
+@login_required
+def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    session_code = request.session_code
+
+    all_projects = [p.to_dict() for p in controller.heappe_management_projects_get(SessionCode=session_code)]
+
+    project_data = None
+    adaptor_users_in_project = []
+    available_users = []
+
+    if project_id:
+        project_data = next((p for p in all_projects if p['id'] == project_id), None)
+        if not project_data:
+            try:
+                project_data = controller.heappe_management_project_get(Id=project_id,
+                                                                        SessionCode=session_code).to_dict()
+            except Exception:
+                pass
+
+        if project_data:
+            try:
+                adaptor_users_in_project = [u.to_dict() for u in
+                                            controller.heappe_management_adaptor_users_in_project_get(
+                                                SessionCode=session_code, ProjectId=project_id
+                                            )]
+            except Exception:
+                pass
+
+
+            all_adaptor_users = [u.to_dict() for u in
+                                 controller.heappe_management_adaptor_users_get(SessionCode=session_code)]
+            existing_usernames = {u['username'] for u in adaptor_users_in_project}
+            available_users = [u for u in all_adaptor_users if u['username'] not in existing_usernames]
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "create_user":
+            new_user = request.POST.get("new_username")
+            new_pass = request.POST.get("new_password")
+            payload = _create_payload(session_code, {"Username": new_user, "Password": new_pass})
+
+            _handle_api_call(request,
+                             lambda: controller.heappe_management_adaptor_user_post(**payload),
+                             f"User {new_user} created.", "Creation failed.")
+
+            target_url = reverse("manage_project_adaptor_users",
+                                 kwargs={"project_id": project_id}) if project_id else reverse(
+                "manage_project_adaptor_users_base")
+            return redirect(target_url)
+
+        if project_id:
+            if action == "assign":
+                username = request.POST.get("username")
+                role_id = int(request.POST.get("role_id"))
+                payload = _create_payload(session_code,
+                                          {"Username": username, "ProjectId": project_id, "Role": role_id})
+                _handle_api_call(request,
+                                 lambda: controller.heappe_management_assign_adaptor_user_to_project_post(**payload),
+                                 f"User {username} assigned.", "Assignment failed.")
+
+            elif action == "unassign":
+                username = request.POST.get("username")
+                role_name = request.POST.get("role_name")
+                role_id = ADAPTOR_USER_STR_TO_INT.get(role_name, 3)
+                payload = _create_payload(session_code,
+                                          {"Username": username, "ProjectId": project_id, "Role": role_id})
+                _handle_api_call(request,
+                                 lambda: controller.heappe_management_remove_adaptor_user_from_project_delete(
+                                     **payload),
+                                 f"User {username} removed.", "Removal failed.")
+
+            return redirect("manage_project_adaptor_users", project_id=project_id)
+
+    return render(request, "manage_project_users.html", {
+        "project": project_data,
+        "all_projects": all_projects,
+        "adaptor_users": adaptor_users_in_project,
+        "available_users": available_users,
+        "roles_mapping": ADAPTOR_USER_STR_TO_INT
+    })

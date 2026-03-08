@@ -94,6 +94,8 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
     cluster = controller.heappe_management_cluster_get(Id=cluster_id, SessionCode=request.session_code)
     context = {'cluster': cluster.to_dict(), 'active_tab': tab}
     context['PROTOCOL_CHOICES'] = PROTOCOL_CHOICES
+    context['SCHEDULER_CHOICES'] = SCHEDULER_CHOICES
+    context['CONNECTION_PROTOCOL_CHOICES'] = CONNECTION_PROTOCOL_CHOICES
     if tab == 'detail':
         filetarnsfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code)
         # filtr for cluster_id

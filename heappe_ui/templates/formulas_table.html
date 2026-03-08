@@ -1,9 +1,11 @@
-<div class="card mb-4 w-75 mx-auto shadow-sm">
+<div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
   <div class="card-header d-flex align-items-center">
     <strong>Formulas</strong>
     <div class="ms-auto">
-      <button class="btn btn-success btn-sm me-2" data-bs-toggle="modal" data-bs-target="#addFormulaModal">Create New</button>
-      <button class="btn btn-info btn-sm me-2" data-bs-toggle="modal" data-bs-target="#assignFormulaModal">Assign Existing</button>
+      <button class="btn btn-success btn-sm me-2" data-bs-toggle="modal" data-bs-target="#addFormulaModal">Create
+        New</button>
+      <button class="btn btn-info btn-sm me-2" data-bs-toggle="modal" data-bs-target="#assignFormulaModal">Assign
+        Existing</button>
       <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">Reload</button>
     </div>
   </div>
@@ -34,21 +36,17 @@
             <td>{{ formula.validity_to }}</td>
             <td>
               <div class="d-flex gap-1">
-                <button class="btn btn-sm btn-primary"
-                        data-bs-toggle="modal"
-                        data-bs-target="#editFormulaModal"
-                        data-id="{{ formula.id }}"
-                        data-formula="{{ formula.formula }}"
-                        data-validity-from="{{ formula.validity_from }}"
-                        data-validity-to="{{ formula.validity_to }}">
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editFormulaModal"
+                  data-id="{{ formula.id }}" data-formula="{{ formula.formula }}"
+                  data-validity-from="{{ formula.validity_from }}" data-validity-to="{{ formula.validity_to }}">
                   Edit
                 </button>
                 <form method="post">
                   {% csrf_token %}
-                  <input type="hidden" name="action" value="unassign_formula"/>
-                  <input type="hidden" name="FormulaId" value="{{ formula.id }}"/>
+                  <input type="hidden" name="action" value="unassign_formula" />
+                  <input type="hidden" name="FormulaId" value="{{ formula.id }}" />
                   <button type="submit" class="btn btn-sm btn-danger"
-                          onclick="return confirm('Are you sure you want to unassign this formula?');">
+                    onclick="return confirm('Are you sure you want to unassign this formula?');">
                     Unassign
                   </button>
                 </form>
@@ -81,17 +79,20 @@
               <h6>Tokens</h6>
               <div class="d-flex flex-wrap gap-1 mb-3">
                 {% for operand in ACCOUNTING_NUMBERS %}
-                  <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{
+                  operand }}</span>
                 {% endfor %}
               </div>
               <div class="d-flex flex-wrap gap-1 mb-3">
                 {% for operand in ACCOUNTING_TIMES %}
-                  <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{
+                  operand }}</span>
                 {% endfor %}
               </div>
               <div class="d-flex flex-wrap gap-1 mb-3">
                 {% for operator in ACCOUNTING_OPERATORS %}
-                  <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
+                <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{
+                  operator }}</span>
                 {% endfor %}
               </div>
 
@@ -101,19 +102,23 @@
                 <input type="text" class="form-control custom-token-input" placeholder="e.g. 1.25 or Variable">
                 <button class="btn btn-dark add-custom-token-btn" type="button">Add</button>
               </div>
-              <small class="text-muted d-block mt-2">💡 Drag tokens or type custom values. Click to remove, drag to reorder.</small>
+              <small class="text-muted d-block mt-2">💡 Drag tokens or type custom values. Click to remove, drag to
+                reorder.</small>
             </div>
 
             <div class="col-8">
               <h6>Formula Builder</h6>
-              <div id="addFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light" style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
+              <div id="addFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light"
+                style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
               <input type="hidden" name="Formula" id="addFormulaInput">
             </div>
           </div>
           <hr>
           <div class="row">
-            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control" name="ValidityFrom"></div>
-            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control" name="ValidityTo"></div>
+            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control"
+                name="ValidityFrom"></div>
+            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control"
+                name="ValidityTo"></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -142,17 +147,20 @@
               <h6>Tokens</h6>
               <div class="d-flex flex-wrap gap-1 mb-3">
                 {% for operand in ACCOUNTING_NUMBERS %}
-                  <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{
+                  operand }}</span>
                 {% endfor %}
               </div>
               <div class="d-flex flex-wrap gap-1 mb-3">
                 {% for operand in ACCOUNTING_TIMES %}
-                  <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{
+                  operand }}</span>
                 {% endfor %}
               </div>
               <div class="d-flex flex-wrap gap-1 mb-3">
                 {% for operator in ACCOUNTING_OPERATORS %}
-                  <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
+                <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{
+                  operator }}</span>
                 {% endfor %}
               </div>
 
@@ -166,14 +174,17 @@
 
             <div class="col-8">
               <h6>Formula Builder</h6>
-              <div id="editFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light" style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
+              <div id="editFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light"
+                style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
               <input type="hidden" name="Formula" id="editFormulaInput">
             </div>
           </div>
           <hr>
           <div class="row">
-            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control" name="ValidityFrom" id="editValidityFrom"></div>
-            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control" name="ValidityTo" id="editValidityTo"></div>
+            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control"
+                name="ValidityFrom" id="editValidityFrom"></div>
+            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control"
+                name="ValidityTo" id="editValidityTo"></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -201,142 +212,143 @@
             <select class="form-select" name="FormulaId" required>
               <option value="" selected disabled>-- Choose a formula --</option>
               {% for formula in all_formulas %}
-                <option value="{{ formula.id }}">{{ formula.formula }} (ID: {{ formula.id }})</option>
+              <option value="{{ formula.id }}">{{ formula.formula }} (ID: {{ formula.id }})</option>
               {% endfor %}
             </select>
           </div>
         </div>
-        <div class="modal-footer"><button type="submit" class="btn btn-primary">Assign</button><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button></div>
+        <div class="modal-footer"><button type="submit" class="btn btn-primary">Assign</button><button type="button"
+            class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button></div>
       </form>
     </div>
   </div>
 </div>
 
 <script>
-function initFormulaBuilder(dropZoneId, inputId) {
-  const dropZone = document.getElementById(dropZoneId);
-  const formulaInput = document.getElementById(inputId);
-  let dragSrcEl = null;
+  function initFormulaBuilder(dropZoneId, inputId) {
+    const dropZone = document.getElementById(dropZoneId);
+    const formulaInput = document.getElementById(inputId);
+    let dragSrcEl = null;
 
-  dropZone.addEventListener("dragover", (e) => e.preventDefault());
-  dropZone.addEventListener("dragenter", (e) => e.preventDefault());
+    dropZone.addEventListener("dragover", (e) => e.preventDefault());
+    dropZone.addEventListener("dragenter", (e) => e.preventDefault());
 
-  dropZone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    const value = e.dataTransfer.getData("text/plain");
-    // Pokud hodnota existuje a netaháme zrovna element už uvnitř dropzóny (dragSrcEl)
-    if (value && !dragSrcEl) {
-      addToken(value);
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const value = e.dataTransfer.getData("text/plain");
+      // Pokud hodnota existuje a netaháme zrovna element už uvnitř dropzóny (dragSrcEl)
+      if (value && !dragSrcEl) {
+        addToken(value);
+      }
+    });
+
+    function updateFormula() {
+      formulaInput.value = [...dropZone.querySelectorAll("span")]
+        .map((s) => s.dataset.value)
+        .join(" ");
     }
-  });
 
-  function updateFormula() {
-    formulaInput.value = [...dropZone.querySelectorAll("span")]
-      .map((s) => s.dataset.value)
-      .join(" ");
-  }
+    function addToken(value) {
+      if (!value || value.trim() === "") return;
+      const span = document.createElement("span");
+      span.textContent = value;
+      // Vlastní hodnoty dostanou jinou barvu (info), pokud nejsou v predefined (volitelné)
+      span.className = "badge bg-secondary p-2 shadow-sm";
+      span.dataset.value = value;
+      span.draggable = true;
+      span.style.cursor = "pointer";
+      span.title = "Click to remove";
 
-  function addToken(value) {
-    if (!value || value.trim() === "") return;
-    const span = document.createElement("span");
-    span.textContent = value;
-    // Vlastní hodnoty dostanou jinou barvu (info), pokud nejsou v predefined (volitelné)
-    span.className = "badge bg-secondary p-2 shadow-sm";
-    span.dataset.value = value;
-    span.draggable = true;
-    span.style.cursor = "pointer";
-    span.title = "Click to remove";
-
-    span.addEventListener("click", () => {
-      span.remove();
-      updateFormula();
-    });
-
-    span.addEventListener("dragstart", (e) => {
-      dragSrcEl = span;
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", span.dataset.value);
-      span.classList.add("opacity-50");
-    });
-
-    span.addEventListener("dragend", () => {
-      dragSrcEl = null;
-      span.classList.remove("opacity-50");
-    });
-
-    span.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      span.classList.add("border-start", "border-primary", "border-3");
-    });
-
-    span.addEventListener("dragleave", () => {
-      span.classList.remove("border-start", "border-primary", "border-3");
-    });
-
-    span.addEventListener("drop", (e) => {
-      e.preventDefault();
-      if (dragSrcEl && dragSrcEl !== span) {
-        const allSpans = [...dropZone.querySelectorAll("span")];
-        const targetIndex = allSpans.indexOf(span);
-        const srcIndex = allSpans.indexOf(dragSrcEl);
-        if (srcIndex < targetIndex) {
-          span.after(dragSrcEl);
-        } else {
-          span.before(dragSrcEl);
-        }
+      span.addEventListener("click", () => {
+        span.remove();
         updateFormula();
-      }
-      span.classList.remove("border-start", "border-primary", "border-3");
-    });
+      });
 
-    dropZone.appendChild(span);
-    updateFormula();
+      span.addEventListener("dragstart", (e) => {
+        dragSrcEl = span;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", span.dataset.value);
+        span.classList.add("opacity-50");
+      });
+
+      span.addEventListener("dragend", () => {
+        dragSrcEl = null;
+        span.classList.remove("opacity-50");
+      });
+
+      span.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        span.classList.add("border-start", "border-primary", "border-3");
+      });
+
+      span.addEventListener("dragleave", () => {
+        span.classList.remove("border-start", "border-primary", "border-3");
+      });
+
+      span.addEventListener("drop", (e) => {
+        e.preventDefault();
+        if (dragSrcEl && dragSrcEl !== span) {
+          const allSpans = [...dropZone.querySelectorAll("span")];
+          const targetIndex = allSpans.indexOf(span);
+          const srcIndex = allSpans.indexOf(dragSrcEl);
+          if (srcIndex < targetIndex) {
+            span.after(dragSrcEl);
+          } else {
+            span.before(dragSrcEl);
+          }
+          updateFormula();
+        }
+        span.classList.remove("border-start", "border-primary", "border-3");
+      });
+
+      dropZone.appendChild(span);
+      updateFormula();
+    }
+
+    return { updateFormula, addToken, dropZone };
   }
 
-  return { updateFormula, addToken, dropZone };
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-  // Inicializace drag & drop pro tokeny z panelu
-  document.querySelectorAll(".draggable").forEach((item) => {
-    item.addEventListener("dragstart", (e) => {
-      e.dataTransfer.setData("text/plain", e.target.dataset.value);
+  document.addEventListener("DOMContentLoaded", () => {
+    // Inicializace drag & drop pro tokeny z panelu
+    document.querySelectorAll(".draggable").forEach((item) => {
+      item.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", e.target.dataset.value);
+      });
     });
-  });
 
-  const addBuilder = initFormulaBuilder("addFormulaDropZone", "addFormulaInput");
-  const editBuilder = initFormulaBuilder("editFormulaDropZone", "editFormulaInput");
+    const addBuilder = initFormulaBuilder("addFormulaDropZone", "addFormulaInput");
+    const editBuilder = initFormulaBuilder("editFormulaDropZone", "editFormulaInput");
 
-  // Logika pro přidávání vlastních hodnot (Custom Tokens)
-  document.querySelectorAll(".add-custom-token-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      const modal = e.target.closest(".modal");
-      const input = modal.querySelector(".custom-token-input");
-      const value = input.value.trim();
+    // Logika pro přidávání vlastních hodnot (Custom Tokens)
+    document.querySelectorAll(".add-custom-token-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const modal = e.target.closest(".modal");
+        const input = modal.querySelector(".custom-token-input");
+        const value = input.value.trim();
 
-      if (value !== "") {
-        if (modal.id === "addFormulaModal") {
-          addBuilder.addToken(value);
-        } else {
-          editBuilder.addToken(value);
+        if (value !== "") {
+          if (modal.id === "addFormulaModal") {
+            addBuilder.addToken(value);
+          } else {
+            editBuilder.addToken(value);
+          }
+          input.value = "";
         }
-        input.value = "";
-      }
+      });
+    });
+
+    const editModal = document.getElementById("editFormulaModal");
+    editModal.addEventListener("show.bs.modal", (event) => {
+      const button = event.relatedTarget;
+      document.getElementById("editFormulaId").value = button.getAttribute("data-id");
+      document.getElementById("editValidityFrom").value = button.getAttribute("data-validity-from");
+      document.getElementById("editValidityTo").value = button.getAttribute("data-validity-to");
+
+      editBuilder.dropZone.innerHTML = "";
+      const formula = button.getAttribute("data-formula") || "";
+      formula.split(" ").forEach((value) => {
+        if (value.trim() !== "") editBuilder.addToken(value);
+      });
     });
   });
-
-  const editModal = document.getElementById("editFormulaModal");
-  editModal.addEventListener("show.bs.modal", (event) => {
-    const button = event.relatedTarget;
-    document.getElementById("editFormulaId").value = button.getAttribute("data-id");
-    document.getElementById("editValidityFrom").value = button.getAttribute("data-validity-from");
-    document.getElementById("editValidityTo").value = button.getAttribute("data-validity-to");
-
-    editBuilder.dropZone.innerHTML = "";
-    const formula = button.getAttribute("data-formula") || "";
-    formula.split(" ").forEach((value) => {
-      if (value.trim() !== "") editBuilder.addToken(value);
-    });
-  });
-});
 </script>

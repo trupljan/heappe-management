@@ -5,39 +5,40 @@
 
 {% block content %}
 
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-md-4">
-                <div class="card shadow-lg rounded-4">
-                    <div class="card-body p-4">
-                        <div class="text-center mb-4">
-                            <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" style="height:50px;" class="mb-2">
-                            <h5 class="fw-bold">HEAppE Admin Login</h5>
-                        </div>
-
-                        {% if error %}
-                            <div class="alert alert-danger py-2">{{ error }}</div>
-                        {% endif %}
-
-                        <form method="post">
-                            {% csrf_token %}
-                            <div class="mb-3">
-                                <label for="username" class="form-label">Username</label>
-                                <input type="text" class="form-control" id="username" name="username" required autofocus>
-                            </div>
-                            <div class="mb-3">
-                                <label for="password" class="form-label">Password</label>
-                                <input type="password" class="form-control" id="password" name="password" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">Log In</button>
-                        </form>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-8 col-lg-4">
+            <div class="card shadow-lg rounded-4">
+                <div class="card-body p-4">
+                    <div class="text-center mb-4">
+                        <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo"
+                            style="height:50px;" class="mb-2">
+                        <h5 class="fw-bold">HEAppE Admin Login</h5>
                     </div>
+
+                    {% if error %}
+                    <div class="alert alert-danger py-2">{{ error }}</div>
+                    {% endif %}
+
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username</label>
+                            <input type="text" class="form-control" id="username" name="username" required autofocus>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password</label>
+                            <input type="password" class="form-control" id="password" name="password" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Log In</button>
+                    </form>
                 </div>
-                <p class="text-center text-muted mt-3" style="font-size: 0.9rem;">
-                    &copy; {{ year|default:2025 }} HEAppE Admin
-                </p>
             </div>
+            <p class="text-center text-muted mt-3" style="font-size: 0.9rem;">
+                &copy; {{ year|default:2025 }} HEAppE Admin
+            </p>
         </div>
     </div>
+</div>
 
 {% endblock %}

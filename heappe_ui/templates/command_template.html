@@ -8,260 +8,280 @@
 </h1>
 
 <div class="container">
-{% if command_template.id and not command_template.project_id %}
-    <div class="alert alert-warning text-center w-75 mx-auto" role="alert">
-      This command template is shared across all projects and cannot be edited.
-    </div>
-    <div class="d-flex justify-content-center">
-      <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-secondary">Back</a>
-    </div>
+  {% if command_template.id and not command_template.project_id %}
+  <div class="alert alert-warning text-center col-12 col-xl-10 mx-auto" role="alert">
+    This command template is shared across all projects and cannot be edited.
+  </div>
+  <div class="d-flex justify-content-center">
+    <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-secondary">Back</a>
+  </div>
   {% else %}
-    <!-- Command Template Form -->
-    <div class="card mb-4 w-75 mx-auto shadow-sm">
-      <div class="card-header d-flex align-items-center">
-        <strong>Command Template Information</strong>
-        <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
-      </div>
-      <div class="card-body">
-        <form method="post">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="{% if command_template %}update_command_template{% else %}create_command_template{% endif %}">
-          <input type="hidden" name="Id" value="{{ command_template.Id|default:0 }}">
-          <input type="hidden" name="ProjectId" value="{{ project_id }}">
-          <div class="row g-3">
+  <!-- Command Template Form -->
+  <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
+    <div class="card-header d-flex align-items-center">
+      <strong>Command Template Information</strong>
+      <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
+    </div>
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action"
+          value="{% if command_template %}update_command_template{% else %}create_command_template{% endif %}">
+        <input type="hidden" name="Id" value="{{ command_template.Id|default:0 }}">
+        <input type="hidden" name="ProjectId" value="{{ project_id }}">
+        <div class="row g-3">
           {% if command_template %}
-            <div class="col-md-3">
-              <label class="form-label">Id</label>
-              <input type="number" class="form-control" name="Id" value="{{ command_template.id|default:0 }}" readonly disabled>
-            </div>
+          <div class="col-md-3">
+            <label class="form-label">Id</label>
+            <input type="number" class="form-control" name="Id" value="{{ command_template.id|default:0 }}" readonly
+              disabled>
+          </div>
           {% endif %}
           {% if command_template %}
-            <div class="col-md-9">
-              <label class="form-label">Name</label>
-              <input type="text" class="form-control" name="Name" value="{{ command_template.name|default:'' }}" required>
-            </div>
-            {% else %}
-            <div class="col-md-12">
-              <label class="form-label">Name</label>
-              <input type="text" class="form-control" name="Name" value="{{ command_template.name|default:'' }}" required>
-            </div>
-            {% endif %}
-            <div class="col-md-6">
-              <label class="form-label">Description</label>
-              <input type="text" class="form-control" name="Description" value="{{ command_template.description|default:'' }}">
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Extended Allocation Command</label>
-              <input type="text" class="form-control" name="ExtendedAllocationCommand" value="{{ command_template.extended_allocation_command|default:'' }}">
-            </div>
+          <div class="col-md-9">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-control" name="Name" value="{{ command_template.name|default:'' }}" required>
+          </div>
+          {% else %}
+          <div class="col-md-12">
+            <label class="form-label">Name</label>
+            <input type="text" class="form-control" name="Name" value="{{ command_template.name|default:'' }}" required>
+          </div>
+          {% endif %}
+          <div class="col-md-6">
+            <label class="form-label">Description</label>
+            <input type="text" class="form-control" name="Description"
+              value="{{ command_template.description|default:'' }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Extended Allocation Command</label>
+            <input type="text" class="form-control" name="ExtendedAllocationCommand"
+              value="{{ command_template.extended_allocation_command|default:'' }}">
+          </div>
           {% if v620_check %}
-                {% if project %}
-                    <div class="col-md-6">
-                        <label class="form-label">KeyScripts Directory Path</label>
-                        <input type="email" class="form-control" name="KeyScriptsDirectoryPath" readonly disabled value="{{ project.key_scripts_directory_path|default:'' }}">
-                    </div>
-                {% endif %}
-            {% endif %}
-            <div class="col-md-6">
-              <label class="form-label">Executable File</label>
-              <input type="text" class="form-control" name="ExecutableFile" value="{{ command_template.executable_file|default:'' }}">
+          {% if project %}
+          <div class="col-md-6">
+            <label class="form-label">KeyScripts Directory Path</label>
+            <input type="email" class="form-control" name="KeyScriptsDirectoryPath" readonly disabled
+              value="{{ project.key_scripts_directory_path|default:'' }}">
+          </div>
+          {% endif %}
+          {% endif %}
+          <div class="col-md-6">
+            <label class="form-label">Executable File</label>
+            <input type="text" class="form-control" name="ExecutableFile"
+              value="{{ command_template.executable_file|default:'' }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Preparation Script</label>
+            <input type="text" class="form-control" name="PreparationScript"
+              value="{{ command_template.preparation_script|default:'' }}">
+          </div>
+          <div class="col-md-12">
+            <label class="form-label">Command Parameters</label>
+            <input type="text" class="form-control" name="CommandParameters"
+              value="{{ command_template.command_parameters|default:'' }}" disabled readonly>
+          </div>
+          <div class="col-md-3 d-flex align-items-center">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" name="IsGeneric" {% if command_template.is_generic
+                %}checked{% endif %} disabled readonly>
+              <label class="form-check-label">Is Generic</label>
             </div>
-            <div class="col-md-6">
-              <label class="form-label">Preparation Script</label>
-              <input type="text" class="form-control" name="PreparationScript" value="{{ command_template.preparation_script|default:'' }}">
-            </div>
-            <div class="col-md-12">
-              <label class="form-label">Command Parameters</label>
-              <input type="text" class="form-control" name="CommandParameters" value="{{ command_template.command_parameters|default:'' }}" disabled readonly>
-            </div>
-            <div class="col-md-3 d-flex align-items-center">
-              <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" name="IsGeneric" {% if command_template.is_generic %}checked{% endif %} disabled readonly>
-                <label class="form-check-label">Is Generic</label>
-              </div>
-            </div>
+          </div>
           {% if command_template %}
-            <div class="col-md-3 d-flex align-items-center">
-              <div class="form-check mt-2">
-                <input class="form-check-input" type="checkbox" name="IsEnabled" {% if command_template.is_enabled %}checked{% endif %}>
-                <label class="form-check-label">Is Enabled</label>
-              </div>
+          <div class="col-md-3 d-flex align-items-center">
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" name="IsEnabled" {% if command_template.is_enabled
+                %}checked{% endif %}>
+              <label class="form-check-label">Is Enabled</label>
             </div>
-            {% endif %}
-            <div class="col-md-3">
-  <label class="form-label">Cluster Node Type</label>
-  <select class="form-control" name="ClusterNodeTypeId">
-    <option value="0" {% if command_template.cluster_node_type_id|default:0 == 0 %}selected{% endif %}>-- Select Node Type --</option>
-    
-    {# Seskupení podle názvu clusteru #}
-    {% regroup node_types by cluster_name as cluster_list %}
-    
-    {% for cluster in cluster_list %}
-      <optgroup label="Cluster: {{ cluster.grouper }}">
-        {% for node_type in cluster.list %}
-          <option value="{{ node_type.id }}" 
-            {% if command_template.cluster_node_type_id|default:0 == node_type.id %}selected{% endif %}>
-            {{ node_type.name }} (Cluster: {{ cluster.grouper }})
-          </option>
-        {% endfor %}
-      </optgroup>
-    {% endfor %}
-  </select>
-</div>
+          </div>
+          {% endif %}
+          <div class="col-md-3">
+            <label class="form-label">Cluster Node Type</label>
+            <select class="form-control" name="ClusterNodeTypeId">
+              <option value="0" {% if command_template.cluster_node_type_id|default:0 == 0 %}selected{% endif %}>-- Select
+                Node Type --</option>
+
+              {# Seskupení podle názvu clusteru #}
+              {% regroup node_types by cluster_name as cluster_list %}
+
+              {% for cluster in cluster_list %}
+              <optgroup label="Cluster: {{ cluster.grouper }}">
+                {% for node_type in cluster.list %}
+                <option value="{{ node_type.id }}" {% if command_template.cluster_node_type_id|default:0 == node_type.id
+                  %}selected{% endif %}>
+                  {{ node_type.name }} (Cluster: {{ cluster.grouper }})
+                </option>
+                {% endfor %}
+              </optgroup>
+              {% endfor %}
+            </select>
+          </div>
           {% if false %}
-            <div class="col-md-3">
-              <label class="form-label">Created From Generic Template ID</label>
-              <input type="number" class="form-control" name="CreatedFromGenericTemplateId" value="{{ command_template.created_from_generic_template_id|default:0 }}" disabled readonly>
-            </div>
-            {% endif %}
+          <div class="col-md-3">
+            <label class="form-label">Created From Generic Template ID</label>
+            <input type="number" class="form-control" name="CreatedFromGenericTemplateId"
+              value="{{ command_template.created_from_generic_template_id|default:0 }}" disabled readonly>
           </div>
-          <div class="mt-4 d-flex justify-content-between">
-            {% if command_template %}
-              <button type="submit" class="btn btn-primary">Save</button>
-            {% else %}
-              <button type="submit" class="btn btn-primary">Create new</button>
-            {% endif %}
-            <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-secondary">Back</a>
-          </div>
-        </form>
+          {% endif %}
+        </div>
+        <div class="mt-4 d-flex justify-content-between">
+          {% if command_template %}
+          <button type="submit" class="btn btn-primary">Save</button>
+          {% else %}
+          <button type="submit" class="btn btn-primary">Create new</button>
+          {% endif %}
+          <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-secondary">Back</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Template Parameters Table -->
+  {% if not command_template %}
+  <div class="d-flex justify-content-center align-items-center">
+    <div class="alert alert-info text-center col-12 col-xl-10 mx-auto" role="alert">
+      Template parameters can be added after creating the command template.
+    </div>
+  </div>
+  {% else %}
+  <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
+    <div class="card-header d-flex align-items-center">
+      <strong>Template Parameters</strong>
+      <div class="ms-auto">
+        <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addParameterModal">Add
+          New</button>
+        <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
       </div>
     </div>
-
-    <!-- Template Parameters Table -->
-    {% if not command_template %}
-      <div class="d-flex justify-content-center align-items-center">
-        <div class="alert alert-info text-center w-75" role="alert">
-          Template parameters can be added after creating the command template.
-        </div>
+    <div class="card-body p-0">
+      {% if command_template.template_parameters %}
+      <div class="table-responsive">
+        <table class="table table-striped mb-0">
+          <thead class="table-light">
+            <tr>
+              <th scope="col">ID</th>
+              <th scope="col">Identifier</th>
+              <th scope="col">Description</th>
+              <th scope="col">Query</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for param in command_template.template_parameters %}
+            <tr>
+              <td>{{ param.id }}</td>
+              <td>{{ param.identifier }}</td>
+              <td>{{ param.description }}</td>
+              <td>{{ param.query }}</td>
+              <td>
+                <button class="btn btn-sm btn-secondary me-2" data-bs-toggle="modal"
+                  data-bs-target="#editParameterModal"
+                  onclick="document.querySelector('#editParameterModal input[name=ParameterId]').value='{{ param.id }}'; document.querySelector('#editParameterModal input[name=Identifier]').value='{{ param.identifier }}'; document.querySelector('#editParameterModal input[name=Description]').value='{{ param.description }}'; document.querySelector('#editParameterModal input[name=Query]').value='{{ param.query }}';">Edit</button>
+                <form method="post" class="d-inline">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="delete_parameter">
+                  <input type="hidden" name="ParameterId" value="{{ param.id }}">
+                  <input type="hidden" name="CommandTemplateId" value="{{ command_template.id }}">
+                  <button type="submit" class="btn btn-sm btn-danger"
+                    onclick="return confirm('Are you sure you want to delete this parameter?');">Delete</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
-    {% else %}
-      <div class="card mb-4 w-75 mx-auto shadow-sm">
-        <div class="card-header d-flex align-items-center">
-          <strong>Template Parameters</strong>
-          <div class="ms-auto">
-            <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addParameterModal">Add New</button>
-            <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
-          </div>
-        </div>
-        <div class="card-body p-0">
-          {% if command_template.template_parameters %}
-            <div class="table-responsive">
-              <table class="table table-striped mb-0">
-                <thead class="table-light">
-                  <tr>
-                    <th scope="col">ID</th>
-                    <th scope="col">Identifier</th>
-                    <th scope="col">Description</th>
-                    <th scope="col">Query</th>
-                    <th scope="col">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for param in command_template.template_parameters %}
-                    <tr>
-                      <td>{{ param.id }}</td>
-                      <td>{{ param.identifier }}</td>
-                      <td>{{ param.description }}</td>
-                      <td>{{ param.query }}</td>
-                      <td>
-                        <button class="btn btn-sm btn-secondary me-2" data-bs-toggle="modal" data-bs-target="#editParameterModal" onclick="document.querySelector('#editParameterModal input[name=ParameterId]').value='{{ param.id }}'; document.querySelector('#editParameterModal input[name=Identifier]').value='{{ param.identifier }}'; document.querySelector('#editParameterModal input[name=Description]').value='{{ param.description }}'; document.querySelector('#editParameterModal input[name=Query]').value='{{ param.query }}';">Edit</button>
-                        <form method="post" class="d-inline">
-                          {% csrf_token %}
-                          <input type="hidden" name="action" value="delete_parameter">
-                          <input type="hidden" name="ParameterId" value="{{ param.id }}">
-                          <input type="hidden" name="CommandTemplateId" value="{{ command_template.id }}">
-                          <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to delete this parameter?');">Delete</button>
-                        </form>
-                      </td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          {% else %}
-            <p class="p-3 mb-0">No template parameters available.</p>
-          {% endif %}
-        </div>
-      </div>
-    {% endif %}
+      {% else %}
+      <p class="p-3 mb-0">No template parameters available.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
   {% endif %}
 </div>
 
 <!-- Add Parameter Modal -->
 {% if command_template.project_id != 0 and command_template.project_id != null %}
-  <div class="modal fade" id="addParameterModal" tabindex="-1" aria-labelledby="addParameterModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="addParameterModalLabel">Add Template Parameter</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <form method="post" id="addParameterForm">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="add_parameter">
-            <input type="hidden" name="CommandTemplateId" value="{{ command_template.id|default:0 }}">
-            <div id="parameters-container">
-              <div class="parameter-form mb-4">
-                <div class="mb-3">
-                  <label class="form-label">Identifier</label>
-                  <input type="text" class="form-control" name="Identifier" required>
-                </div>
-                <div class="mb-3">
-                  <label class="form-label">Description</label>
-                  <input type="text" class="form-control" name="Description">
-                </div>
-                <div class="mb-3">
-                  <label class="form-label">Query</label>
-                  <input type="text" class="form-control" name="Query">
-                </div>
+<div class="modal fade" id="addParameterModal" tabindex="-1" aria-labelledby="addParameterModalLabel"
+  aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="addParameterModalLabel">Add Template Parameter</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="post" id="addParameterForm">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_parameter">
+          <input type="hidden" name="CommandTemplateId" value="{{ command_template.id|default:0 }}">
+          <div id="parameters-container">
+            <div class="parameter-form mb-4">
+              <div class="mb-3">
+                <label class="form-label">Identifier</label>
+                <input type="text" class="form-control" name="Identifier" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Description</label>
+                <input type="text" class="form-control" name="Description">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Query</label>
+                <input type="text" class="form-control" name="Query">
               </div>
             </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-              <button type="submit" class="btn btn-primary">Save</button>
-            </div>
-          </form>
-        </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="submit" class="btn btn-primary">Save</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
+</div>
 
-  <!-- Edit Parameter Modal -->
-  <div class="modal fade" id="editParameterModal" tabindex="-1" aria-labelledby="editParameterModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="editParameterModalLabel">Edit Template Parameter</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="update_parameter">
-            <input type="hidden" name="ParameterId" value="{{ edit_parameter.id|default_if_none:0 }}">
-            <input type="hidden" name="CommandTemplateId" value="{{ command_template.id|default:0 }}">
-            <div class="mb-3">
-              <label class="form-label">Identifier</label>
-              <input type="text" class="form-control" name="Identifier" value="{{ edit_parameter.identifier|default_if_none:'' }}" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Description</label>
-              <input type="text" class="form-control" name="Description" value="{{ edit_parameter.description|default_if_none:'' }}">
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Query</label>
-              <input type="text" class="form-control" name="Query" value="{{ edit_parameter.query|default_if_none:'' }}">
-            </div>
-            <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-              <button type="submit" class="btn btn-primary">Save Parameter</button>
-            </div>
-          </form>
-        </div>
+<!-- Edit Parameter Modal -->
+<div class="modal fade" id="editParameterModal" tabindex="-1" aria-labelledby="editParameterModalLabel"
+  aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="editParameterModalLabel">Edit Template Parameter</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="update_parameter">
+          <input type="hidden" name="ParameterId" value="{{ edit_parameter.id|default_if_none:0 }}">
+          <input type="hidden" name="CommandTemplateId" value="{{ command_template.id|default:0 }}">
+          <div class="mb-3">
+            <label class="form-label">Identifier</label>
+            <input type="text" class="form-control" name="Identifier"
+              value="{{ edit_parameter.identifier|default_if_none:'' }}" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Description</label>
+            <input type="text" class="form-control" name="Description"
+              value="{{ edit_parameter.description|default_if_none:'' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Query</label>
+            <input type="text" class="form-control" name="Query" value="{{ edit_parameter.query|default_if_none:'' }}">
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="submit" class="btn btn-primary">Save Parameter</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>
+</div>
 {% endif %}
 
 <script>

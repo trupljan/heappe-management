@@ -437,3 +437,10 @@ def unassign_project_to_group(request: HttpRequest, group_id: int) -> HttpRespon
     )
     return redirect(f"{reverse('queue_group_detail', kwargs={'group_id': group_id})}?tab=projects")
 
+
+
+@login_required
+def list_jobs(request: HttpRequest) -> HttpResponse:
+    # Placeholder for listing jobs
+    return HttpResponse(status=204)
+

@@ -4,7 +4,7 @@
 {% block content %}
 
 <div class="container">
-    <div class="card mb-4 w-90 mx-auto shadow-sm p-0">
+    <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm p-0">
         <div class="card-header d-flex align-items-center">
             <strong>Available Clusters</strong>
             <div class="ms-auto d-flex align-items-center">
@@ -14,50 +14,52 @@
         </div>
         <div class="">
             {% if clusters %}
-                <div class="table-responsive">
-                    <table class="table table-striped mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th scope="col">ID</th>
-                                <th scope="col">Name</th>
-                                <th scope="col">Description</th>
-                                <th scope="col">Master Node Name</th>
-                                <th scope="col">Domain Name</th>
-                                <th scope="col">Scheduler</th>
-                                <th scope="col">Time Zone</th>
-                                <th scope="col">Port</th>
-                                <th scope="col">Protocol</th>
-                                <th scope="col">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for cluster in clusters %}
-                            <tr>
-                                <td>{{ cluster.id }}</td>
-                                <td>{{ cluster.name }}</td>
-                                <td>{{ cluster.description }}</td>
-                                <td>{{ cluster.master_node_name|default:"-" }}</td>
-                                <td>{{ cluster.domain_name|default:"-" }}</td>
-                                <td>{{ cluster.scheduler_name|default:"-" }}</td>
-                                <td>{{ cluster.time_zone|default:"-" }}</td>
-                                <td>{{ cluster.port|default:"-" }}</td>
-                                <td>{{ cluster.connection_protocol_name|default:"-" }}</td>
+            <div class="table-responsive">
+                <table class="table table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">ID</th>
+                            <th scope="col">Name</th>
+                            <th scope="col" class="d-none d-md-table-cell">Description</th>
+                            <th scope="col" class="d-none d-lg-table-cell">Master Node</th>
+                            <th scope="col" class="d-none d-lg-table-cell">Domain</th>
+                            <th scope="col">Scheduler</th>
+                            <th scope="col" class="d-none d-xl-table-cell">Time Zone</th>
+                            <th scope="col" class="d-none d-xl-table-cell">Port</th>
+                            <th scope="col" class="d-none d-md-table-cell">Protocol</th>
+                            <th scope="col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cluster in clusters %}
+                        <tr>
+                            <td>{{ cluster.id }}</td>
+                            <td>{{ cluster.name }}</td>
+                            <td class="d-none d-md-table-cell">{{ cluster.description }}</td>
+                            <td class="d-none d-lg-table-cell">{{ cluster.master_node_name|default:"-" }}</td>
+                            <td class="d-none d-lg-table-cell">{{ cluster.domain_name|default:"-" }}</td>
+                            <td>{{ cluster.scheduler_name|default:"-" }}</td>
+                            <td class="d-none d-xl-table-cell">{{ cluster.time_zone|default:"-" }}</td>
+                            <td class="d-none d-xl-table-cell">{{ cluster.port|default:"-" }}</td>
+                            <td class="d-none d-md-table-cell">{{ cluster.connection_protocol_name|default:"-" }}</td>
 
-                                <td>
-                                    <a href="{% url 'cluster_detail' cluster.id %}" class="btn btn-sm btn-primary me-1">Detail</a>
-                                    <a href="{% url 'cluster_delete' cluster.id %}"
-                                       class="btn btn-sm btn-danger"
-                                       onclick="return confirm('Are you sure you want to delete this cluster?');">
-                                       Delete
+                            <td>
+                                <div class="d-flex flex-wrap gap-1">
+                                    <a href="{% url 'cluster_detail' cluster.id %}"
+                                        class="btn btn-sm btn-primary">Detail</a>
+                                    <a href="{% url 'cluster_delete' cluster.id %}" class="btn btn-sm btn-danger"
+                                        onclick="return confirm('Are you sure you want to delete this cluster?');">
+                                        Delete
                                     </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             {% else %}
-                <p class="mb-0">No clusters available.</p>
+            <p class="mb-0">No clusters available.</p>
             {% endif %}
         </div>
     </div>
