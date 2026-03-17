@@ -551,6 +551,9 @@ def run_with_retries(instance_name, ports, password):
         #raise Exception("Failed to initialize database after maximum retries.")
 
 
+import subprocess
+
+
 def get_remote_tags(repo_url: str) -> list[str]:
     try:
         result = subprocess.run(
@@ -558,16 +561,16 @@ def get_remote_tags(repo_url: str) -> list[str]:
             capture_output=True, text=True, check=True
         )
 
-        tags = []
-        for line in result.stdout.splitlines():
-            if "refs/tags/" in line:
-                tag = line.split("refs/tags/")[1]
-                if tag.endswith("^{}"):
-                    continue
-                if tag >= "V6.0.0":  # filtr od verze 6.0.0
-                    tags.append(tag)
-        # Sort tags in descending order
-        tags.sort(reverse=True)
+        tags = [
+            line.split("refs/tags/")[1]
+            for line in result.stdout.splitlines()
+            if "refs/tags/" in line and not line.endswith("^{}")
+        ]
+
+        tags = [t for t in tags if t.lower() >= "v6.0.0"]
+
+        tags.sort(key=lambda t: [int(n) for n in t.lower().lstrip('v').split('.') if n.isdigit()], reverse=True)
+
         return tags
 
     except subprocess.CalledProcessError:
@@ -603,7 +606,6 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
     version = "v6.0.0"
     ip = "localhost"
     branches = get_remote_tags(repo_url)
-    branches.sort(key=version.parse, reverse=True)
 
     ports = {}
     action_message = None
