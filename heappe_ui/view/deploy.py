@@ -603,6 +603,7 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
     version = "v6.0.0"
     ip = "localhost"
     branches = get_remote_tags(repo_url)
+    branches.sort(key=version.parse, reverse=True)
 
     ports = {}
     action_message = None
