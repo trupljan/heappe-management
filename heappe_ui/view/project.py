@@ -377,16 +377,12 @@ def job_task_file_view(request: HttpRequest, job_id: int, task_id: int, file_nam
         
         # We now use the relative file path provided in the request
         # In the UI, we should pass the full relative path if possible.
-        # For now, let's assume file_name is the relative path.
-        
+        print(f"DEBUG: job_task_file_view - JobID: {job_id}, TaskID: {task_id}, File: {file_name}")
         body = hp.DownloadFileFromClusterModel(
             session_code=request.session_code,
             submitted_job_info_id=job_id,
             relative_file_path=file_name
         )
-        
-        # Overriding _preload_content=True to get the base64 string directly if parsed
-        # or checking the raw response.
         
         result_b64 = _handle_api_call(
             request,
@@ -396,16 +392,19 @@ def job_task_file_view(request: HttpRequest, job_id: int, task_id: int, file_nam
             silent=True
         )
         
-        if result_b64:
+        if result_b64 is not None:
             try:
-                # result_b64 might be already the string or the model object (though response_type='str')
+                # result_b64 is the base64 string
                 content = base64.b64decode(result_b64).decode('utf-8', errors='replace')
                 return JsonResponse({"status": "OK", "content": content})
             except Exception as e:
+                print(f"DEBUG: Decode error: {str(e)}")
                 return JsonResponse({"status": "ERROR", "message": f"Decode error: {str(e)}"})
         
-        return JsonResponse({"status": "ERROR", "message": "No content returned"})
+        print(f"DEBUG: Download failed for {file_name}")
+        return JsonResponse({"status": "ERROR", "message": "Failed to retrieve file content or file is missing."})
     except Exception as e:
+        print(f"DEBUG: job_task_file_view exception: {str(e)}")
         return JsonResponse({"status": "ERROR", "message": str(e)})
 
 
