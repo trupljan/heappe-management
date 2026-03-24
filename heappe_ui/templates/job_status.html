@@ -64,15 +64,29 @@
           {% if job.state == 1 %}
           <span
             class="badge bg-secondary-subtle text-secondary px-3 py-2 rounded-pill border border-secondary">Configuring</span>
+          {% elif job.state == 2 %}
+          <span class="badge bg-info-subtle text-info px-3 py-2 rounded-pill border border-info">Submitted</span>
+          {% elif job.state == 4 %}
+          <span class="badge bg-primary-subtle text-primary px-3 py-2 rounded-pill border border-primary">Queued</span>
           {% elif job.state == 8 %}
-          <span class="badge bg-warning-subtle text-warning px-3 py-2 rounded-pill border border-warning">Running</span>
+          <span
+            class="badge bg-warning-subtle text-warning px-3 py-2 rounded-pill border border-warning animate-pulse">Running</span>
           {% elif job.state == 16 %}
           <span
             class="badge bg-success-subtle text-success px-3 py-2 rounded-pill border border-success">Finished</span>
-          {% elif job.state == 32 or job.state == 64 %}
-          <span class="badge bg-danger-subtle text-danger px-3 py-2 rounded-pill border border-danger">Terminated</span>
+          {% elif job.state == 32 %}
+          <span class="badge bg-danger-subtle text-danger px-3 py-2 rounded-pill border border-danger">Failed</span>
+          {% elif job.state == 64 %}
+          <span class="badge bg-dark-subtle text-dark px-3 py-2 rounded-pill border border-dark">Canceled</span>
+          {% elif job.state == 128 %}
+          <span class="badge bg-secondary-subtle text-secondary px-3 py-2 rounded-pill border border-secondary">Waiting
+            for Service Account</span>
+          {% elif job.state == 256 %}
+          <span
+            class="badge bg-secondary-subtle text-secondary px-3 py-2 rounded-pill border border-secondary">Deleted</span>
           {% else %}
-          <span class="badge bg-info-subtle text-info px-3 py-2 rounded-pill border border-info">In Queue</span>
+          <span class="badge bg-secondary-subtle text-secondary px-3 py-2 rounded-pill border border-secondary">State
+            #{{ job.state }}</span>
           {% endif %}
         </div>
         <div class="card-body p-4">
@@ -140,7 +154,8 @@
           </div>
           <div class="mb-3">
             <label class="small text-white-50 d-block">Total Time Allocated</label>
-            <span class="fw-bold"><i class="bi bi-clock-history me-1"></i> {{ job.total_allocated_time|default:"0s" }}</span>
+            <span class="fw-bold"><i class="bi bi-clock-history me-1"></i> {{ job.total_allocated_time|default:"0s"
+              }}</span>
           </div>
           <div class="mb-0">
             <label class="small text-white-50 d-block">Task Count</label>
@@ -198,16 +213,24 @@
               </div>
               <div class="col-6 col-md-3">
                 <span class="text-muted d-block uppercase-labels mb-1">Project</span>
-                <span class="fw-semibold text-truncate d-inline-block" style="max-width: 100%;">{{ task.node_type.project.name }}</span>
-                <div class="text-muted extra-small" style="font-size: 0.75rem;">{{ task.node_type.project.accounting_string }}</div>
+                <span class="fw-semibold text-truncate d-inline-block" style="max-width: 100%;">{{
+                  task.node_type.project.name }}</span>
+                <div class="text-muted extra-small" style="font-size: 0.75rem;">{{
+                  task.node_type.project.accounting_string }}</div>
               </div>
               <div class="col-6 col-md-3">
                 <span class="text-muted d-block uppercase-labels mb-1">Status</span>
                 <span class="fw-bold">
-                  {% if task.state == 8 %}<span class="text-warning">Running</span>
+                  {% if task.state == 1 %}<span class="text-secondary">Configuring</span>
+                  {% elif task.state == 2 %}<span class="text-info">Submitted</span>
+                  {% elif task.state == 4 %}<span class="text-primary">Queued</span>
+                  {% elif task.state == 8 %}<span class="text-warning">Running</span>
                   {% elif task.state == 16 %}<span class="text-success">Finished</span>
                   {% elif task.state == 32 %}<span class="text-danger">Failed</span>
-                  {% else %}Pending{% endif %}
+                  {% elif task.state == 64 %}<span class="text-dark">Canceled</span>
+                  {% elif task.state == 128 %}<span class="text-secondary">Waiting</span>
+                  {% elif task.state == 256 %}<span class="text-secondary">Deleted</span>
+                  {% else %}<span class="text-muted">State #{{ task.state }}</span>{% endif %}
                 </span>
               </div>
             </div>
@@ -217,13 +240,15 @@
                 <div class="col-md-6">
                   <label class="uppercase-labels text-muted small d-block mb-1">Command Template</label>
                   <span class="fw-medium">{{ task.node_type.project.command_template.name }}</span>
-                  <div class="text-muted extra-small" style="font-size: 0.75rem;">{{ task.node_type.project.command_template.description }}</div>
+                  <div class="text-muted extra-small" style="font-size: 0.75rem;">{{
+                    task.node_type.project.command_template.description }}</div>
                 </div>
                 <div class="col-md-6">
                   <label class="uppercase-labels text-muted small d-block mb-1">Template Parameters</label>
                   <div class="d-flex flex-wrap gap-2">
                     {% for param in task.node_type.project.command_template.template_parameters %}
-                    <span class="badge bg-white text-dark border fw-normal" title="{{ param.description }}">{{ param.identifier }}</span>
+                    <span class="badge bg-white text-dark border fw-normal" title="{{ param.description }}">{{
+                      param.identifier }}</span>
                     {% empty %}
                     <span class="text-muted italic small">No parameters</span>
                     {% endfor %}

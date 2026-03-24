@@ -84,16 +84,14 @@
           </div>
           <div class="col-md-3 d-flex align-items-center">
             <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" name="IsGeneric" {% if command_template.is_generic
-                %}checked{% endif %} disabled readonly>
+              <input class="form-check-input" type="checkbox" name="IsGeneric" {% if command_template.is_generic %}checked{% endif %} disabled readonly>
               <label class="form-check-label">Is Generic</label>
             </div>
           </div>
           {% if command_template %}
           <div class="col-md-3 d-flex align-items-center">
             <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" name="IsEnabled" {% if command_template.is_enabled
-                %}checked{% endif %}>
+              <input class="form-check-input" type="checkbox" name="IsEnabled" {% if command_template.is_enabled %}checked{% endif %}>
               <label class="form-check-label">Is Enabled</label>
             </div>
           </div>
@@ -110,8 +108,7 @@
               {% for cluster in cluster_list %}
               <optgroup label="Cluster: {{ cluster.grouper }}">
                 {% for node_type in cluster.list %}
-                <option value="{{ node_type.id }}" {% if command_template.cluster_node_type_id|default:0 == node_type.id
-                  %}selected{% endif %}>
+                <option value="{{ node_type.id }}" {% if command_template.cluster_node_type_id|default:0 == node_type.id %}selected{% endif %}>
                   {{ node_type.name }} (Cluster: {{ cluster.grouper }})
                 </option>
                 {% endfor %}
