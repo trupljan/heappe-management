@@ -338,11 +338,11 @@
                                                         <a href="{% url 'submit_job_view' template.id %}" class="btn btn-outline-secondary">Test Job</a>
                                                     {% endif %}
                                                     <button type="button" class="btn btn-outline-danger"
-                                                            onclick="if(confirm('Delete template?')) { document.getElementById('del-templ-{{template.id}}').submit(); }">
+                                                            onclick="if(confirm('Delete template?')) { document.getElementById('del-templ-{{ template.id }}').submit(); }">
                                                         Delete
                                                     </button>
                                                 </div>
-                                                <form id="del-templ-{{template.id}}" method="post" action="{% url 'command_template_delete' template.id %}" class="d-none">
+                                                <form id="del-templ-{{ template.id }}" method="post" action="{% url 'command_template_delete' template.id %}" class="d-none">
                                                     {% csrf_token %}
                                                 </form>
                                             </td>

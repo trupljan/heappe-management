@@ -48,8 +48,7 @@
                     </div>
                     <div class="mb-2">
                         <label class="small text-muted fw-bold text-uppercase d-block">Description</label>
-                        <p class="mb-0 small text-secondary">{{ heappe.description|default:"No description available."
-                            }}</p>
+                        <p class="mb-0 small text-secondary">{{ heappe.description|default:"No description available." }}</p>
                     </div>
                     <div>
                         <label class="small text-muted fw-bold text-uppercase d-block">Version</label>
@@ -210,8 +209,7 @@
                                 <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
                                     <span class="small fw-semibold">{{ state }}</span>
                                     <span class="badge rounded-pill shadow-sm"
-                                        style="background-color: {% if state == 'Configuring' or state == 'WaitingForServiceAccount' or state == 'Deleted' or state == 'Waiting For Service Account' %}#6c757d{% elif state == 'Submitted' %}#0dcaf0{% elif state == 'Queued' %}#0d6efd{% elif state == 'Running' %}#ffc107{% elif state == 'Finished' %}#198754{% elif state == 'Failed' %}#dc3545{% elif state == 'Canceled' %}#343a40{% endif %}; color: {% if state == 'Running' %}black{% else %}white{% endif %}; min-width: 40px;">{{
-                                        count }}</span>
+                                        style="background-color: {% if state == 'Configuring' or state == 'WaitingForServiceAccount' or state == 'Deleted' or state == 'Waiting For Service Account' %}#6c757d{% elif state == 'Submitted' %}#0dcaf0{% elif state == 'Queued' %}#0d6efd{% elif state == 'Running' %}#ffc107{% elif state == 'Finished' %}#198754{% elif state == 'Failed' %}#dc3545{% elif state == 'Canceled' %}#343a40{% endif %}; color: {% if state == 'Running' %}black{% else %}white{% endif %}; min-width: 40px;">{{ count }}</span>
                                 </li>
                                 {% endfor %}
                             </ul>
@@ -253,8 +251,7 @@
                                     <div class="fw-bold">{{ job_item.name }}</div>
                                     <small class="text-muted">ID: #{{ job_item.id }}</small>
                                 </td>
-                                <td><span class="small"><i class="bi bi-person me-1"></i>{{
-                                        job_item.submitter|default:"N/A" }}</span></td>
+                                <td><span class="small"><i class="bi bi-person me-1"></i>{{ job_item.submitter|default:"N/A" }}</span></td>
                                 <td class="small text-muted">{{ job_item.creation_time|default:"N/A" }}</td>
                                 <td>
                                     {% if job_item.state == 1 %}
@@ -276,8 +273,7 @@
                                     {% elif job_item.state == 256 %}
                                     <span class="badge rounded-pill bg-secondary text-white px-3">Deleted</span>
                                     {% else %}
-                                    <span class="badge rounded-pill bg-secondary text-white px-3">State #{{
-                                        job_item.state }}</span>
+                                    <span class="badge rounded-pill bg-secondary text-white px-3">State #{{ job_item.state }}</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-end pe-4">
