@@ -93,8 +93,7 @@
       <h6 class="mb-3">Command Template Parameters</h6>
       {% for param in command_template.template_parameters %}
       <div class="mb-3">
-        <label for="param_{{ param.identifier }}" class="form-label">{{ param.description|default:param.identifier
-          }}</label>
+        <label for="param_{{ param.identifier }}" class="form-label">{{ param.description|default:param.identifier }}</label>
         {% if param.query %}
         <!-- For now, use text input; handle query-based options (e.g., select) in the view by pre-processing options as a list -->
         <input type="text" class="form-control" id="param_{{ param.identifier }}"
