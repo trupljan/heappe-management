@@ -1,6 +1,7 @@
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
 from datetime import datetime
+import base64
 
 
 KEY_TYPE_CHOICES = {
@@ -324,8 +325,19 @@ def job_status_view(request: HttpRequest, job_id: int) -> HttpResponse:
             messages.error(request, f"Job with ID {job_id} not found or access denied.")
             return redirect("dashboard_view")
 
+        # Fetch changed files
+        changed_files = []
+        try:
+            ft_controller = hp.FileTransferApi(request.api_instance)
+            changed_files = ft_controller.heappe_file_transfer_list_changed_files_for_job_get(
+                SessionCode=request.session_code,
+                SubmittedJobInfoId=job_id
+            )
+        except:
+            pass
+
         project = None
-        if hasattr(result, 'project_id') and result.project_id:
+        if hasattr(result, 'project_id') and result.project_id is not None:
             try:
                 mgmt_controller = hp.ManagementApi(request.api_instance)
                 project = mgmt_controller.heappe_management_project_get(Id=result.project_id, SessionCode=request.session_code)
@@ -334,7 +346,8 @@ def job_status_view(request: HttpRequest, job_id: int) -> HttpResponse:
 
         context = {
             "job": _ensure_datetimes(result),
-            "project": project
+            "project": project,
+            "changed_files": changed_files
         }
         return render(request, "job_status.html", context)
     except Exception as e:
@@ -348,56 +361,38 @@ def job_task_file_view(request: HttpRequest, job_id: int, task_id: int, file_nam
     try:
         controller = hp.FileTransferApi(request.api_instance)
         
-        payload_data = {
-            "SubmittedTaskInfoId": task_id,
-            "FileName": file_name
-        }
-        payload = _create_payload(request.session_code, payload_data)
-
-        file_type = 0
-        if file_name == 'stdout':
-            file_type = 2
-        elif file_name == 'stderr':
-            file_type = 3
-
-        # Download Parts Of Job Files From Cluster requires a specific payload.
-        download_payload_data = {
-            "SubmittedJobInfoId": job_id,
-            "TaskFileOffsets": [
-                {
-                    "SubmittedTaskInfoId": task_id,
-                    "RelativePath": file_name,
-                    "Offset": 0,
-                    "FileType": file_type
-                }
-            ]
-        }
-        download_payload = _create_payload(request.session_code, download_payload_data)
-        download_payload["_preload_content"] = True
-
-        result = _handle_api_call(
+        # We now use the relative file path provided in the request
+        # In the UI, we should pass the full relative path if possible.
+        # For now, let's assume file_name is the relative path.
+        
+        body = hp.DownloadFileFromClusterModel(
+            session_code=request.session_code,
+            submitted_job_info_id=job_id,
+            relative_file_path=file_name
+        )
+        
+        # Overriding _preload_content=True to get the base64 string directly if parsed
+        # or checking the raw response.
+        
+        result_b64 = _handle_api_call(
             request,
-            lambda: controller.heappe_file_transfer_download_parts_of_job_files_from_cluster_post(**download_payload),
-            "OK",
-            "FAIL",
+            lambda: controller.heappe_file_transfer_download_file_from_cluster_post(body=body, _preload_content=True),
+            "File downloaded",
+            "Failed to download file",
             silent=True
         )
-
-        content = "No content available."
         
-        # In typical PY4HEAppE SDK, result is a list of JobFileContentExt
-        if isinstance(result, list) and len(result) > 0:
-            if isinstance(result[0], dict):
-                content = result[0].get("Content", "")
-            else:
-                content = getattr(result[0], "content", "")
-                
-        if not content:
-            content = "File is empty or currently not available."
-
-        return JsonResponse({"status": "success", "content": content})
+        if result_b64:
+            try:
+                # result_b64 might be already the string or the model object (though response_type='str')
+                content = base64.b64decode(result_b64).decode('utf-8', errors='replace')
+                return JsonResponse({"status": "OK", "content": content})
+            except Exception as e:
+                return JsonResponse({"status": "ERROR", "message": f"Decode error: {str(e)}"})
+        
+        return JsonResponse({"status": "ERROR", "message": "No content returned"})
     except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+        return JsonResponse({"status": "ERROR", "message": str(e)})
 
 
 
