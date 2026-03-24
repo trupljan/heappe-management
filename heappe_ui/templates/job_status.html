@@ -126,12 +126,11 @@
           <h5 class="fw-bold mb-4"><i class="bi bi-info-square me-2 text-info"></i>Job Specs</h5>
           <div class="mb-3">
             <label class="small text-white-50 d-block">Project</label>
-            <span class="fw-bold text-info">{{ job.sub_project|default:"Global" }}</span>
+            <span class="fw-bold text-info">{{ project.name|default:job.sub_project|default:"Global" }}</span>
           </div>
           <div class="mb-3">
             <label class="small text-white-50 d-block">Total Time Allocated</label>
-            <span class="fw-bold"><i class="bi bi-clock-history me-1"></i> {{ job.total_allocated_time|default:"0s"
-              }}</span>
+            <span class="fw-bold"><i class="bi bi-clock-history me-1"></i> {{ job.total_allocated_time|default:"0s" }}</span>
           </div>
           <div class="mb-0">
             <label class="small text-white-50 d-block">Task Count</label>
@@ -189,10 +188,8 @@
               </div>
               <div class="col-6 col-md-3">
                 <span class="text-muted d-block uppercase-labels mb-1">Project</span>
-                <span class="fw-semibold text-truncate d-inline-block" style="max-width: 100%;">{{
-                  task.node_type.project.name }}</span>
-                <div class="text-muted extra-small" style="font-size: 0.75rem;">{{
-                  task.node_type.project.accounting_string }}</div>
+                <span class="fw-semibold text-truncate d-inline-block" style="max-width: 100%;">{{ task.node_type.project.name }}</span>
+                <div class="text-muted extra-small" style="font-size: 0.75rem;">{{ task.node_type.project.accounting_string }}</div>
               </div>
               <div class="col-6 col-md-3">
                 <span class="text-muted d-block uppercase-labels mb-1">Status</span>
@@ -210,15 +207,13 @@
                 <div class="col-md-6">
                   <label class="uppercase-labels text-muted small d-block mb-1">Command Template</label>
                   <span class="fw-medium">{{ task.node_type.project.command_template.name }}</span>
-                  <div class="text-muted extra-small" style="font-size: 0.75rem;">{{
-                    task.node_type.project.command_template.description }}</div>
+                  <div class="text-muted extra-small" style="font-size: 0.75rem;">{{ task.node_type.project.command_template.description }}</div>
                 </div>
                 <div class="col-md-6">
                   <label class="uppercase-labels text-muted small d-block mb-1">Template Parameters</label>
                   <div class="d-flex flex-wrap gap-2">
                     {% for param in task.node_type.project.command_template.template_parameters %}
-                    <span class="badge bg-white text-dark border fw-normal" title="{{ param.description }}">{{
-                      param.identifier }}</span>
+                    <span class="badge bg-white text-dark border fw-normal" title="{{ param.description }}">{{ param.identifier }}</span>
                     {% empty %}
                     <span class="text-muted italic small">No parameters</span>
                     {% endfor %}
@@ -276,6 +271,24 @@
         <div class="modal-footer bg-dark border-top border-secondary">
           <div class="me-auto text-white-50 small" id="fileContentInfo"></div>
           <button type="button" class="btn btn-sm btn-outline-light" data-bs-dismiss="modal">Close Viewer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mt-5 pt-5 border-top">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h3 class="fw-bold mb-0 text-muted">Raw Response Data</h3>
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+        data-bs-target="#rawResponseCollapse">
+        <i class="bi bi-eye me-1"></i> Toggle Data
+      </button>
+    </div>
+    <div class="collapse" id="rawResponseCollapse">
+      <div class="card border-0 shadow-sm rounded-4 bg-dark text-light">
+        <div class="card-body p-0">
+          <pre class="m-0 p-4"
+            style="font-size: 0.8rem; line-height: 1.4; max-height: 600px; overflow-y: auto;">{{ job.to_str }}</pre>
         </div>
       </div>
     </div>

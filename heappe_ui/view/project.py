@@ -1,5 +1,6 @@
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
+from datetime import datetime
 
 
 KEY_TYPE_CHOICES = {
@@ -10,6 +11,37 @@ KEY_TYPE_CHOICES = {
     5: "nistP521",
     6: "Ed25519",
 }
+
+
+
+def _ensure_datetimes(obj):
+    """
+    Recursively check for timestamp strings and convert them to datetime objects
+    if the SDK failed to do so (e.g. if python-dateutil is missing).
+    """
+    if not obj:
+        return obj
+    
+    # Common HEAppE date fields
+    fields = ['creation_time', 'submit_time', 'start_time', 'end_time']
+    for field in fields:
+        val = getattr(obj, field, None)
+        if isinstance(val, str) and val.strip():
+            try:
+                # Python 3.11+ handles the 'Z' suffix correctly in fromisoformat.
+                # If on older Python, we'd need to replace 'Z' with '+00:00'.
+                # Given we're on 3.12, this should be fine.
+                setattr(obj, field, datetime.fromisoformat(val.replace('Z', '+00:00')))
+            except (ValueError, TypeError):
+                pass
+                
+    # Recurse into tasks if they exist
+    tasks = getattr(obj, 'tasks', None)
+    if tasks and isinstance(tasks, list):
+        for task in tasks:
+            _ensure_datetimes(task)
+            
+    return obj
 
 
 @login_required
@@ -292,8 +324,17 @@ def job_status_view(request: HttpRequest, job_id: int) -> HttpResponse:
             messages.error(request, f"Job with ID {job_id} not found or access denied.")
             return redirect("dashboard_view")
 
+        project = None
+        if hasattr(result, 'project_id') and result.project_id:
+            try:
+                mgmt_controller = hp.ManagementApi(request.api_instance)
+                project = mgmt_controller.heappe_management_project_get(Id=result.project_id, SessionCode=request.session_code)
+            except:
+                pass
+
         context = {
-            "job": result
+            "job": _ensure_datetimes(result),
+            "project": project
         }
         return render(request, "job_status.html", context)
     except Exception as e:
