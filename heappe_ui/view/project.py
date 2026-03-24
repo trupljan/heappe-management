@@ -216,25 +216,32 @@ def submit_job_view(request, command_template_id:int):
 
             controller = hp.JobManagementApi(request.api_instance)
             payload = _create_payload(request.session_code, payload_data)
+            payload["_preload_content"] = True
+            
             result = _handle_api_call(
                 request,
                 lambda: controller.heappe_job_management_create_job_post(**payload),
                 "Job created successfully!",
                 "Job failed to create"
             )
+
             if result:
+                # After creation, we must SUBMIT the job
                 payload_data = {
-                      "CreatedJobInfoId": result['Id']
-                    }
+                    "SubmittedJobInfoId": result.id
+                }
                 payload = _create_payload(request.session_code, payload_data)
+                payload["_preload_content"] = True
+                
                 result = _handle_api_call(
                     request,
                     lambda: controller.heappe_job_management_submit_job_put(**payload),
                     "Job submitted successfully!",
                     "Job failed to submit"
                 )
+                
                 if result:
-                    return redirect("job_status_view", job_id=result['Id'])
+                    return redirect("job_status_view", job_id=result.id)
 
     context = {
         "project": project,
@@ -306,20 +313,26 @@ def job_task_file_view(request: HttpRequest, job_id: int, task_id: int, file_nam
         }
         payload = _create_payload(request.session_code, payload_data)
 
-        # Download Parts Of Job Files From Cluster requires a slightly different payload.
-        # It takes a list of requested files
+        file_type = 0
+        if file_name == 'stdout':
+            file_type = 2
+        elif file_name == 'stderr':
+            file_type = 3
+
+        # Download Parts Of Job Files From Cluster requires a specific payload.
         download_payload_data = {
             "SubmittedJobInfoId": job_id,
-            "PartsOfJobFiles": [
+            "TaskFileOffsets": [
                 {
                     "SubmittedTaskInfoId": task_id,
                     "RelativePath": file_name,
                     "Offset": 0,
-                    "FileType": 0 # Unknown? stdout might just be a relative path
+                    "FileType": file_type
                 }
             ]
         }
         download_payload = _create_payload(request.session_code, download_payload_data)
+        download_payload["_preload_content"] = True
 
         result = _handle_api_call(
             request,
