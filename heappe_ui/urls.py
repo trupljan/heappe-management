@@ -53,7 +53,7 @@ urlpatterns = [
     path('projects/', project.project_list, name='project_list'),
     path('submit-test-job/<int:command_template_id>', project.submit_job_view, name="submit_job_view"),
     path('job-status/<int:job_id>', project.job_status_view, name="job_status_view"),
-    path('job-status/<int:job_id>/task/<int:task_id>/file/<path:file_name>/', project.job_task_file_view, name="job_task_file_view"),
+    path('job-task-file/<int:job_id>/<int:task_id>', project.job_task_file_view, name="job_task_file_view"),
 
     # Command Templates
     path('command-templates/<int:project_id>/new/', command_template.command_template_create, name='command_template_create'),

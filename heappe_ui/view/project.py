@@ -371,8 +371,12 @@ def job_status_view(request: HttpRequest, job_id: int) -> HttpResponse:
 from django.http import JsonResponse
 
 @login_required
-def job_task_file_view(request: HttpRequest, job_id: int, task_id: int, file_name: str) -> JsonResponse:
+def job_task_file_view(request: HttpRequest, job_id: int, task_id: int) -> JsonResponse:
     try:
+        file_name = request.GET.get('file_name')
+        if not file_name:
+            return JsonResponse({"status": "ERROR", "message": "Missing file_name parameter"})
+
         controller = hp.FileTransferApi(request.api_instance)
         
         # We now use the relative file path provided in the request
