@@ -80,19 +80,22 @@ def dashboard_view(request):
         print(f"Error fetching queues: {e}")
 
     # Get job stats
+    all_states = [
+        'Configuring', 'Submitted', 'Queued', 'Running', 'Finished',
+        'Failed', 'Canceled', 'WaitingForServiceAccount', 'Deleted'
+    ]
+    job_counts = {s: 0 for s in all_states}
     try:
         job_stats = jr_controller.heappe_job_reporting_jobs_state_agregation_report_get(SessionCode=request.session_code)
-        all_states = [
-            'Configuring', 'Submitted', 'Queued', 'Running', 'Finished',
-            'Failed', 'Canceled', 'WaitingForServiceAccount', 'Deleted'
-        ]
-        job_counts = {s: 0 for s in all_states}
         for js in job_stats:
-            job_counts[js.job_state_name] = js.count
+            state_key = js.job_state_name.replace(" ", "")
+            job_counts[state_key] = js.count
         context["job_counts"] = job_counts
         context["total_jobs"] = sum(job_counts.values())
     except Exception as e:
         print(f"Error fetching job stats: {e}")
+        context["job_counts"] = job_counts
+        context["total_jobs"] = 0
 
     # Get detailed job report
     try:
