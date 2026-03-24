@@ -46,7 +46,8 @@
                     </div>
                     <div class="mb-2">
                         <label class="small text-muted fw-bold text-uppercase d-block">Description</label>
-                        <p class="mb-0 small text-secondary">{{ heappe.description|default:"No description available." }}</p>
+                        <p class="mb-0 small text-secondary">{{ heappe.description|default:"No description available."
+                            }}</p>
                     </div>
                     <div>
                         <label class="small text-muted fw-bold text-uppercase d-block">Version</label>
@@ -62,15 +63,18 @@
                     </h5>
                 </div>
                 <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center p-3 mb-4 rounded-3 {% if health.is_healthy %}bg-success-subtle border border-success-subtle{% else %}bg-danger-subtle border border-danger-subtle{% endif %}">
+                    <div
+                        class="d-flex justify-content-between align-items-center p-3 mb-4 rounded-3 {% if health.is_healthy %}bg-success-subtle border border-success-subtle{% else %}bg-danger-subtle border border-danger-subtle{% endif %}">
                         <div class="d-flex align-items-center">
-                            <i class="bi {% if health.is_healthy %}bi-check-circle-fill text-success{% else %}bi-exclamation-triangle-fill text-danger{% endif %} fs-4 me-3"></i>
+                            <i
+                                class="bi {% if health.is_healthy %}bi-check-circle-fill text-success{% else %}bi-exclamation-triangle-fill text-danger{% endif %} fs-4 me-3"></i>
                             <div>
                                 <h6 class="mb-0 fw-bold">Overall Status</h6>
-                                <small class="text-muted">v{{ health.version|default:"N/A" }}</small>
+                                <small class="text-muted">{{ health.version|default:"N/A" }}</small>
                             </div>
                         </div>
-                        <span class="badge rounded-pill {% if health.is_healthy %}bg-success{% else %}bg-danger{% endif %} px-3 py-2">
+                        <span
+                            class="badge rounded-pill {% if health.is_healthy %}bg-success{% else %}bg-danger{% endif %} px-3 py-2">
                             {% if health.is_healthy %}Healthy{% else %}Unhealthy{% endif %}
                         </span>
                     </div>
@@ -79,15 +83,18 @@
                     <div class="vstack gap-2">
                         <div class="d-flex justify-content-between align-items-center p-2 border rounded bg-light">
                             <span class="small fw-semibold"><i class="bi bi-database me-2"></i>Database</span>
-                            <span class="badge {% if health.component.database.is_healthy %}bg-success{% else %}bg-danger{% endif %}">
+                            <span
+                                class="badge {% if health.component.database.is_healthy %}bg-success{% else %}bg-danger{% endif %}">
                                 {% if health.component.database.is_healthy %}Online{% else %}Offline{% endif %}
                             </span>
                         </div>
 
                         <div class="border rounded p-2 bg-light">
                             <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="small fw-semibold"><i class="bi bi-shield-lock me-2"></i>Security Vault</span>
-                                <span class="badge {% if health.component.vault.is_healthy %}bg-success{% else %}bg-danger{% endif %}">
+                                <span class="small fw-semibold"><i class="bi bi-shield-lock me-2"></i>Security
+                                    Vault</span>
+                                <span
+                                    class="badge {% if health.component.vault.is_healthy %}bg-success{% else %}bg-danger{% endif %}">
                                     {% if health.component.vault.is_healthy %}Active{% else %}Error{% endif %}
                                 </span>
                             </div>
@@ -99,7 +106,8 @@
                                     <div class="col-6">
                                         <div class="d-flex justify-content-between pe-2">
                                             <span class="text-muted">{{ key|title }}:</span>
-                                            <span class="fw-bold {% if key == 'initialized' and value %}text-success{% elif key == 'initialized' and not value %}text-danger{% else %}text-dark{% endif %}">
+                                            <span
+                                                class="fw-bold {% if key == 'initialized' and value %}text-success{% elif key == 'initialized' and not value %}text-danger{% else %}text-dark{% endif %}">
                                                 {{ value|yesno:"True,False" }}
                                             </span>
                                         </div>
@@ -121,12 +129,14 @@
         <div class="col-lg-8">
             <div class="row g-4 mb-4">
                 <div class="col-md-3">
-                    <div class="card stat-card shadow-sm h-100 p-3 text-center position-relative overflow-hidden" onclick="location.href='{% url 'cluster_list' %}'" style="cursor: pointer;">
+                    <div class="card stat-card shadow-sm h-100 p-3 text-center position-relative overflow-hidden"
+                        onclick="location.href='{% url 'cluster_list' %}'" style="cursor: pointer;">
                         <div class="card-body-content d-flex flex-column h-100">
                             <h6 class="text-muted small fw-bold text-uppercase">Clusters</h6>
                             <div class="display-6 fw-bold text-primary my-2">{{ clusters|length }}</div>
                             <div class="mt-auto">
-                                <span class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm">Manage <i class="bi bi-arrow-right ms-1"></i></span>
+                                <span class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm">Manage <i
+                                        class="bi bi-arrow-right ms-1"></i></span>
                             </div>
                         </div>
                         <i class="bi bi-server card-bg-icon text-primary"></i>
@@ -134,12 +144,14 @@
                 </div>
 
                 <div class="col-md-3">
-                    <div class="card stat-card shadow-sm h-100 p-3 text-center position-relative overflow-hidden" onclick="location.href='{% url 'project_list' %}'" style="cursor: pointer;">
+                    <div class="card stat-card shadow-sm h-100 p-3 text-center position-relative overflow-hidden"
+                        onclick="location.href='{% url 'project_list' %}'" style="cursor: pointer;">
                         <div class="card-body-content d-flex flex-column h-100">
                             <h6 class="text-muted small fw-bold text-uppercase">Projects</h6>
                             <div class="display-6 fw-bold text-success my-2">{{ projects|length|default:"0" }}</div>
                             <div class="mt-auto">
-                                <span class="btn btn-sm btn-success rounded-pill px-3 shadow-sm">Manage <i class="bi bi-arrow-right ms-1"></i></span>
+                                <span class="btn btn-sm btn-success rounded-pill px-3 shadow-sm">Manage <i
+                                        class="bi bi-arrow-right ms-1"></i></span>
                             </div>
                         </div>
                         <i class="bi bi-people card-bg-icon text-success"></i>
@@ -147,12 +159,14 @@
                 </div>
 
                 <div class="col-md-3">
-                    <div class="card stat-card shadow-sm h-100 p-3 text-center position-relative overflow-hidden" onclick="location.href='{% url 'queues_view' %}'" style="cursor: pointer;">
+                    <div class="card stat-card shadow-sm h-100 p-3 text-center position-relative overflow-hidden"
+                        onclick="location.href='{% url 'queues_view' %}'" style="cursor: pointer;">
                         <div class="card-body-content d-flex flex-column h-100">
                             <h6 class="text-muted small fw-bold text-uppercase">Queues</h6>
                             <div class="display-6 fw-bold text-info my-2">{{ queues|length|default:"0" }}</div>
                             <div class="mt-auto">
-                                <span class="btn btn-sm btn-info text-white rounded-pill px-3 shadow-sm">Manage <i class="bi bi-arrow-right ms-1"></i></span>
+                                <span class="btn btn-sm btn-info text-white rounded-pill px-3 shadow-sm">Manage <i
+                                        class="bi bi-arrow-right ms-1"></i></span>
                             </div>
                         </div>
                         <i class="bi bi-list-task card-bg-icon text-info"></i>
@@ -160,7 +174,8 @@
                 </div>
 
                 <div class="col-md-3">
-                    <div class="card stat-card shadow-sm h-100 p-3 text-center bg-light-subtle position-relative overflow-hidden">
+                    <div
+                        class="card stat-card shadow-sm h-100 p-3 text-center bg-light-subtle position-relative overflow-hidden">
                         <div class="card-body-content d-flex flex-column h-100">
                             <h6 class="text-muted small fw-bold text-uppercase">Total Jobs</h6>
                             <div class="display-6 fw-bold text-warning my-2">{{ total_jobs|default:"0" }}</div>
@@ -204,10 +219,13 @@
         <div class="col-12 mt-4">
             <div class="card shadow-sm border-0 rounded-3">
                 <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0 fw-bold"><i class="bi bi-list-task me-2 text-primary"></i>Recent Jobs Activity</h5>
+                    <h5 class="card-title mb-0 fw-bold"><i class="bi bi-list-task me-2 text-primary"></i>Recent Jobs
+                        Activity</h5>
                     <form method="get" class="d-flex gap-2">
-                        <input type="datetime-local" class="form-control form-control-sm" name="time_from" value="{{ time_from }}">
-                        <input type="datetime-local" class="form-control form-control-sm" name="time_to" value="{{ time_to }}">
+                        <input type="datetime-local" class="form-control form-control-sm" name="time_from"
+                            value="{{ time_from }}">
+                        <input type="datetime-local" class="form-control form-control-sm" name="time_to"
+                            value="{{ time_to }}">
                         <button type="submit" class="btn btn-primary btn-sm px-3 shadow-sm">Filter</button>
                     </form>
                 </div>
@@ -229,7 +247,8 @@
                                     <div class="fw-bold">{{ job_item.name }}</div>
                                     <small class="text-muted">ID: #{{ job_item.id }}</small>
                                 </td>
-                                <td><span class="small"><i class="bi bi-person me-1"></i>{{ job_item.submitter|default:"N/A" }}</span></td>
+                                <td><span class="small"><i class="bi bi-person me-1"></i>{{
+                                        job_item.submitter|default:"N/A" }}</span></td>
                                 <td class="small text-muted">{{ job_item.creation_time|default:"N/A" }}</td>
                                 <td>
                                     {% if job_item.state == 1 %}
@@ -251,16 +270,20 @@
                                     {% elif job_item.state == 256 %}
                                     <span class="badge rounded-pill bg-secondary px-3">Deleted</span>
                                     {% else %}
-                                    <span class="badge rounded-pill bg-secondary px-3">State #{{ job_item.state }}</span>
+                                    <span class="badge rounded-pill bg-secondary px-3">State #{{ job_item.state
+                                        }}</span>
                                     {% endif %}
                                 </td>
                                 <td class="text-end pe-4">
-                                    <button class="btn btn-outline-primary btn-sm border-2 fw-bold" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}">View Details</button>
+                                    <button class="btn btn-outline-primary btn-sm border-2 fw-bold"
+                                        data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}">View
+                                        Details</button>
                                 </td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5" class="text-center py-5 text-muted small">No jobs found within the selected timeframe.</td>
+                                <td colspan="5" class="text-center py-5 text-muted small">No jobs found within the
+                                    selected timeframe.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -272,20 +295,26 @@
                     <nav aria-label="Job list navigation">
                         <ul class="pagination pagination-sm justify-content-center mb-0">
                             {% if page_obj.has_previous %}
-                            <li class="page-item"><a class="page-link shadow-none" href="?page={{ page_obj.previous_page_number }}&time_from={{ time_from }}&time_to={{ time_to }}">«</a></li>
+                            <li class="page-item"><a class="page-link shadow-none"
+                                    href="?page={{ page_obj.previous_page_number }}&time_from={{ time_from }}&time_to={{ time_to }}">«</a>
+                            </li>
                             {% endif %}
 
                             {% for num in page_obj.paginator.page_range %}
-                                {% if num == page_obj.number %}
-                                <li class="page-item active"><span class="page-link border-0">{{ num }}</span></li>
-                                {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
-                                <li class="page-item"><a class="page-link shadow-none" href="?page={{ num }}&time_from={{ time_from }}&time_to={{ time_to }}">{{ num }}</a></li>
+                            {% if num == page_obj.number %}
+                            <li class="page-item active"><span class="page-link border-0">{{ num }}</span></li>
+                            {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %} <li
+                                class="page-item"><a class="page-link shadow-none"
+                                    href="?page={{ num }}&time_from={{ time_from }}&time_to={{ time_to }}">{{ num }}</a>
+                                </li>
                                 {% endif %}
-                            {% endfor %}
+                                {% endfor %}
 
-                            {% if page_obj.has_next %}
-                            <li class="page-item"><a class="page-link shadow-none" href="?page={{ page_obj.next_page_number }}&time_from={{ time_from }}&time_to={{ time_to }}">»</a></li>
-                            {% endif %}
+                                {% if page_obj.has_next %}
+                                <li class="page-item"><a class="page-link shadow-none"
+                                        href="?page={{ page_obj.next_page_number }}&time_from={{ time_from }}&time_to={{ time_to }}">»</a>
+                                </li>
+                                {% endif %}
                         </ul>
                     </nav>
                 </div>
@@ -307,8 +336,20 @@
                 <div class="row g-3 mb-4">
                     <div class="col-md-4">
                         <div class="bg-white p-3 rounded-3 shadow-sm h-100 text-center">
-                            <small class="text-muted d-block text-uppercase fw-bold mb-1">State Code</small>
-                            <span class="badge bg-primary text-white">#{{ job_item.state }}</span>
+                            <small class="text-muted d-block text-uppercase fw-bold mb-1">Status</small>
+                            <span
+                                class="badge rounded-pill {% if job_item.state == 1 %}bg-secondary{% elif job_item.state == 2 %}bg-info text-dark{% elif job_item.state == 4 %}bg-primary{% elif job_item.state == 8 %}bg-warning text-dark{% elif job_item.state == 16 %}bg-success{% elif job_item.state == 32 %}bg-danger{% elif job_item.state == 64 %}bg-dark{% else %}bg-secondary{% endif %}">
+                                {% if job_item.state == 1 %}Configuring
+                                {% elif job_item.state == 2 %}Submitted
+                                {% elif job_item.state == 4 %}Queued
+                                {% elif job_item.state == 8 %}Running
+                                {% elif job_item.state == 16 %}Finished
+                                {% elif job_item.state == 32 %}Failed
+                                {% elif job_item.state == 64 %}Canceled
+                                {% elif job_item.state == 128 %}Waiting
+                                {% elif job_item.state == 256 %}Deleted
+                                {% else %}State #{{ job_item.state }}{% endif %}
+                            </span>
                         </div>
                     </div>
                     <div class="col-md-4">
@@ -331,16 +372,29 @@
                     <div class="list-group-item d-flex justify-content-between align-items-center border-bottom py-3">
                         <div>
                             <div class="fw-bold">{{ task.name }}</div>
-                            <small class="text-muted">ID: {{ task.id }} | Usage: {{ task.usage|default:"0" }}%</small>
+                            <small class="text-muted">ID: {{ task.id }} | Usage: {{ task.usage|default:"0" }}</small>
                         </div>
-                        <span class="badge rounded-pill bg-light text-dark border px-3">{{ task.state }}</span>
+                        <span
+                            class="badge rounded-pill {% if task.state == 1 %}bg-secondary{% elif task.state == 2 %}bg-info text-dark{% elif task.state == 4 %}bg-primary{% elif task.state == 8 %}bg-warning text-dark{% elif task.state == 16 %}bg-success{% elif task.state == 32 %}bg-danger{% elif task.state == 64 %}bg-dark{% else %}bg-secondary{% endif %} px-3">
+                            {% if task.state == 1 %}Configuring
+                            {% elif task.state == 2 %}Submitted
+                            {% elif task.state == 4 %}Queued
+                            {% elif task.state == 8 %}Running
+                            {% elif task.state == 16 %}Finished
+                            {% elif task.state == 32 %}Failed
+                            {% elif task.state == 64 %}Canceled
+                            {% elif task.state == 128 %}Waiting
+                            {% elif task.state == 256 %}Deleted
+                            {% else %}State #{{ task.state }}{% endif %}
+                        </span>
                     </div>
                     {% endfor %}
                 </div>
             </div>
             <div class="modal-footer bg-white border-0 py-3 px-4">
                 <button type="button" class="btn btn-secondary fw-bold px-4" data-bs-dismiss="modal">Close</button>
-                <a href="{% url 'job_status_view' job_item.id %}" class="btn btn-primary fw-bold px-4 shadow-sm">Open Full Logs</a>
+                <a href="{% url 'job_status_view' job_item.id %}" class="btn btn-primary fw-bold px-4 shadow-sm">Open
+                    Full Logs</a>
             </div>
         </div>
     </div>
@@ -349,7 +403,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', function () {
         const jobsStateCtx = document.getElementById('jobsStateChart').getContext('2d');
         new Chart(jobsStateCtx, {
             type: 'bar',
@@ -358,30 +412,30 @@
                 datasets: [{
                     label: 'Count',
                     data: [
-                        {{ job_counts.Configuring|default:0 }},
-                        {{ job_counts.Submitted|default:0 }},
-                        {{ job_counts.Queued|default:0 }},
-                        {{ job_counts.Running|default:0 }},
-                        {{ job_counts.Finished|default:0 }},
-                        {{ job_counts.Failed|default:0 }},
-                        {{ job_counts.Canceled|default:0 }},
-                        {{ job_counts.WaitingForServiceAccount|default:0 }},
-                        {{ job_counts.Deleted|default:0 }}
+                        {{ job_counts.Configuring |default: 0 }},
+                {{ job_counts.Submitted |default: 0 }},
+                        {{ job_counts.Queued |default: 0 }},
+        {{ job_counts.Running |default: 0 }},
+        {{ job_counts.Finished |default: 0 }},
+        {{ job_counts.Failed |default: 0 }},
+        {{ job_counts.Canceled |default: 0 }},
+        {{ job_counts.WaitingForServiceAccount |default: 0 }},
+        {{ job_counts.Deleted |default: 0 }}
                     ],
-                    backgroundColor: ['#6c757d', '#0dcaf0', '#0d6efd', '#ffc107', '#198754', '#dc3545', '#343a40', '#adb5bd', '#212529'],
-                    borderRadius: 5,
-                    borderWidth: 0
+        backgroundColor: ['#6c757d', '#0dcaf0', '#0d6efd', '#ffc107', '#198754', '#dc3545', '#343a40', '#adb5bd', '#212529'],
+        borderRadius: 5,
+        borderWidth: 0
                 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { precision: 0 } },
-                    x: { grid: { display: false } }
-                }
-            }
+        options: {
+        responsive: true,
+        ntainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+            y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { precision: 0 } },
+            x: { grid: { display: false } }
+        }
+    }
         });
     });
 </script>
