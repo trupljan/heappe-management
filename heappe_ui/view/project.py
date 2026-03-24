@@ -261,7 +261,7 @@ def submit_job_view(request, command_template_id:int):
             if result:
                 # After creation, we must SUBMIT the job
                 payload_data = {
-                    "SubmittedJobInfoId": result.id
+                    "CreatedJobInfoId": result.id
                 }
                 payload = _create_payload(request.session_code, payload_data)
                 payload["_preload_content"] = True
@@ -315,7 +315,7 @@ def job_status_view(request: HttpRequest, job_id: int) -> HttpResponse:
     try:
         result = _handle_api_call(
             request,
-            lambda: controller.heappe_job_management_current_info_for_job_get(SubmittedJobInfoId=job_id, SessionCode=request.session_code),
+            lambda: controller.heappe_job_management_current_info_for_job_get(SubmittedJobInfoId=job_id, SessionCode=request.session_code, _preload_content=True),
             "OK",
             "FAIL",
             silent=True
@@ -331,18 +331,32 @@ def job_status_view(request: HttpRequest, job_id: int) -> HttpResponse:
             ft_controller = hp.FileTransferApi(request.api_instance)
             changed_files = ft_controller.heappe_file_transfer_list_changed_files_for_job_get(
                 SessionCode=request.session_code,
-                SubmittedJobInfoId=job_id
+                SubmittedJobInfoId=job_id,
+                _preload_content=True
             )
-        except:
-            pass
+        except Exception as e:
+            print(f"DEBUG: File listing failed: {str(e)}")
 
         project = None
-        if hasattr(result, 'project_id') and result.project_id is not None:
+        project_id = getattr(result, 'project_id', None)
+        
+        # If not at top level, try to find it in tasks
+        if project_id is None and hasattr(result, 'tasks') and result.tasks:
+            for t in result.tasks:
+                nt = getattr(t, 'node_type', None)
+                if nt:
+                    p = getattr(nt, 'project', None)
+                    if p:
+                        project_id = getattr(p, 'id', None)
+                        if project_id is not None:
+                            break
+        
+        if project_id is not None:
             try:
                 mgmt_controller = hp.ManagementApi(request.api_instance)
-                project = mgmt_controller.heappe_management_project_get(Id=result.project_id, SessionCode=request.session_code)
-            except:
-                pass
+                project = mgmt_controller.heappe_management_project_get(Id=project_id, SessionCode=request.session_code, _preload_content=True)
+            except Exception as e:
+                print(f"DEBUG: Project fetch failed: {str(e)}")
 
         context = {
             "job": _ensure_datetimes(result),
