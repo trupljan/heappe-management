@@ -88,7 +88,8 @@ def dashboard_view(request):
     try:
         job_stats = jr_controller.heappe_job_reporting_jobs_state_agregation_report_get(SessionCode=request.session_code)
         for js in job_stats:
-            state_key = js.job_state_name.replace(" ", "")
+            raw_name = js.job_state_name or "Unknown"
+            state_key = raw_name.replace(" ", "")
             job_counts[state_key] = js.count
         context["job_counts"] = job_counts
         context["total_jobs"] = sum(job_counts.values())
@@ -98,6 +99,8 @@ def dashboard_view(request):
         context["total_jobs"] = 0
 
     # Get detailed job report
+    context["job_details"] = []
+    context["page_obj"] = None
     try:
         # Set default time range: TimeTo=Now, TimeFrom=Now-1day
         time_to = request.GET.get('time_to', datetime.now().isoformat())
