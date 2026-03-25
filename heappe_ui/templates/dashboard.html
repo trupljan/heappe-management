@@ -1,3 +1,8 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
 <style>
     .dashboard-container {
         padding: 2rem;
@@ -21,563 +26,344 @@
     }
 
     .stat-card::before {
-        content: '';
+        content: "";
         position: absolute;
         top: 0;
         left: 0;
         width: 100%;
         height: 4px;
-        background: var(--primary-color);
-        opacity: 0;
-        transition: opacity 0.3s ease;
+        background: var(--card-accent, #4361ee);
     }
 
-    .stat-card:hover::before {
-        opacity: 1;
-    }
-
-    .stat-icon-wrapper {
-        width: 48px;
-        height: 48px;
-        border-radius: 12px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 1.25rem;
-        font-size: 1.5rem;
-    }
-
-    .card-bg-icon {
-        opacity: 0.03;
-        font-size: 8rem;
-        position: absolute;
-        bottom: -20px;
-        right: -10px;
-        z-index: 0;
-        transform: rotate(-15deg);
-        pointer-events: none;
-    }
-
-    .health-indicator {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        display: inline-block;
-        margin-right: 8px;
-    }
-
-    .health-pulse {
-        box-shadow: 0 0 0 rgba(46, 196, 182, 0.4);
-        animation: pulse-green 2s infinite;
-    }
-
-    @keyframes pulse-green {
-        0% {
-            box-shadow: 0 0 0 0px rgba(46, 196, 182, 0.4);
-        }
-
-        70% {
-            box-shadow: 0 0 0 10px rgba(46, 196, 182, 0);
-        }
-
-        100% {
-            box-shadow: 0 0 0 0px rgba(46, 196, 182, 0);
-        }
-    }
-
-    .table-modern {
-        border-collapse: separate;
-        border-spacing: 0 8px;
-    }
-
-    .table-modern tr {
-        background-color: #ffffff;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-        transition: transform 0.2s ease;
-    }
-
-    .table-modern tr:hover {
-        transform: scale(1.005);
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    }
-
-    .table-modern td,
-    .table-modern th {
-        border: none;
-        padding: 1.25rem 1rem;
-    }
-
-    .table-modern td:first-child {
-        border-radius: 12px 0 0 12px;
-    }
-
-    .table-modern td:last-child {
-        border-radius: 0 12px 12px 0;
-    }
-
-    .status-badge {
-        font-size: 0.75rem;
-        padding: 0.5em 1em;
-        letter-spacing: 0.025em;
-        text-transform: uppercase;
-        font-weight: 700;
-    }
-
-    .filter-bar {
-        background: #ffffff;
-        border-radius: 12px;
-        padding: 1rem;
-        margin-bottom: 2rem;
-        box-shadow: var(--card-shadow);
+    .glass-card {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 1.25rem;
     }
 
     .chart-container {
+        height: 350px;
         position: relative;
-        height: 300px;
+    }
+
+    .hpc-table thead th {
+        background: #f8fafc;
+        border-bottom: 2px solid #e2e8f0;
+        color: #64748b;
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        padding: 1rem 1.5rem;
+    }
+
+    .hpc-table tbody td {
+        padding: 1rem 1.5rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #f1f5f9;
+        font-size: 0.925rem;
+    }
+
+    .btn-action {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+    .bg-primary-soft {
+        background-color: rgba(67, 97, 238, 0.1);
+    }
+
+    .pulse-indicator {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        background: #10b981;
+        border-radius: 50%;
+        margin-right: 8px;
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+        70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
     }
 </style>
 
 <div class="dashboard-container">
-    <div class="row g-4">
-        <!-- Sidebar Info Section -->
-        <div class="col-xl-3 col-lg-4">
-            <!-- HEAppE Info -->
-            <div class="card p-4 mb-4 border-0">
-                <div class="d-flex align-items-center mb-4">
-                    <div class="stat-icon-wrapper bg-primary text-white mb-0 me-3">
-                        <i class="bi bi-info-circle"></i>
-                    </div>
-                    <h5 class="mb-0">HEAppE Info</h5>
-                </div>
-                <div class="space-y-4">
-                    <div class="mb-3">
-                        <label class="small text-muted fw-bold text-uppercase d-block mb-1">Instance Name</label>
-                        <span class="fs-5 fw-bold">{{heappe.name|default:"N/A"}}</span>
-                    </div>
-                    <div class="mb-3">
-                        <label class="small text-muted fw-bold text-uppercase d-block mb-1">Description</label>
- <p class="mb-0 small text-secondary leading-relaxed">{{heappe.description|default:"No description available."}}</p>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                        <span class="small text-muted fw-bold text-uppercase">Version</span>
- <span class="badge bg-light text-dark border-0 shadow-none px-3">{{heappe.version|default:"N/A"}}</span>
-                    </div>
-                </div>
+    <div class="row mb-5 align-items-center">
+        <div class="col-md-7">
+            <h2 class="display-6 fw-bold mb-1">System Dashboard</h2>
+            <p class="text-muted lead mb-0 d-flex align-items-center">
+                <span class="pulse-indicator"></span>
+                Connected to: <strong class="ms-2 text-dark">{{ request.session.chosen_instance|default:"None" }}</strong>
+                <span class="mx-3 text-light-50">|</span>
+                <span class="small"><i class="bi bi-clock me-1"></i> Last update: {% now "H:i" %}</span>
+            </p>
+        </div>
+        <div class="col-md-5 text-md-end mt-3 mt-md-0">
+            <div class="btn-group shadow-sm">
+                <a href="{% url 'cluster_list' %}" class="btn btn-white border-0 py-2 px-3">
+                    <i class="bi bi-hdd-network me-2"></i>Clusters
+                </a>
+                <a href="{% url 'project_list' %}" class="btn btn-white border-0 py-2 px-3 border-start">
+                    <i class="bi bi-folder-symlink me-2"></i>Projects
+                </a>
             </div>
+            <button onclick="location.reload()" class="btn btn-primary px-4 py-2 ms-2 shadow-sm rounded-pill">
+                <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+            </button>
+        </div>
+    </div>
 
-            <!-- Health Status -->
-            <div class="card p-4 border-0 glass-card">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h5 class="mb-0"><i class="bi bi-heart-pulse text-danger me-2"></i>Health</h5>
-                    <span class="badge {%if health.is_healthy%}bg-success{%else%}bg-danger{%endif%} rounded-pill">
-                        {%if health.is_healthy%}Operational{%else%}Degraded{%endif%}
-                    </span>
-                </div>
-
-                <div class="vstack gap-3">
-                    <div class="p-3 bg-white bg-opacity-50 rounded-3 border-0">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="small fw-semibold text-muted">Database</span>
-                            <span
-                                class="{%if health.component.database.is_healthy%}health-indicator health-pulse bg-success{%else%}health-indicator bg-danger{%endif%}"></span>
+    <div class="row g-4 mb-5">
+        <div class="col-md-3">
+            <div class="stat-card card shadow-sm h-100" style="--card-accent: #4361ee;">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="bg-primary-soft p-3 rounded-4">
+                            <i class="bi bi-stack fs-3 text-primary"></i>
                         </div>
+                        <span class="badge bg-success-subtle text-success border-0 px-3">Active</span>
                     </div>
-                    <div class="p-3 bg-white bg-opacity-50 rounded-3 border-0">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span class="small fw-semibold text-muted">Security Vault</span>
-                            <span
-                                class="{%if health.component.vault.is_healthy%}health-indicator health-pulse bg-success{%else%}health-indicator bg-danger{%endif%}"></span>
-                        </div>
-                        {%if health.component.vault.info%}
-                        <div class="row g-2 mt-2 pt-2 border-top">
-                            {%for key, value in health.component.vault.info.items%}
-                            <div class="col-6">
- <div class="smaller text-muted text-uppercase fw-bold" style="font-size: 0.6rem;">{{key}}</div>
-                                <div
-                                    class="small fw-bold {%if key == 'initialized' and value%}text-success{%elif key == 'initialized' and not value%}text-danger{%endif%}">
-                                    {{value|yesno:"True,False"}}</div>
-                            </div>
-                            {%endfor%}
-                        </div>
-                        {%endif%}
-                    </div>
-                </div>
-                <div class="mt-4 text-center">
- <small class="text-muted smaller"><i class="bi bi-clock me-1"></i>Last Check: {{health.timestamp|default:"N/A"}}</small>
+                    <h3 class="fw-bold mb-1">{{ total_jobs|default:"0" }}</h3>
+                    <p class="text-muted small fw-semibold text-uppercase mb-0">Total Aggregate Jobs</p>
                 </div>
             </div>
         </div>
+        <div class="col-md-3">
+            <div class="stat-card card shadow-sm h-100" style="--card-accent: #10b981;">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="bg-success-subtle p-3 rounded-4">
+                            <i class="bi bi-check-circle-fill fs-3 text-success"></i>
+                        </div>
+                    </div>
+                    <h3 class="fw-bold mb-1">{{ job_counts.Finished|default:"0" }}</h3>
+                    <p class="text-muted small fw-semibold text-uppercase mb-0">Completed Successfully</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card card shadow-sm h-100" style="--card-accent: #f59e0b;">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="bg-warning-subtle p-3 rounded-4">
+                            <i class="bi bi-gear-wide-connected fs-3 text-warning"></i>
+                        </div>
+                    </div>
+                    <h3 class="fw-bold mb-1">{{ job_counts.Running|default:"0" }}</h3>
+                    <p class="text-muted small fw-semibold text-uppercase mb-0">Running Tasks</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card card shadow-sm h-100" style="--card-accent: #ef4444;">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div class="bg-danger-subtle p-3 rounded-4">
+                            <i class="bi bi-shield-exclamation fs-3 text-danger"></i>
+                        </div>
+                    </div>
+                    <h3 class="fw-bold mb-1">{{ job_counts.Failed|default:"0" }}</h3>
+                    <p class="text-muted small fw-semibold text-uppercase mb-0">Failed Executions</p>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        <!-- Main Content Section -->
-        <div class="col-xl-9 col-lg-8">
-            <!-- Stat Grid -->
-            <div class="row g-4 mb-4">
-                <div class="col-md-3">
-                    <div class="card stat-card p-4 border-0 h-100" onclick="location.href='{%url 'cluster_list'%}'"
-                        style="cursor: pointer;">
-                        <div class="stat-icon-wrapper bg-primary-subtle text-primary">
-                            <i class="bi bi-server"></i>
-                        </div>
-                        <h3 class="fw-bold mb-1">{{clusters|length}}</h3>
-                        <span class="text-muted small fw-bold text-uppercase">Total Clusters</span>
-                        <i class="bi bi-server card-bg-icon text-primary"></i>
+    <div class="row g-4 mb-5">
+        <div class="col-xl-8">
+            <div class="card glass-card shadow-sm border-0 h-100 overflow-hidden">
+                <div class="card-header bg-white border-0 py-4 px-4 d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="fw-bold mb-0">HPC Job Distribution</h5>
+                        <small class="text-muted">Global view across all projects</small>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="card stat-card p-4 border-0 h-100" onclick="location.href='{%url 'project_list'%}'"
-                        style="cursor: pointer;">
-                        <div class="stat-icon-wrapper bg-success-subtle text-success">
-                            <i class="bi bi-people"></i>
-                        </div>
-                        <h3 class="fw-bold mb-1">{{projects|length|default:"0"}}</h3>
-                        <span class="text-muted small fw-bold text-uppercase">Active Projects</span>
-                        <i class="bi bi-people card-bg-icon text-success"></i>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card stat-card p-4 border-0 h-100" onclick="location.href='{%url 'queues_view'%}'"
-                        style="cursor: pointer;">
-                        <div class="stat-icon-wrapper bg-info-subtle text-info">
-                            <i class="bi bi-list-task"></i>
-                        </div>
-                        <h3 class="fw-bold mb-1">{{queues|length|default:"0"}}</h3>
-                        <span class="text-muted small fw-bold text-uppercase">Configured Queues</span>
-                        <i class="bi bi-list-task card-bg-icon text-info"></i>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card stat-card p-4 border-0 h-100 bg-dark text-white shadow-lg">
-                        <div class="stat-icon-wrapper bg-white bg-opacity-20 text-white">
-                            <i class="bi bi-cpu"></i>
-                        </div>
-                        <h3 class="fw-bold mb-1">{{total_jobs|default:"0"}}</h3>
-                        <span class="text-white-50 small fw-bold text-uppercase">Total System Jobs</span>
-                        <i class="bi bi-cpu card-bg-icon text-white"></i>
+                <div class="card-body px-4 pb-4">
+                    <div class="chart-container">
+                        <canvas id="jobsStateChart"></canvas>
                     </div>
                 </div>
             </div>
-
-            <!-- Charts Section -->
-            <div class="row g-4 mb-4">
-                <div class="col-lg-8">
-                    <div class="card p-4 border-0 h-100">
-                        <div class="d-flex justify-content-between align-items-center mb-4">
-                            <h5 class="mb-0 fw-bold">Job Execution Distribution</h5>
-                            <i class="bi bi-three-dots text-muted"></i>
-                        </div>
-                        <div class="chart-container">
-                            <canvas id="jobsStateChart"></canvas>
-                        </div>
-                    </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card glass-card shadow-sm border-0 h-100">
+                <div class="card-header bg-white border-0 py-4 px-4">
+                    <h5 class="fw-bold mb-0">System Infrastructure</h5>
+                    <small class="text-muted">Active Clusters & Queues</small>
                 </div>
-                <div class="col-lg-4">
-                    <div class="card p-4 border-0 h-100">
-                        <h5 class="mb-4 fw-bold">Real-time Status</h5>
-                        <div class="vstack gap-2">
-                            {%for state, count in job_counts.items%}
-                            {%if count > 0 or state == 'Running' or state == 'Failed' or state == 'Finished'%}
-                            <div
-                                class="d-flex justify-content-between align-items-center p-3 rounded-3 bg-light transition-all hover-translate-x">
-                                <span class="small fw-bold text-muted">{{state}}</span>
-                                <span class="badge rounded-pill shadow-sm"
-                                    style="background-color: {%if state == 'Configuring' or state == 'WaitingForServiceAccount' or state == 'Deleted'%}#6c757d{%elif state == 'Submitted'%}#0dcaf0{%elif state == 'Queued'%}#4361ee{%elif state == 'Running'%}#ff9f1c{%elif state == 'Finished'%}#2ec4b6{%elif state == 'Failed'%}#e71d36{%elif state == 'Canceled'%}#343a40{%else%}#adb5bd{%endif%}; min-width: 32px;">
-                                    {{count}}
-                                </span>
+                <div class="card-body px-4 pt-0">
+                    <div class="list-group list-group-flush">
+                        {% for cluster in clusters %}
+                        <div class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center">
+                                <div class="bg-light p-2 rounded-3 me-3">
+                                    <i class="bi bi-hdd-network text-primary"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0 fw-bold">{{ cluster.name }}</h6>
+                                    <small class="text-muted">{{ cluster.node_types|length }} Node Types</small>
+                                </div>
                             </div>
-                            {%endif%}
-                            {%endfor%}
+                            <a href="{% url 'cluster_detail' cluster.id %}" class="btn btn-sm btn-light rounded-pill px-3">View</a>
                         </div>
+                        {% empty %}
+                        <div class="text-center py-5">
+                            <p class="text-muted">No clusters found.</p>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
 
-            <!-- Filter Bar -->
-            <div class="filter-bar d-flex justify-content-between align-items-center">
-                <h5 class="mb-0 fw-bold">Recent Activity Feed</h5>
-                <form method="get" class="d-flex gap-3">
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light border-0 small fw-bold text-muted">FROM</span>
-                        <input type="datetime-local" class="form-control border-0 bg-light small" name="time_from"
-                            value="{{time_from}}">
-                    </div>
-                    <div class="input-group input-group-sm">
-                        <span class="input-group-text bg-light border-0 small fw-bold text-muted">TO</span>
-                        <input type="datetime-local" class="form-control border-0 bg-light small" name="time_to"
-                            value="{{time_to}}">
-                    </div>
-                    <button type="submit" class="btn btn-primary btn-sm px-4">Update Feed</button>
-                </form>
+    <div class="card glass-card shadow-sm border-0 mb-5 overflow-hidden">
+        <div class="card-header bg-white border-0 py-4 px-4 d-flex justify-content-between align-items-center">
+            <div>
+                <h5 class="fw-bold mb-0">Recent Activity Stream</h5>
+                <small class="text-muted">Sorted by ID</small>
             </div>
-
-            <!-- Modern Jobs Table -->
+            <form class="d-flex gap-2 align-items-center" method="get">
+                <input type="datetime-local" name="time_from" class="form-control form-control-sm" value="{{ time_from }}">
+                <span class="text-muted">to</span>
+                <input type="datetime-local" name="time_to" class="form-control form-control-sm" value="{{ time_to }}">
+                <button type="submit" class="btn btn-sm btn-primary px-3">Filter</button>
+            </form>
+        </div>
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-modern align-middle">
-                    <thead class="text-muted small text-uppercase">
+                <table class="table hpc-table mb-0">
+                    <thead>
                         <tr>
-                            <th class="ps-4">Job Details</th>
-                            <th>Owner</th>
-                            <th>Time Control</th>
-                            <th>Current State</th>
-                            <th class="text-end pe-4">Context</th>
+                            <th class="ps-4">ID / Name</th>
+                            <th>Status</th>
+                            <th>Submitter</th>
+                            <th>Tasks</th>
+                            <th class="text-end pe-4">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {%for job_item in job_details%}
+                        {% for job in job_details %}
                         <tr>
                             <td class="ps-4">
-                                <div class="d-flex align-items-center">
-                                    <div
-                                        class="p-2 {%if job_item.state == 16%}bg-success-subtle text-success{%elif job_item.state == 32%}bg-danger-subtle text-danger{%elif job_item.state == 8%}bg-warning-subtle text-warning{%else%}bg-secondary-subtle text-secondary{%endif%} rounded-3 me-3">
-                                        <i
-                                            class="bi {%if job_item.state == 16%}bi-check2-circle{%elif job_item.state == 32%}bi-exclamation-triangle{%elif job_item.state == 8%}bi-play-circle{%else%}bi-clock-history{%endif%} fs-5"></i>
-                                    </div>
-                                    <div>
-                                        <div class="fw-bold text-dark">{{job_item.name}}</div>
-                                        <div class="smaller text-muted">ID: #{{job_item.id}}</div>
-                                    </div>
-                                </div>
+                                <div class="fw-bold text-dark">{{ job.name }}</div>
+                                <div class="small text-muted font-monospace">#{{ job.id }}</div>
                             </td>
                             <td>
-                                <div class="d-flex align-items-center">
-                                    <img src="https://ui-avatars.com/api/?name={{job_item.submitter|default:'A'}}&background=random&size=32"
-                                        class="rounded-circle me-2" alt="Avatar">
-                                    <span class="small fw-semibold">{{job_item.submitter|default:"Admin"}}</span>
-                                </div>
-                            </td>
-                            <td class="small text-muted">
-                                <div><i class="bi bi-calendar3 me-2"></i>{{job_item.creation_time|default:"N/A"}}
-                                </div>
-                            </td>
-                            <td>
-                                <span
-                                    class="badge status-badge rounded-pill {%if job_item.state == 1%}bg-secondary{%elif job_item.state == 2%}bg-info text-dark{%elif job_item.state == 4%}bg-primary{%elif job_item.state == 8%}bg-warning text-dark{%elif job_item.state == 16%}bg-success{%elif job_item.state == 32%}bg-danger{%elif job_item.state == 64%}bg-dark{%else%}bg-secondary{%endif%}">
-                                    {%if job_item.state == 1%}Configuring
-                                    {%elif job_item.state == 2%}Submitted
-                                    {%elif job_item.state == 4%}Queued
-                                    {%elif job_item.state == 8%}Running
-                                    {%elif job_item.state == 16%}Finished
-                                    {%elif job_item.state == 32%}Failed
-                                    {%elif job_item.state == 64%}Canceled
-                                    {%elif job_item.state == 128%}Waiting
-                                    {%elif job_item.state == 256%}Deleted
-                                    {%else%}State #{{job_item.state}}{%endif%}
+                                <span class="badge rounded-pill 
+                                    {% if job.state == 1 %}bg-secondary{% elif job.state == 8 %}bg-warning text-dark{% elif job.state == 16 %}bg-success{% elif job.state == 32 %}bg-danger{% else %}bg-primary{% endif %}">
+                                    {% if job.state == 1 %}Configuring{% elif job.state == 8 %}Running{% elif job.state == 16 %}Finished{% elif job.state == 32 %}Failed{% elif job.state == 64 %}Canceled{% else %}Pending{% endif %}
                                 </span>
                             </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <img src="https://ui-avatars.com/api/?name={{ job.submitter|default:'A' }}&background=random&size=24" class="rounded-circle me-2">
+                                    <span>{{ job.submitter|default:"System" }}</span>
+                                </div>
+                            </td>
+                            <td><span class="badge bg-light text-dark border">{{ job.tasks|length }} Units</span></td>
                             <td class="text-end pe-4">
-                                <button class="btn btn-outline-primary btn-sm border-0 fw-bold" data-bs-toggle="modal"
-                                    data-bs-target="#jobModal{{job_item.id}}">
-                                    Inspect <i class="bi bi-chevron-right ms-1"></i>
-                                </button>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-light btn-action" data-bs-toggle="modal" data-bs-target="#jobModal{{ forloop.counter }}">
+                                        <i class="bi bi-eye text-primary"></i>
+                                    </button>
+                                    <a href="{% url 'job_status_view' job.id %}" class="btn btn-sm btn-light btn-action">
+                                        <i class="bi bi-graph-up-arrow text-info"></i>
+                                    </a>
+                                </div>
                             </td>
                         </tr>
-                        {%empty%}
-                        <tr class="bg-transparent shadow-none">
-                            <td colspan="5" class="text-center py-5">
-                                <img src="https://cdn-icons-png.flaticon.com/512/9167/9167014.png"
-                                    style="width: 80px; opacity: 0.2;" class="mb-3">
-                                <p class="text-muted fw-bold">No active jobs found for this range.</p>
-                            </td>
-                        </tr>
-                        {%endfor%}
+
+                        <div class="modal fade" id="jobModal{{ forloop.counter }}" tabindex="-1">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow-lg">
+                                    <div class="modal-header bg-dark text-white">
+                                        <h5 class="modal-title">{{ job.name }}</h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body bg-light">
+                                        <div class="list-group shadow-sm">
+                                            {% for task in job.tasks %}
+                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                                <span>{{ task.name }}</span>
+                                                <span class="badge bg-primary rounded-pill">State: {{ task.state }}</span>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-center py-5 text-muted">No jobs found.</td></tr>
+                        {% endfor %}
                     </tbody>
                 </table>
             </div>
 
-            <!-- Pagination -->
-            {%if page_obj%}
-            <div class="d-flex justify-content-center mt-5">
-                <nav aria-label="Job navigation">
-                    <ul class="pagination pagination-rounded gap-2">
-                        {%if page_obj.has_previous%}
-                        <li class="page-item"><a class="page-link border-0 shadow-sm"
-                                href="?page={{page_obj.previous_page_number}}&time_from={{time_from}}&time_to={{time_to}}"><i
-                                    class="bi bi-chevron-left"></i></a></li>
-                        {%endif%}
-
-                        {%for num in page_obj.paginator.page_range%}
-                        {%if num == page_obj.number%}
-                        <li class="page-item active"><span class="page-link border-0 shadow-sm">{{num}}</span></li>
-                        {%elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3"%} <li
-                            class="page-item"><a class="page-link border-0 shadow-sm bg-white text-dark"
-                                href="?page={{num}}&time_from={{time_from}}&time_to={{time_to}}">{{num}}</a>
-                            </li>
-                            {%endif%}
-                            {%endfor%}
-
-                            {%if page_obj.has_next%}
-                            <li class="page-item"><a class="page-link border-0 shadow-sm"
-                                    href="?page={{page_obj.next_page_number}}&time_from={{time_from}}&time_to={{time_to}}"><i
-                                        class="bi bi-chevron-right"></i></a></li>
-                            {%endif%}
+            {% if page_obj.paginator.num_pages > 1 %}
+            <div class="px-4 py-4 bg-light border-top d-flex justify-content-between align-items-center">
+                <div class="small text-muted">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        {% if page_obj.has_previous %}
+                        <li class="page-item"><a class="page-link" href="?page=1&{{ request.GET.urlencode|safe }}">First</a></li>
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode|safe }}">Prev</a></li>
+                        {% endif %}
+                        {% if page_obj.has_next %}
+                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode|safe }}">Next</a></li>
+                        {% endif %}
                     </ul>
                 </nav>
             </div>
-            {%endif%}
+            {% endif %}
         </div>
     </div>
 </div>
-
-<!-- Job Detail Modals -->
-{%for job_item in job_details%}
-<div class="modal fade" id="jobModal{{job_item.id}}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
-            <div class="modal-header bg-dark text-white border-0 py-4 px-4">
-                <div class="d-flex align-items-center">
-                    <div class="p-3 bg-white bg-opacity-10 rounded-3 me-3">
-                        <i class="bi bi-cpu fs-4 text-primary"></i>
-                    </div>
-                    <div>
-                        <h5 class="modal-title fw-bold mb-0">{{job_item.name}}</h5>
-                        <small class="text-white-50">Global Identifier: #{{job_item.id}}</small>
-                    </div>
-                </div>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-4 bg-light">
-                <div class="row g-3 mb-4">
-                    <div class="col-md-4">
-                        <div class="card p-3 border-0 h-100 text-center shadow-sm">
-                            <small class="text-muted d-block text-uppercase fw-bold mb-2">Live Status</small>
-                            <span
-                                class="badge border-0 rounded-pill {%if job_item.state == 1%}bg-secondary{%elif job_item.state == 2%}bg-info text-dark{%elif job_item.state == 4%}bg-primary{%elif job_item.state == 8%}bg-warning text-dark{%elif job_item.state == 16%}bg-success{%elif job_item.state == 32%}bg-danger{%elif job_item.state == 64%}bg-dark{%else%}bg-secondary{%endif%}">
-                                {%if job_item.state == 1%}Configuring
-                                {%elif job_item.state == 2%}Submitted
-                                {%elif job_item.state == 4%}Queued
-                                {%elif job_item.state == 8%}Running
-                                {%elif job_item.state == 16%}Finished
-                                {%elif job_item.state == 32%}Failed
-                                {%elif job_item.state == 64%}Canceled
-                                {%elif job_item.state == 128%}Waiting
-                                {%elif job_item.state == 256%}Deleted
-                                {%else%}State #{{job_item.state}}{%endif%}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="card p-3 border-0 h-100 text-center shadow-sm">
-                            <small class="text-muted d-block text-uppercase fw-bold mb-2">Submitted By</small>
-                            <div class="d-flex align-items-center justify-content-center">
-                                <img src="https://ui-avatars.com/api/?name={{job_item.submitter|default:'A'}}&background=random&size=24"
-                                    class="rounded-circle me-2">
-                                <span class="fw-bold">{{job_item.submitter|default:"Internal Admin"}}</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="card p-3 border-0 h-100 text-center shadow-sm">
-                            <small class="text-muted d-block text-uppercase fw-bold mb-2">Task Units</small>
-                            <span class="fs-4 fw-bold text-primary">{{job_item.tasks|length}}</span>
-                        </div>
-                    </div>
-                </div>
-
-                <h6 class="fw-bold mb-3 d-flex align-items-center"><i class="bi bi-stack me-2 text-primary"></i>Task
-                    Inventory</h6>
-                <div class="list-group list-group-flush rounded-4 overflow-hidden border-0 shadow-sm">
-                    {%for task in job_item.tasks%}
-                    <div
-                        class="list-group-item d-flex justify-content-between align-items-center p-3 border-0 bg-white mb-2 rounded-3 shadow-none">
-                        <div class="d-flex align-items-center">
-                            <div class="smaller text-muted me-3 fw-bold">#{{task.id}}</div>
-                            <div>
-                                <div class="fw-bold text-dark">{{task.name}}</div>
-                                <div class="extra-small text-muted text-uppercase">USAGE: {{task.usage|default:"0"}}
-                                    ch/nh</div>
-                            </div>
-                        </div>
-                        <span
-                            class="badge rounded-pill {%if task.state == 1%}bg-secondary{%elif task.state == 2%}bg-info text-dark{%elif task.state == 4%}bg-primary{%elif task.state == 8%}bg-warning text-dark{%elif task.state == 16%}bg-success{%elif task.state == 32%}bg-danger{%elif task.state == 64%}bg-dark{%else%}bg-secondary{%endif%} opacity-75">
-                            {%if task.state == 1%}CONFIG
-                            {%elif task.state == 2%}SUBMIT
-                            {%elif task.state == 4%}QUEUED
-                            {%elif task.state == 8%}RUNNING
-                            {%elif task.state == 16%}DONE
-                            {%elif task.state == 32%}FAIL
-                            {%elif task.state == 64%}CANCEL
-                            {%else%}S#{{task.state}}{%endif%}
-                        </span>
-                    </div>
-                    {%endfor%}
-                </div>
-            </div>
-            <div class="modal-footer bg-white border-0 py-4 px-4">
-                <button type="button" class="btn btn-light fw-bold px-4" data-bs-dismiss="modal">Dismiss</button>
-                <a href="{%url 'job_status_view' job_item.id%}" class="btn btn-primary fw-bold px-4 shadow-sm">Full
-                    Execution Status <i class="bi bi-arrow-right-short"></i></a>
-            </div>
-        </div>
-    </div>
-</div>
-{%endfor%}
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const jobsStateCtx = document.getElementById('jobsStateChart').getContext('2d');
-
-        // Custom gradients for Chart
-        const gradientPrimary = jobsStateCtx.createLinearGradient(0, 0, 0, 400);
-        gradientPrimary.addColorStop(0, 'rgba(67, 97, 238, 0.8)');
-        gradientPrimary.addColorStop(1, 'rgba(67, 97, 238, 0.2)');
-
-        new Chart(jobsStateCtx, {
+        const ctx = document.getElementById('jobsStateChart').getContext('2d');
+        new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: ['Configuring', 'Submitted', 'Queued', 'Running', 'Finished', 'Failed', 'Canceled', 'Waiting', 'Deleted'],
+                labels: ['Configuring', 'Submitted', 'Queued', 'Running', 'Finished', 'Failed', 'Canceled'],
                 datasets: [{
-                    label: 'Jobs Count',
+                    label: 'Jobs',
                     data: [
-                        {{job_counts.Configuring |default: 0}},
-                {{job_counts.Submitted |default: 0}},
-                        {{job_counts.Queued |default: 0}},
-        {{job_counts.Running |default: 0}},
-        {{job_counts.Finished |default: 0}},
-        {{job_counts.Failed |default: 0}},
-        {{job_counts.Canceled |default: 0}},
-        {{job_counts.WaitingForServiceAccount |default: 0}},
-        {{job_counts.Deleted |default: 0}}
+                        {{ job_counts.Configuring|default:0 }},
+                        {{ job_counts.Submitted|default:0 }},
+                        {{ job_counts.Queued|default:0 }},
+                        {{ job_counts.Running|default:0 }},
+                        {{ job_counts.Finished|default:0 }},
+                        {{ job_counts.Failed|default:0 }},
+                        {{ job_counts.Canceled|default:0 }}
                     ],
-        backgroundColor: [
-        '#64748b', // Configuring
-        '#0dcaf0', // Submitted
-        '#4361ee', // Queued
-        '#ff9f1c', // Running
-        '#2ec4b6', // Finished
-        '#e71d36', // Failed
-        '#1e293b', // Canceled
-        '#94a3b8', // Waiting
-        '#020617'  // Deleted
-    ],
-        borderRadius: 8,
-        maxBarThickness: 40
+                    backgroundColor: ['#64748b', '#0dcaf0', '#4361ee', '#ff9f1c', '#2ec4b6', '#e71d36', '#1e293b'],
+                    borderRadius: 6
                 }]
             },
-        options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                backgroundColor: '#1e293b',
-                padding: 12,
-                cornerRadius: 8,
-                titleFont: { family: 'Outfit', size: 14 },
-                bodyFont: { family: 'Inter', size: 13 }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } },
+                    x: { grid: { display: false } }
+                },
+                plugins: { legend: { display: false } }
             }
-        },
-        scales: {
-            y: {
-                beginAtZero: true,
-                grid: { color: '#f1f5f9', drawBorder: false },
-                ticks: { color: '#64748b', font: { size: 12 }, precision: 0 }
-            },
-            x: {
-                grid: { display: false, drawBorder: false },
-                ticks: { color: '#64748b', font: { size: 11, weight: '600' } }
-            }
-        }
-    }
         });
     });
 </script>
+{% endblock %}

@@ -1,31 +1,108 @@
-{%extends "base.html"%}
-{%load static%}
+{% extends "base.html" %}
+{% load static %}
 
-{%block content%}
+{% block title %}Job List{% endblock %}
 
-<div class="container">
-    <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm p-0">
-        <div class="card-header d-flex align-items-center">
-            <strong>Available Jobs</strong>
+{% block content %}
+<div class="container py-4">
+    <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm p-0 border-0" style="border-radius: 1rem; overflow: hidden;">
+        <div class="card-header bg-white py-3 d-flex align-items-center border-bottom">
+            <h5 class="mb-0 fw-bold">Available Jobs</h5>
             <div class="ms-auto d-flex align-items-center">
-                <a href="{%url 'job_create'%}" class="btn btn-sm btn-primary me-2">Add New</a>
-                <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
+                <a href="{% url 'job_create' %}" class="btn btn-sm btn-primary rounded-pill px-3 me-2">
+                    <i class="bi bi-plus-lg me-1"></i> Add New
+                </a>
+                <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="location.reload();">
+                    <i class="bi bi-arrow-clockwise me-1"></i> Reload
+                </button>
             </div>
         </div>
-        <div class="">
-            {%if jobs%}
+
+        <div class="card-body p-0">
+            {% if jobs %}
             <div class="table-responsive">
-                <table class="table table-striped mb-0">
+                <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
-                        <tr>
-                            <th scope="col">ID</th>
-                            <th scope="col">Job ID</th>
-                            <th scope="col">Cluster</th>
-                            <th scope="col">User</th>
-                            <th scope="col">Status</th>
-                            <th scope="col">Submission Time</th>
-                            <th scope="col">Start Time</th>
-                            <th scope="col">End Time</th>
-                            <th scope="col">Actions</th>
+                        <tr class="text-muted small text-uppercase">
+                            <th class="ps-4">ID</th>
+                            <th>Job ID</th>
+                            <th>Cluster</th>
+                            <th>User</th>
+                            <th>Status</th>
+                            <th>Submitted</th>
+                            <th>Started</th>
+                            <th>Ended</th>
+                            <th class="text-end pe-4">Actions</th>
                         </tr>
                     </thead>
+                    <tbody>
+                        {% for job in jobs %}
+                        <tr>
+                            <td class="ps-4 fw-bold">#{{ job.id }}</td>
+                            <td class="font-monospace small">{{ job.job_external_id|default:"---" }}</td>
+                            <td>
+                                <span class="badge bg-light text-dark border">
+                                    <i class="bi bi-cpu me-1"></i> {{ job.cluster.name }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <img src="https://ui-avatars.com/api/?name={{ job.user.username }}&size=24&background=random" class="rounded-circle me-2" alt="user">
+                                    <span>{{ job.user.username }}</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge rounded-pill
+                                    {% if job.status == 'RUNNING' %}bg-warning text-dark
+                                    {% elif job.status == 'COMPLETED' %}bg-success
+                                    {% elif job.status == 'FAILED' %}bg-danger
+                                    {% elif job.status == 'PENDING' %}bg-primary
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ job.status }}
+                                </span>
+                            </td>
+                            <td class="small">{{ job.submission_time|date:"d.m. H:i" }}</td>
+                            <td class="small">{{ job.start_time|date:"d.m. H:i"|default:"---" }}</td>
+                            <td class="small">{{ job.end_time|date:"d.m. H:i"|default:"---" }}</td>
+                            <td class="text-end pe-4">
+                                <div class="btn-group">
+                                    <a href="{% url 'job_detail' job.id %}" class="btn btn-sm btn-light border" title="View Detail">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{% url 'job_delete' job.id %}" class="btn btn-sm btn-light border text-danger" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="bi bi-inbox display-4 text-muted opacity-25"></i>
+                <p class="mt-3 text-muted">No jobs available in the system.</p>
+                <a href="{% url 'job_create' %}" class="btn btn-primary btn-sm rounded-pill">Create your first job</a>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if is_paginated %}
+        <div class="card-footer bg-white border-top py-3">
+            <nav>
+                <ul class="pagination pagination-sm justify-content-center mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a></li>
+                    {% endif %}
+                    <li class="page-item active"><span class="page-link">Page {{ page_obj.number }} of {{ paginator.num_pages }}</span></li>
+                    {% if page_obj.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a></li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
