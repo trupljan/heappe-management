@@ -74,10 +74,11 @@ def dashboard_view(request):
 
     # Get queue information
     try:
-        queues = [c.to_dict() for c in controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
-        context['queues'] = queues
+        queues_raw = controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)
+        context['queues'] = [c.to_dict() for c in queues_raw] if queues_raw else []
     except Exception as e:
         print(f"Error fetching queues: {e}")
+        context['queues'] = []
 
     # Get job stats
     all_states = [
@@ -87,10 +88,11 @@ def dashboard_view(request):
     job_counts = {s: 0 for s in all_states}
     try:
         job_stats = jr_controller.heappe_job_reporting_jobs_state_agregation_report_get(SessionCode=request.session_code)
-        for js in job_stats:
-            raw_name = js.job_state_name or "Unknown"
-            state_key = raw_name.replace(" ", "")
-            job_counts[state_key] = js.count
+        if job_stats:
+            for js in job_stats:
+                raw_name = js.job_state_name or "Unknown"
+                state_key = raw_name.replace(" ", "")
+                job_counts[state_key] = js.count
         context["job_counts"] = job_counts
         context["total_jobs"] = sum(job_counts.values())
     except Exception as e:
@@ -127,10 +129,17 @@ def dashboard_view(request):
 
         # Rozbalit všechny job_itemy do jednoho seznamu
         all_jobs = []
-        for job in job_details_raw:
-            for cluster in job.clusters:
-                for node_type in cluster.cluster_node_types:
-                    all_jobs.extend(node_type.jobs)
+        if job_details_raw:
+            for job in job_details_raw:
+                if not job or not hasattr(job, 'clusters') or not job.clusters:
+                    continue
+                for cluster in job.clusters:
+                    if not cluster or not hasattr(cluster, 'cluster_node_types') or not cluster.cluster_node_types:
+                        continue
+                    for node_type in cluster.cluster_node_types:
+                        if not node_type or not hasattr(node_type, 'jobs') or not node_type.jobs:
+                            continue
+                        all_jobs.extend(node_type.jobs)
         all_jobs.sort(key=lambda x: x.id or 0, reverse=True)
         #distinct all jobs by ID
         all_jobs = list({job.id: job for job in all_jobs}.values())

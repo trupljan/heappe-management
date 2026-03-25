@@ -121,22 +121,29 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
 
 
     elif tab == 'projects':
-        node_types_projects = {
-            project['id']: project
-            for node_type in cluster.to_dict()['node_types']
-            for project in node_type['projects']
-        }
+        node_types_projects = {}
+        node_types = cluster.to_dict().get('node_types')
+        if node_types:
+            for node_type in node_types:
+                projects = node_type.get('projects')
+                if projects:
+                    for project in projects:
+                        if project and 'id' in project:
+                            node_types_projects[project['id']] = project
+                            
         context['projects'] = list(node_types_projects.values())
         user_api = hp.UserAndLimitationManagementApi(request.api_instance)
         projects_for_user = user_api.heappe_user_and_limitation_management_projects_for_current_user_get(
             SessionCode=request.session_code
         )
-        seen_ids = {p['id'] for p in context['projects']}
-        context['projectsForCurrentUser'] = [
-            item.project for item in projects_for_user
-            if item.project.id not in seen_ids
-        ]
-        context['queues'] = cluster.to_dict()['node_types']
+        seen_ids = {p['id'] for p in context['projects'] if 'id' in p}
+        context['projectsForCurrentUser'] = []
+        if projects_for_user:
+            context['projectsForCurrentUser'] = [
+                item.project for item in projects_for_user
+                if item and item.project and item.project.id not in seen_ids
+            ]
+        context['queues'] = node_types or []
 
     return render(request, "cluster_detail.html", context)
 

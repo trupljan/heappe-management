@@ -76,10 +76,13 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
     all_node_types_raw = controller.heappe_management_cluster_node_types_get(SessionCode=session_code)
     node_type_map = {nt.id: nt.to_dict() for nt in all_node_types_raw}
 
-    for c_obj in clusters_raw:
-        for nt in c_obj.node_types:
-            if nt.id in node_type_map:
-                node_type_map[nt.id]['cluster_name'] = c_obj.name
+    if clusters_raw:
+        for c_obj in clusters_raw:
+            if not c_obj or not hasattr(c_obj, 'node_types') or not c_obj.node_types:
+                continue
+            for nt in c_obj.node_types:
+                if nt.id in node_type_map:
+                    node_type_map[nt.id]['cluster_name'] = c_obj.name
 
     project_data = controller.heappe_management_project_get(Id=project_id, SessionCode=session_code).to_dict()
 
