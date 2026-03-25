@@ -1,244 +1,389 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block title %}Configuration Wizard{% endblock %}
+
 {% block content %}
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Configuration Wizard</title>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-    <style>
-        .step { display: none; }
-        .step.active { display: block; }
-        .error { color: red; }
-        .nested { margin-left: 1rem; }
-        .array-item { border: 1px solid #e2e8f0; padding: 0.5rem; margin-bottom: 0.5rem; }
-    </style>
-</head>
-<body class="bg-gray-100">
-    <div id="app" class="container mx-auto p-4">
-        <h1 class="text-2xl font-bold mb-4">Configuration Wizard</h1>
-        <div class="bg-white p-6 rounded shadow">
-            <div class="mb-4">
-                <div class="flex justify-between">
-                    <div v-for="(step, index) in steps" :key="index"
-                         :class="['px-4 py-2', currentStep === index ? 'bg-blue-500 text-white' : 'bg-gray-200']">
-                        {{ step.title }}
+<div id="app" class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-12 col-xl-10">
+            <!-- Header -->
+            <div class="d-flex align-items-center mb-5">
+                <div class="icon-box bg-indigo-soft me-3 shadow-xs">
+                    <i class="bi bi-gear-wide-connected text-indigo fs-4"></i>
+                </div>
+                <div>
+                    <h2 class="mb-0 fw-bold">Configuration Wizard</h2>
+                    <p class="text-muted mb-0">Step-by-step system environment setup</p>
+                </div>
+            </div>
+
+            <!-- Wizard Progress -->
+            <div class="card glass-card border-0 mb-4 shadow-sm overflow-hidden">
+                <div class="card-body p-0">
+                    <div class="d-flex wizard-nav">
+                        <div v-for="(step, index) in steps" :key="index"
+                            class="wizard-step flex-grow-1 text-center py-3 px-2 border-bottom border-3 transition-all"
+                            :class="currentStep === index ? 'border-indigo bg-indigo-soft text-indigo fw-bold' : 'border-transparent text-muted opacity-50'">
+                            <span class="step-number me-2" v-if="index < steps.length - 1">0${index + 1}</span>
+                            <i class="bi bi-check2-circle me-2" v-else></i>
+                            <span class="d-none d-md-inline">${ step.title }</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Dynamic Steps -->
-            <div v-for="(section, sectionName, index) in config"
-                 :key="sectionName"
-                 class="step"
-                 :class="{ 'active': currentStep === index }">
-                <h2 class="text-xl font-semibold mb-4">{{ sectionName }}</h2>
-                <div v-for="(value, key) in section" :key="key" class="mb-4">
-                    <div v-if="isObject(value) && !isArray(value)">
-                        <h3 class="font-medium">{{ key }}</h3>
-                        <div class="nested">
-                            <div v-for="(subValue, subKey) in value" :key="subKey" class="mb-2">
-                                <div v-if="isObject(subValue) && !isArray(subValue)">
-                                    <h4 class="font-medium">{{ subKey }}</h4>
-                                    <div class="nested">
-                                        <div v-for="(subSubValue, subSubKey) in subValue" :key="subSubKey" class="mb-2">
-                                            <div v-if="isSimpleValue(subSubValue)">
-                                                <label class="block">{{ subSubKey }}<span v-if="isRequired(sectionName, key, subKey, subSubKey)">*</span></label>
-                                                <input v-if="typeof subSubValue === 'string'"
-                                                       v-model="config[sectionName][key][subKey][subSubKey]"
-                                                       :required="isRequired(sectionName, key, subKey, subSubKey)"
-                                                       class="w-full p-2 border rounded">
-                                                <input v-else-if="typeof subSubValue === 'number'"
-                                                       type="number"
-                                                       v-model.number="config[sectionName][key][subKey][subSubKey]"
-                                                       class="w-full p-2 border rounded">
-                                                <input v-else-if="typeof subSubValue === 'boolean'"
-                                                       type="checkbox"
-                                                       v-model="config[sectionName][key][subKey][subSubKey]">
+            <!-- Active Section Card -->
+            <div class="card glass-card border-0 shadow-sm min-vh-50">
+                <div class="card-body p-4 p-lg-5">
+
+                    <!-- Dynamic Configuration Steps -->
+                    <div v-for="(section, sectionName, index) in config" :key="sectionName"
+                        class="config-step-container animate__animated animate__fadeIn" v-if="currentStep === index">
+
+                        <div class="section-header mb-5">
+                            <h3 class="fw-bold text-dark mb-2">${ sectionName }</h3>
+                            <div class="h-1 bg-indigo-soft rounded" style="width: 60px;"></div>
+                        </div>
+
+                        <div class="row g-4">
+                            <div v-for="(value, key) in section" :key="key" class="col-12">
+                                <!-- Nested Object Layer 1 -->
+                                <div v-if="isObject(value) && !isArray(value)"
+                                    class="p-4 rounded-4 bg-light-subtle border border-light shadow-xs mb-4">
+                                    <h5 class="fw-bold text-indigo mb-4 d-flex align-items-center">
+                                        <i class="bi bi-box-seam me-2"></i> ${ key }
+                                    </h5>
+
+                                    <div class="row g-3">
+                                        <div v-for="(subValue, subKey) in value" :key="subKey" class="col-12">
+                                            <!-- Nested Object Layer 2 -->
+                                            <div v-if="isObject(subValue) && !isArray(subValue)" class="ms-md-4 mb-3">
+                                                <h6
+                                                    class="fw-bold text-muted text-uppercase small mb-3 letter-spacing-1">
+                                                    ${ subKey }</h6>
+                                                <div class="row g-3 ms-md-3 border-start ps-3 border-light">
+                                                    <div v-for="(subSubValue, subSubKey) in subValue" :key="subSubKey"
+                                                        class="col-md-6">
+                                                        <div v-if="isSimpleValue(subSubValue)">
+                                                            <label class="form-label small fw-bold text-muted">${
+                                                                subSubKey }<span
+                                                                    v-if="isRequired(sectionName, key, subKey, subSubKey)"
+                                                                    class="text-danger ms-1">*</span></label>
+                                                            <input v-if="typeof subSubValue === 'string'"
+                                                                v-model="config[sectionName][key][subKey][subSubKey]"
+                                                                :required="isRequired(sectionName, key, subKey, subSubKey)"
+                                                                class="form-control border-0 bg-white">
+                                                            <input v-else-if="typeof subSubValue === 'number'"
+                                                                type="number"
+                                                                v-model.number="config[sectionName][key][subKey][subSubKey]"
+                                                                class="form-control border-0 bg-white">
+                                                            <div v-else-if="typeof subSubValue === 'boolean'"
+                                                                class="form-check form-switch mt-2">
+                                                                <input class="form-check-input" type="checkbox"
+                                                                    v-model="config[sectionName][key][subKey][subSubKey]">
+                                                            </div>
+                                                        </div>
+                                                        <div v-else-if="isArray(subSubValue)">
+                                                            <label class="form-label small fw-bold text-muted">${
+                                                                subSubKey }</label>
+                                                            <textarea
+                                                                v-model="config[sectionName][key][subKey][subSubKey]"
+                                                                class="form-control border-0 bg-white font-monospace small"
+                                                                rows="3" placeholder="JSON Array Format"></textarea>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div v-else-if="isArray(subSubValue)">
-                                                <label class="block">{{ subSubKey }}</label>
-                                                <textarea v-model="config[sectionName][key][subKey][subSubKey]"
-                                                          class="w-full p-2 border rounded"
-                                                          placeholder="Enter array items as JSON"></textarea>
+
+                                            <!-- Simple Value Layer 2 -->
+                                            <div v-else-if="isSimpleValue(subValue)" class="ms-md-4">
+                                                <div class="row align-items-center">
+                                                    <div class="col-md-4">
+                                                        <label class="form-label mb-md-0 fw-semibold text-dark">${
+                                                            subKey }<span v-if="isRequired(sectionName, key, subKey)"
+                                                                class="text-danger ms-1">*</span></label>
+                                                    </div>
+                                                    <div class="col-md-8">
+                                                        <input v-if="typeof subValue === 'string'"
+                                                            v-model="config[sectionName][key][subKey]"
+                                                            :required="isRequired(sectionName, key, subKey)"
+                                                            class="form-control border-0 bg-white shadow-xs">
+                                                        <input v-else-if="typeof subValue === 'number'" type="number"
+                                                            v-model.number="config[sectionName][key][subKey]"
+                                                            class="form-control border-0 bg-white shadow-xs">
+                                                        <div v-else-if="typeof subValue === 'boolean'"
+                                                            class="form-check form-switch p-0">
+                                                            <input class="form-check-input ms-0" type="checkbox"
+                                                                v-model="config[sectionName][key][subKey]">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Array Layer 2 -->
+                                            <div v-else-if="isArray(subValue)" class="ms-md-4">
+                                                <label class="form-label small fw-bold text-muted">${ subKey }</label>
+                                                <textarea v-model="config[sectionName][key][subKey]"
+                                                    class="form-control border-0 bg-white font-monospace small" rows="3"
+                                                    placeholder="JSON Array Format"></textarea>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <div v-else-if="isSimpleValue(subValue)">
-                                    <label class="block">{{ subKey }}<span v-if="isRequired(sectionName, key, subKey)">*</span></label>
-                                    <input v-if="typeof subValue === 'string'"
-                                           v-model="config[sectionName][key][subKey]"
-                                           :required="isRequired(sectionName, key, subKey)"
-                                           class="w-full p-2 border rounded">
-                                    <input v-else-if="typeof subValue === 'number'"
-                                           type="number"
-                                           v-model.number="config[sectionName][key][subKey]"
-                                           class="w-full p-2 border rounded">
-                                    <input v-else-if="typeof subValue === 'boolean'"
-                                           type="checkbox"
-                                           v-model="config[sectionName][key][subKey]">
+
+                                <!-- Simple Value Layer 1 -->
+                                <div v-else-if="isSimpleValue(value)" class="row align-items-center mb-4">
+                                    <div class="col-md-4 ps-md-4">
+                                        <label class="form-label mb-md-0 fw-bold text-dark">${ key }<span
+                                                v-if="isRequired(sectionName, key)"
+                                                class="text-danger ms-1">*</span></label>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <input v-if="typeof value === 'string'" v-model="config[sectionName][key]"
+                                            :required="isRequired(sectionName, key)"
+                                            class="form-control bg-light border-0 py-2 shadow-xs">
+                                        <input v-else-if="typeof value === 'number'" type="number"
+                                            v-model.number="config[sectionName][key]"
+                                            class="form-control bg-light border-0 py-2 shadow-xs">
+                                        <div v-else-if="typeof value === 'boolean'" class="form-check form-switch ms-2">
+                                            <input class="form-check-input" type="checkbox"
+                                                v-model="config[sectionName][key]">
+                                        </div>
+                                    </div>
                                 </div>
-                                <div v-else-if="isArray(subValue)">
-                                    <label class="block">{{ subKey }}</label>
-                                    <textarea v-model="config[sectionName][key][subKey]"
-                                              class="w-full p-2 border rounded"
-                                              placeholder="Enter array items as JSON"></textarea>
+
+                                <!-- Array Layer 1 -->
+                                <div v-else-if="isArray(value)" class="mb-4 ps-md-4">
+                                    <label class="form-label fw-bold text-dark">${ key }</label>
+                                    <textarea v-model="config[sectionName][key]"
+                                        class="form-control bg-light border-0 font-monospace small" rows="4"
+                                        placeholder="JSON Array Format"></textarea>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div v-else-if="isSimpleValue(value)">
-                        <label class="block">{{ key }}<span v-if="isRequired(sectionName, key)">*</span></label>
-                        <input v-if="typeof value === 'string'"
-                               v-model="config[sectionName][key]"
-                               :required="isRequired(sectionName, key)"
-                               class="w-full p-2 border rounded">
-                        <input v-else-if="typeof value === 'number'"
-                               type="number"
-                               v-model.number="config[sectionName][key]"
-                               class="w-full p-2 border rounded">
-                        <input v-else-if="typeof value === 'boolean'"
-                               type="checkbox"
-                               v-model="config[sectionName][key]">
+
+                    <!-- Review Step -->
+                    <div class="animate__animated animate__fadeIn" v-if="currentStep === steps.length - 1">
+                        <div class="section-header mb-4">
+                            <h3 class="fw-bold text-dark mb-2">Final Review</h3>
+                            <p class="text-muted">Review the complete configuration JSON before submission.</p>
+                        </div>
+
+                        <div class="position-relative">
+                            <button class="btn btn-sm btn-light position-absolute top-0 end-0 m-3 opacity-75"
+                                @click="copyJson">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                            <pre class="bg-dark text-emerald p-4 rounded-4 shadow-lg overflow-auto"
+                                style="max-height: 500px; font-size: 0.85rem; border: 1px solid #1a1a1a;">${ formattedConfig }</pre>
+                        </div>
                     </div>
-                    <div v-else-if="isArray(value)">
-                        <label class="block">{{ key }}</label>
-                        <textarea v-model="config[sectionName][key]"
-                                  class="w-full p-2 border rounded"
-                                  placeholder="Enter array items as JSON"></textarea>
+
+                </div>
+
+                <!-- Footer Actions -->
+                <div
+                    class="card-footer bg-transparent border-0 p-4 p-lg-5 pt-0 d-flex justify-content-between align-items-center mt-auto">
+                    <button @click="prevStep" :disabled="currentStep === 0" class="btn btn-light px-4 py-2 fw-semibold">
+                        <i class="bi bi-arrow-left me-2"></i> Previous
+                    </button>
+
+                    <div class="d-flex gap-2">
+                        <button @click="nextStep" v-if="currentStep < steps.length - 1"
+                            class="btn btn-indigo text-white px-5 py-2 fw-bold shadow-sm">
+                            Next Step <i class="bi bi-arrow-right ms-2"></i>
+                        </button>
+                        <button @click="submitConfig" v-if="currentStep === steps.length - 1"
+                            class="btn btn-emerald text-white px-5 py-2 fw-bold shadow-sm">
+                            <i class="bi bi-cloud-upload me-2"></i> Save Configuration
+                        </button>
                     </div>
                 </div>
             </div>
 
-            <!-- Review Step -->
-            <div class="step" :class="{ 'active': currentStep === steps.length - 1 }">
-                <h2 class="text-xl font-semibold mb-4">Review Configuration</h2>
-                <pre class="bg-gray-100 p-4 rounded">{{ formattedConfig }}</pre>
+            <!-- Error Feedback -->
+            <div v-show="error" class="animate__animated animate__shakeX mt-4">
+                <div
+                    class="alert alert-rose bg-rose-soft border-0 text-rose rounded-4 shadow-sm p-3 d-flex align-items-center">
+                    <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+                    <div>
+                        <div class="fw-bold">Validation Error</div>
+                        <div class="small">${ error }</div>
+                    </div>
+                </div>
             </div>
-
-            <div class="flex justify-between mt-4">
-                <button @click="prevStep" :disabled="currentStep === 0"
-                        class="px-4 py-2 bg-gray-300 rounded">Previous</button>
-                <button @click="nextStep" v-if="currentStep < steps.length - 1"
-                        class="px-4 py-2 bg-blue-500 text-white rounded">Next</button>
-                <button @click="submitConfig" v-if="currentStep === steps.length - 1"
-                        class="px-4 py-2 bg-green-500 text-white rounded">Submit</button>
-            </div>
-
-            <div v-if="error" class="error mt-4">{{ error }}</div>
         </div>
     </div>
+</div>
 
-    <script>
-        new Vue({
-            el: '#app',
-            data: {
-                config: {{ config|safe }},
-                currentStep: 0,
-                requiredFields: [
-                    'ConnectionStrings.MiddlewareContext',
-                    'ConnectionStrings.Logging',
-                    'ExternalAuthenticationSettings.BaseUrl',
-                    'ExternalAuthenticationSettings.RealmName',
-                    'ExternalAuthenticationSettings.ClientId',
-                    'ExternalAuthenticationSettings.SecretId',
-                    'ExternalAuthenticationSettings.Projects[0].UUID',
-                    'ExternalAuthenticationSettings.Projects[0].Name',
-                    'ExternalAuthenticationSettings.LexisAuthenticationConfiguration.BaseAddress'
-                ],
-                error: ''
-            },
-            computed: {
-                steps() {
-                    return [
-                        ...Object.keys(this.config).map(key => ({ title: key })),
-                        { title: 'Review' }
-                    ];
-                },
-                formattedConfig() {
-                    return JSON.stringify(this.config, null, 2);
-                }
-            },
-            methods: {
-                isObject(value) {
-                    return value && typeof value === 'object' && !Array.isArray(value);
-                },
-                isArray(value) {
-                    return Array.isArray(value);
-                },
-                isSimpleValue(value) {
-                    return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
-                },
-                isRequired(section, key, subKey, subSubKey) {
-                    let path = section;
-                    if (key) path += `.${key}`;
-                    if (subKey) path += `.${subKey}`;
-                    if (subSubKey) path += `.${subSubKey}`;
-                    return this.requiredFields.includes(path);
-                },
-                nextStep() {
-                    if (this.validateStep()) {
-                        this.currentStep++;
-                    }
-                },
-                prevStep() {
-                    this.currentStep--;
-                    this.error = '';
-                },
-                validateStep() {
-                    if (this.currentStep === this.steps.length - 1) return true; // Skip validation for review step
-                    const sectionName = this.steps[this.currentStep].title;
-                    const errors = [];
-                    this.requiredFields.forEach(field => {
-                        if (field.startsWith(sectionName)) {
-                            let keys = field.split('.');
-                            let current = this.config;
-                            let path = [];
-                            for (let key of keys) {
-                                path.push(key);
-                                if (key.includes('[')) {
-                                    let [arrayKey, index] = key.split('[');
-                                    index = parseInt(index.replace(']', ''));
-                                    current = current[arrayKey][index];
-                                } else {
-                                    current = current[key];
-                                }
-                            }
-                            if (typeof current === 'string' && !current) {
-                                errors.push(`Field ${field} is required`);
+<!-- Scripts Section -->
+<script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
+
+<style>
+    .wizard-step {
+        cursor: default;
+        position: relative;
+    }
+
+    .wizard-step.active {
+        color: var(--indigo);
+        border-bottom-color: var(--indigo) !important;
+    }
+
+    .letter-spacing-1 {
+        letter-spacing: 1px;
+    }
+
+    .animate__animated {
+        --animate-duration: 0.4s;
+    }
+
+    .icon-box {
+        width: 52px;
+        height: 52px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+    }
+
+    .bg-light-subtle {
+        background-color: rgba(248, 249, 250, 0.4);
+    }
+
+    .h-1 {
+        height: 4px;
+    }
+
+    .letter-spacing-1 {
+        letter-spacing: 0.1em;
+    }
+
+    .wizard-step .step-number {
+        font-size: 0.8rem;
+        font-family: monospace;
+    }
+</style>
+
+<script>
+    new Vue({
+        el: '#app',
+        delimiters: ['${', '}'],
+        data: {
+            config: {{ config| safe }},
+        currentStep: 0,
+        requiredFields: [
+        'ConnectionStrings.MiddlewareContext',
+        'ConnectionStrings.Logging',
+        'ExternalAuthenticationSettings.BaseUrl',
+        'ExternalAuthenticationSettings.RealmName',
+        'ExternalAuthenticationSettings.ClientId',
+        'ExternalAuthenticationSettings.SecretId',
+        'ExternalAuthenticationSettings.Projects[0].UUID',
+        'ExternalAuthenticationSettings.Projects[0].Name',
+        'ExternalAuthenticationSettings.LexisAuthenticationConfiguration.BaseAddress'
+    ],
+        error: ''
+        },
+        computed: {
+        steps() {
+            return [
+                ...Object.keys(this.config).map(key => ({ title: key })),
+                { title: 'Review' }
+            ];
+        },
+        formattedConfig() {
+            return JSON.stringify(this.config, null, 2);
+        }
+    },
+        methods: {
+        isObject(value) {
+            return value && typeof value === 'object' && !Array.isArray(value);
+        },
+        isArray(value) {
+            return Array.isArray(value);
+        },
+        isSimpleValue(value) {
+            return typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
+        },
+        isRequired(section, key, subKey, subSubKey) {
+            let path = section;
+            if (key) path += `.${key}`;
+            if (subKey) path += `.${subKey}`;
+            if (subSubKey) path += `.${subSubKey}`;
+            return this.requiredFields.includes(path);
+        },
+        nextStep() {
+            if (this.validateStep()) {
+                this.currentStep++;
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        },
+        prevStep() {
+            this.currentStep--;
+            this.error = '';
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+        validateStep() {
+            if (this.currentStep === this.steps.length - 1) return true;
+            const sectionName = this.steps[this.currentStep].title;
+            const errors = [];
+            this.requiredFields.forEach(field => {
+                if (field.startsWith(sectionName)) {
+                    let keys = field.split('.');
+                    let current = this.config;
+                    try {
+                        for (let key of keys) {
+                            if (key.includes('[')) {
+                                let [arrayKey, index] = key.split('[');
+                                index = parseInt(index.replace(']', ''));
+                                current = current[arrayKey][index];
+                            } else {
+                                current = current[key];
                             }
                         }
-                    });
-                    if (errors.length) {
-                        this.error = errors.join(', ');
-                        return false;
-                    }
-                    this.error = '';
-                    return true;
-                },
-                submitConfig() {
-                    if (this.validateStep()) {
-                        $.ajax({
-                            url: '/config',
-                            type: 'POST',
-                            contentType: 'application/json',
-                            data: JSON.stringify(this.config),
-                            success: (response) => {
-                                alert('Configuration saved successfully!');
-                            },
-                            error: (xhr) => {
-                                this.error = xhr.responseJSON.error || 'An error occurred';
-                            }
-                        });
-                    }
+                        if ((typeof current === 'string' && !current) || current === null || current === undefined) {
+                            errors.push(`${field} is mandatory`);
+                        }
+                    } catch (e) { /* field might not exist in current config struct */ }
                 }
+            });
+            if (errors.length) {
+                this.error = errors.join(', ');
+                return false;
             }
-        });
-    </script>
-</body>
-</html>
+            this.error = '';
+            return true;
+        },
+        copyJson() {
+            navigator.clipboard.writeText(this.formattedConfig);
+            alert('Configuration copied to clipboard');
+        },
+        submitConfig() {
+            if (this.validateStep()) {
+                $.ajax({
+                    url: '/config',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify(this.config),
+                    success: (response) => {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Saved!',
+                            text: 'Configuration updated successfully',
+                            confirmButtonColor: '#4f46e5'
+                        });
+                    },
+                    error: (xhr) => {
+                        this.error = xhr.responseJSON.error || 'Failed to save configuration';
+                    }
+                });
+            }
+        }
+    }
+    });
+</script>
 {% endblock %}

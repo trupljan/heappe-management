@@ -3,203 +3,215 @@
 {% block title %}Database Backup & Restore{% endblock %}
 
 {% block content %}
-<div class="container py-4">
-    <!-- Header Section -->
-    <div class="row align-items-center mb-4 pb-2 border-bottom">
-        <div class="col-md-6 mb-3 mb-md-0">
-            <h2 class="fw-bold mb-1">Database Backup &amp; Restore</h2>
-            <p class="text-muted mb-0">
-                Manage full backups and transaction log backups of the HEAppE database.
-            </p>
-        </div>
-        <div class="col-md-6 text-md-end">
-            <div class="d-inline-flex gap-2">
-                <form method="post" class="m-0" onsubmit="return confirm('Trigger a Full Database Backup?');">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="backup_database">
-                    <button type="submit" class="btn btn-primary shadow-sm"
-                        title="Triggers a full database backup via HEAppE Management API.">
-                        <i class="bi bi-hdd-network me-1"></i>
-                        Full Backup
-                    </button>
-                </form>
-
-                <form method="post" class="m-0"
-                    onsubmit="return confirm('Create a backup of database transaction logs?');">
-                    {% csrf_token %}
-                    <input type="hidden" name="action" value="backup_transaction_logs">
-                    <button type="submit" class="btn btn-outline-primary shadow-sm">
-                        <i class="bi bi-journal-code me-1"></i>
-                        Backup Logs
-                    </button>
-                </form>
+<div class="container-fluid py-4 px-lg-5 min-vh-100">
+    <!-- Page Header -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <div class="d-flex align-items-center">
+            <div class="icon-box bg-primary-soft me-3 shadow-xs">
+                <i class="bi bi-shield-shaded text-primary fs-4"></i>
             </div>
+            <div>
+                <h2 class="mb-0 fw-bold text-dark font-outfit">Database Maintenance</h2>
+                <p class="text-muted mb-0 small">Secure backups and point-in-time recovery</p>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <form method="post" class="m-0" onsubmit="return confirm('Trigger a Full Database Backup?');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="backup_database">
+                <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm"
+                    title="Triggers a full database backup via HEAppE Management API.">
+                    <i class="bi bi-plus-circle me-2"></i> Full Backup
+                </button>
+            </form>
+
+            <form method="post" class="m-0" onsubmit="return confirm('Create a backup of database transaction logs?');">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="backup_transaction_logs">
+                <button type="submit" class="btn btn-white px-3 fw-semibold border shadow-xs">
+                    <i class="bi bi-journal-text me-2"></i> Log Backup
+                </button>
+            </form>
         </div>
     </div>
 
-    <!-- Main List Card -->
-    <div class="card shadow-sm border-0">
-        <!-- Card Header with Filters -->
-        <div class="card-header bg-white border-bottom py-3">
-            <div class="row align-items-end g-3">
-                <div class="col-md-3">
-                    <h5 class="mb-0 fw-semibold text-dark">Available Backups</h5>
-                </div>
-                <div class="col-md-9">
-                    <form method="get" class="d-flex flex-wrap gap-2 justify-content-md-end align-items-end m-0">
-                        <div class="d-flex flex-column" style="width: 200px;">
-                            <label class="small text-muted mb-1 fw-medium">From</label>
-                            <input type="datetime-local" name="from" value="{{ filters.from }}"
-                                class="form-control form-control-sm bg-light border-0 px-3 py-2">
+    <!-- Main Content Grid -->
+    <div class="row g-4">
+        <!-- Backups List Section -->
+        <div class="col-12">
+            <div class="card glass-card border-0 shadow-sm overflow-hidden">
+                <!-- Filter Toolbar -->
+                <div class="card-header bg-transparent border-0 py-4 px-4">
+                    <div class="row align-items-center g-3">
+                        <div class="col-md-3">
+                            <h5 class="mb-0 fw-bold">Available Archives</h5>
                         </div>
-                        <div class="d-flex flex-column" style="width: 200px;">
-                            <label class="small text-muted mb-1 fw-medium">To</label>
-                            <input type="datetime-local" name="to" value="{{ filters.to }}"
-                                class="form-control form-control-sm bg-light border-0 px-3 py-2">
-                        </div>
-                        <div class="d-flex flex-column" style="width: 140px;">
-                            <label class="small text-muted mb-1 fw-medium">Type</label>
-                            <select name="type" class="form-select form-select-sm bg-light border-0 px-3 py-2">
-                                <option value="" {% if not filters.type %}selected{% endif %}>All</option>
-                                <option value="0" {% if filters.is_type_0 %}selected{% endif %}>
-                                    Full</option>
-                                <option value="1" {% if filters.is_type_1 %}selected{% endif %}>
-                                    Logs</option>
-                            </select>
-                        </div>
-                        <div class="d-flex align-items-end">
-                            <button type="submit" class="btn btn-sm btn-secondary shadow-sm px-3 py-2"
-                                style="font-weight: 500;">
-                                <i class="bi bi-funnel me-1"></i> Filter
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Backups List -->
-        <div class="card-body p-0">
-            {% if backups %}
-            <div class="table-responsive">
-                <table class="table table-hover table-borderless mb-0 align-middle">
-                    <thead class="bg-light border-bottom">
-                        <tr>
-                            <th scope="col" class="ps-4 py-3 text-secondary border-0"
-                                style="font-weight: 600; font-size: 0.85rem; text-transform: uppercase;">File Name</th>
-                            <th scope="col" class="py-3 text-secondary border-0"
-                                style="width: 130px; font-weight: 600; font-size: 0.85rem; text-transform: uppercase;">
-                                Type</th>
-                            <th scope="col" class="py-3 text-secondary border-0"
-                                style="width: 220px; font-weight: 600; font-size: 0.85rem; text-transform: uppercase;">
-                                Timestamp</th>
-                            <th scope="col" class="py-3 text-end text-secondary border-0"
-                                style="width: 130px; font-weight: 600; font-size: 0.85rem; text-transform: uppercase;">
-                                Size</th>
-                            <th scope="col" class="pe-4 py-3 text-end text-secondary border-0"
-                                style="width: 200px; font-weight: 600; font-size: 0.85rem; text-transform: uppercase;">
-                                Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for b in backups %}
-                        <tr class="border-bottom" style="transition: background-color 0.2s;">
-                            <td class="ps-4 py-3">
-                                <div class="d-flex align-items-center">
-                                    <i class="bi bi-file-earmark-zip text-primary me-3 fs-4 mt-n1 opacity-75"></i>
-                                    <code class="text-dark bg-light px-2 py-1 rounded"
-                                        style="font-size: 0.9rem; font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace;">{{ b.file_name }}</code>
-                                </div>
-                            </td>
-                            <td class="py-3">
-                                {% if b.type == 1 %}
-                                <span
-                                    class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 rounded-pill px-3 py-1 fw-medium">Logs</span>
-                                {% else %}
-                                <span
-                                    class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 rounded-pill px-3 py-1 fw-medium">Full</span>
-                                {% endif %}
-                            </td>
-                            <td class="small text-muted py-3">
-                                <div class="d-flex align-items-center">
-                                    <i class="bi bi-clock me-2 opacity-50"></i>
-                                    {{ b.time_stamp }}
-                                </div>
-                            </td>
-                            <td class="text-end small text-secondary fw-medium py-3">
-                                {% if b.file_size_mb %}
-                                {{ b.file_size_mb }} MB
-                                {% else %}
-                                <span class="opacity-50">-</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-end pe-4 py-3">
-                                <form method="post" class="m-0"
-                                    onsubmit="return confirm('WARNING: Are you sure you want to restore the database from {{ b.file_name }}?\n\nThis will OVERWRITE the current database and CANNOT BE UNDONE.');">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="action" value="restore_database">
-                                    <input type="hidden" name="backup_file_name" value="{{ b.file_name }}">
-                                    <div class="d-flex justify-content-end align-items-center gap-3">
-                                        <div class="form-check form-switch m-0 pe-2 border-end d-flex align-items-center"
-                                            style="gap: 5px;">
-                                            <input class="form-check-input mt-0" type="checkbox" role="switch"
-                                                name="include_logs" id="includeLogs{{ forloop.counter }}"
-                                                style="cursor: pointer;" checked>
-                                            <label class="form-check-label small text-muted mb-0 user-select-none"
-                                                for="includeLogs{{ forloop.counter }}"
-                                                style="cursor: pointer; padding-top: 1px;"
-                                                title="Include logs during restore">
-                                                Logs
-                                            </label>
-                                        </div>
-                                        <button type="submit"
-                                            class="btn btn-sm btn-light border d-inline-flex align-items-center action-restore-btn text-danger shadow-sm">
-                                            <i class="bi bi-arrow-counterclockwise me-1"></i>
-                                            Restore
-                                        </button>
+                        <div class="col-md-9">
+                            <form method="get" class="row g-2 justify-content-md-end">
+                                <div class="col-auto">
+                                    <div class="input-group input-group-sm rounded-3 overflow-hidden border">
+                                        <span class="input-group-text bg-light border-0 small text-muted">From</span>
+                                        <input type="datetime-local" name="from" value="{{ filters.from }}"
+                                            class="form-control border-0 bg-white small" style="width: 180px;">
                                     </div>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="p-5 text-center">
-                <div class="bg-light rounded-circle d-inline-flex align-items-center justify-content-center mb-3 text-secondary"
-                    style="width: 80px; height: 80px;">
-                    <i class="bi bi-inbox" style="font-size: 2.5rem; opacity: 0.6;"></i>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="input-group input-group-sm rounded-3 overflow-hidden border">
+                                        <span class="input-group-text bg-light border-0 small text-muted">To</span>
+                                        <input type="datetime-local" name="to" value="{{ filters.to }}"
+                                            class="form-control border-0 bg-white small" style="width: 180px;">
+                                    </div>
+                                </div>
+                                <div class="col-auto">
+                                    <select name="type"
+                                        class="form-select form-select-sm border bg-white rounded-3 small"
+                                        style="width: 120px;">
+                                        <option value="" {% if not filters.type %}selected{% endif %}>All Types</option>
+                                        <option value="0" {% if filters.is_type_0 %}selected{% endif %}>Full</option>
+                                        <option value="1" {% if filters.is_type_1 %}selected{% endif %}>Logs</option>
+                                    </select>
+                                </div>
+                                <div class="col-auto">
+                                    <button type="submit"
+                                        class="btn btn-sm btn-indigo text-white px-3 rounded-3 fw-bold">
+                                        <i class="bi bi-filter"></i> Apply
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
-                <h5 class="fw-semibold text-dark mb-1">No backups found</h5>
-                <p class="text-muted mb-0" style="font-size: 0.95rem;">Try adjusting your filters or create a new
-                    backup.</p>
+
+                <!-- List Body -->
+                <div class="card-body p-0">
+                    {% if backups %}
+                    <div class="table-responsive">
+                        <table class="table table-modern align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">Archive Name</th>
+                                    <th>Type</th>
+                                    <th>Created On</th>
+                                    <th class="text-end">Size</th>
+                                    <th class="text-end pe-4">Operations</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for b in backups %}
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="d-flex align-items-center">
+                                            <div class="archive-icon me-3">
+                                                <i class="bi bi-safe2 fs-5 text-indigo"></i>
+                                            </div>
+                                            <div>
+                                                <code
+                                                    class="text-dark bg-indigo-soft px-2 py-1 rounded small fw-bold">{{ b.file_name }}</code>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if b.type == 1 %}
+                                        <span
+                                            class="badge rounded-pill bg-amber-soft text-amber px-3 py-1 fw-bold small">LOGS</span>
+                                        {% else %}
+                                        <span
+                                            class="badge rounded-pill bg-indigo-soft text-indigo px-3 py-1 fw-bold small">FULL</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center small text-muted">
+                                            <i class="bi bi-calendar3 me-2 opacity-50"></i>
+                                            {{ b.time_stamp }}
+                                        </div>
+                                    </td>
+                                    <td class="text-end fw-semibold">
+                                        {% if b.file_size_mb %}
+                                        <span class="text-dark">{{ b.file_size_mb }}</span> <span
+                                            class="text-muted small">MB</span>
+                                        {% else %}
+                                        <span class="text-muted">–</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <form method="post" class="m-0 d-inline-block"
+                                            onsubmit="return confirm('WARNING: Are you sure you want to restore the database from {{ b.file_name }}?\n\nThis will OVERWRITE the current database and CANNOT BE UNDONE.');">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="restore_database">
+                                            <input type="hidden" name="backup_file_name" value="{{ b.file_name }}">
+                                            <div class="d-flex justify-content-end align-items-center gap-3">
+                                                <div class="form-check form-switch glass-card px-2 py-1 rounded-pill d-flex align-items-center border mb-0"
+                                                    style="font-size: 0.75rem;">
+                                                    <input class="form-check-input mt-0 me-1" type="checkbox"
+                                                        name="include_logs" id="includeLogs{{ forloop.counter }}"
+                                                        checked>
+                                                    <label class="form-check-label fw-bold text-muted mb-0"
+                                                        for="includeLogs{{ forloop.counter }}">
+                                                        Logs
+                                                    </label>
+                                                </div>
+                                                <button type="submit"
+                                                    class="btn btn-sm btn-white border px-3 rounded-pill fw-bold text-rose hover-rose shadow-xs">
+                                                    <i class="bi bi-arrow-counterclockwise me-1"></i> Restore
+                                                </button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <div class="empty-state-icon mx-auto mb-3">
+                            <i class="bi bi-search fs-1 opacity-25"></i>
+                        </div>
+                        <h5 class="fw-bold">No recovery points found</h5>
+                        <p class="text-muted mb-0 px-4">Your current filters didn't match any backups. Try adjusting
+                            dates or type.</p>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
-            {% endif %}
         </div>
     </div>
 </div>
 
 <style>
-    /* Custom styling for a more premium feel */
-    .action-restore-btn {
-        transition: all 0.2s ease;
-        background-color: #fff;
+    .icon-box {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
     }
 
-    .action-restore-btn:hover {
-        background-color: #dc3545 !important;
+    .archive-icon {
+        width: 36px;
+        height: 36px;
+        background: var(--light);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .hover-rose:hover {
+        background-color: var(--rose) !important;
         color: white !important;
-        border-color: #dc3545 !important;
+        border-color: var(--rose) !important;
     }
 
-    /* Switch styling improvements */
-    .form-switch .form-check-input {
-        width: 2.2em;
-    }
-
-    .table tbody tr:hover {
-        background-color: #f8f9fa !important;
+    .empty-state-icon {
+        width: 80px;
+        height: 80px;
+        background: var(--light);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 </style>
 {% endblock %}

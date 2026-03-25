@@ -4,283 +4,349 @@
 
 {% block content %}
 
-{% if cluster %}
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
-  <div class="container justify-content-center">
-    <ul class="nav nav-pills">
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Cluster Detail</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'queues' %}active{% endif %}" href="?tab=queues">Queues</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'projects' %}active{% endif %}" href="?tab=projects">Projects</a>
-      </li>
-    </ul>
-  </div>
-</nav>
-{% endif %}
-
-<h1 class="mb-4 text-center">{{ cluster.name }}</h1>
-
-<div class="container">
-  {% if active_tab == 'detail' %}
-  <!-- Cluster Detail Form -->
-  <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
-    <div class="card-header d-flex align-items-center">
-      <strong>Cluster Information</strong>
-      <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
-    </div>
-    <div class="card-body">
-      <form method="post">
-        {% csrf_token %}
-        <div class="row g-3">
-          <div class="col-md-3">
-            <label class="form-label">Id</label>
-            <input type="number" class="form-control" name="Id" value="{{ cluster.id }}" readonly disabled>
-          </div>
-
-          <div class="col-md-9">
-            <label class="form-label">Name</label>
-            <input type="text" class="form-control" name="Name" value="{{ cluster.name }}">
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label">Description</label>
-            <input type="text" class="form-control" name="Description" value="{{ cluster.description }}">
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label">Master Node Name</label>
-            <input type="text" class="form-control" name="MasterNodeName" value="{{ cluster.master_node_name }}">
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label">Scheduler Type</label>
-            <select class="form-select" name="SchedulerType">
-              {% for sid, sname in SCHEDULER_CHOICES %}
-              <option value="{{ sid }}" {% if cluster.scheduler_type == sid %}selected{% endif %}>{{ sname }}</option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label">Connection Protocol</label>
-            <select class="form-select" name="ConnectionProtocol">
-              {% for pid, pname in CONNECTION_PROTOCOL_CHOICES %}
-              <option value="{{ pid }}" {% if cluster.connection_protocol == pid %}selected{% endif %}>{{ pname }}
-              </option>
-              {% endfor %}
-            </select>
-          </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Time Zone</label>
-            <input type="text" class="form-control" name="TimeZone" value="{{ cluster.time_zone }}">
-          </div>
-
-          <div class="col-md-4">
-            <label class="form-label">Port</label>
-            <input type="number" class="form-control" name="Port" value="{{ cluster.port }}">
-          </div>
-
-          <div class="col-md-4 d-flex align-items-end">
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" name="UpdateJobStateByServiceAccount"
-                id="UpdateJobStateCheckbox" {% if cluster.update_job_state_by_service_account %}checked{% endif %}>
-              <label class="form-check-label" for="UpdateJobStateCheckbox">Update Job State By Service Account</label>
-            </div>
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label">Domain Name</label>
-            <input type="text" class="form-control" name="DomainName" value="{{ cluster.domain_name }}">
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label">Proxy Connection Id</label>
-            <input type="number" class="form-control" name="ProxyConnectionId" value="{{ cluster.proxy_connection }}">
-          </div>
-        </div>
-
-        <div class="mt-4 mb-2 d-flex justify-content-between border-top pt-3">
-          <button type="submit" class="btn btn-primary">Save Changes</button>
-          <a href="{% url 'cluster_list' %}" class="btn btn-secondary">Back</a>
-        </div>
-      </form>
-    </div>
-  </div>
-
+<div class="container py-4">
   {% if cluster %}
-  <!-- File Transfer Methods -->
-  <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
-    <div class="card-header d-flex align-items-center">
-      <strong>File Transfer Methods</strong>
-      <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
+  <!-- Page Header -->
+  <div class="d-flex align-items-center mb-4 pb-2">
+    <div class="icon-box bg-emerald-soft me-4">
+      <i class="bi bi-hdd-network text-emerald fs-3"></i>
     </div>
-    <div class="card-body">
-      {% if filetransfer_methods %}
-      <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle mb-0">
-          <thead>
-            <tr>
-              <th scope="col">Id</th>
-              <th scope="col">Server Hostname</th>
-              <th scope="col">Port</th>
-              <th scope="col">Protocol</th>
-              <th scope="col" class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for ftm in filetransfer_methods %}
-            <tr>
-              <td>{{ ftm.id }}</td>
-              <td>{{ ftm.server_hostname }}</td>
-              <td>{{ ftm.port }}</td>
-              <td>{{ ftm.protocol_name }}</td>
-              <td class="text-end">
-                <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal"
-                  data-bs-target="#editFileTransferModal" data-id="{{ ftm.id }}"
-                  data-hostname="{{ ftm.server_hostname }}" data-protocol-id="{{ ftm.protocol }}"
-                  data-port="{{ ftm.port }}">
-                  Edit
-                </button>
-                <form method="post" class="d-inline"
-                  onsubmit="return confirm('Are you sure you want to delete this File Transfer Method?');">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="delete_filetransfer">
-                  <input type="hidden" name="Id" value="{{ ftm.id }}">
-                  <button class="btn btn-sm btn-danger">Delete</button>
-                </form>
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <div>
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+          <li class="breadcrumb-item"><a href="{% url 'cluster_list' %}" class="text-decoration-none">Clusters</a></li>
+          <li class="breadcrumb-item active">{{ cluster.name }}</li>
+        </ol>
+      </nav>
+      <h2 class="mb-0 fw-bold">{{ cluster.name }}</h2>
+    </div>
+    <div class="ms-auto">
+      <button class="btn btn-glass-secondary" onclick="location.reload();">
+        <i class="bi bi-arrow-clockwise me-1"></i> Reload
+      </button>
+    </div>
+  </div>
+
+  <!-- Sub Navigation -->
+  <div class="row mb-5">
+    <div class="col-12">
+      <div class="card glass-card border-0 p-1">
+        <ul class="nav nav-pills nav-fill gap-2">
+          <li class="nav-item">
+            <a class="nav-link rounded-3 py-2 {% if active_tab == 'detail' %}active bg-emerald text-white fw-semibold shadow-sm{% else %}text-muted{% endif %}"
+              href="?tab=detail">
+              <i class="bi bi-info-circle me-2"></i>Cluster Detail
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link rounded-3 py-2 {% if active_tab == 'queues' %}active bg-emerald text-white fw-semibold shadow-sm{% else %}text-muted{% endif %}"
+              href="?tab=queues">
+              <i class="bi bi-stack me-2"></i>Queues
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link rounded-3 py-2 {% if active_tab == 'projects' %}active bg-emerald text-white fw-semibold shadow-sm{% else %}text-muted{% endif %}"
+              href="?tab=projects">
+              <i class="bi bi-folder2-open me-2"></i>Projects
+            </a>
+          </li>
+        </ul>
       </div>
-      {% else %}
-      <p class="text-muted mb-0">No file transfer methods found.</p>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="row justify-content-center">
+    {% if active_tab == 'detail' %}
+    <!-- Cluster Detail Form -->
+    <div class="col-12 col-xl-11">
+      <div class="card glass-card border-0 mb-4 overflow-hidden">
+        <div class="card-header bg-transparent border-0 py-3 px-4">
+          <h5 class="mb-0 fw-bold text-dark">General Information</h5>
+        </div>
+        <div class="card-body p-4 pt-0">
+          <form method="post">
+            {% csrf_token %}
+            <div class="row g-4">
+              <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Cluster ID</label>
+                <input type="number" class="form-control border-0 bg-light font-monospace" name="Id"
+                  value="{{ cluster.id }}" readonly disabled>
+              </div>
+
+              <div class="col-md-9">
+                <label class="form-label small fw-bold text-muted">Display Name</label>
+                <input type="text" class="form-control border-0 bg-light fw-semibold" name="Name"
+                  value="{{ cluster.name }}">
+              </div>
+
+              <div class="col-md-12">
+                <label class="form-label small fw-bold text-muted">Description</label>
+                <textarea class="form-control border-0 bg-light" name="Description"
+                  rows="2">{{ cluster.description }}</textarea>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Master Node</label>
+                <div class="input-group">
+                  <span class="input-group-text border-0 bg-light text-muted"><i class="bi bi-cpu"></i></span>
+                  <input type="text" class="form-control border-0 bg-light font-monospace" name="MasterNodeName"
+                    value="{{ cluster.master_node_name }}">
+                </div>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Scheduler</label>
+                <select class="form-select border-0 bg-light" name="SchedulerType">
+                  {% for sid, sname in SCHEDULER_CHOICES %}
+                  <option value="{{ sid }}" {% if cluster.scheduler_type==sid %}selected{% endif %}>{{ sname }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Protocol</label>
+                <select class="form-select border-0 bg-light" name="ConnectionProtocol">
+                  {% for pid, pname in CONNECTION_PROTOCOL_CHOICES %}
+                  <option value="{{ pid }}" {% if cluster.connection_protocol==pid %}selected{% endif %}>{{ pname }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">Domain</label>
+                <input type="text" class="form-control border-0 bg-light font-monospace" name="DomainName"
+                  value="{{ cluster.domain_name }}">
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">Port</label>
+                <input type="number" class="form-control border-0 bg-light font-monospace" name="Port"
+                  value="{{ cluster.port }}">
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">Time Zone</label>
+                <input type="text" class="form-control border-0 bg-light" name="TimeZone"
+                  value="{{ cluster.time_zone }}">
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-muted">Proxy Connection ID</label>
+                <input type="number" class="form-control border-0 bg-light font-monospace" name="ProxyConnectionId"
+                  value="{{ cluster.proxy_connection }}">
+              </div>
+
+              <div class="col-md-6 d-flex align-items-center">
+                <div class="form-check form-switch mt-3">
+                  <input class="form-check-input" type="checkbox" name="UpdateJobStateByServiceAccount"
+                    id="UpdateJobStateCheckbox" {% if cluster.update_job_state_by_service_account %}checked{% endif %}>
+                  <label class="form-check-label ms-2 fw-medium" for="UpdateJobStateCheckbox">Update Job State By
+                    Service Account</label>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-5 pt-3 d-flex justify-content-between align-items-center border-top">
+              <a href="{% url 'cluster_list' %}" class="btn btn-light"><i class="bi bi-arrow-left me-1"></i> Back to
+                List</a>
+              <button type="submit" class="btn btn-emerald text-white px-5 shadow-sm">Save Changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {% if cluster %}
+      <!-- File Transfer Methods -->
+      <div class="card glass-card border-0 mb-4 overflow-hidden">
+        <div class="card-header bg-transparent border-0 d-flex align-items-center py-3 px-4">
+          <h5 class="mb-0 fw-bold text-dark">File Transfer Methods</h5>
+          <button class="btn btn-sm btn-glass-emerald ms-auto" data-bs-toggle="modal"
+            data-bs-target="#addFileTransferModal">
+            <i class="bi bi-plus-lg me-1"></i> Add Method
+          </button>
+        </div>
+        <div class="card-body p-0">
+          {% if filetransfer_methods %}
+          <div class="table-responsive">
+            <table class="table table-modern mb-0">
+              <thead>
+                <tr>
+                  <th scope="col" class="ps-4">Id</th>
+                  <th scope="col">Server Hostname</th>
+                  <th scope="col">Port</th>
+                  <th scope="col">Protocol</th>
+                  <th scope="col" class="text-end pe-4">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for ftm in filetransfer_methods %}
+                <tr>
+                  <td class="ps-4"><span class="badge bg-light text-dark font-monospace">{{ ftm.id }}</span></td>
+                  <td>
+                    <div class="fw-semibold">{{ ftm.server_hostname }}</div>
+                  </td>
+                  <td><span class="text-muted">{{ ftm.port }}</span></td>
+                  <td><span class="badge bg-primary-soft text-primary">{{ ftm.protocol_name }}</span></td>
+                  <td class="text-end pe-4">
+                    <div class="btn-group">
+                      <button class="btn btn-sm btn-light border-0" data-bs-toggle="modal"
+                        data-bs-target="#editFileTransferModal" data-id="{{ ftm.id }}"
+                        data-hostname="{{ ftm.server_hostname }}" data-protocol-id="{{ ftm.protocol }}"
+                        data-port="{{ ftm.port }}" title="Edit">
+                        <i class="bi bi-pencil-square text-primary"></i>
+                      </button>
+                      <form method="post" class="d-inline"
+                        onsubmit="return confirm('Are you sure you want to delete this File Transfer Method?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_filetransfer">
+                        <input type="hidden" name="Id" value="{{ ftm.id }}">
+                        <button class="btn btn-sm btn-light border-0" title="Delete">
+                          <i class="bi bi-trash text-danger"></i>
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="p-5 text-center">
+            <i class="bi bi-send-x fs-1 text-muted"></i>
+            <p class="mt-2 mb-0 text-muted">No file transfer methods configured for this cluster.</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Modals preserved and styled -->
+      <!-- Add Modal -->
+      <div class="modal fade" id="addFileTransferModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content border-0 shadow-lg">
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="add_filetransfer">
+              <div class="modal-header border-0 bg-light py-3">
+                <h5 class="modal-title fw-bold">Add File Transfer Method</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-4">
+                <div class="mb-3">
+                  <label class="form-label small fw-bold text-muted">Server Hostname</label>
+                  <input type="text" class="form-control border-0 bg-light" name="ServerHostname"
+                    placeholder="hostname.example.com" required>
+                </div>
+                <div class="row g-3">
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label small fw-bold text-muted">Port</label>
+                    <input type="number" class="form-control border-0 bg-light" name="Port" id="Port">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label small fw-bold text-muted">Protocol</label>
+                    <select class="form-select border-0 bg-light" name="Protocol" required>
+                      {% for pid, pname in PROTOCOL_CHOICES %}
+                      <option value="{{ pid }}">{{ pname }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer border-0 p-4 pt-0">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-emerald text-white px-4">Create Method</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Edit Modal -->
+      <div class="modal fade" id="editFileTransferModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content border-0 shadow-lg">
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="edit_filetransfer">
+              <input type="hidden" name="Id" id="editFileTransferId">
+              <div class="modal-header border-0 bg-light py-3">
+                <h5 class="modal-title fw-bold">Edit File Transfer Method</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+              </div>
+              <div class="modal-body p-4">
+                <div class="mb-3">
+                  <label class="form-label small fw-bold text-muted">Server Hostname</label>
+                  <input type="text" class="form-control border-0 bg-light" name="ServerHostname"
+                    id="editServerHostname" required>
+                </div>
+                <div class="row g-3">
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label small fw-bold text-muted">Port</label>
+                    <input type="number" class="form-control border-0 bg-light" name="Port" id="editPort">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label small fw-bold text-muted">Protocol</label>
+                    <select class="form-select border-0 bg-light" name="Protocol" id="editProtocol" required>
+                      {% for pid, pname in PROTOCOL_CHOICES %}
+                      <option value="{{ pid }}">{{ pname }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer border-0 p-4 pt-0">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-indigo text-white px-4">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <script>
+        document.addEventListener('DOMContentLoaded', function () {
+          var editModal = document.getElementById('editFileTransferModal');
+          if (editModal) {
+            editModal.addEventListener('show.bs.modal', function (event) {
+              var button = event.relatedTarget;
+              document.getElementById('editFileTransferId').value = button.getAttribute('data-id');
+              document.getElementById('editServerHostname').value = button.getAttribute('data-hostname');
+              document.getElementById('editPort').value = button.getAttribute('data-port');
+              var protocolValue = button.getAttribute('data-protocol-id');
+              document.getElementById('editProtocol').value = protocolValue;
+            });
+          }
+        });
+      </script>
       {% endif %}
+    </div>
+    {% endif %} <!-- End of detail tab -->
 
-      <div class="mt-3">
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addFileTransferModal">
-          Add New Method
-        </button>
+    {% if active_tab == 'queues' %}
+    <div class="col-12">
+      {% include "queues_table.html" %}
+    </div>
+    {% endif %}
+
+    {% if active_tab == 'projects' %}
+    <div class="col-12">
+      {% if queues %}
+      {% include "projects_table.html" %}
+      {% else %}
+      <div
+        class="alert alert-warning border-0 bg-amber-soft text-amber p-4 rounded-4 shadow-sm text-center col-12 col-xl-11 mx-auto"
+        role="alert">
+        <i class="bi bi-exclamation-triangle fs-4 d-block mb-2"></i>
+        <h5 class="fw-bold">Queue Required</h5>
+        <p class="mb-0">You need to add a queue before managing projects for this cluster.</p>
       </div>
+      {% endif %}
     </div>
+    {% endif %}
   </div>
-
-  <!-- Add Modal -->
-  <div class="modal fade" id="addFileTransferModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <form method="post">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="add_filetransfer">
-          <div class="modal-header">
-            <h5 class="modal-title">Add File Transfer Method</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Server Hostname</label>
-              <input type="text" class="form-control" name="ServerHostname" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Port</label>
-              <input type="number" class="form-control" name="Port" id="Port" optional>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Protocol</label>
-              <select class="form-select" name="Protocol" required>
-                {% for pid, pname in PROTOCOL_CHOICES %}
-                <option value="{{ pid }}">{{ pname }}</option>
-                {% endfor %}
-              </select>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="submit" class="btn btn-primary">Save</button>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <!-- Edit Modal -->
-  <div class="modal fade" id="editFileTransferModal" tabindex="-1">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <form method="post">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="edit_filetransfer">
-          <input type="hidden" name="Id" id="editFileTransferId">
-          <div class="modal-header">
-            <h5 class="modal-title">Edit File Transfer Method</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <div class="mb-3">
-              <label class="form-label">Server Hostname</label>
-              <input type="text" class="form-control" name="ServerHostname" id="editServerHostname" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Port</label>
-              <input type="number" class="form-control" name="Port" id="editPort" optional>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Protocol</label>
-              <select class="form-select" name="Protocol" id="editProtocol" required>
-                {% for pid, pname in PROTOCOL_CHOICES %}
-                <option value="{{ pid }}">{{ pname }}</option>
-                {% endfor %}
-              </select>
-            </div>
-          </div>
-          <div class="modal-footer">
-            <button type="submit" class="btn btn-primary">Save Changes</button>
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    // Fill edit modal with data
-    var editModal = document.getElementById('editFileTransferModal')
-    if (editModal) {
-      editModal.addEventListener('show.bs.modal', function (event) {
-        var button = event.relatedTarget
-        document.getElementById('editFileTransferId').value = button.getAttribute('data-id')
-        document.getElementById('editServerHostname').value = button.getAttribute('data-hostname')
-        document.getElementById('editPort').value = button.getAttribute('data-port')
-        var protocolValue = button.getAttribute('data-protocol-id')
-        document.getElementById('editProtocol').value = protocolValue
-      })
-    }
-  </script>
-  {% endif %}
-  {% endif %} <!-- End of detail tab -->
-
-  {% if active_tab == 'queues' %}
-  <!-- Queues Content -->
-  {% include "queues_table.html" %}
-  {% endif %}
-
-  {% if active_tab == 'projects' %}
-  {% if queues %}
-  {% include "projects_table.html" %}
-  {% else %}
-  <div class="d-flex justify-content-center">
-    <div class="alert alert-warning text-center col-12 col-xl-10 mx-auto" role="alert">
-      You need to add a queue before managing projects.
-    </div>
-  </div>
-  {% endif %}
-  {% endif %}
 </div>
+{% endblock %}
 {% endblock %}

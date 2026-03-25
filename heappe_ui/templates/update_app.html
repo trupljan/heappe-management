@@ -1,59 +1,87 @@
 {% extends 'base.html' %}
+
 {% block title %}System Update | HEAppE Admin{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6 col-lg-5">
-        <div class="card border-0 shadow-sm mt-4">
-            <div class="card-header bg-white border-bottom py-3">
-                <h5 class="card-title mb-0 fw-bold d-flex align-items-center">
-                    <i class="bi bi-shield-lock text-primary me-2"></i>
-                    Authentication Required
-                </h5>
+<div class="container-fluid py-5 px-lg-5 min-vh-100 d-flex align-items-center justify-content-center bg-light-soft">
+    <div class="col-md-8 col-lg-6 col-xl-5">
+        <!-- Main Update Card -->
+        <div class="card glass-card border-0 shadow-lg animate__animated animate__fadeInUp overflow-hidden">
+            <div class="card-header bg-indigo text-white p-4 text-center border-0">
+                <div class="icon-box bg-white bg-opacity-20 mx-auto mb-3 shadow-sm rounded-circle"
+                    style="width: 64px; height: 64px;">
+                    <i class="bi bi-cloud-arrow-down fs-2"></i>
+                </div>
+                <h4 class="mb-1 fw-bold font-outfit">System Deployment</h4>
+                <p class="mb-0 small opacity-75">Administrative Authorization Required</p>
             </div>
-            <div class="card-body p-4">
-                <p class="text-muted small mb-4">
-                    To proceed with the system update, please provide your administrative credentials.
-                </p>
+
+            <div class="card-body p-4 p-md-5">
+                <div class="alert alert-indigo bg-indigo-soft border-0 text-indigo rounded-4 small mb-4 d-flex">
+                    <i class="bi bi-info-circle-fill me-3 fs-5"></i>
+                    <div>
+                        Deployment will pull the latest codebase from <strong>{{ GIT_BRANCH }}</strong> and perform a
+                        graceful service restart.
+                    </div>
+                </div>
 
                 <form id="updateForm">
                     {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="username" class="form-label small fw-bold text-secondary">Username</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-end-0"><i class="bi bi-person text-muted"></i></span>
-                            <input type="text" class="form-control border-start-0 ps-0" id="username" name="username" placeholder="Enter username" required>
-                        </div>
-                    </div>
-
                     <div class="mb-4">
-                        <label for="password" class="form-label small fw-bold text-secondary">Password</label>
-                        <div class="input-group">
-                            <span class="input-group-text bg-light border-end-0"><i class="bi bi-key text-muted"></i></span>
-                            <input type="password" class="form-control border-start-0 ps-0" id="password" name="password" placeholder="Enter password" required>
+                        <label for="username"
+                            class="form-label small fw-bold text-muted text-uppercase letter-spacing-1">Admin
+                            Identity</label>
+                        <div class="input-group input-group-lg border rounded-3 overflow-hidden bg-white shadow-xs">
+                            <span class="input-group-text border-0 bg-transparent ps-3"><i
+                                    class="bi bi-person text-muted"></i></span>
+                            <input type="text" class="form-control border-0 bg-transparent fs-6" id="username"
+                                name="username" placeholder="Username" required>
                         </div>
                     </div>
 
-                    <div class="d-grid gap-2">
-                        <button type="button" id="updateBtn" onclick="updateApp()" class="btn btn-primary fw-bold py-2 shadow-sm">
-                            <span id="btnText">Start System Update</span>
-                            <span id="btnSpinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                    <div class="mb-5">
+                        <label for="password"
+                            class="form-label small fw-bold text-muted text-uppercase letter-spacing-1">Secret
+                            Key</label>
+                        <div class="input-group input-group-lg border rounded-3 overflow-hidden bg-white shadow-xs">
+                            <span class="input-group-text border-0 bg-transparent ps-3"><i
+                                    class="bi bi-shield-lock text-muted"></i></span>
+                            <input type="password" class="form-control border-0 bg-transparent fs-6" id="password"
+                                name="password" placeholder="••••••••" required>
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-3">
+                        <button type="button" id="updateBtn" onclick="updateApp()"
+                            class="btn btn-indigo text-white py-3 fw-bold rounded-3 shadow-indigo ripple-effect d-flex align-items-center justify-content-center">
+                            <span id="btnText">Initialize Update Sequence</span>
+                            <span id="btnSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"
+                                aria-hidden="true"></span>
                         </button>
-                        <a href="{% url 'dashboard_view' %}" class="btn btn-link text-muted btn-sm text-decoration-none">Back to Dashboard</a>
+                        <a href="{% url 'dashboard_view' %}"
+                            class="btn btn-link text-muted small text-decoration-none text-center">
+                            <i class="bi bi-arrow-left me-1"></i> Return to Workspace
+                        </a>
                     </div>
                 </form>
-            </div>
-            <div class="card-footer bg-light border-0 py-3">
-                <div class="d-flex align-items-center text-muted small">
-                    <i class="bi bi-info-circle me-2"></i>
-                    <span>Updating from branch: <strong>{{ GIT_BRANCH }}</strong></span>
+
+                <!-- Status Feedback -->
+                <div id="statusMessage" class="mt-4 d-none animate__animated animate__fadeIn">
+                    <div class="alert shadow-sm border-0 d-flex align-items-center rounded-4 overflow-hidden p-3"
+                        role="alert">
+                        <div class="status-icon-box me-3 rounded-circle d-flex align-items-center justify-content-center"
+                            style="width: 38px; height: 38px;">
+                            <i id="statusIcon" class="bi fs-5 text-white"></i>
+                        </div>
+                        <div id="statusText" class="fw-semibold"></div>
+                    </div>
                 </div>
             </div>
-        </div>
-        
-        <div id="statusMessage" class="mt-3 d-none">
-            <div class="alert shadow-sm border-0 d-flex align-items-center" role="alert">
-                <i id="statusIcon" class="bi me-2 fs-5"></i>
-                <div id="statusText"></div>
+
+            <div class="card-footer bg-light-soft border-0 py-3 px-4 text-center">
+                <span class="text-muted small">Target Revision: <span
+                        class="badge bg-white border text-dark fw-bold px-2 rounded-pill shadow-xs">{{ GIT_BRANCH
+                        }}</span></span>
             </div>
         </div>
     </div>
@@ -71,18 +99,17 @@
         const statusIcon = document.getElementById('statusIcon');
 
         if (!username || !password) {
-            showStatus('Please enter both username and password.', 'warning');
+            showStatus('Identity and secret required to proceed.', 'warning');
             return;
         }
 
-        // Final safety check
-        if (!confirm("Confirm system update? This will pull latest code and restart the server.")) {
+        if (!confirm("Confirm system deployment? Action will pull latest assets and restart services.")) {
             return;
         }
 
         // UI State: Loading
         btn.disabled = true;
-        btnText.innerText = "Updating...";
+        btnText.innerText = "Processing Sequence...";
         btnSpinner.classList.remove('d-none');
         statusDiv.classList.add('d-none');
 
@@ -97,16 +124,16 @@
             });
 
             const result = await response.json();
-            
+
             if (response.ok) {
-                showStatus(result.message || 'Update successful! Redirecting...', 'success');
+                showStatus(result.message || 'Deployment success. Syncing core...', 'success');
                 setTimeout(() => window.location.href = "{% url 'dashboard_view' %}", 3000);
             } else {
-                showStatus(result.message || 'Update failed.', 'danger');
+                showStatus(result.message || 'Deployment authorization failed.', 'danger');
                 resetBtn();
             }
         } catch (error) {
-            showStatus('Network error: ' + error, 'danger');
+            showStatus('Communication failure: ' + error, 'danger');
             resetBtn();
         }
     }
@@ -116,13 +143,25 @@
         const statusText = document.getElementById('statusText');
         const statusIcon = document.getElementById('statusIcon');
         const alertBox = statusDiv.querySelector('.alert');
+        const iconContainer = statusDiv.querySelector('.status-icon-box');
 
         statusDiv.classList.remove('d-none');
         statusText.innerText = message;
-        
-        // Reset classes
-        alertBox.className = 'alert shadow-sm border-0 d-flex align-items-center alert-' + type;
-        statusIcon.className = 'bi me-2 fs-5 ' + (type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle');
+
+        // Premium class mapping
+        if (type === 'success') {
+            alertBox.className = 'alert shadow-sm border-0 d-flex align-items-center rounded-4 p-3 bg-teal-soft text-teal';
+            iconContainer.className = 'status-icon-box me-3 rounded-circle d-flex align-items-center justify-content-center bg-teal';
+            statusIcon.className = 'bi bi-check-lg fs-5 text-white';
+        } else if (type === 'warning') {
+            alertBox.className = 'alert shadow-sm border-0 d-flex align-items-center rounded-4 p-3 bg-amber-soft text-amber';
+            iconContainer.className = 'status-icon-box me-3 rounded-circle d-flex align-items-center justify-content-center bg-amber';
+            statusIcon.className = 'bi bi-exclamation-triangle fs-5 text-white';
+        } else {
+            alertBox.className = 'alert shadow-sm border-0 d-flex align-items-center rounded-4 p-3 bg-rose-soft text-rose';
+            iconContainer.className = 'status-icon-box me-3 rounded-circle d-flex align-items-center justify-content-center bg-rose';
+            statusIcon.className = 'bi bi-x-lg fs-5 text-white';
+        }
     }
 
     function resetBtn() {
@@ -130,8 +169,30 @@
         const btnText = document.getElementById('btnText');
         const btnSpinner = document.getElementById('btnSpinner');
         btn.disabled = false;
-        btnText.innerText = "Start System Update";
+        btnText.innerText = "Initialize Update Sequence";
         btnSpinner.classList.add('d-none');
     }
 </script>
+
+<style>
+    .bg-light-soft {
+        background-color: #f8fafc;
+    }
+
+    .shadow-indigo {
+        box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.39);
+    }
+
+    .letter-spacing-1 {
+        letter-spacing: 0.1rem;
+    }
+
+    .ripple-effect {
+        transition: transform 0.2s;
+    }
+
+    .ripple-effect:active {
+        transform: scale(0.98);
+    }
+</style>
 {% endblock %}

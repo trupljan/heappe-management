@@ -1,222 +1,461 @@
-<div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
-  <div class="card-header d-flex align-items-center">
-    <strong>Formulas</strong>
-    <div class="ms-auto">
-      <button class="btn btn-success btn-sm me-2" data-bs-toggle="modal" data-bs-target="#addFormulaModal">Create
-        New</button>
-      <button class="btn btn-info btn-sm me-2" data-bs-toggle="modal" data-bs-target="#assignFormulaModal">Assign
-        Existing</button>
-      <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">Reload</button>
-    </div>
-  </div>
+<style>
+  .formula-dropzone {
+    min-height: 120px;
+    border: 2px dashed rgba(0, 0, 0, 0.1) !important;
+    background-color: rgba(0, 0, 0, 0.02) !important;
+    transition: 0.2s;
+    border-radius: 12px !important;
+  }
 
-  <div class="card-body p-0">
-    {% if formulas %}
-    <div class="table-responsive">
-      <table class="table table-striped mb-0">
-        <thead class="table-light">
-          <tr>
-            <th>ID</th>
-            <th>Formula</th>
-            <th>Created At</th>
-            <th>Modified At</th>
-            <th>Validity From</th>
-            <th>Validity To</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for formula in formulas %}
-          <tr>
-            <td>{{ formula.id }}</td>
-            <td>{{ formula.formula }}</td>
-            <td>{{ formula.created_at }}</td>
-            <td>{{ formula.modified_at }}</td>
-            <td>{{ formula.validity_from }}</td>
-            <td>{{ formula.validity_to }}</td>
-            <td>
-              <div class="d-flex gap-1">
-                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#editFormulaModal"
-                  data-id="{{ formula.id }}" data-formula="{{ formula.formula }}"
-                  data-validity-from="{{ formula.validity_from }}" data-validity-to="{{ formula.validity_to }}">
-                  Edit
-                </button>
-                <form method="post">
-                  {% csrf_token %}
-                  <input type="hidden" name="action" value="unassign_formula" />
-                  <input type="hidden" name="FormulaId" value="{{ formula.id }}" />
-                  <button type="submit" class="btn btn-sm btn-danger"
-                    onclick="return confirm('Are you sure you want to unassign this formula?');">
-                    Unassign
-                  </button>
-                </form>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  .formula-dropzone:hover {
+    border-color: var(--primary-color) !important;
+    background-color: rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .token-badge {
+    padding: 0.5rem 0.8rem !important;
+    font-weight: 600 !important;
+    cursor: grab;
+    transition: 0.2s;
+    user-select: none;
+    border: 0 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  }
+
+  .token-badge:active {
+    cursor: grabbing;
+  }
+
+  .token-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .token-number {
+    background-color: var(--emerald-soft) !important;
+    color: var(--emerald) !important;
+  }
+
+  .token-time {
+    background-color: var(--indigo-soft) !important;
+    color: var(--indigo) !important;
+  }
+
+  .token-operator {
+    background-color: var(--primary-soft) !important;
+    color: var(--primary-color) !important;
+  }
+
+  .token-custom {
+    background-color: #f8fafc !important;
+    color: #475569 !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+</style>
+
+<div class="col-12 col-xl-11 mx-auto">
+  <div class="card glass-card border-0 mb-4 overflow-hidden">
+    <div class="card-header bg-transparent border-0 d-flex align-items-center py-3 px-4">
+      <div class="d-flex align-items-center">
+        <div class="icon-box-sm bg-primary-soft me-3">
+          <i class="bi bi-calculator text-primary fs-5"></i>
+        </div>
+        <div>
+          <h5 class="mb-0 fw-bold">Accounting Formulas</h5>
+          <small class="text-muted">Define how computing costs are calculated</small>
+        </div>
+      </div>
+      <div class="ms-auto d-flex gap-2">
+        <button class="btn btn-sm btn-emerald text-white" data-bs-toggle="modal" data-bs-target="#addFormulaModal">
+          <i class="bi bi-plus-lg me-1"></i> Create New
+        </button>
+        <button class="btn btn-sm btn-glass-primary" data-bs-toggle="modal" data-bs-target="#assignFormulaModal">
+          <i class="bi bi-link-45deg me-1"></i> Assign Existing
+        </button>
+        <button class="btn btn-sm btn-glass-secondary" onclick="location.reload();">
+          <i class="bi bi-arrow-clockwise me-1"></i> Reload
+        </button>
+      </div>
     </div>
-    {% else %}
-    <p class="p-3 mb-0">No formulas available.</p>
-    {% endif %}
+
+    <div class="card-body p-0">
+      {% if formulas %}
+      <div class="table-responsive">
+        <table class="table table-modern mb-0">
+          <thead>
+            <tr>
+              <th scope="col" class="ps-4">ID</th>
+              <th scope="col">Formula Expression</th>
+              <th scope="col" class="d-none d-lg-table-cell">Validity Period</th>
+              <th scope="col" class="d-none d-xl-table-cell">Timestamps</th>
+              <th scope="col" class="text-end pe-4">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for formula in formulas %}
+            <tr>
+              <td class="ps-4"><span class="badge bg-light text-dark font-monospace">{{ formula.id }}</span></td>
+              <td>
+                <code class="bg-light p-2 rounded text-indigo fw-bold">{{ formula.formula }}</code>
+              </td>
+              <td class="d-none d-lg-table-cell">
+                <div class="small fw-medium text-emerald">From: {{ formula.validity_from }}</div>
+                <div class="small text-muted">To: {{ formula.validity_to }}</div>
+              </td>
+              <td class="d-none d-xl-table-cell">
+                <div class="small text-muted">Created: {{ formula.created_at }}</div>
+                <div class="small text-muted">Modified: {{ formula.modified_at }}</div>
+              </td>
+              <td class="text-end pe-4">
+                <div class="btn-group">
+                  <button class="btn btn-sm btn-light border-0" data-bs-toggle="modal"
+                    data-bs-target="#editFormulaModal" data-id="{{ formula.id }}" data-formula="{{ formula.formula }}"
+                    data-validity-from="{{ formula.validity_from }}" data-validity-to="{{ formula.validity_to }}"
+                    title="Edit">
+                    <i class="bi bi-pencil-square text-primary"></i>
+                  </button>
+                  <form method="post" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="unassign_formula" />
+                    <input type="hidden" name="FormulaId" value="{{ formula.id }}" />
+                    <button type="submit" class="btn btn-sm btn-light border-0"
+                      onclick="return confirm('Are you sure you want to unassign this formula?');" title="Unassign">
+                      <i class="bi bi-trash text-danger"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="p-5 text-center">
+        <i class="bi bi-calculator fs-1 text-muted"></i>
+        <p class="mt-2 mb-0 text-muted">No formulas assigned to this project.</p>
+      </div>
+      {% endif %}
+    </div>
   </div>
 </div>
 
+<!-- Add Formula Modal -->
 <div class="modal fade" id="addFormulaModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="add_formula">
-        <div class="modal-header">
-          <h5 class="modal-title">Add Formula</h5>
+        <div class="modal-header border-0 bg-emerald-soft py-3">
+          <h5 class="modal-title fw-bold text-emerald"><i class="bi bi-plus-circle me-2"></i>Create New Formula</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
-          <div class="row">
-            <div class="col-4 border-end">
-              <h6>Tokens</h6>
-              <div class="d-flex flex-wrap gap-1 mb-3">
+        <div class="modal-body p-4">
+          <div class="row g-4">
+            <div class="col-lg-4 border-end">
+              <h6 class="fw-bold mb-3">Available Tokens</h6>
+
+              <p class="small text-muted mb-2">Metrics</p>
+              <div class="d-flex flex-wrap gap-2 mb-3">
                 {% for operand in ACCOUNTING_NUMBERS %}
-                <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                <span class="badge rounded-pill token-badge token-number draggable" draggable="true"
+                  data-value="{{ operand }}">{{ operand }}</span>
                 {% endfor %}
               </div>
-              <div class="d-flex flex-wrap gap-1 mb-3">
+
+              <p class="small text-muted mb-2">Time/Units</p>
+              <div class="d-flex flex-wrap gap-2 mb-3">
                 {% for operand in ACCOUNTING_TIMES %}
-                <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                <span class="badge rounded-pill token-badge token-time draggable" draggable="true"
+                  data-value="{{ operand }}">{{ operand }}</span>
                 {% endfor %}
               </div>
-              <div class="d-flex flex-wrap gap-1 mb-3">
+
+              <p class="small text-muted mb-2">Operators</p>
+              <div class="d-flex flex-wrap gap-2 mb-3">
                 {% for operator in ACCOUNTING_OPERATORS %}
-                <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
+                <span class="badge rounded-pill token-badge token-operator draggable" draggable="true"
+                  data-value="{{ operator }}">{{ operator }}</span>
                 {% endfor %}
               </div>
 
-              <hr>
-              <h6>Custom Value</h6>
-              <div class="input-group input-group-sm mb-2">
-                <input type="text" class="form-control custom-token-input" placeholder="e.g. 1.25 or Variable">
-                <button class="btn btn-dark add-custom-token-btn" type="button">Add</button>
+              <hr class="my-4">
+              <h6 class="fw-bold mb-3">Custom Value</h6>
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control border-0 bg-light custom-token-input" placeholder="e.g. 1.5">
+                <button class="btn btn-indigo add-custom-token-btn" type="button">Add</button>
               </div>
-              <small class="text-muted d-block mt-2">💡 Drag tokens or type custom values. Click to remove, drag to
-                reorder.</small>
             </div>
 
-            <div class="col-8">
-              <h6>Formula Builder</h6>
-              <div id="addFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light"
-                style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
+            <div class="col-lg-8">
+              <h6 class="fw-bold mb-3">Formula Builder</h6>
+              <div id="addFormulaDropZone" class="formula-dropzone p-3 d-flex flex-wrap align-content-start gap-2">
+              </div>
               <input type="hidden" name="Formula" id="addFormulaInput">
+
+              <div class="mt-4 row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label small fw-bold">Validity From</label>
+                  <input type="datetime-local" class="form-control border-0 bg-light" name="ValidityFrom">
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label small fw-bold">Validity To</label>
+                  <input type="datetime-local" class="form-control border-0 bg-light" name="ValidityTo">
+                </div>
+              </div>
+
+              <div class="alert alert-info border-0 bg-primary-soft text-primary small mt-3">
+                <i class="bi bi-info-circle me-2"></i>Drag tokens to build your formula. Click on a token to remove it.
+              </div>
             </div>
-          </div>
-          <hr>
-          <div class="row">
-            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control"
-                name="ValidityFrom"></div>
-            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control"
-                name="ValidityTo"></div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Save</button>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <div class="modal-footer border-0 p-4 pt-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-emerald text-white px-4">Save Formula</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+<!-- Edit Formula Modal -->
 <div class="modal fade" id="editFormulaModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="edit_formula">
         <input type="hidden" name="FormulaId" id="editFormulaId">
-        <div class="modal-header">
-          <h5 class="modal-title">Edit Formula</h5>
+        <div class="modal-header border-0 bg-indigo-soft py-3">
+          <h5 class="modal-title fw-bold text-indigo"><i class="bi bi-pencil-square me-2"></i>Edit Formula</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
-          <div class="row">
-            <div class="col-4 border-end">
-              <h6>Tokens</h6>
-              <div class="d-flex flex-wrap gap-1 mb-3">
+        <div class="modal-body p-4">
+          <div class="row g-4">
+            <div class="col-lg-4 border-end">
+              <h6 class="fw-bold mb-3">Available Tokens</h6>
+              <div class="d-flex flex-wrap gap-2 mb-3">
                 {% for operand in ACCOUNTING_NUMBERS %}
-                <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                <span class="badge rounded-pill token-badge token-number draggable" draggable="true"
+                  data-value="{{ operand }}">{{ operand }}</span>
                 {% endfor %}
               </div>
-              <div class="d-flex flex-wrap gap-1 mb-3">
+              <div class="d-flex flex-wrap gap-2 mb-3">
                 {% for operand in ACCOUNTING_TIMES %}
-                <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                <span class="badge rounded-pill token-badge token-time draggable" draggable="true"
+                  data-value="{{ operand }}">{{ operand }}</span>
                 {% endfor %}
               </div>
-              <div class="d-flex flex-wrap gap-1 mb-3">
+              <div class="d-flex flex-wrap gap-2 mb-3">
                 {% for operator in ACCOUNTING_OPERATORS %}
-                <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
+                <span class="badge rounded-pill token-badge token-operator draggable" draggable="true"
+                  data-value="{{ operator }}">{{ operator }}</span>
                 {% endfor %}
               </div>
-
-              <hr>
-              <h6>Custom Value</h6>
-              <div class="input-group input-group-sm mb-2">
-                <input type="text" class="form-control custom-token-input" placeholder="e.g. 100">
-                <button class="btn btn-dark add-custom-token-btn" type="button">Add</button>
+              <hr class="my-3">
+              <div class="input-group input-group-sm">
+                <input type="text" class="form-control border-0 bg-light custom-token-input" placeholder="Value">
+                <button class="btn btn-indigo add-custom-token-btn" type="button">Add</button>
               </div>
             </div>
 
-            <div class="col-8">
-              <h6>Formula Builder</h6>
-              <div id="editFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light"
-                style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
+            <div class="col-lg-8">
+              <h6 class="fw-bold mb-3">Formula Builder</h6>
+              <div id="editFormulaDropZone" class="formula-dropzone p-3 d-flex flex-wrap align-content-start gap-2">
+              </div>
               <input type="hidden" name="Formula" id="editFormulaInput">
+
+              <div class="mt-4 row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label small fw-bold">Validity From</label>
+                  <input type="datetime-local" class="form-control border-0 bg-light" name="ValidityFrom"
+                    id="editValidityFrom">
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label small fw-bold">Validity To</label>
+                  <input type="datetime-local" class="form-control border-0 bg-light" name="ValidityTo"
+                    id="editValidityTo">
+                </div>
+              </div>
             </div>
-          </div>
-          <hr>
-          <div class="row">
-            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control"
-                name="ValidityFrom" id="editValidityFrom"></div>
-            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control"
-                name="ValidityTo" id="editValidityTo"></div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Save Changes</button>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <div class="modal-footer border-0 p-4 pt-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-indigo px-4 text-white">Save Changes</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+<!-- Assign Existing Formula Modal -->
 <div class="modal fade" id="assignFormulaModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="assign_formula">
-        <div class="modal-header">
-          <h5 class="modal-title">Assign Existing Formula</h5>
+        <div class="modal-header border-0 bg-primary-soft py-3">
+          <h5 class="modal-title fw-bold text-primary"><i class="bi bi-link-45deg me-2"></i>Assign Formula</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body p-4">
           <div class="mb-3">
-            <label>Select Formula</label>
-            <select class="form-select" name="FormulaId" required>
-              <option value="" selected disabled>-- Choose a formula --</option>
+            <label class="form-label fw-semibold">Select Formula</label>
+            <select class="form-select border-0 bg-light" name="FormulaId" required>
+              <option value="" selected disabled>Choose from library...</option>
               {% for formula in all_formulas %}
               <option value="{{ formula.id }}">{{ formula.formula }} (ID: {{ formula.id }})</option>
               {% endfor %}
             </select>
           </div>
         </div>
-        <div class="modal-footer"><button type="submit" class="btn btn-primary">Assign</button><button type="button"
-            class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button></div>
+        <div class="modal-footer border-0 p-4 pt-0">
+          <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-indigo px-4">Assign</button>
+        </div>
       </form>
     </div>
   </div>
 </div>
+
+<script>
+  function initFormulaBuilder(dropZoneId, inputId) {
+    const dropZone = document.getElementById(dropZoneId);
+    const formulaInput = document.getElementById(inputId);
+    let dragSrcEl = null;
+
+    dropZone.addEventListener("dragover", (e) => e.preventDefault());
+    dropZone.addEventListener("dragenter", (e) => e.preventDefault());
+
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const value = e.dataTransfer.getData("text/plain");
+      if (value && !dragSrcEl) {
+        addToken(value);
+      }
+    });
+
+    function updateFormula() {
+      formulaInput.value = [...dropZone.querySelectorAll(".token-badge")]
+        .map((s) => s.dataset.value)
+        .join(" ");
+    }
+
+    function addToken(value) {
+      if (!value || value.trim() === "") return;
+      const span = document.createElement("span");
+      span.textContent = value;
+
+      // Assign class based on predefined tokens
+      const predefinedNumbers = Array.from(document.querySelectorAll('.token-number')).map(b => b.dataset.value);
+      const predefinedTimes = Array.from(document.querySelectorAll('.token-time')).map(b => b.dataset.value);
+      const predefinedOps = Array.from(document.querySelectorAll('.token-operator')).map(b => b.dataset.value);
+
+      let typeClass = 'token-custom';
+      if (predefinedNumbers.includes(value)) typeClass = 'token-number';
+      else if (predefinedTimes.includes(value)) typeClass = 'token-time';
+      else if (predefinedOps.includes(value)) typeClass = 'token-operator';
+
+      span.className = `badge rounded-pill token-badge ${typeClass}`;
+      span.dataset.value = value;
+      span.draggable = true;
+      span.title = "Click to remove";
+
+      span.addEventListener("click", () => {
+        span.remove();
+        updateFormula();
+      });
+
+      span.addEventListener("dragstart", (e) => {
+        dragSrcEl = span;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", span.dataset.value);
+        span.classList.add("opacity-50");
+      });
+
+      span.addEventListener("dragend", () => {
+        dragSrcEl = null;
+        span.classList.remove("opacity-50");
+      });
+
+      span.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        span.classList.add("border-start", "border-indigo", "border-3");
+      });
+
+      span.addEventListener("dragleave", () => {
+        span.classList.remove("border-start", "border-indigo", "border-3");
+      });
+
+      span.addEventListener("drop", (e) => {
+        e.preventDefault();
+        if (dragSrcEl && dragSrcEl !== span) {
+          const allSpans = [...dropZone.querySelectorAll(".token-badge")];
+          const targetIndex = allSpans.indexOf(span);
+          const srcIndex = allSpans.indexOf(dragSrcEl);
+          if (srcIndex < targetIndex) {
+            span.after(dragSrcEl);
+          } else {
+            span.before(dragSrcEl);
+          }
+          updateFormula();
+        }
+        span.classList.remove("border-start", "border-indigo", "border-3");
+      });
+
+      dropZone.appendChild(span);
+      updateFormula();
+    }
+
+    return { updateFormula, addToken, dropZone };
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".draggable").forEach((item) => {
+      item.addEventListener("dragstart", (e) => {
+        e.dataTransfer.setData("text/plain", e.target.dataset.value);
+      });
+    });
+
+    const addBuilder = initFormulaBuilder("addFormulaDropZone", "addFormulaInput");
+    const editBuilder = initFormulaBuilder("editFormulaDropZone", "editFormulaInput");
+
+    document.querySelectorAll(".add-custom-token-btn").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        const modal = e.target.closest(".modal");
+        const input = modal.querySelector(".custom-token-input");
+        const value = input.value.trim();
+
+        if (value !== "") {
+          if (modal.id === "addFormulaModal") {
+            addBuilder.addToken(value);
+          } else {
+            editBuilder.addToken(value);
+          }
+          input.value = "";
+        }
+      });
+    });
+
+    const editModal = document.getElementById("editFormulaModal");
+    editModal.addEventListener("show.bs.modal", (event) => {
+      const button = event.relatedTarget;
+      document.getElementById("editFormulaId").value = button.getAttribute("data-id");
+      document.getElementById("editValidityFrom").value = button.getAttribute("data-validity-from");
+      document.getElementById("editValidityTo").value = button.getAttribute("data-validity-to");
+
+      editBuilder.dropZone.innerHTML = "";
+      const formula = button.getAttribute("data-formula") || "";
+      formula.split(" ").forEach((value) => {
+        if (value.trim() !== "") editBuilder.addToken(value);
+      });
+    });
+  });
+</script>
 
 <script>
   function initFormulaBuilder(dropZoneId, inputId) {

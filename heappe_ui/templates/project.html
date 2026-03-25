@@ -1,168 +1,196 @@
-<style>
-  /* Základní styly pro lepší vzhled */
-  .copy-btn { font-size: 0.85rem; font-weight: 500; }
-  .copy-badge { animation: fadeIn 0.3s ease-in; font-size: 0.75em; }
-
-  /* Karty a tabulky */
-  .card { border: none; border-radius: 0.5rem; transition: box-shadow 0.3s; }
-  .card:hover { box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05) !important; }
-
-  /* Styl pro klíče - textový, žádné ikonky */
-  .key-row { background-color: #f8f9fa; border-radius: 4px; padding: 6px 10px; margin-bottom: 6px; border: 1px solid #e9ecef; }
-  .key-label { font-weight: bold; font-size: 0.8rem; color: #495057; display: inline-block; min-width: 70px; }
-  .key-code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85rem; color: #d63384; margin-right: 10px; }
-
-  /* Tlačítka v akcích */
-  .action-stack .btn { text-align: left; margin-bottom: 4px; }
-  .action-stack .btn:last-child { margin-bottom: 0; }
-
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-</style>
-
 {% extends "base.html" %}
 
 {% block title %}{% if project %}{{ project.name }}{% else %}New Project{% endif %}{% endblock %}
 
 {% block content %}
 
-{% if project %}
-<nav class="navbar navbar-expand-lg navbar-light bg-white mb-4 shadow-sm sticky-top" style="z-index: 100;">
-  <div class="container">
-    <span class="navbar-brand mb-0 h1 d-none d-md-block fs-6 text-muted">Project Management</span>
-    <button class="navbar-toggler mx-auto" type="button" data-bs-toggle="collapse" data-bs-target="#projectNav">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse justify-content-center" id="projectNav">
-        <ul class="nav nav-pills nav-fill gap-2 py-2">
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Project Detail</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'commandtemplates' %}active{% endif %}" href="?tab=commandtemplates">Command Templates</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'accounts' %}active{% endif %}" href="?tab=accounts">SSH Accounts</a>
-          </li>
-          {% if ui_features.adaptor_users %}
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'adaptor_users' %}active{% endif %}" href="?tab=adaptor_users">External User Management</a>
-          </li>
-          {% endif %}
-        </ul>
+<div class="container py-4">
+    <!-- Page Header -->
+    <div class="d-flex align-items-center mb-4 pb-2">
+        <div class="icon-box bg-indigo-soft me-4">
+            <i class="bi bi-briefcase text-indigo fs-3"></i>
+        </div>
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-1">
+                    <li class="breadcrumb-item"><a href="{% url 'cluster_list' %}"
+                            class="text-decoration-none text-muted">Resources</a></li>
+                    <li class="breadcrumb-item active">{% if project %}{{ project.name }}{% else %}New Project{% endif
+                        %}</li>
+                </ol>
+            </nav>
+            <h2 class="mb-0 fw-bold">{% if project %}{{ project.name }}{% else %}Create Project{% endif %}</h2>
+        </div>
+        {% if project %}
+        <div class="ms-auto d-flex gap-2">
+            <button class="btn btn-glass-secondary" onclick="location.reload();">
+                <i class="bi bi-arrow-clockwise me-1"></i> Reload
+            </button>
+        </div>
+        {% endif %}
     </div>
-  </div>
-</nav>
-{% endif %}
 
-<div class="container py-3">
+    {% if project %}
+    <!-- Sub Navigation -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <div class="card glass-card border-0 p-1">
+                <ul class="nav nav-pills nav-fill gap-2">
+                    <li class="nav-item">
+                        <a class="nav-link rounded-3 py-2 {% if active_tab == 'detail' %}active bg-indigo text-white fw-semibold shadow-sm{% else %}text-muted{% endif %}"
+                            href="?tab=detail">
+                            <i class="bi bi-info-circle me-2"></i>Project Detail
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link rounded-3 py-2 {% if active_tab == 'commandtemplates' %}active bg-indigo text-white fw-semibold shadow-sm{% else %}text-muted{% endif %}"
+                            href="?tab=commandtemplates">
+                            <i class="bi bi-terminal me-2"></i>Command Templates
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link rounded-3 py-2 {% if active_tab == 'accounts' %}active bg-indigo text-white fw-semibold shadow-sm{% else %}text-muted{% endif %}"
+                            href="?tab=accounts">
+                            <i class="bi bi-key me-2"></i>SSH Accounts
+                        </a>
+                    </li>
+                    {% if ui_features.adaptor_users %}
+                    <li class="nav-item">
+                        <a class="nav-link rounded-3 py-2 {% if active_tab == 'adaptor_users' %}active bg-indigo text-white fw-semibold shadow-sm{% else %}text-muted{% endif %}"
+                            href="?tab=adaptor_users">
+                            <i class="bi bi-people me-2"></i>External Users
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {% if active_tab == 'detail' %}
-
     <div class="row justify-content-center">
-        <div class="col-lg-10 col-xl-9">
-
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1 class="h3 mb-0">{% if project %}{{ project.Name }}{% else %}Create Project{% endif %}</h1>
-                {% if project %}
-                <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">
-                    Reload
-                </button>
-                {% endif %}
-            </div>
-
-            <div class="card shadow-sm mb-5">
-                <div class="card-header bg-transparent py-3">
-                    <strong class="text-primary">Project Information</strong>
+        <div class="col-lg-11">
+            <div class="card glass-card border-0 mb-5 overflow-hidden">
+                <div class="card-header bg-transparent border-0 py-3 px-4">
+                    <h5 class="mb-0 fw-bold text-dark">Project Settings</h5>
                 </div>
-                <div class="card-body p-4">
+                <div class="card-body p-4 pt-0">
                     <form method="post">
                         {% csrf_token %}
-                        <input type="hidden" name="action" value="{% if project %}project_update{% else %}project_create{% endif %}">
+                        <input type="hidden" name="action"
+                            value="{% if project %}project_update{% else %}project_create{% endif %}">
 
-                        <div class="row g-3">
+                        <div class="row g-4">
                             {% if project %}
-                            <div class="col-md-2">
-                                <label class="form-label small text-muted">ID</label>
-                                <input type="number" class="form-control bg-light" value="{{ project.id }}" readonly disabled>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-bold text-muted">HEAppE ID</label>
+                                <input type="number" class="form-control border-0 bg-light font-monospace"
+                                    value="{{ project.id }}" readonly disabled>
                             </div>
-                            <div class="col-md-10">
-                                <label class="form-label small text-muted">Name</label>
-                                <input type="text" class="form-control fw-bold" name="Name" value="{{ project.name|default:'' }}">
+                            <div class="col-md-9">
+                                <label class="form-label small fw-bold text-muted">Project Name</label>
+                                <input type="text" class="form-control border-0 bg-light fw-bold" name="Name"
+                                    value="{{ project.name|default:'' }}">
                             </div>
                             {% else %}
                             <div class="col-12">
-                                <label class="form-label small text-muted">Name</label>
-                                <input type="text" class="form-control fw-bold" name="Name" value="{{ project.name|default:'' }}">
+                                <label class="form-label small fw-bold text-muted">Project Name</label>
+                                <input type="text" class="form-control border-0 bg-light fw-bold" name="Name"
+                                    value="{{ project.name|default:'' }}" required>
                             </div>
                             {% endif %}
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">PI Email</label>
-                                <input type="email" class="form-control" name="PIEmail" value="{{ project.PIEmail|default:'' }}"
-                                    {% if project %}readonly disabled{% endif %}>
+                                <label class="form-label small fw-bold text-muted">Principal Investigator Email</label>
+                                <div class="input-group">
+                                    <span class="input-group-text border-0 bg-light text-muted"><i
+                                            class="bi bi-envelope"></i></span>
+                                    <input type="email" class="form-control border-0 bg-light" name="PIEmail"
+                                        value="{{ project.PIEmail|default:'' }}" {% if project %}readonly disabled{%
+                                        endif %}>
+                                </div>
                             </div>
 
                             {% if v620_check and project %}
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">KeyScripts Path</label>
-                                <input type="text" class="form-control bg-light" name="KeyScriptsDirectoryPath" readonly disabled value="{{ project.key_scripts_directory_path|default:'' }}">
+                                <label class="form-label small fw-bold text-muted">KeyScripts Path</label>
+                                <div class="input-group">
+                                    <span class="input-group-text border-0 bg-light text-muted"><i
+                                            class="bi bi-folder"></i></span>
+                                    <input type="text" class="form-control border-0 bg-light font-monospace"
+                                        name="KeyScriptsDirectoryPath" readonly disabled
+                                        value="{{ project.key_scripts_directory_path|default:'' }}">
+                                </div>
                             </div>
                             {% endif %}
 
                             <div class="col-12">
-                                <label class="form-label small text-muted">Description</label>
-                                <textarea class="form-control" name="Description" rows="3">{{ project.description|default:'' }}</textarea>
+                                <label class="form-label small fw-bold text-muted">Description</label>
+                                <textarea class="form-control border-0 bg-light" name="Description"
+                                    rows="3">{{ project.description|default:'' }}</textarea>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">Accounting String</label>
-                                <input type="text" class="form-control font-monospace" name="AccountingString"
-                                    value="{{ project.accounting_string|default:'' }}"
-                                    {% if project %}readonly disabled{% endif %}>
+                                <label class="form-label small fw-bold text-muted">Accounting String</label>
+                                <input type="text" class="form-control border-0 bg-light font-monospace"
+                                    name="AccountingString" value="{{ project.accounting_string|default:'' }}" {% if
+                                    project %}readonly disabled{% endif %}>
                             </div>
-                             <div class="col-md-6">
-                                <label class="form-label small text-muted" for="UsageType">Usage Type</label>
-                                <select class="form-select" id="UsageType" name="UsageType">
-                                    <option value="" disabled selected>Select usage type</option>
-                                    <option value="1" {% if project.usage_type == 1 %}selected{% endif %}>NodeHours</option>
-                                    <option value="2" {% if project.usage_type == 2 %}selected{% endif %}>CoreHours</option>
+
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-muted" for="UsageType">Usage Metric</label>
+                                <select class="form-select border-0 bg-light" id="UsageType" name="UsageType">
+                                    <option value="" disabled selected>Select metric...</option>
+                                    <option value="1" {% if project.usage_type==1 %}selected{% endif %}>Node Hours
+                                    </option>
+                                    <option value="2" {% if project.usage_type==2 %}selected{% endif %}>Core Hours
+                                    </option>
                                 </select>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">Start Date</label>
-                                <input type="datetime-local" class="form-control" name="StartDate" value="{{ project.start_date }}">
+                                <label class="form-label small fw-bold text-muted">Start Date</label>
+                                <input type="datetime-local" class="form-control border-0 bg-light" name="StartDate"
+                                    value="{{ project.start_date }}">
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">End Date</label>
-                                <input type="datetime-local" class="form-control" name="EndDate" value="{{ project.end_date }}">
+                                <label class="form-label small fw-bold text-muted">End Date</label>
+                                <input type="datetime-local" class="form-control border-0 bg-light" name="EndDate"
+                                    value="{{ project.end_date }}">
                             </div>
 
                             <div class="col-12 mt-4">
-                                <div class="card bg-light border-0">
-                                    <div class="card-body">
-                                        <div class="form-check mb-2">
-                                            <input type="checkbox" class="form-check-input" id="isOneToOneMapping" name="IsOneToOneMapping"
-                                                {% if project.is_one_to_one_mapping %}checked{% endif %}>
-                                            <label for="isOneToOneMapping" class="form-check-label">Map directly external users to internal accounts (1:1)</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input type="checkbox" class="form-check-input" id="useAccStr" name="UseAccountingStringForScheduler"
-                                                {% if project.use_accounting_string_for_scheduler %}checked{% endif %}>
-                                            <label for="useAccStr" class="form-check-label">Use Accounting String For Scheduler</label>
-                                        </div>
+                                <div class="p-3 rounded-4 bg-light-subtle border d-flex flex-column gap-2">
+                                    <div class="form-check form-switch">
+                                        <input type="checkbox" class="form-check-input" id="isOneToOneMapping"
+                                            name="IsOneToOneMapping" {% if project.is_one_to_one_mapping %}checked{%
+                                            endif %}>
+                                        <label for="isOneToOneMapping" class="form-check-label ms-2 fw-medium">Direct
+                                            1:1 mapping (external users to accounts)</label>
+                                    </div>
+                                    <div class="form-check form-switch">
+                                        <input type="checkbox" class="form-check-input" id="useAccStr"
+                                            name="UseAccountingStringForScheduler" {% if
+                                            project.use_accounting_string_for_scheduler %}checked{% endif %}>
+                                        <label for="useAccStr" class="form-check-label ms-2 fw-medium">Use Accounting
+                                            String in Scheduler</label>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                            <button type="button" class="btn btn-outline-secondary px-4" onclick="history.back()">Back</button>
+                        <div class="d-flex justify-content-between align-items-center mt-5 pt-3 border-top">
+                            <button type="button" class="btn btn-light px-4" onclick="history.back()">
+                                <i class="bi bi-chevron-left me-1"></i> Back
+                            </button>
                             {% if project %}
-                                <button type="submit" class="btn btn-primary px-4" name="action" value="update_project">Update Project</button>
+                            <button type="submit" class="btn btn-indigo text-white px-5 shadow-sm" name="action"
+                                value="update_project">Update Project</button>
                             {% else %}
-                                <button type="submit" class="btn btn-success px-4" name="action" value="create_project">Create Project</button>
+                            <button type="submit" class="btn btn-emerald text-white px-5 shadow-sm" name="action"
+                                value="create_project">Create Project</button>
                             {% endif %}
                         </div>
                     </form>
@@ -171,35 +199,41 @@
 
             {% if project %}
             <div class="row g-4">
-                <div class="col-lg-6">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-header bg-transparent py-3">
-                            <strong class="text-primary">Assign to Cluster</strong>
+                <div class="col-lg-5">
+                    <div class="card glass-card border-0 h-100 overflow-hidden">
+                        <div class="card-header bg-transparent border-0 py-3 px-4">
+                            <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-plus-circle me-2 text-primary"></i>Assign
+                                to Cluster</h6>
                         </div>
-                        <div class="card-body">
+                        <div class="card-body p-4 pt-0">
                             <form method="post">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="project_assign_to_cluster">
                                 <div class="row g-3">
                                     <div class="col-12">
-                                        <label class="form-label small text-muted">Select Cluster</label>
-                                        <select class="form-select" name="ClusterId" required>
-                                            <option value="" disabled selected>Select a cluster...</option>
+                                        <label class="form-label small fw-bold text-muted">Target Cluster</label>
+                                        <select class="form-select border-0 bg-light" name="ClusterId" required>
+                                            <option value="" disabled selected>Select cluster...</option>
                                             {% for cluster in not_assigned_clusters %}
-                                                <option value="{{ cluster.id }}">{{ cluster.name }}</option>
+                                            <option value="{{ cluster.id }}">{{ cluster.name }}</option>
                                             {% endfor %}
                                         </select>
                                     </div>
                                     <div class="col-12">
-                                        <label class="form-label small text-muted">Scratch Path</label>
-                                        <input type="text" class="form-control" name="ScratchStoragePath" placeholder="/scratch/...">
+                                        <label class="form-label small fw-bold text-muted">Scratch Storage</label>
+                                        <input type="text" class="form-control border-0 bg-light font-monospace"
+                                            name="ScratchStoragePath" placeholder="/scratch/...">
                                     </div>
                                     <div class="col-12">
-                                        <label class="form-label small text-muted">Project Path</label>
-                                        <input type="text" class="form-control" name="ProjectStoragePath" placeholder="/projects/...">
+                                        <label class="form-label small fw-bold text-muted">Project Storage</label>
+                                        <input type="text" class="form-control border-0 bg-light font-monospace"
+                                            name="ProjectStoragePath" placeholder="/projects/...">
                                     </div>
-                                    <div class="col-12 pt-2">
-                                        <button type="submit" class="btn btn-primary w-100">Assign Cluster</button>
+                                    <div class="col-12 pt-3">
+                                        <button type="submit"
+                                            class="btn btn-primary-soft text-primary fw-bold w-100 py-2 border-0">
+                                            <i class="bi bi-link-45deg me-1"></i> Assign Cluster
+                                        </button>
                                     </div>
                                 </div>
                             </form>
@@ -207,154 +241,201 @@
                     </div>
                 </div>
 
-                {% if project_assignments %}
-                <div class="col-lg-6">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-header bg-transparent py-3">
-                            <strong class="text-success">Active Assignments</strong>
+                <div class="col-lg-7">
+                    <div class="card glass-card border-0 h-100 overflow-hidden">
+                        <div class="card-header bg-transparent border-0 py-3 px-4">
+                            <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-hdd-network me-2 text-success"></i>Active
+                                Assignments</h6>
                         </div>
                         <div class="card-body p-0">
+                            {% if project_assignments %}
                             <div class="list-group list-group-flush">
                                 {% for assignment in project_assignments %}
-                                <div class="list-group-item p-3">
-                                    <div class="d-flex justify-content-between align-items-start mb-2">
-                                        <h5 class="mb-0 text-dark">{{ assignment.cluster_name }}</h5>
+                                <div class="list-group-item bg-transparent p-4 border-0 border-bottom">
+                                    <div class="d-flex justify-content-between align-items-start mb-3">
+                                        <div>
+                                            <h5 class="mb-0 fw-bold">{{ assignment.cluster_name }}</h5>
+                                            <span class="badge bg-success-soft text-success mt-1">Connected</span>
+                                        </div>
                                         <div class="dropdown">
-                                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                                Options
+                                            <button class="btn btn-sm btn-glass-secondary border-0" type="button"
+                                                data-bs-toggle="dropdown" aria-expanded="false">
+                                                <i class="bi bi-three-dots-vertical"></i>
                                             </button>
-                                            <ul class="dropdown-menu dropdown-menu-end">
+                                            <ul class="dropdown-menu dropdown-menu-end border-0 shadow-lg">
                                                 <li>
-                                                    <a class="dropdown-item" href="#" onclick="openEditAssignmentModal('{{ assignment.cluster_id }}', '{{ assignment.cluster_name|escapejs }}', '{{ assignment.scratch_storage_path|escapejs }}', '{{ assignment.project_storage_path|escapejs }}')">
-                                                        Edit Paths
+                                                    <a class="dropdown-item py-2" href="#"
+                                                        onclick="openEditAssignmentModal('{{ assignment.cluster_id }}', '{{ assignment.cluster_name|escapejs }}', '{{ assignment.scratch_storage_path|escapejs }}', '{{ assignment.project_storage_path|escapejs }}')">
+                                                        <i class="bi bi-pencil-square me-2"></i> Edit Paths
                                                     </a>
                                                 </li>
-                                                <li><hr class="dropdown-divider"></li>
                                                 <li>
-                                                     <form method="post" class="d-inline">
+                                                    <hr class="dropdown-divider opacity-50">
+                                                </li>
+                                                <li>
+                                                    <form method="post" class="d-inline">
                                                         {% csrf_token %}
                                                         <input type="hidden" name="action" value="delete_assignment">
-                                                        <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
+                                                        <input type="hidden" name="ClusterId"
+                                                            value="{{ assignment.cluster_id }}">
                                                         <input type="hidden" name="redirectTo" value="project_detail">
-                                                        <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to remove this assignment?')">Remove Assignment</button>
+                                                        <button type="submit" class="dropdown-item py-2 text-danger"
+                                                            onclick="return confirm('Are you sure you want to remove this assignment?')">
+                                                            <i class="bi bi-trash me-2"></i> Remove Assignment
+                                                        </button>
                                                     </form>
                                                 </li>
                                             </ul>
                                         </div>
                                     </div>
-                                    <div class="small text-muted">
-                                        <div class="row">
-                                            <div class="col-3 fw-bold">Scratch:</div>
-                                            <div class="col-9 text-break">{{ assignment.scratch_storage_path }}</div>
+                                    <div class="storage-info p-3 bg-light rounded-4">
+                                        <div class="row mb-2">
+                                            <div class="col-sm-3 text-muted small fw-bold">Scratch:</div>
+                                            <div class="col-sm-9 font-monospace small text-break">{{
+                                                assignment.scratch_storage_path }}</div>
                                         </div>
-                                        <div class="row mt-1">
-                                            <div class="col-3 fw-bold">Project:</div>
-                                            <div class="col-9 text-break">{{ assignment.project_storage_path }}</div>
+                                        <div class="row">
+                                            <div class="col-sm-3 text-muted small fw-bold">Project:</div>
+                                            <div class="col-sm-9 font-monospace small text-break">{{
+                                                assignment.project_storage_path }}</div>
                                         </div>
                                     </div>
                                 </div>
                                 {% endfor %}
                             </div>
+                            {% else %}
+                            <div class="p-5 text-center">
+                                <i class="bi bi-link-45deg fs-1 text-muted opacity-50"></i>
+                                <p class="mt-2 mb-0 text-muted">No cluster assignments yet.</p>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
-                {% endif %}
             </div>
             {% endif %}
         </div>
     </div>
 
     {% elif active_tab == 'commandtemplates' %}
-
     <div class="row justify-content-center">
-        <div class="col-12 col-xl-10">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <strong class="h5 mb-0">Command Templates</strong>
-                    <div class="d-flex align-items-center gap-2">
+        <div class="col-12 col-xl-11">
+            <div class="card glass-card border-0 mb-4 overflow-hidden">
+                <div
+                    class="card-header bg-transparent border-0 py-3 px-4 d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <h5 class="mb-0 fw-bold text-dark">Command Templates</h5>
+                    <div class="d-flex align-items-center gap-3">
                         <form method="get" class="d-flex align-items-center">
                             <input type="hidden" name="tab" value="commandtemplates">
-                            <select name="project_filter" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 140px;">
-                                <option value="all" {% if request.GET.project_filter == "all" %}selected{% endif %}>All Projects</option>
-                                <option value="shared" {% if request.GET.project_filter == "shared" %}selected{% endif %}>Shared</option>
-                                <option value="own" {% if not request.GET.project_filter or request.GET.project_filter == "own" %}selected{% endif %}>Own</option>
-                            </select>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text border-0 bg-light text-muted small fw-bold">Filter:</span>
+                                <select name="project_filter" class="form-select border-0 bg-light-subtle"
+                                    onchange="this.form.submit()" style="min-width: 140px;">
+                                    <option value="all" {% if request.GET.project_filter=="all" %}selected{% endif %}>
+                                        All Projects</option>
+                                    <option value="shared" {% if request.GET.project_filter=="shared" %}selected{% endif
+                                        %}>Shared Only</option>
+                                    <option value="own" {% if not request.GET.project_filter or
+                                        request.GET.project_filter=="own" %}selected{% endif %}>Project Own</option>
+                                </select>
+                            </div>
                         </form>
-                        <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-primary">Add New</a>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">Reload</button>
+                        <a href="{% url 'command_template_create' project.id %}"
+                            class="btn btn-sm btn-emerald text-white px-3 fw-semibold shadow-sm">
+                            <i class="bi bi-plus-lg me-1"></i> Add New
+                        </a>
                     </div>
                 </div>
 
                 <div class="card-body p-0">
                     {% if command_templates %}
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th class="ps-4">Name</th>
-                                        <th>Executable</th>
-                                        <th>Queue / Cluster</th>
-                                        <th class="text-center">Status</th>
-                                        <th>Scope</th>
-                                        <th class="text-end pe-4">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for template in command_templates %}
-                                        <tr>
-                                            <td class="ps-4">
-                                                <div class="fw-bold">{{ template.name }}</div>
-                                                <small class="text-muted">{{ template.description|truncatechars:40 }}</small>
-                                            </td>
-                                            <td><code class="text-primary bg-light px-2 rounded">{{ template.executable_file }}</code></td>
-                                            <td>
-                                                {% for ntype in node_types %}
-                                                    {% if ntype.id == template.cluster_node_type_id %}
-                                                        <span class="badge bg-info text-dark">{{ ntype.name }}</span>
-                                                        {% if ntype.cluster_name %}
-                                                            <div class="small text-muted mt-1">{{ ntype.cluster_name }}</div>
-                                                        {% endif %}
-                                                    {% endif %}
-                                                {% endfor %}
-                                            </td>
-                                            <td class="text-center">
-                                                {% if template.is_enabled %}
-                                                    <span class="badge bg-success">Enabled</span>
-                                                {% else %}
-                                                    <span class="badge bg-secondary">Disabled</span>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                {% if template.project_id == 0 %}
-                                                    <span class="badge rounded-pill border border-secondary text-secondary">Shared</span>
-                                                {% else %}
-                                                    <span class="badge rounded-pill bg-primary">Project {{ template.project_id }}</span>
-                                                {% endif %}
-                                            </td>
-                                            <td class="text-end pe-4">
-                                                <div class="btn-group btn-group-sm">
-                                                    <a href="{% url 'command_template_detail' template.id %}" class="btn btn-outline-primary">Detail</a>
-                                                    {% if template.project_id != 0 %}
-                                                        <a href="{% url 'submit_job_view' template.id %}" class="btn btn-outline-secondary">Test Job</a>
-                                                    {% endif %}
-                                                    <button type="button" class="btn btn-outline-danger"
-                                                            onclick="if(confirm('Delete template?')) { document.getElementById('del-templ-{{ template.id }}').submit(); }">
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                                <form id="del-templ-{{ template.id }}" method="post" action="{% url 'command_template_delete' template.id %}" class="d-none">
-                                                    {% csrf_token %}
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div class="table-responsive">
+                        <table class="table table-modern mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-4">Template Name</th>
+                                    <th>Executable</th>
+                                    <th>Target Environment</th>
+                                    <th class="text-center">Status</th>
+                                    <th>Scope</th>
+                                    <th class="text-end pe-4">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for template in command_templates %}
+                                <tr>
+                                    <td class="ps-4">
+                                        <div class="fw-bold text-dark">{{ template.name }}</div>
+                                        <div class="small text-muted text-truncate" style="max-width: 200px;">{{
+                                            template.description|default:"No description" }}</div>
+                                    </td>
+                                    <td><code
+                                            class="text-indigo bg-indigo-soft px-2 py-1 rounded small">{{ template.executable_file }}</code>
+                                    </td>
+                                    <td>
+                                        {% for ntype in node_types %}
+                                        {% if ntype.id == template.cluster_node_type_id %}
+                                        <div class="d-flex flex-column">
+                                            <span class="badge bg-primary-soft text-primary align-self-start">{{
+                                                ntype.name }}</span>
+                                            {% if ntype.cluster_name %}
+                                            <small class="text-muted mt-1 font-monospace">{{ ntype.cluster_name
+                                                }}</small>
+                                            {% endif %}
+                                        </div>
+                                        {% endif %}
+                                        {% endfor %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if template.is_enabled %}
+                                        <span class="badge bg-emerald-soft text-emerald">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-light text-muted">Disabled</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if template.project_id == 0 %}
+                                        <span class="badge border border-secondary text-secondary rounded-pill">Global
+                                            Shared</span>
+                                        {% else %}
+                                        <span class="badge bg-indigo-soft text-indigo rounded-pill">Project Local</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{% url 'command_template_detail' template.id %}"
+                                                class="btn btn-light border-0" title="Edit Detail">
+                                                <i class="bi bi-pencil-square text-primary"></i>
+                                            </a>
+                                            {% if template.project_id != 0 %}
+                                            <a href="{% url 'submit_job_view' template.id %}"
+                                                class="btn btn-light border-0" title="Test Submission">
+                                                <i class="bi bi-play-circle text-emerald"></i>
+                                            </a>
+                                            {% endif %}
+                                            <button type="button" class="btn btn-light border-0" title="Delete"
+                                                onclick="if(confirm('Are you sure you want to delete this template?')) { document.getElementById('del-templ-{{ template.id }}').submit(); }">
+                                                <i class="bi bi-trash text-danger"></i>
+                                            </button>
+                                        </div>
+                                        <form id="del-templ-{{ template.id }}" method="post"
+                                            action="{% url 'command_template_delete' template.id %}" class="d-none">
+                                            {% csrf_token %}
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                     {% else %}
-                        <div class="text-center py-5 text-muted">
-                            <p class="mb-0">No command templates available.</p>
+                    <div class="text-center py-5">
+                        <div class="mb-3 text-muted opacity-25">
+                            <i class="bi bi-terminal fs-1"></i>
                         </div>
+                        <h6 class="text-muted">No command templates discovered</h6>
+                        <p class="small text-muted mb-0">Start by creating a new template for this project.</p>
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -362,119 +443,156 @@
     </div>
 
     {% elif active_tab == 'accounts' %}
-
     <div class="row justify-content-center">
         <div class="col-12 col-xl-11">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between">
-                    <strong class="h5 mb-0">HPC Accounts</strong>
-                    <div>
-                        <button type="button" class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addHpcAccountModal">Add Account</button>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">Reload</button>
-                    </div>
+            <div class="card glass-card border-0 mb-4 overflow-hidden">
+                <div
+                    class="card-header bg-transparent border-0 py-3 px-4 d-flex align-items-center justify-content-between">
+                    <h5 class="mb-0 fw-bold text-dark">HPC SSH Accounts</h5>
+                    <button type="button" class="btn btn-sm btn-emerald text-white px-3 fw-semibold shadow-sm"
+                        data-bs-toggle="modal" data-bs-target="#addHpcAccountModal">
+                        <i class="bi bi-plus-lg me-1"></i> Add Account
+                    </button>
                 </div>
                 <div class="card-body p-0">
                     {% if project_accounts %}
                     <div class="table-responsive">
-                        <table class="table table-hover align-top mb-0">
-                            <thead class="table-light">
+                        <table class="table table-modern mb-0">
+                            <thead>
                                 <tr>
-                                    <th class="ps-4" style="width: 15%;">Username / Type</th>
-                                    <th style="width: 50%;">Public Keys</th>
-                                    <th class="text-center" style="width: 10%;">Init</th>
-                                    <th class="text-end pe-4" style="width: 25%;">Actions</th>
+                                    <th class="ps-4" style="width: 20%;">Identity</th>
+                                    <th style="width: 45%;">Security Credentials</th>
+                                    <th class="text-center" style="width: 10%;">Status</th>
+                                    <th class="text-end pe-4" style="width: 25%;">Control</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for account in project_accounts %}
                                 <tr>
-                                    <td class="ps-4 py-3">
-                                        <div class="fw-bold fs-5">{{ account.username }}</div>
-                                        <span class="badge bg-light text-dark border mt-1">{{ account.key_type_name }}</span>
+                                    <td class="ps-4 py-4">
+                                        <div class="d-flex align-items-center">
+                                            <div class="bg-light p-2 rounded-3 me-3">
+                                                <i class="bi bi-person-badge fs-4 text-indigo"></i>
+                                            </div>
+                                            <div>
+                                                <div class="fw-bold fs-5 text-dark">{{ account.username }}</div>
+                                                <span class="small text-muted font-monospace">{{ account.key_type_name
+                                                    }}</span>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td class="py-3">
-                                        <div class="key-row d-flex align-items-center justify-content-between">
-                                            <div class="d-flex align-items-center overflow-hidden">
-                                                <span class="key-label">OpenSSH</span>
-                                                <span class="key-code text-truncate">
-                                                    {{ account.public_key_open_ssh|slice:":15" }}...{{ account.public_key_open_ssh|slice:"-15:" }}
-                                                </span>
+                                        <!-- OpenSSH Key -->
+                                        <div
+                                            class="p-2 mb-2 rounded-3 bg-light border-0 d-flex align-items-center justify-content-between shadow-xs">
+                                            <div class="d-flex align-items-center overflow-hidden flex-grow-1 me-3">
+                                                <span
+                                                    class="badge bg-dark-subtle text-dark-emphasis me-2 font-monospace"
+                                                    style="min-width: 65px;">SSH</span>
+                                                <code
+                                                    class="text-indigo small text-truncate">{{ account.public_key_open_ssh }}</code>
                                             </div>
                                             <div class="d-flex align-items-center">
-                                                <button class="btn btn-sm btn-white border copy-btn"
-                                                        onclick="copyToClipboard('{{ account.public_key_open_ssh|escapejs }}', 'open_ssh_feedback_{{ account.id }}')">
-                                                    Copy
+                                                <button class="btn btn-sm btn-glass-secondary border-0 p-1 px-2"
+                                                    onclick="copyToClipboard('{{ account.public_key_open_ssh|escapejs }}', 'open_ssh_feedback_{{ account.id }}')"
+                                                    title="Copy SSH Public Key">
+                                                    <i class="bi bi-clipboard"></i>
                                                 </button>
-                                                <span id="open_ssh_feedback_{{ account.id }}" class="badge bg-success ms-2 d-none copy-badge">Copied!</span>
+                                                <span id="open_ssh_feedback_{{ account.id }}"
+                                                    class="badge bg-emerald ms-2 d-none">Copied!</span>
                                             </div>
                                         </div>
 
-                                        <div class="key-row d-flex align-items-center justify-content-between mb-0">
-                                            <div class="d-flex align-items-center overflow-hidden">
-                                                <span class="key-label">PEM</span>
-                                                <span class="key-code text-truncate">
-                                                    {{ account.public_key_pem|slice:":15" }}...{{ account.public_key_pem|slice:"-15:" }}
-                                                </span>
+                                        <!-- PEM Key -->
+                                        <div
+                                            class="p-2 rounded-3 bg-light border-0 d-flex align-items-center justify-content-between shadow-xs">
+                                            <div class="d-flex align-items-center overflow-hidden flex-grow-1 me-3">
+                                                <span
+                                                    class="badge bg-dark-subtle text-dark-emphasis me-2 font-monospace"
+                                                    style="min-width: 65px;">PEM</span>
+                                                <code
+                                                    class="text-indigo small text-truncate">{{ account.public_key_pem }}</code>
                                             </div>
                                             <div class="d-flex align-items-center">
-                                                <button class="btn btn-sm btn-white border copy-btn"
-                                                        onclick="copyToClipboard('{{ account.public_key_pem|escapejs }}', 'pem_feedback_{{ account.id }}')">
-                                                    Copy
+                                                <button class="btn btn-sm btn-glass-secondary border-0 p-1 px-2"
+                                                    onclick="copyToClipboard('{{ account.public_key_pem|escapejs }}', 'pem_feedback_{{ account.id }}')"
+                                                    title="Copy PEM Public Key">
+                                                    <i class="bi bi-clipboard"></i>
                                                 </button>
-                                                <span id="pem_feedback_{{ account.id }}" class="badge bg-success ms-2 d-none copy-badge">Copied!</span>
+                                                <span id="pem_feedback_{{ account.id }}"
+                                                    class="badge bg-emerald ms-2 d-none">Copied!</span>
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="text-center py-3">
+                                    <td class="text-center py-4">
                                         {% if account.is_initialized %}
-                                            <div class="text-success fw-bold">Active</div>
-                                            <small class="text-muted">●</small>
+                                        <div class="d-flex flex-column align-items-center">
+                                            <i class="bi bi-check-circle-fill text-emerald fs-4"></i>
+                                            <span class="small fw-bold text-emerald mt-1">Ready</span>
+                                        </div>
                                         {% else %}
-                                            <div class="text-danger fw-bold">Inactive</div>
-                                            <small class="text-muted">●</small>
+                                        <div class="d-flex flex-column align-items-center">
+                                            <i class="bi bi-dash-circle text-amber fs-4"></i>
+                                            <span class="small fw-bold text-amber mt-1">Pending</span>
+                                        </div>
                                         {% endif %}
                                     </td>
-                                    <td class="text-end pe-4 py-3">
-                                        <div class="d-grid gap-2 action-stack">
-                                            <form method="post" class="w-100">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="action" value="test_hpc_access">
-                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                <input type="hidden" name="username" value="{{ account.username }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-info w-100">Test Access</button>
-                                            </form>
+                                    <td class="text-end pe-4 py-4">
+                                        <div class="d-flex flex-column gap-2"
+                                            style="max-width: 180px; margin-left: auto;">
+                                            <div
+                                                class="btn-group btn-group-sm w-100 shadow-xs rounded-3 overflow-hidden">
+                                                <form method="post" class="flex-grow-1">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="test_hpc_access">
+                                                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                    <input type="hidden" name="username" value="{{ account.username }}">
+                                                    <button type="submit" class="btn btn-light w-100 border-0 h-100"
+                                                        title="Verify Connection">
+                                                        <i class="bi bi-hdd-network text-primary"></i> Test
+                                                    </button>
+                                                </form>
+                                                <form method="post" class="flex-grow-1">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="initialize_hpc_account">
+                                                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                    <input type="hidden" name="Username" value="{{ account.username }}">
+                                                    <button type="submit" class="btn btn-light w-100 border-0 h-100"
+                                                        title="Initialize Credentials">
+                                                        <i class="bi bi-lightning-charge text-amber"></i> Init
+                                                    </button>
+                                                </form>
+                                            </div>
 
-                                            <button type="button" class="btn btn-sm btn-outline-warning w-100"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#regenerateSshKeyModal"
-                                                    onclick="setUsernameInModal('{{ account.username }}')">
-                                                Regenerate Key
-                                            </button>
+                                            <div
+                                                class="btn-group btn-group-sm w-100 shadow-xs rounded-3 overflow-hidden">
+                                                <button type="button" class="btn btn-light flex-grow-1 border-0"
+                                                    data-bs-toggle="modal" data-bs-target="#regenerateSshKeyModal"
+                                                    onclick="setUsernameInModal('{{ account.username }}')"
+                                                    title="Regenerate Security Token">
+                                                    <i class="bi bi-arrow-repeat text-indigo"></i> Token
+                                                </button>
 
-                                            {% if v610_check %}
-                                            <button type="button" class="btn btn-sm btn-outline-dark w-100"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#renameAccountModal"
-                                                    onclick="setRenameAccountUsername('{{ account.username }}')">
-                                                Rename / Password
-                                            </button>
-                                            {% endif %}
+                                                {% if v610_check %}
+                                                <button type="button" class="btn btn-light flex-grow-1 border-0"
+                                                    data-bs-toggle="modal" data-bs-target="#renameAccountModal"
+                                                    onclick="setRenameAccountUsername('{{ account.username }}')"
+                                                    title="Manage Password/Identity">
+                                                    <i class="bi bi-shield-lock text-dark"></i> Auth
+                                                </button>
+                                                {% endif %}
 
-                                            <form method="post" class="w-100">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="action" value="initialize_hpc_account">
-                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                <input type="hidden" name="Username" value="{{ account.username }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-secondary w-100">Initialize</button>
-                                            </form>
-
-                                            <form method="post" class="w-100">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="action" value="delete_hpc_account">
-                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                <input type="hidden" name="username" value="{{ account.username }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger w-100" onclick="return confirm('Are you sure you want to delete this HPC account?')">Delete</button>
-                                            </form>
+                                                <form method="post" class="flex-grow-1">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="action" value="delete_hpc_account">
+                                                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                    <input type="hidden" name="username" value="{{ account.username }}">
+                                                    <button type="submit" class="btn btn-light w-100 border-0 h-100"
+                                                        onclick="return confirm('Are you sure you want to delete this HPC account? This cannot be undone.')">
+                                                        <i class="bi bi-trash text-danger"></i>
+                                                    </button>
+                                                </form>
+                                            </div>
                                         </div>
                                     </td>
                                 </tr>
@@ -483,8 +601,12 @@
                         </table>
                     </div>
                     {% else %}
-                    <div class="text-center py-5 text-muted">
-                        <p class="mb-0">No SSH accounts available.</p>
+                    <div class="text-center py-5">
+                        <div class="mb-3 text-muted opacity-25">
+                            <i class="bi bi-shield-slash fs-1"></i>
+                        </div>
+                        <h6 class="text-muted">No HPC accounts authorized</h6>
+                        <p class="small text-muted mb-0">Authorize an account to enable remote compute access.</p>
                     </div>
                     {% endif %}
                 </div>
@@ -494,218 +616,227 @@
 
     {% elif active_tab == 'adaptor_users' %}
     <div class="container-fluid px-lg-5">
-      {% include "adaptor_users_table.html" %}
+        {% include "adaptor_users_table.html" %}
     </div>
     {% endif %}
 
 </div>
 
 <div class="modal fade" id="editAssignmentModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 shadow">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="update_assignment">
-        <input type="hidden" id="editClusterId" name="ClusterId">
-        <input type="hidden" name="ProjectId" value="{{ project.id }}">
-        <div class="modal-header bg-light">
-          <h5 class="modal-title">Edit Assignment</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_assignment">
+                <input type="hidden" id="editClusterId" name="ClusterId">
+                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title">Edit Assignment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Cluster</label>
+                        <div class="fw-bold fs-5" id="editClusterNameDisplay"></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Scratch Storage Path</label>
+                        <input type="text" class="form-control" id="editScratchPath" name="ScratchStoragePath">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Project Storage Path</label>
+                        <input type="text" class="form-control" id="editProjectPath" name="ProjectStoragePath">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-link text-secondary text-decoration-none"
+                        data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+                </div>
+            </form>
         </div>
-        <div class="modal-body p-4">
-          <div class="mb-3">
-             <label class="form-label text-muted small">Cluster</label>
-             <div class="fw-bold fs-5" id="editClusterNameDisplay"></div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Scratch Storage Path</label>
-            <input type="text" class="form-control" id="editScratchPath" name="ScratchStoragePath">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Project Storage Path</label>
-            <input type="text" class="form-control" id="editProjectPath" name="ProjectStoragePath">
-          </div>
-        </div>
-        <div class="modal-footer bg-light">
-          <button type="button" class="btn btn-link text-secondary text-decoration-none" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary px-4">Save Changes</button>
-        </div>
-      </form>
     </div>
-  </div>
 </div>
 
 <div class="modal fade" id="addHpcAccountModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 shadow">
-      <div class="modal-header bg-light">
-          <h5 class="modal-title">Add New HPC Account</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="create_new_hpc_account">
-        <input type="hidden" name="ProjectId" value="{{ project.id }}">
-        <div class="modal-body p-4">
-          <div class="mb-3">
-            <label class="form-label">Username</label>
-            <input type="text" class="form-control" name="username" required placeholder="e.g. jdoe01">
-          </div>
-          <div class="mb-3">
-            <div class="d-grid">
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleField('password-field-add')">
-                    Set Initial Password (Optional)
-                </button>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title">Add New HPC Account</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div id="password-field-add" style="display: none;" class="mt-3 p-3 bg-light rounded">
-                <label class="form-label small text-muted">Password</label>
-                <input type="password" class="form-control" name="password">
-            </div>
-          </div>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_new_hpc_account">
+                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-control" name="username" required placeholder="e.g. jdoe01">
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-grid">
+                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                onclick="toggleField('password-field-add')">
+                                Set Initial Password (Optional)
+                            </button>
+                        </div>
+                        <div id="password-field-add" style="display: none;" class="mt-3 p-3 bg-light rounded">
+                            <label class="form-label small text-muted">Password</label>
+                            <input type="password" class="form-control" name="password">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-link text-secondary text-decoration-none"
+                        data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary px-4">Create Account</button>
+                </div>
+            </form>
         </div>
-        <div class="modal-footer bg-light">
-            <button type="button" class="btn btn-link text-secondary text-decoration-none" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary px-4">Create Account</button>
-        </div>
-      </form>
     </div>
-  </div>
 </div>
 
 <div class="modal fade" id="renameAccountModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 shadow">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="rename_hpc_account">
-        <input type="hidden" id="oldUsername" name="oldUsername">
-        <input type="hidden" name="ProjectId" value="{{ project.id }}">
-        <div class="modal-header bg-light">
-            <h5 class="modal-title">Account Management</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="rename_hpc_account">
+                <input type="hidden" id="oldUsername" name="oldUsername">
+                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title">Account Management</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <div class="mb-4">
+                        <label class="form-label text-muted small">Update Username</label>
+                        <input type="text" class="form-control form-control-lg" name="NewUsername" required
+                            id="renameDisplayOld">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Change Password (Optional)</label>
+                        <input type="password" class="form-control" name="NewPassword"
+                            placeholder="Leave blank to keep current">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-link text-secondary text-decoration-none"
+                        data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+                </div>
+            </form>
         </div>
-        <div class="modal-body p-4">
-          <div class="mb-4">
-              <label class="form-label text-muted small">Update Username</label>
-              <input type="text" class="form-control form-control-lg" name="NewUsername" required id="renameDisplayOld">
-          </div>
-          <div class="mb-3">
-               <label class="form-label text-muted small">Change Password (Optional)</label>
-               <input type="password" class="form-control" name="NewPassword" placeholder="Leave blank to keep current">
-          </div>
-        </div>
-        <div class="modal-footer bg-light">
-             <button type="button" class="btn btn-link text-secondary text-decoration-none" data-bs-dismiss="modal">Cancel</button>
-             <button type="submit" class="btn btn-primary px-4">Save Changes</button>
-        </div>
-      </form>
     </div>
-  </div>
 </div>
 
 <div class="modal fade" id="regenerateSshKeyModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-0 shadow">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="regenerate_ssh_key">
-        <input type="hidden" name="ProjectId" value="{{ project.id }}">
-        <input type="hidden" name="username" id="modal-username-regen">
-        <div class="modal-header bg-warning bg-opacity-10">
-            <h5 class="modal-title text-warning text-opacity-75">Regenerate SSH Key</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body p-4 text-center">
-            <div class="mb-3 text-muted">You are about to regenerate the SSH key for:</div>
-            <h4 id="display-username-regen" class="mb-4"></h4>
-
-            <div class="alert alert-info small text-start">
-                This will invalidate the existing key. You may need to provide the password below if the account requires it.
-            </div>
-
-            <div class="mb-3 text-start">
-                <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="toggleField('regen-pwd-field')">Enter Password (If required)</button>
-                <div id="regen-pwd-field" style="display: none;" class="mt-2">
-                    <input type="password" class="form-control" name="password" placeholder="HPC Password">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="regenerate_ssh_key">
+                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                <input type="hidden" name="username" id="modal-username-regen">
+                <div class="modal-header bg-warning bg-opacity-10">
+                    <h5 class="modal-title text-warning text-opacity-75">Regenerate SSH Key</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-            </div>
+                <div class="modal-body p-4 text-center">
+                    <div class="mb-3 text-muted">You are about to regenerate the SSH key for:</div>
+                    <h4 id="display-username-regen" class="mb-4"></h4>
+
+                    <div class="alert alert-info small text-start">
+                        This will invalidate the existing key. You may need to provide the password below if the account
+                        requires it.
+                    </div>
+
+                    <div class="mb-3 text-start">
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100"
+                            onclick="toggleField('regen-pwd-field')">Enter Password (If required)</button>
+                        <div id="regen-pwd-field" style="display: none;" class="mt-2">
+                            <input type="password" class="form-control" name="password" placeholder="HPC Password">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-link text-secondary text-decoration-none"
+                        data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning px-4">Regenerate Now</button>
+                </div>
+            </form>
         </div>
-        <div class="modal-footer bg-light">
-            <button type="button" class="btn btn-link text-secondary text-decoration-none" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-warning px-4">Regenerate Now</button>
-        </div>
-      </form>
     </div>
-  </div>
 </div>
 
 <script>
-// --- Assignment Edit Logic ---
-function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
-    document.getElementById('editClusterId').value = clusterId;
-    document.getElementById('editClusterNameDisplay').innerText = clusterName;
-    document.getElementById('editScratchPath').value = scratchPath;
-    document.getElementById('editProjectPath').value = projectPath;
-    new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
-}
-
-// --- SSH Account Modal Logic ---
-function setUsernameInModal(username) {
-    document.getElementById('modal-username-regen').value = username;
-    document.getElementById('display-username-regen').innerText = username;
-}
-
-function setRenameAccountUsername(username) {
-    document.getElementById('oldUsername').value = username;
-    document.getElementById('renameDisplayOld').value = username;
-}
-
-function toggleField(elementId) {
-    const el = document.getElementById(elementId);
-    el.style.display = (el.style.display === 'none') ? 'block' : 'none';
-}
-
-// --- Copy to Clipboard Logic ---
-function copyToClipboard(text, feedbackId) {
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => showFeedback(feedbackId))
-        .catch(err => fallbackCopy(text, feedbackId));
-    } else {
-        fallbackCopy(text, feedbackId);
+    // --- Assignment Edit Logic ---
+    function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
+        document.getElementById('editClusterId').value = clusterId;
+        document.getElementById('editClusterNameDisplay').innerText = clusterName;
+        document.getElementById('editScratchPath').value = scratchPath;
+        document.getElementById('editProjectPath').value = projectPath;
+        new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
     }
-}
 
-function fallbackCopy(text, feedbackId) {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    document.body.appendChild(textarea);
-    textarea.select();
-    try {
-        document.execCommand('copy');
-        showFeedback(feedbackId);
-    } catch (err) {
-        console.error('Copy failed', err);
+    // --- SSH Account Modal Logic ---
+    function setUsernameInModal(username) {
+        document.getElementById('modal-username-regen').value = username;
+        document.getElementById('display-username-regen').innerText = username;
     }
-    document.body.removeChild(textarea);
-}
 
-function showFeedback(feedbackId) {
-    const feedbackElement = document.getElementById(feedbackId);
-    if (feedbackElement) {
-        feedbackElement.classList.remove('d-none');
-        setTimeout(() => feedbackElement.classList.add('d-none'), 2000);
+    function setRenameAccountUsername(username) {
+        document.getElementById('oldUsername').value = username;
+        document.getElementById('renameDisplayOld').value = username;
     }
-}
 
-// Initialize Tooltips
-document.addEventListener('DOMContentLoaded', function () {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
+    function toggleField(elementId) {
+        const el = document.getElementById(elementId);
+        el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+    }
+
+    // --- Copy to Clipboard Logic ---
+    function copyToClipboard(text, feedbackId) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => showFeedback(feedbackId))
+                .catch(err => fallbackCopy(text, feedbackId));
+        } else {
+            fallbackCopy(text, feedbackId);
+        }
+    }
+
+    function fallbackCopy(text, feedbackId) {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.left = '-9999px';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+            showFeedback(feedbackId);
+        } catch (err) {
+            console.error('Copy failed', err);
+        }
+        document.body.removeChild(textarea);
+    }
+
+    function showFeedback(feedbackId) {
+        const feedbackElement = document.getElementById(feedbackId);
+        if (feedbackElement) {
+            feedbackElement.classList.remove('d-none');
+            setTimeout(() => feedbackElement.classList.add('d-none'), 2000);
+        }
+    }
+
+    // Initialize Tooltips
+    document.addEventListener('DOMContentLoaded', function () {
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
     });
-});
 </script>
 
 {% endblock %}

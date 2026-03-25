@@ -1,102 +1,216 @@
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-
 <style>
-    table.dataTable { width: 100% !important; border-collapse: collapse !important; }
-    .dataTables_wrapper { padding: 1rem 0; }
-    .dataTables_filter input { border: 1px solid #dee2e6; border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; margin-bottom: 10px; }
-    .nav-tabs .nav-link { font-size: 0.85rem; color: #6c757d; border: none; border-bottom: 2px solid transparent; padding: 0.8rem 1.2rem; transition: 0.3s; }
-    .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; background: none; }
-    .card-header-tabs { margin-bottom: -10px; }
-    .role-badge { min-width: 110px; background: white; border-radius: 4px; border: 1px solid #dee2e6; padding: 4px 8px; display: inline-flex; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 4px; }
-    .role-name { font-size: 0.65rem; font-weight: bold; color: #0d6efd; text-transform: uppercase; }
-    .group-name { font-size: 0.75rem; color: #6c757d; }
-    .table-success-fade { animation: fadeBackground 2s forwards; }
-    @keyframes fadeBackground { from { background-color: #d1e7dd; } to { background-color: transparent; } }
+    /* DataTables Overrides */
+    .dataTables_wrapper .dataTables_filter {
+        margin-bottom: 1rem;
+    }
+
+    .dataTables_wrapper .dataTables_filter input {
+        border: 0 !important;
+        background: rgba(0, 0, 0, 0.03) !important;
+        border-radius: 8px !important;
+        padding: 0.5rem 1rem !important;
+        font-size: 0.875rem !important;
+        width: 250px !important;
+    }
+
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+        background: var(--primary-color) !important;
+        border: 0 !important;
+        color: white !important;
+        border-radius: 6px !important;
+    }
+
+    .nav-pills-custom .nav-link {
+        color: #6c757d;
+        font-weight: 600;
+        padding: 0.6rem 1.2rem;
+        border-radius: 8px;
+        transition: 0.2s;
+        border: 1px solid transparent;
+    }
+
+    .nav-pills-custom .nav-link.active {
+        background-color: var(--primary-soft);
+        color: var(--primary-color);
+        border-color: var(--primary-color);
+    }
+
+    .user-avatar {
+        width: 32px;
+        height: 32px;
+        background: var(--indigo-soft);
+        color: var(--indigo);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-weight: bold;
+        font-size: 0.8rem;
+    }
+
+    .role-badge-modern {
+        background: white;
+        border-radius: 8px;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+        padding: 6px 10px;
+        display: inline-flex;
+        align-items: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+        margin-bottom: 4px;
+        transition: 0.2s;
+    }
+
+    .role-badge-modern:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+        transform: translateY(-1px);
+    }
+
+    .role-name-text {
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: var(--primary-color);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .group-name-text {
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+
+    .table-success-fade {
+        animation: fadeBackground 2s forwards;
+    }
+
+    @keyframes fadeBackground {
+        from {
+            background-color: var(--emerald-soft);
+        }
+
+        to {
+            background-color: transparent;
+        }
+    }
 </style>
 
-<div class="card mb-4 shadow-sm border-0">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 border-bottom">
-        <ul class="nav nav-tabs card-header-tabs border-bottom-0" id="userTabs" role="tablist">
-            <li class="nav-item">
-                <button class="nav-link active fw-bold text-uppercase" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button">
-                    In Project (<span id="countIn">{{ adaptor_users|length }}</span>)
-                </button>
-            </li>
-            <li class="nav-item">
-                <button class="nav-link fw-bold text-uppercase" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button">
-                    Available Accounts (<span id="countOut">{{ adaptor_users_not_in_project|length }}</span>)
-                </button>
-            </li>
-        </ul>
-        <div class="btn-group">
-            <a href="{% url 'adaptor_user_create' %}" class="btn btn-primary btn-sm px-3"><i class="bi bi-plus-lg"></i> Create New</a>
-            <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();"><i class="bi bi-arrow-clockwise"></i></button>
+<div class="card glass-card border-0 mb-4 overflow-hidden">
+    <div class="card-header bg-transparent border-0 d-flex flex-wrap align-items-center py-3 px-4 gap-3">
+        <div class="d-flex align-items-center">
+            <div class="icon-box-sm bg-primary-soft me-3">
+                <i class="bi bi-people text-primary fs-5"></i>
+            </div>
+            <div>
+                <h5 class="mb-0 fw-bold">User Management</h5>
+                <small class="text-muted">Control project access and permissions</small>
+            </div>
+        </div>
+
+        <div class="ms-md-auto d-flex align-items-center gap-3">
+            <ul class="nav nav-pills nav-pills-custom border-0 p-1 bg-light rounded-3" id="userTabs" role="tablist">
+                <li class="nav-item">
+                    <button class="nav-link active" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane"
+                        type="button">
+                        In Project <span class="badge bg-white text-primary ms-1 shadow-sm" id="countIn">{{
+                            adaptor_users|length }}</span>
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button class="nav-link" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane"
+                        type="button">
+                        Available <span class="badge bg-white text-muted ms-1 shadow-sm" id="countOut">{{
+                            adaptor_users_not_in_project|length }}</span>
+                    </button>
+                </li>
+            </ul>
+            <div class="vr mx-1 d-none d-md-block"></div>
+            <div class="btn-group">
+                <a href="{% url 'adaptor_user_create' %}" class="btn btn-sm btn-indigo text-white"><i
+                        class="bi bi-person-plus me-1"></i> Create</a>
+                <button class="btn btn-sm btn-glass-secondary px-2" onclick="location.reload();"><i
+                        class="bi bi-arrow-clockwise"></i></button>
+            </div>
         </div>
     </div>
 
     <div class="card-body p-0">
         <div class="tab-content">
-            <div class="tab-pane fade show active px-3 pb-3" id="in-project-pane" role="tabpanel">
+            <!-- In Project Pane -->
+            <div class="tab-pane fade show active px-4 pb-4 mt-2" id="in-project-pane" role="tabpanel">
                 <div class="table-responsive">
-                    <table id="tableIn" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
-                        <thead class="table-light text-muted small text-uppercase">
+                    <table id="tableIn" class="table table-modern align-middle mb-0">
+                        <thead>
                             <tr>
-                                <th class="ps-4" style="width: 80px;">ID</th>
+                                <th style="width: 60px;">ID</th>
                                 <th>User</th>
                                 <th>Project Roles & Groups</th>
-                                <th class="text-end pe-4">Action</th>
+                                <th class="text-end">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for adaptor_user in adaptor_users %}
                             <tr>
-                                <td class="ps-4 text-muted small">#{{ adaptor_user.id }}</td>
-                                <td class="fw-medium text-dark">{{ adaptor_user.username }}</td>
+                                <td><span class="text-muted small">#{{ adaptor_user.id }}</span></td>
                                 <td>
-                                    <div class="d-flex align-items-center w-100">
+                                    <div class="d-flex align-items-center">
+                                        <div class="user-avatar me-2">{{ adaptor_user.username|make_list|first|upper }}
+                                        </div>
+                                        <div class="fw-semibold">{{ adaptor_user.username }}</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center flex-wrap gap-2">
                                         <div class="d-flex flex-wrap gap-2 role-container-{{ adaptor_user.username }}">
                                             {% for group in adaptor_user.adaptor_user_groups|dictsort:"name" %}
-                                                {% if group.project.id == project.id %}
-                                                    {% for role in group.roles %}
-                                                    <div class="role-badge">
-                                                        <div class="d-flex flex-column flex-grow-1">
-                                                            <span class="role-name">{{ role }}</span>
-                                                            <span class="group-name text-truncate" style="max-width: 150px;">{{ group.name }}</span>
-                                                        </div>
-                                                        <form method="post" action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}" class="ms-2">
-                                                            {% csrf_token %}
-                                                            <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                            <input type="hidden" name="Role" value="{{ role }}">
-                                                            <button type="submit" class="btn-close" style="font-size: 0.5rem;" onclick="return confirm('Remove {{ role }}?');"></button>
-                                                        </form>
-                                                    </div>
-                                                    {% endfor %}
-                                                {% endif %}
+                                            {% if group.project.id == project.id %}
+                                            {% for role in group.roles %}
+                                            <div class="role-badge-modern">
+                                                <div class="d-flex flex-column me-2">
+                                                    <span class="role-name-text">{{ role }}</span>
+                                                    <span class="group-name-text text-truncate"
+                                                        style="max-width: 150px;">{{ group.name }}</span>
+                                                </div>
+                                                <form method="post"
+                                                    action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}"
+                                                    class="d-inline">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                    <input type="hidden" name="Role" value="{{ role }}">
+                                                    <button type="submit" class="btn-close"
+                                                        style="width: 8px; height: 8px;"
+                                                        onclick="return confirm('Remove {{ role }}?');"></button>
+                                                </form>
+                                            </div>
+                                            {% endfor %}
+                                            {% endif %}
                                             {% endfor %}
                                         </div>
 
-                                        <form method="post" action="{% url 'adaptor_user_assign_to_project' adaptor_user.username %}" class="ms-auto ps-3 ajax-assign-form" data-table="in">
+                                        <form method="post"
+                                            action="{% url 'adaptor_user_assign_to_project' adaptor_user.username %}"
+                                            class="ms-auto ps-3 ajax-assign-form" data-table="in">
                                             {% csrf_token %}
                                             <input type="hidden" name="ProjectId" value="{{ project.id }}">
                                             <input type="hidden" name="role_name_display" class="role-name-display">
-                                            <div class="input-group input-group-sm" style="width: 250px;">
-                                                <select name="role" class="form-select border-secondary-subtle" required>
-                                                <option value="" selected disabled>+ Add Role</option>
-                                                <option value="1" title="HEAppE administrator role with access to the entire system.">Administrator</option>
-                                                <option value="2" title="HEAppE maintainer role for getting information about actual HEAppE status.">Maintainer</option>
-                                                <option value="3" title="Standard user, can submit and check his own jobs.">Submitter</option>
-                                                <option value="4" title="Users with this role car report in assigned groups.">GroupReporter</option>
-                                                <option value="5" title="Users with this role can watch other jobs in the same group.">Reporter</option>
-                                                <option value="6" title="User with this role can create new project and use management API.">ManagementAdmin</option>
-                                                <option value="7" title="User with this role can manage command templates, can submit and check his own jobs.">Manager</option>
-                                            </select>
-                                                <button class="btn btn-success" type="submit">Add</button>
+                                            <div class="input-group input-group-sm rounded-3 overflow-hidden shadow-xs"
+                                                style="width: 220px;">
+                                                <select name="role" class="form-select border-0 bg-light" required>
+                                                    <option value="" selected disabled>+ Add Role</option>
+                                                    <option value="1">Administrator</option>
+                                                    <option value="2">Maintainer</option>
+                                                    <option value="3">Submitter</option>
+                                                    <option value="4">GroupReporter</option>
+                                                    <option value="5">Reporter</option>
+                                                    <option value="6">ManagementAdmin</option>
+                                                    <option value="7">Manager</option>
+                                                </select>
+                                                <button class="btn btn-emerald text-white" type="submit">Add</button>
                                             </div>
                                         </form>
                                     </div>
                                 </td>
-                                <td class="text-end pe-4">
-                                    <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="btn btn-sm btn-outline-secondary py-0 px-2">Detail</a>
+                                <td class="text-end pe-3">
+                                    <a href="{% url 'adaptor_user_detail' adaptor_user.username %}"
+                                        class="btn btn-sm btn-light border-0"><i class="bi bi-info-circle"></i></a>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -105,36 +219,45 @@
                 </div>
             </div>
 
-            <div class="tab-pane fade px-3 pb-3" id="available-pane" role="tabpanel">
+            <!-- Available Pane -->
+            <div class="tab-pane fade px-4 pb-4 mt-2" id="available-pane" role="tabpanel">
                 <div class="table-responsive">
-                    <table id="tableOut" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
-                        <thead class="table-light text-muted small text-uppercase">
+                    <table id="tableOut" class="table table-modern align-middle mb-0">
+                        <thead>
                             <tr>
-                                <th class="ps-4">Username</th>
+                                <th>Username</th>
                                 <th>System ID</th>
-                                <th class="text-end pe-4">Action</th>
+                                <th class="text-end">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for user in adaptor_users_not_in_project %}
                             <tr>
-                                <td class="ps-4 fw-medium">{{ user.username }}</td>
-                                <td class="text-muted small">#{{ user.id }}</td>
-                                <td class="text-end pe-4">
-                                    <form method="post" action="{% url 'adaptor_user_assign_to_project' user.username %}" class="d-inline-block ajax-assign-form" data-table="out">
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="user-avatar me-2">{{ user.username|make_list|first|upper }}</div>
+                                        <div class="fw-semibold">{{ user.username }}</div>
+                                    </div>
+                                </td>
+                                <td><span class="badge bg-light text-dark font-monospace">#{{ user.id }}</span></td>
+                                <td class="text-end">
+                                    <form method="post"
+                                        action="{% url 'adaptor_user_assign_to_project' user.username %}"
+                                        class="d-inline-block ajax-assign-form" data-table="out">
                                         {% csrf_token %}
                                         <input type="hidden" name="ProjectId" value="{{ project.id }}">
                                         <input type="hidden" name="role_name_display" class="role-name-display">
-                                        <div class="input-group input-group-sm" style="width: 260px;">
-                                            <select name="role" class="form-select border-secondary-subtle" required>
-                                                <option value="" selected disabled>+ Add Role</option>
-                                                <option value="1" title="HEAppE administrator role with access to the entire system.">Administrator</option>
-                                                <option value="2" title="HEAppE maintainer role for getting information about actual HEAppE status.">Maintainer</option>
-                                                <option value="3" title="Standard user, can submit and check his own jobs.">Submitter</option>
-                                                <option value="4" title="Users with this role car report in assigned groups.">GroupReporter</option>
-                                                <option value="5" title="Users with this role can watch other jobs in the same group.">Reporter</option>
-                                                <option value="6" title="User with this role can create new project and use management API.">ManagementAdmin</option>
-                                                <option value="7" title="User with this role can manage command templates, can submit and check his own jobs.">Manager</option>
+                                        <div class="input-group input-group-sm rounded-3 overflow-hidden shadow-xs"
+                                            style="width: 260px;">
+                                            <select name="role" class="form-select border-0 bg-light" required>
+                                                <option value="" selected disabled>Choose Role...</option>
+                                                <option value="1">Administrator</option>
+                                                <option value="2">Maintainer</option>
+                                                <option value="3">Submitter</option>
+                                                <option value="4">GroupReporter</option>
+                                                <option value="5">Reporter</option>
+                                                <option value="6">ManagementAdmin</option>
+                                                <option value="7">Manager</option>
                                             </select>
                                             <button type="submit" class="btn btn-primary">Add to Project</button>
                                         </div>
@@ -155,11 +278,17 @@
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
-    $(document).ready(function() {
-        const t1 = $('#tableIn').DataTable({ pageLength: 10, language: {search: ""}, autoWidth: false });
-        const t2 = $('#tableOut').DataTable({ pageLength: 10, language: {search: ""}, autoWidth: false });
+    $(document).ready(function () {
+        const t1 = $('#tableIn').DataTable({ pageLength: 10, language: { search: "" }, autoWidth: false });
+        const t2 = $('#tableOut').DataTable({ pageLength: 10, language: { search: "" }, autoWidth: false });
 
-        $(document).on('submit', '.ajax-assign-form', function(e) {
+        // Update counts visually
+        const updateCounts = () => {
+            $('#countIn').text(t1.rows().count());
+            $('#countOut').text(t2.rows().count());
+        };
+
+        $(document).on('submit', '.ajax-assign-form', function (e) {
             e.preventDefault();
             const $form = $(this);
             const $btn = $form.find('button');
@@ -169,43 +298,50 @@
 
             $form.find('.role-name-display').val(roleText);
             const $row = $form.closest('tr');
-            const username = tableType === 'in' ? $row.find('td:eq(1)').text().trim() : $row.find('td:eq(0)').text().trim();
+
+            // Extract username correctly based on table structure
+            let username = '';
+            if (tableType === 'in') {
+                username = $row.find('td:eq(1) .fw-semibold').text().trim();
+            } else {
+                username = $row.find('td:eq(0) .fw-semibold').text().trim();
+            }
 
             $btn.prop('disabled', true).prepend('<span class="spinner-border spinner-border-sm me-1"></span>');
 
             fetch($form.attr('action'), {
                 method: 'POST',
                 body: new FormData(this),
-                headers: {'X-Requested-With': 'XMLHttpRequest'}
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
             })
-            .then(res => {
-                if (!res.ok) return res.json().then(d => { throw new Error(d.message || 'Error') });
-                return res.json();
-            })
-            .then(data => {
-                if (data.status === 'success') {
-                    if (tableType === 'out') {
-                        const sysId = $row.find('td:eq(1)').text();
-                        t2.row($row).remove().draw();
-                        const node = t1.row.add([
-                            sysId,
-                            `<span class="fw-medium text-dark">${username}</span>`,
-                            `<div class="d-flex align-items-center w-100"><div class="d-flex flex-wrap gap-2 role-container-${username}"><div class="role-badge"><div class="d-flex flex-column"><span class="role-name">${data.role_name}</span><span class="group-name">Project Group</span></div></div></div></div>`,
-                            `<div class="text-end pe-4"><a href="/adaptor_users/detail/${username}/" class="btn btn-sm btn-outline-secondary py-0 px-2">Detail</a></div>`
-                        ]).draw().node();
-                        $(node).addClass('table-success-fade');
-                    } else {
-                        const badge = `<div class="role-badge"><div class="d-flex flex-column"><span class="role-name">${data.role_name}</span><span class="group-name">Project Group</span></div></div>`;
-                        $(`.role-container-${username}`).append(badge);
+                .then(res => {
+                    if (!res.ok) return res.json().then(d => { throw new Error(d.message || 'Error') });
+                    return res.json();
+                })
+                .then(data => {
+                    if (data.status === 'success') {
+                        if (tableType === 'out') {
+                            const sysId = $row.find('td:eq(1)').html();
+                            const userNameHtml = $row.find('td:eq(0)').html();
+                            t2.row($row).remove().draw();
+                            const node = t1.row.add([
+                                sysId,
+                                userNameHtml,
+                                `<div class="d-flex align-items-center flex-wrap gap-2"><div class="d-flex flex-wrap gap-2 role-container-${username}"><div class="role-badge-modern"><div class="d-flex flex-column me-2"><span class="role-name-text">${data.role_name}</span><span class="group-name-text">Project Group</span></div></div></div></div>`,
+                                `<div class="text-end pe-3"><a href="/adaptor_users/detail/${username}/" class="btn btn-sm btn-light border-0"><i class="bi bi-info-circle"></i></a></div>`
+                            ]).draw().node();
+                            $(node).addClass('table-success-fade');
+                        } else {
+                            const badge = `<div class="role-badge-modern"><div class="d-flex flex-column me-2"><span class="role-name-text">${data.role_name}</span><span class="group-name-text">Project Group</span></div></div>`;
+                            $(`.role-container-${username}`).append(badge);
+                        }
+                        updateCounts();
                     }
-                }
-            })
-            .catch(err => alert(err.message))
-            .finally(() => {
-                $btn.prop('disabled', false).find('.spinner-border').remove();
-                $('#countIn').text(t1.rows().count());
-                $('#countOut').text(t2.rows().count());
-            });
+                })
+                .catch(err => alert(err.message))
+                .finally(() => {
+                    $btn.prop('disabled', false).find('.spinner-border').remove();
+                });
         });
 
         $('button[data-bs-toggle="tab"]').on('shown.bs.tab', () => { t1.columns.adjust(); t2.columns.adjust(); });

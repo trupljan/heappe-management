@@ -8,25 +8,169 @@
 
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>{% block title %}HEAppE Admin Panel{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@300;400;600;700&display=swap"
+        rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        .navbar-brand { font-size: 1.4rem; }
-        .nav-link { font-weight: 500; }
-        .nav-white { color: #ffffff !important; }
-        .nav-link:hover { color: #ffc107 !important; }
-        .dropdown-menu { border: none; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15); }
+        :root {
+            --primary-color: #4361ee;
+            --primary-hover: #3a56d4;
+            --secondary-color: #f8fafc;
+            --accent-color: #4cc9f0;
+            --success-color: #2ec4b6;
+            --warning-color: #ff9f1c;
+            --danger-color: #e71d36;
+            --text-dark: #1e293b;
+            --text-muted: #64748b;
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.3);
+            --card-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --font-main: 'Inter', sans-serif;
+            --font-heading: 'Outfit', sans-serif;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: #f1f5f9;
+            color: var(--text-dark);
+            -webkit-font-smoothing: antialiased;
+        }
+
+        h1,
+        h2,
+        h3,
+        h4,
+        h5,
+        h6 {
+            font-family: var(--font-heading);
+            font-weight: 600;
+        }
+
+        .bg-primary {
+            background-color: var(--primary-color) !important;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            border-color: var(--primary-color);
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            border-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .navbar {
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            background-color: rgba(67, 97, 238, 0.9) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .navbar-brand {
+            font-family: var(--font-heading);
+            font-size: 1.4rem;
+            letter-spacing: -0.5px;
+        }
+
+        .nav-link {
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+
+        .nav-white {
+            color: rgba(255, 255, 255, 0.9) !important;
+        }
+
+        .nav-link:hover {
+            color: #ffffff !important;
+            opacity: 1;
+        }
+
+        .card {
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            border-radius: 1rem;
+            box-shadow: var(--card-shadow);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            background: #ffffff;
+        }
+
+        .glass-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .dropdown-menu {
+            border: none;
+            border-radius: 0.75rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            padding: 0.5rem;
+        }
+
+        .dropdown-item {
+            border-radius: 0.5rem;
+            padding: 0.5rem 1rem;
+            margin-bottom: 2px;
+            font-size: 0.9rem;
+        }
+
+        .dropdown-item:active {
+            background-color: var(--primary-color);
+        }
 
         .animate-pulse {
-            animation: pulse-yellow 2s infinite;
+            animation: pulse-primary 2s infinite;
         }
-        @keyframes pulse-yellow {
-            0% { box-shadow: 0 0 0 0px rgba(255, 193, 7, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
-            100% { box-shadow: 0 0 0 0px rgba(255, 193, 7, 0); }
+
+        @keyframes pulse-primary {
+            0% {
+                box-shadow: 0 0 0 0px rgba(67, 97, 238, 0.4);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(67, 97, 238, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0px rgba(67, 97, 238, 0);
+            }
+        }
+
+        .badge {
+            font-weight: 600;
+            padding: 0.4em 0.8em;
+            border-radius: 0.5rem;
+        }
+
+        /* Modern Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
 
         .changelog-box {
@@ -40,11 +184,13 @@
         }
     </style>
 </head>
+
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow py-2">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold d-flex align-items-center me-4" href="{% url 'dashboard_view' %}">
-                <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" class="me-2" style="height: 30px;">
+                <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" class="me-2"
+                    style="height: 30px;">
                 <span>HEAppE Admin Panel</span>
             </a>
 
@@ -54,10 +200,14 @@
 
             <div class="collapse navbar-collapse" id="navbarContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0 align-items-center">
-                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center" href="{% url 'dashboard_view' %}"><i class="bi bi-house me-1"></i> Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center" href="{% url 'manage_project_adaptor_users_base' %}"><i class="bi bi-person me-1"></i> User Management</a></li>
+                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center"
+                            href="{% url 'dashboard_view' %}"><i class="bi bi-house me-1"></i> Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center"
+                            href="{% url 'manage_project_adaptor_users_base' %}"><i class="bi bi-person me-1"></i> User
+                            Management</a></li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="infraDrop" data-bs-toggle="dropdown"><i class="bi bi-hdd-stack me-1"></i> Infrastructure</a>
+                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="infraDrop"
+                            data-bs-toggle="dropdown"><i class="bi bi-hdd-stack me-1"></i> Infrastructure</a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{% url 'cluster_list' %}">Clusters</a></li>
                             <li><a class="dropdown-item" href="{% url 'queues_view' %}">Queues</a></li>
@@ -65,45 +215,56 @@
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="sysDrop" data-bs-toggle="dropdown"><i class="bi bi-graph-up me-1"></i> System Management</a>
+                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="sysDrop"
+                            data-bs-toggle="dropdown"><i class="bi bi-graph-up me-1"></i> System Management</a>
                         <ul class="dropdown-menu">
                             {% if request.session.chosen_instance %}
-                             <li><a class="dropdown-item" href="{% url 'deploy_view' request.session.chosen_instance %}">Application Control</a></li>
+                            <li><a class="dropdown-item"
+                                    href="{% url 'deploy_view' request.session.chosen_instance %}">Application
+                                    Control</a></li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{% url 'logs' %}">Logs</a></li>
                             <li><a class="dropdown-item" href="{% url 'backup_restore' %}">Backup &amp; Restore</a></li>
                         </ul>
                     </li>
-                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center" href="{% url 'deploy_view' %}"><i class="bi bi-cloud-arrow-up me-1"></i> Deploy</a></li>
+                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center"
+                            href="{% url 'deploy_view' %}"><i class="bi bi-cloud-arrow-up me-1"></i> Deploy</a></li>
                 </ul>
 
                 <div class="d-flex align-items-center gap-2">
                     {% if user.is_authenticated %}
-                        <div id="update-notification-item" class="d-none">
-                            <button class="btn btn-warning btn-sm fw-bold px-3 animate-pulse" data-bs-toggle="modal" data-bs-target="#updateModal">
-                                <i class="bi bi-arrow-up-circle-fill me-1"></i> Update Available
-                            </button>
-                        </div>
+                    <div id="update-notification-item" class="d-none">
+                        <button class="btn btn-warning btn-sm fw-bold px-3 animate-pulse" data-bs-toggle="modal"
+                            data-bs-target="#updateModal">
+                            <i class="bi bi-arrow-up-circle-fill me-1"></i> Update Available
+                        </button>
+                    </div>
 
-                        {% if request.session.chosen_instance %}
-                            <a class="btn btn-sm btn-outline-light px-3" href="{% url 'reconnect_view' %}">Reconnect {{ request.session.chosen_instance }}</a>
-                            <a class="btn btn-sm btn-outline-light px-3" href="{% url 'instance_credentials_list' %}">Switch Instance</a>
-                        {% endif %}
+                    {% if request.session.chosen_instance %}
+                    <a class="btn btn-sm btn-outline-light px-3" href="{% url 'reconnect_view' %}">Reconnect {{
+                        request.session.chosen_instance }}</a>
+                    <a class="btn btn-sm btn-outline-light px-3" href="{% url 'instance_credentials_list' %}">Switch
+                        Instance</a>
+                    {% endif %}
 
-                        <div class="dropdown ms-2">
-                            <a class="nav-link nav-white dropdown-toggle d-flex align-items-center px-2" href="#" id="userDrop" data-bs-toggle="dropdown">
-                                <i class="bi bi-person-circle fs-5 me-1"></i><span>{{ user.username }}</span>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end shadow">
-                                <li><a class="dropdown-item" href="{% url 'profile_view' %}">Profile</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li class="px-3 py-1">
-                                    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger w-100">Logout</button></form>
-                                </li>
-                            </ul>
-                        </div>
+                    <div class="dropdown ms-2">
+                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center px-2" href="#"
+                            id="userDrop" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle fs-5 me-1"></i><span>{{ user.username }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                            <li><a class="dropdown-item" href="{% url 'profile_view' %}">Profile</a></li>
+                            <li>
+                                <hr class="dropdown-divider">
+                            </li>
+                            <li class="px-3 py-1">
+                                <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit"
+                                        class="btn btn-sm btn-outline-danger w-100">Logout</button></form>
+                            </li>
+                        </ul>
+                    </div>
                     {% else %}
-                        <a class="btn btn-outline-light btn-sm px-4" href="{% url 'login' %}">Login</a>
+                    <a class="btn btn-outline-light btn-sm px-4" href="{% url 'login' %}">Login</a>
                     {% endif %}
                 </div>
             </div>
@@ -124,19 +285,23 @@
 
                         <div class="alert alert-warning py-2 small shadow-sm">
                             <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                            <strong>Notice:</strong> The application will restart. Management UI will be temporarily unavailable for 30-60s.
+                            <strong>Notice:</strong> The application will restart. Management UI will be temporarily
+                            unavailable for 30-60s.
                         </div>
                     </div>
 
                     <div id="update-running-view" class="d-none text-center py-4">
-                        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        </div>
                         <h5 class="fw-bold">Update in progress...</h5>
-                        <p class="text-muted small">Executing deployment script and restarting server.<br>You will be redirected in <span id="countdown">15</span> seconds.</p>
+                        <p class="text-muted small">Executing deployment script and restarting server.<br>You will be
+                            redirected in <span id="countdown">15</span> seconds.</p>
                     </div>
                 </div>
                 <div class="modal-footer bg-light" id="modalFooter">
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Later</button>
-                    <button type="button" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
+                    <button type="button" onclick="confirmAndDeploy()"
+                        class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
                         Start Update Now
                     </button>
                 </div>
@@ -147,9 +312,9 @@
     {% if messages %}
     <div class="container mt-3">
         {% for message in messages %}
-            <div class="alert alert-info alert-dismissible fade show shadow-sm border-0" role="alert">
-                {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
+        <div class="alert alert-info alert-dismissible fade show shadow-sm border-0" role="alert">
+            {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
         {% endfor %}
     </div>
     {% endif %}
@@ -164,7 +329,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             fetch('{% url "check_updates" %}')
                 .then(r => r.json())
                 .then(data => {
@@ -201,23 +366,23 @@
                     git_tag: 'HEAD'
                 })
             })
-            .then(response => response.json())
-            .then(data => {
-                let seconds = 15;
-                const countdownEl = document.getElementById('countdown');
-                const timer = setInterval(() => {
-                    seconds--;
-                    countdownEl.innerText = seconds;
-                    if (seconds <= 0) {
-                        clearInterval(timer);
-                        window.location.href = "{% url 'dashboard_view' %}";
-                    }
-                }, 1000);
-            })
-            .catch(error => {
-                alert("Critical error: Deployment failed to launch. " + error);
-                location.reload();
-            });
+                .then(response => response.json())
+                .then(data => {
+                    let seconds = 15;
+                    const countdownEl = document.getElementById('countdown');
+                    const timer = setInterval(() => {
+                        seconds--;
+                        countdownEl.innerText = seconds;
+                        if (seconds <= 0) {
+                            clearInterval(timer);
+                            window.location.href = "{% url 'dashboard_view' %}";
+                        }
+                    }, 1000);
+                })
+                .catch(error => {
+                    alert("Critical error: Deployment failed to launch. " + error);
+                    location.reload();
+                });
         }
 
         function copyApiKey(btn) {
@@ -229,4 +394,5 @@
         }
     </script>
 </body>
+
 </html>

@@ -1,308 +1,450 @@
-{% extends "base.html" %}
-
-{% block content %}
-{% load static %}
-
 <style>
+    .dashboard-container {
+        padding: 2rem;
+        max-width: 1600px;
+        margin: 0 auto;
+    }
+
     .stat-card {
-        transition: all 0.25s ease;
-        border: 1px solid rgba(0, 0, 0, .05) !important;
+        border: none !important;
+        border-radius: 1.25rem !important;
+        background: #ffffff;
+        overflow: hidden;
+        position: relative;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        z-index: 1;
     }
 
     .stat-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.1) !important;
+        transform: translateY(-8px);
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+    }
+
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: var(--primary-color);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .stat-card:hover::before {
+        opacity: 1;
+    }
+
+    .stat-icon-wrapper {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1.25rem;
+        font-size: 1.5rem;
     }
 
     .card-bg-icon {
-        opacity: 0.1;
-        font-size: 4rem;
+        opacity: 0.03;
+        font-size: 8rem;
         position: absolute;
-        bottom: -10px;
-        right: 0;
+        bottom: -20px;
+        right: -10px;
         z-index: 0;
+        transform: rotate(-15deg);
+        pointer-events: none;
     }
 
-    .card-body-content {
+    .health-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 8px;
+    }
+
+    .health-pulse {
+        box-shadow: 0 0 0 rgba(46, 196, 182, 0.4);
+        animation: pulse-green 2s infinite;
+    }
+
+    @keyframes pulse-green {
+        0% {
+            box-shadow: 0 0 0 0px rgba(46, 196, 182, 0.4);
+        }
+
+        70% {
+            box-shadow: 0 0 0 10px rgba(46, 196, 182, 0);
+        }
+
+        100% {
+            box-shadow: 0 0 0 0px rgba(46, 196, 182, 0);
+        }
+    }
+
+    .table-modern {
+        border-collapse: separate;
+        border-spacing: 0 8px;
+    }
+
+    .table-modern tr {
+        background-color: #ffffff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        transition: transform 0.2s ease;
+    }
+
+    .table-modern tr:hover {
+        transform: scale(1.005);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .table-modern td,
+    .table-modern th {
+        border: none;
+        padding: 1.25rem 1rem;
+    }
+
+    .table-modern td:first-child {
+        border-radius: 12px 0 0 12px;
+    }
+
+    .table-modern td:last-child {
+        border-radius: 0 12px 12px 0;
+    }
+
+    .status-badge {
+        font-size: 0.75rem;
+        padding: 0.5em 1em;
+        letter-spacing: 0.025em;
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+
+    .filter-bar {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 1rem;
+        margin-bottom: 2rem;
+        box-shadow: var(--card-shadow);
+    }
+
+    .chart-container {
         position: relative;
-        z-index: 1;
+        height: 300px;
     }
 </style>
 
-<div class="container-fluid py-4 px-4">
+<div class="dashboard-container">
     <div class="row g-4">
-
-        <div class="col-lg-4">
-            <div class="card shadow-sm border-0 rounded-3 mb-4">
-                <div class="card-header bg-white py-3">
-                    <h5 class="card-title mb-0 fw-bold">
-                        <i class="bi bi-info-circle text-primary me-2"></i>HEAppE Information
-                    </h5>
+        <!-- Sidebar Info Section -->
+        <div class="col-xl-3 col-lg-4">
+            <!-- HEAppE Info -->
+            <div class="card p-4 mb-4 border-0">
+                <div class="d-flex align-items-center mb-4">
+                    <div class="stat-icon-wrapper bg-primary text-white mb-0 me-3">
+                        <i class="bi bi-info-circle"></i>
+                    </div>
+                    <h5 class="mb-0">HEAppE Info</h5>
                 </div>
-                <div class="card-body">
-                    <div class="mb-2">
-                        <label class="small text-muted fw-bold text-uppercase d-block">Instance Name</label>
-                        <span class="fw-bold">{{ heappe.name|default:"N/A" }}</span>
+                <div class="space-y-4">
+                    <div class="mb-3">
+                        <label class="small text-muted fw-bold text-uppercase d-block mb-1">Instance Name</label>
+                        <span class="fs-5 fw-bold">{{ heappe.name|default:"N/A" }}</span>
                     </div>
-                    <div class="mb-2">
-                        <label class="small text-muted fw-bold text-uppercase d-block">Description</label>
-                        <p class="mb-0 small text-secondary">{{ heappe.description|default:"No description available." }}</p>
+                    <div class="mb-3">
+                        <label class="small text-muted fw-bold text-uppercase d-block mb-1">Description</label>
+                        <p class="mb-0 small text-secondary leading-relaxed">{{ heappe.description|default:"No
+                            description available." }}</p>
                     </div>
-                    <div>
-                        <label class="small text-muted fw-bold text-uppercase d-block">Version</label>
-                        <span class="badge bg-light text-dark border">{{ heappe.version|default:"N/A" }}</span>
+                    <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+                        <span class="small text-muted fw-bold text-uppercase">Version</span>
+                        <span class="badge bg-light text-dark border-0 shadow-none px-3">{{ heappe.version|default:"N/A"
+                            }}</span>
                     </div>
                 </div>
             </div>
 
-            <div class="card shadow-sm border-0 rounded-3">
-                <div class="card-header bg-white py-3">
-                    <h5 class="card-title mb-0 fw-bold">
-                        <i class="bi bi-heart-pulse text-danger me-2"></i>System Health
-                    </h5>
+            <!-- Health Status -->
+            <div class="card p-4 border-0 glass-card">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h5 class="mb-0"><i class="bi bi-heart-pulse text-danger me-2"></i>Health</h5>
+                    <span class="badge {% if health.is_healthy %}bg-success{% else %}bg-danger{% endif %} rounded-pill">
+                        {% if health.is_healthy %}Operational{% else %}Degraded{% endif %}
+                    </span>
                 </div>
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center p-3 mb-4 rounded-3 {% if health.is_healthy %}bg-success-subtle border border-success-subtle{% else %}bg-danger-subtle border border-danger-subtle{% endif %}">
-                        <div class="d-flex align-items-center">
-                            <i class="bi {% if health.is_healthy %}bi-check-circle-fill text-success{% else %}bi-exclamation-triangle-fill text-danger{% endif %} fs-4 me-3"></i>
-                            <div>
-                                <h6 class="mb-0 fw-bold">Overall Status</h6>
-                                <small class="text-muted">{{ health.version|default:"N/A" }}</small>
-                            </div>
-                        </div>
-                        <span class="badge rounded-pill {% if health.is_healthy %}bg-success{% else %}bg-danger{% endif %} px-3 py-2">
-                            {% if health.is_healthy %}Healthy{% else %}Unhealthy{% endif %}
-                        </span>
-                    </div>
 
-                    <h6 class="text-uppercase text-muted small fw-bold mb-3">Core Components</h6>
-                    <div class="vstack gap-2">
-                        <div class="d-flex justify-content-between align-items-center p-2 border rounded bg-light">
-                            <span class="small fw-semibold"><i class="bi bi-database me-2"></i>Database</span>
-                            <span class="badge {% if health.component.database.is_healthy %}bg-success{% else %}bg-danger{% endif %}">
-                                {% if health.component.database.is_healthy %}Online{% else %}Offline{% endif %}
-                            </span>
-                        </div>
-
-                        <div class="border rounded p-2 bg-light">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span class="small fw-semibold"><i class="bi bi-shield-lock me-2"></i>Security Vault</span>
-                                <span class="badge {% if health.component.vault.is_healthy %}bg-success{% else %}bg-danger{% endif %}">
-                                    {% if health.component.vault.is_healthy %}Active{% else %}Error{% endif %}
-                                </span>
-                            </div>
-
-                            {% if health.component.vault.info %}
-                            <div class="mt-2 pt-2 border-top small">
-                                <div class="row g-1">
-                                    {% for key, value in health.component.vault.info.items %}
-                                    <div class="col-6">
-                                        <div class="d-flex justify-content-between pe-2">
-                                            <span class="text-muted">{{ key|title }}:</span>
-                                            <span class="fw-bold {% if key == 'initialized' and value %}text-success{% elif key == 'initialized' and not value %}text-danger{% else %}text-dark{% endif %}">
-                                                {{ value|yesno:"True,False" }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            {% endif %}
+                <div class="vstack gap-3">
+                    <div class="p-3 bg-white bg-opacity-50 rounded-3 border-0">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="small fw-semibold text-muted">Database</span>
+                            <span
+                                class="{% if health.component.database.is_healthy %}health-indicator health-pulse bg-success{% else %}health-indicator bg-danger{% endif %}"></span>
                         </div>
                     </div>
-
-                    <div class="mt-4 pt-2 border-top text-center text-muted smaller">
-                        <i class="bi bi-clock me-1"></i>Last Check: {{ health.timestamp|default:"N/A" }}
+                    <div class="p-3 bg-white bg-opacity-50 rounded-3 border-0">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small fw-semibold text-muted">Security Vault</span>
+                            <span
+                                class="{% if health.component.vault.is_healthy %}health-indicator health-pulse bg-success{% else %}health-indicator bg-danger{% endif %}"></span>
+                        </div>
+                        {% if health.component.vault.info %}
+                        <div class="row g-2 mt-2 pt-2 border-top">
+                            {% for key, value in health.component.vault.info.items %}
+                            <div class="col-6">
+                                <div class="smaller text-muted text-uppercase fw-bold" style="font-size: 0.6rem;">{{ key
+                                    }}</div>
+                                <div
+                                    class="small fw-bold {% if key == 'initialized' and value %}text-success{% elif key == 'initialized' and not value %}text-danger{% endif %}">
+                                    {{ value|yesno:"True,False" }}</div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
                     </div>
+                </div>
+                <div class="mt-4 text-center">
+                    <small class="text-muted smaller"><i class="bi bi-clock me-1"></i>Last Check: {{
+                        health.timestamp|default:"N/A" }}</small>
                 </div>
             </div>
         </div>
 
-        <div class="col-lg-8">
+        <!-- Main Content Section -->
+        <div class="col-xl-9 col-lg-8">
+            <!-- Stat Grid -->
             <div class="row g-4 mb-4">
                 <div class="col-md-3">
-                    <div class="card stat-card shadow-sm h-100 p-3 text-center position-relative overflow-hidden"
-                        onclick="location.href='{% url 'cluster_list' %}'" style="cursor: pointer;">
-                        <div class="card-body-content d-flex flex-column h-100">
-                            <h6 class="text-muted small fw-bold text-uppercase">Clusters</h6>
-                            <div class="display-6 fw-bold text-primary my-2">{{ clusters|length }}</div>
-                            <div class="mt-auto">
-                                <span class="btn btn-sm btn-primary rounded-pill px-3 shadow-sm">Manage <i class="bi bi-arrow-right ms-1"></i></span>
-                            </div>
+                    <div class="card stat-card p-4 border-0 h-100" onclick="location.href='{% url 'cluster_list' %}'"
+                        style="cursor: pointer;">
+                        <div class="stat-icon-wrapper bg-primary-subtle text-primary">
+                            <i class="bi bi-server"></i>
                         </div>
+                        <h3 class="fw-bold mb-1">{{ clusters|length }}</h3>
+                        <span class="text-muted small fw-bold text-uppercase">Total Clusters</span>
                         <i class="bi bi-server card-bg-icon text-primary"></i>
                     </div>
                 </div>
-
                 <div class="col-md-3">
-                    <div class="card stat-card shadow-sm h-100 p-3 text-center position-relative overflow-hidden"
-                        onclick="location.href='{% url 'project_list' %}'" style="cursor: pointer;">
-                        <div class="card-body-content d-flex flex-column h-100">
-                            <h6 class="text-muted small fw-bold text-uppercase">Projects</h6>
-                            <div class="display-6 fw-bold text-success my-2">{{ projects|length|default:"0" }}</div>
-                            <div class="mt-auto">
-                                <span class="btn btn-sm btn-success rounded-pill px-3 shadow-sm">Manage <i class="bi bi-arrow-right ms-1"></i></span>
-                            </div>
+                    <div class="card stat-card p-4 border-0 h-100" onclick="location.href='{% url 'project_list' %}'"
+                        style="cursor: pointer;">
+                        <div class="stat-icon-wrapper bg-success-subtle text-success">
+                            <i class="bi bi-people"></i>
                         </div>
+                        <h3 class="fw-bold mb-1">{{ projects|length|default:"0" }}</h3>
+                        <span class="text-muted small fw-bold text-uppercase">Active Projects</span>
                         <i class="bi bi-people card-bg-icon text-success"></i>
                     </div>
                 </div>
-
                 <div class="col-md-3">
-                    <div class="card stat-card shadow-sm h-100 p-3 text-center position-relative overflow-hidden"
-                        onclick="location.href='{% url 'queues_view' %}'" style="cursor: pointer;">
-                        <div class="card-body-content d-flex flex-column h-100">
-                            <h6 class="text-muted small fw-bold text-uppercase">Queues</h6>
-                            <div class="display-6 fw-bold text-info my-2">{{ queues|length|default:"0" }}</div>
-                            <div class="mt-auto">
-                                <span class="btn btn-sm btn-info text-white rounded-pill px-3 shadow-sm">Manage <i class="bi bi-arrow-right ms-1"></i></span>
-                            </div>
+                    <div class="card stat-card p-4 border-0 h-100" onclick="location.href='{% url 'queues_view' %}'"
+                        style="cursor: pointer;">
+                        <div class="stat-icon-wrapper bg-info-subtle text-info">
+                            <i class="bi bi-list-task"></i>
                         </div>
+                        <h3 class="fw-bold mb-1">{{ queues|length|default:"0" }}</h3>
+                        <span class="text-muted small fw-bold text-uppercase">Configured Queues</span>
                         <i class="bi bi-list-task card-bg-icon text-info"></i>
                     </div>
                 </div>
-
                 <div class="col-md-3">
-                    <div class="card stat-card shadow-sm h-100 p-3 text-center bg-light-subtle position-relative overflow-hidden">
-                        <div class="card-body-content d-flex flex-column h-100">
-                            <h6 class="text-muted small fw-bold text-uppercase">Total Jobs</h6>
-                            <div class="display-6 fw-bold text-warning my-2">{{ total_jobs|default:"0" }}</div>
-                            <div class="mt-auto text-muted small italic">System-wide</div>
+                    <div class="card stat-card p-4 border-0 h-100 bg-dark text-white shadow-lg">
+                        <div class="stat-icon-wrapper bg-white bg-opacity-20 text-white">
+                            <i class="bi bi-cpu"></i>
                         </div>
-                        <i class="bi bi-journal-text card-bg-icon text-warning"></i>
+                        <h3 class="fw-bold mb-1">{{ total_jobs|default:"0" }}</h3>
+                        <span class="text-white-50 small fw-bold text-uppercase">Total System Jobs</span>
+                        <i class="bi bi-cpu card-bg-icon text-white"></i>
                     </div>
                 </div>
             </div>
 
-            <div class="row g-4">
-                <div class="col-md-6">
-                    <div class="card shadow-sm border-0 rounded-3 h-100">
-                        <div class="card-header bg-white py-3 fw-bold">Job Distribution</div>
-                        <div class="card-body" style="min-height: 250px;">
+            <!-- Charts Section -->
+            <div class="row g-4 mb-4">
+                <div class="col-lg-8">
+                    <div class="card p-4 border-0 h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h5 class="mb-0 fw-bold">Job Execution Distribution</h5>
+                            <i class="bi bi-three-dots text-muted"></i>
+                        </div>
+                        <div class="chart-container">
                             <canvas id="jobsStateChart"></canvas>
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <div class="card shadow-sm border-0 rounded-3 h-100">
-                        <div class="card-header bg-white py-3 fw-bold">Live Status Summary</div>
-                        <div class="card-body p-0">
-                            <ul class="list-group list-group-flush">
-                                {% for state, count in job_counts.items %}
-                                <li class="list-group-item d-flex justify-content-between align-items-center py-2 px-3">
-                                    <span class="small fw-semibold">{{ state }}</span>
-                                    <span class="badge rounded-pill shadow-sm"
-                                        style="background-color: {% if state == 'Configuring' or state == 'WaitingForServiceAccount' or state == 'Deleted' %}#6c757d{% elif state == 'Submitted' %}#0dcaf0{% elif state == 'Queued' %}#0d6efd{% elif state == 'Running' %}#ffc107{% elif state == 'Finished' %}#198754{% elif state == 'Failed' %}#dc3545{% elif state == 'Canceled' %}#343a40{% else %}#adb5bd{% endif %}; color: {% if state == 'Running' %}black{% else %}white{% endif %}; min-width: 40px;">
-                                        {{ count }}
-                                    </span>
-                                </li>
-                                {% endfor %}
-                            </ul>
+                <div class="col-lg-4">
+                    <div class="card p-4 border-0 h-100">
+                        <h5 class="mb-4 fw-bold">Real-time Status</h5>
+                        <div class="vstack gap-2">
+                            {% for state, count in job_counts.items %}
+                            {% if count > 0 or state == 'Running' or state == 'Failed' or state == 'Finished' %}
+                            <div
+                                class="d-flex justify-content-between align-items-center p-3 rounded-3 bg-light transition-all hover-translate-x">
+                                <span class="small fw-bold text-muted">{{ state }}</span>
+                                <span class="badge rounded-pill shadow-sm"
+                                    style="background-color: {% if state == 'Configuring' or state == 'WaitingForServiceAccount' or state == 'Deleted' %}#6c757d{% elif state == 'Submitted' %}#0dcaf0{% elif state == 'Queued' %}#4361ee{% elif state == 'Running' %}#ff9f1c{% elif state == 'Finished' %}#2ec4b6{% elif state == 'Failed' %}#e71d36{% elif state == 'Canceled' %}#343a40{% else %}#adb5bd{% endif %}; min-width: 32px;">
+                                    {{ count }}
+                                </span>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <div class="col-12 mt-4">
-            <div class="card shadow-sm border-0 rounded-3">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0 fw-bold"><i class="bi bi-list-task me-2 text-primary"></i>Recent Jobs Activity</h5>
-                    <form method="get" class="d-flex gap-2">
-                        <input type="datetime-local" class="form-control form-control-sm" name="time_from" value="{{ time_from }}">
-                        <input type="datetime-local" class="form-control form-control-sm" name="time_to" value="{{ time_to }}">
-                        <button type="submit" class="btn btn-primary btn-sm px-3 shadow-sm">Filter</button>
-                    </form>
-                </div>
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle mb-0">
-                        <thead class="bg-light text-muted small text-uppercase">
-                            <tr>
-                                <th class="ps-4 py-3">Job ID & Name</th>
-                                <th>Submitter</th>
-                                <th>Creation Time</th>
-                                <th>Status</th>
-                                <th class="text-end pe-4">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for job_item in job_details %}
-                            <tr>
-                                <td class="ps-4">
-                                    <div class="fw-bold">{{ job_item.name }}</div>
-                                    <small class="text-muted">ID: #{{ job_item.id }}</small>
-                                </td>
-                                <td><span class="small"><i class="bi bi-person me-1"></i>{{ job_item.submitter|default:"N/A" }}</span></td>
-                                <td class="small text-muted">{{ job_item.creation_time|default:"N/A" }}</td>
-                                <td>
-                                    <span class="badge rounded-pill {% if job_item.state == 1 %}bg-secondary{% elif job_item.state == 2 %}bg-info text-dark{% elif job_item.state == 4 %}bg-primary{% elif job_item.state == 8 %}bg-warning text-dark{% elif job_item.state == 16 %}bg-success{% elif job_item.state == 32 %}bg-danger{% elif job_item.state == 64 %}bg-dark{% else %}bg-secondary{% endif %} px-3">
-                                        {% if job_item.state == 1 %}Configuring
-                                        {% elif job_item.state == 2 %}Submitted
-                                        {% elif job_item.state == 4 %}Queued
-                                        {% elif job_item.state == 8 %}Running
-                                        {% elif job_item.state == 16 %}Finished
-                                        {% elif job_item.state == 32 %}Failed
-                                        {% elif job_item.state == 64 %}Canceled
-                                        {% elif job_item.state == 128 %}Waiting
-                                        {% elif job_item.state == 256 %}Deleted
-                                        {% else %}State #{{ job_item.state }}{% endif %}
-                                    </span>
-                                </td>
-                                <td class="text-end pe-4">
-                                    <button class="btn btn-outline-primary btn-sm border-2 fw-bold" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}">View Details</button>
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="5" class="text-center py-5 text-muted small">No jobs found within the selected timeframe.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+            <!-- Filter Bar -->
+            <div class="filter-bar d-flex justify-content-between align-items-center">
+                <h5 class="mb-0 fw-bold">Recent Activity Feed</h5>
+                <form method="get" class="d-flex gap-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light border-0 small fw-bold text-muted">FROM</span>
+                        <input type="datetime-local" class="form-control border-0 bg-light small" name="time_from"
+                            value="{{ time_from }}">
+                    </div>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light border-0 small fw-bold text-muted">TO</span>
+                        <input type="datetime-local" class="form-control border-0 bg-light small" name="time_to"
+                            value="{{ time_to }}">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm px-4">Update Feed</button>
+                </form>
+            </div>
 
-                {% if page_obj %}
-                <div class="card-footer bg-white py-3 border-0">
-                    <nav aria-label="Job list navigation">
-                        <ul class="pagination pagination-sm justify-content-center mb-0">
-                            {% if page_obj.has_previous %}
-                            <li class="page-item"><a class="page-link shadow-none" href="?page={{ page_obj.previous_page_number }}&time_from={{ time_from }}&time_to={{ time_to }}">«</a></li>
+            <!-- Modern Jobs Table -->
+            <div class="table-responsive">
+                <table class="table table-modern align-middle">
+                    <thead class="text-muted small text-uppercase">
+                        <tr>
+                            <th class="ps-4">Job Details</th>
+                            <th>Owner</th>
+                            <th>Time Control</th>
+                            <th>Current State</th>
+                            <th class="text-end pe-4">Context</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job_item in job_details %}
+                        <tr>
+                            <td class="ps-4">
+                                <div class="d-flex align-items-center">
+                                    <div
+                                        class="p-2 {% if job_item.state == 16 %}bg-success-subtle text-success{% elif job_item.state == 32 %}bg-danger-subtle text-danger{% elif job_item.state == 8 %}bg-warning-subtle text-warning{% else %}bg-secondary-subtle text-secondary{% endif %} rounded-3 me-3">
+                                        <i
+                                            class="bi {% if job_item.state == 16 %}bi-check2-circle{% elif job_item.state == 32 %}bi-exclamation-triangle{% elif job_item.state == 8 %}bi-play-circle{% else %}bi-clock-history{% endif %} fs-5"></i>
+                                    </div>
+                                    <div>
+                                        <div class="fw-bold text-dark">{{ job_item.name }}</div>
+                                        <div class="smaller text-muted">ID: #{{ job_item.id }}</div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <img src="https://ui-avatars.com/api/?name={{ job_item.submitter|default:'A' }}&background=random&size=32"
+                                        class="rounded-circle me-2" alt="Avatar">
+                                    <span class="small fw-semibold">{{ job_item.submitter|default:"Admin" }}</span>
+                                </div>
+                            </td>
+                            <td class="small text-muted">
+                                <div><i class="bi bi-calendar3 me-2"></i>{{ job_item.creation_time|default:"N/A" }}
+                                </div>
+                            </td>
+                            <td>
+                                <span
+                                    class="badge status-badge rounded-pill {% if job_item.state == 1 %}bg-secondary{% elif job_item.state == 2 %}bg-info text-dark{% elif job_item.state == 4 %}bg-primary{% elif job_item.state == 8 %}bg-warning text-dark{% elif job_item.state == 16 %}bg-success{% elif job_item.state == 32 %}bg-danger{% elif job_item.state == 64 %}bg-dark{% else %}bg-secondary{% endif %}">
+                                    {% if job_item.state == 1 %}Configuring
+                                    {% elif job_item.state == 2 %}Submitted
+                                    {% elif job_item.state == 4 %}Queued
+                                    {% elif job_item.state == 8 %}Running
+                                    {% elif job_item.state == 16 %}Finished
+                                    {% elif job_item.state == 32 %}Failed
+                                    {% elif job_item.state == 64 %}Canceled
+                                    {% elif job_item.state == 128 %}Waiting
+                                    {% elif job_item.state == 256 %}Deleted
+                                    {% else %}State #{{ job_item.state }}{% endif %}
+                                </span>
+                            </td>
+                            <td class="text-end pe-4">
+                                <button class="btn btn-outline-primary btn-sm border-0 fw-bold" data-bs-toggle="modal"
+                                    data-bs-target="#jobModal{{ job_item.id }}">
+                                    Inspect <i class="bi bi-chevron-right ms-1"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr class="bg-transparent shadow-none">
+                            <td colspan="5" class="text-center py-5">
+                                <img src="https://cdn-icons-png.flaticon.com/512/9167/9167014.png"
+                                    style="width: 80px; opacity: 0.2;" class="mb-3">
+                                <p class="text-muted fw-bold">No active jobs found for this range.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if page_obj %}
+            <div class="d-flex justify-content-center mt-5">
+                <nav aria-label="Job navigation">
+                    <ul class="pagination pagination-rounded gap-2">
+                        {% if page_obj.has_previous %}
+                        <li class="page-item"><a class="page-link border-0 shadow-sm"
+                                href="?page={{ page_obj.previous_page_number }}&time_from={{ time_from }}&time_to={{ time_to }}"><i
+                                    class="bi bi-chevron-left"></i></a></li>
+                        {% endif %}
+
+                        {% for num in page_obj.paginator.page_range %}
+                        {% if num == page_obj.number %}
+                        <li class="page-item active"><span class="page-link border-0 shadow-sm">{{ num }}</span></li>
+                        {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %} <li
+                            class="page-item"><a class="page-link border-0 shadow-sm bg-white text-dark"
+                                href="?page={{ num }}&time_from={{ time_from }}&time_to={{ time_to }}">{{ num }}</a>
+                            </li>
                             {% endif %}
-
-                            {% for num in page_obj.paginator.page_range %}
-                                {% if num == page_obj.number %}
-                                <li class="page-item active"><span class="page-link border-0">{{ num }}</span></li>
-                                {% elif num > page_obj.number|add:"-3" and num < page_obj.number|add:"3" %}
-                                <li class="page-item"><a class="page-link shadow-none" href="?page={{ num }}&time_from={{ time_from }}&time_to={{ time_to }}">{{ num }}</a></li>
-                                {% endif %}
                             {% endfor %}
 
                             {% if page_obj.has_next %}
-                            <li class="page-item"><a class="page-link shadow-none" href="?page={{ page_obj.next_page_number }}&time_from={{ time_from }}&time_to={{ time_to }}">»</a></li>
+                            <li class="page-item"><a class="page-link border-0 shadow-sm"
+                                    href="?page={{ page_obj.next_page_number }}&time_from={{ time_from }}&time_to={{ time_to }}"><i
+                                        class="bi bi-chevron-right"></i></a></li>
                             {% endif %}
-                        </ul>
-                    </nav>
-                </div>
-                {% endif %}
+                    </ul>
+                </nav>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>
 
+<!-- Job Detail Modals -->
 {% for job_item in job_details %}
 <div class="modal fade" id="jobModal{{ job_item.id }}" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
-        <div class="modal-content border-0 shadow-lg rounded-4">
-            <div class="modal-header bg-primary text-white border-0 py-3">
-                <h5 class="modal-title fw-bold">Job Inspection: {{ job_item.name }}</h5>
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div class="modal-header bg-dark text-white border-0 py-4 px-4">
+                <div class="d-flex align-items-center">
+                    <div class="p-3 bg-white bg-opacity-10 rounded-3 me-3">
+                        <i class="bi bi-cpu fs-4 text-primary"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title fw-bold mb-0">{{ job_item.name }}</h5>
+                        <small class="text-white-50">Global Identifier: #{{ job_item.id }}</small>
+                    </div>
+                </div>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body p-4 bg-light">
                 <div class="row g-3 mb-4">
                     <div class="col-md-4">
-                        <div class="bg-white p-3 rounded-3 shadow-sm h-100 text-center">
-                            <small class="text-muted d-block text-uppercase fw-bold mb-1">Status</small>
-                            <span class="badge rounded-pill {% if job_item.state == 1 %}bg-secondary{% elif job_item.state == 2 %}bg-info text-dark{% elif job_item.state == 4 %}bg-primary{% elif job_item.state == 8 %}bg-warning text-dark{% elif job_item.state == 16 %}bg-success{% elif job_item.state == 32 %}bg-danger{% elif job_item.state == 64 %}bg-dark{% else %}bg-secondary{% endif %}">
+                        <div class="card p-3 border-0 h-100 text-center shadow-sm">
+                            <small class="text-muted d-block text-uppercase fw-bold mb-2">Live Status</small>
+                            <span
+                                class="badge border-0 rounded-pill {% if job_item.state == 1 %}bg-secondary{% elif job_item.state == 2 %}bg-info text-dark{% elif job_item.state == 4 %}bg-primary{% elif job_item.state == 8 %}bg-warning text-dark{% elif job_item.state == 16 %}bg-success{% elif job_item.state == 32 %}bg-danger{% elif job_item.state == 64 %}bg-dark{% else %}bg-secondary{% endif %}">
                                 {% if job_item.state == 1 %}Configuring
                                 {% elif job_item.state == 2 %}Submitted
                                 {% elif job_item.state == 4 %}Queued
@@ -317,46 +459,56 @@
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="bg-white p-3 rounded-3 shadow-sm h-100 text-center">
-                            <small class="text-muted d-block text-uppercase fw-bold mb-1">Submitted By</small>
-                            <span class="fw-bold">{{ job_item.submitter|default:"Admin" }}</span>
+                        <div class="card p-3 border-0 h-100 text-center shadow-sm">
+                            <small class="text-muted d-block text-uppercase fw-bold mb-2">Submitted By</small>
+                            <div class="d-flex align-items-center justify-content-center">
+                                <img src="https://ui-avatars.com/api/?name={{ job_item.submitter|default:'A' }}&background=random&size=24"
+                                    class="rounded-circle me-2">
+                                <span class="fw-bold">{{ job_item.submitter|default:"Internal Admin" }}</span>
+                            </div>
                         </div>
                     </div>
                     <div class="col-md-4">
-                        <div class="bg-white p-3 rounded-3 shadow-sm h-100 text-center">
-                            <small class="text-muted d-block text-uppercase fw-bold mb-1">Total Tasks</small>
-                            <span class="fw-bold">{{ job_item.tasks|length }}</span>
+                        <div class="card p-3 border-0 h-100 text-center shadow-sm">
+                            <small class="text-muted d-block text-uppercase fw-bold mb-2">Task Units</small>
+                            <span class="fs-4 fw-bold text-primary">{{ job_item.tasks|length }}</span>
                         </div>
                     </div>
                 </div>
 
-                <h6 class="fw-bold mb-3"><i class="bi bi-cpu me-2"></i>Task Execution List</h6>
-                <div class="list-group list-group-flush border rounded-3 bg-white">
+                <h6 class="fw-bold mb-3 d-flex align-items-center"><i class="bi bi-stack me-2 text-primary"></i>Task
+                    Inventory</h6>
+                <div class="list-group list-group-flush rounded-4 overflow-hidden border-0 shadow-sm">
                     {% for task in job_item.tasks %}
-                    <div class="list-group-item d-flex justify-content-between align-items-center border-bottom py-3">
-                        <div>
-                            <div class="fw-bold">{{ task.name }}</div>
-                            <small class="text-muted">ID: {{ task.id }} | Usage: {{ task.usage|default:"0" }} ch/nh</small>
+                    <div
+                        class="list-group-item d-flex justify-content-between align-items-center p-3 border-0 bg-white mb-2 rounded-3 shadow-none">
+                        <div class="d-flex align-items-center">
+                            <div class="smaller text-muted me-3 fw-bold">#{{ task.id }}</div>
+                            <div>
+                                <div class="fw-bold text-dark">{{ task.name }}</div>
+                                <div class="extra-small text-muted text-uppercase">USAGE: {{ task.usage|default:"0" }}
+                                    ch/nh</div>
+                            </div>
                         </div>
-                        <span class="badge rounded-pill {% if task.state == 1 %}bg-secondary{% elif task.state == 2 %}bg-info text-dark{% elif task.state == 4 %}bg-primary{% elif task.state == 8 %}bg-warning text-dark{% elif task.state == 16 %}bg-success{% elif task.state == 32 %}bg-danger{% elif task.state == 64 %}bg-dark{% else %}bg-secondary{% endif %} px-3">
-                            {% if task.state == 1 %}Configuring
-                            {% elif task.state == 2 %}Submitted
-                            {% elif task.state == 4 %}Queued
-                            {% elif task.state == 8 %}Running
-                            {% elif task.state == 16 %}Finished
-                            {% elif task.state == 32 %}Failed
-                            {% elif task.state == 64 %}Canceled
-                            {% elif task.state == 128 %}Waiting
-                            {% elif task.state == 256 %}Deleted
-                            {% else %}State #{{ task.state }}{% endif %}
+                        <span
+                            class="badge rounded-pill {% if task.state == 1 %}bg-secondary{% elif task.state == 2 %}bg-info text-dark{% elif task.state == 4 %}bg-primary{% elif task.state == 8 %}bg-warning text-dark{% elif task.state == 16 %}bg-success{% elif task.state == 32 %}bg-danger{% elif task.state == 64 %}bg-dark{% else %}bg-secondary{% endif %} opacity-75">
+                            {% if task.state == 1 %}CONFIG
+                            {% elif task.state == 2 %}SUBMIT
+                            {% elif task.state == 4 %}QUEUED
+                            {% elif task.state == 8 %}RUNNING
+                            {% elif task.state == 16 %}DONE
+                            {% elif task.state == 32 %}FAIL
+                            {% elif task.state == 64 %}CANCEL
+                            {% else %}S#{{ task.state }}{% endif %}
                         </span>
                     </div>
                     {% endfor %}
                 </div>
             </div>
-            <div class="modal-footer bg-white border-0 py-3 px-4">
-                <button type="button" class="btn btn-secondary fw-bold px-4" data-bs-dismiss="modal">Close</button>
-                <a href="{% url 'job_status_view' job_item.id %}" class="btn btn-primary fw-bold px-4 shadow-sm">Open Full Logs</a>
+            <div class="modal-footer bg-white border-0 py-4 px-4">
+                <button type="button" class="btn btn-light fw-bold px-4" data-bs-dismiss="modal">Dismiss</button>
+                <a href="{% url 'job_status_view' job_item.id %}" class="btn btn-primary fw-bold px-4 shadow-sm">Full
+                    Execution Status <i class="bi bi-arrow-right-short"></i></a>
             </div>
         </div>
     </div>
@@ -367,38 +519,69 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const jobsStateCtx = document.getElementById('jobsStateChart').getContext('2d');
+
+        // Custom gradients for Chart
+        const gradientPrimary = jobsStateCtx.createLinearGradient(0, 0, 0, 400);
+        gradientPrimary.addColorStop(0, 'rgba(67, 97, 238, 0.8)');
+        gradientPrimary.addColorStop(1, 'rgba(67, 97, 238, 0.2)');
+
         new Chart(jobsStateCtx, {
             type: 'bar',
             data: {
                 labels: ['Configuring', 'Submitted', 'Queued', 'Running', 'Finished', 'Failed', 'Canceled', 'Waiting', 'Deleted'],
                 datasets: [{
-                    label: 'Count',
+                    label: 'Jobs Count',
                     data: [
-                        {{ job_counts.Configuring|default:0 }},
-                        {{ job_counts.Submitted|default:0 }},
-                        {{ job_counts.Queued|default:0 }},
-                        {{ job_counts.Running|default:0 }},
-                        {{ job_counts.Finished|default:0 }},
-                        {{ job_counts.Failed|default:0 }},
-                        {{ job_counts.Canceled|default:0 }},
-                        {{ job_counts.WaitingForServiceAccount|default:0 }},
-                        {{ job_counts.Deleted|default:0 }}
+                        {{ job_counts.Configuring |default: 0 }},
+                {{ job_counts.Submitted |default: 0 }},
+                        {{ job_counts.Queued |default: 0 }},
+        {{ job_counts.Running |default: 0 }},
+        {{ job_counts.Finished |default: 0 }},
+        {{ job_counts.Failed |default: 0 }},
+        {{ job_counts.Canceled |default: 0 }},
+        {{ job_counts.WaitingForServiceAccount |default: 0 }},
+        {{ job_counts.Deleted |default: 0 }}
                     ],
-                    backgroundColor: ['#6c757d', '#0dcaf0', '#0d6efd', '#ffc107', '#198754', '#dc3545', '#343a40', '#adb5bd', '#212529'],
-                    borderRadius: 5,
-                    borderWidth: 0
+        backgroundColor: [
+        '#64748b', // Configuring
+        '#0dcaf0', // Submitted
+        '#4361ee', // Queued
+        '#ff9f1c', // Running
+        '#2ec4b6', // Finished
+        '#e71d36', // Failed
+        '#1e293b', // Canceled
+        '#94a3b8', // Waiting
+        '#020617'  // Deleted
+    ],
+        borderRadius: 8,
+        maxBarThickness: 40
                 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, grid: { color: '#f0f0f0' }, ticks: { precision: 0 } },
-                    x: { grid: { display: false } }
-                }
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: '#1e293b',
+                padding: 12,
+                cornerRadius: 8,
+                titleFont: { family: 'Outfit', size: 14 },
+                bodyFont: { family: 'Inter', size: 13 }
             }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: { color: '#f1f5f9', drawBorder: false },
+                ticks: { color: '#64748b', font: { size: 12 }, precision: 0 }
+            },
+            x: {
+                grid: { display: false, drawBorder: false },
+                ticks: { color: '#64748b', font: { size: 11, weight: '600' } }
+            }
+        }
+    }
         });
     });
 </script>
-{% endblock %}
