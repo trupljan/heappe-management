@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block content %}
+{%block content%}
 <div class="container mt-5">
     <div id="action-feedback"></div>
 
@@ -12,25 +12,25 @@
 
     <div class="row mb-4 align-items-center">
         <div class="col-md-8">
-            {% if not instance_name %}
+            {%if not instance_name%}
                 <h2 class="mb-0 fw-bold">Deploy New Instance</h2>
-            {% else %}
-                <h2 class="mb-0 fw-bold">Management: <span class="text-primary">{{ instance_name }}</span></h2>
-                {% if not is_deployed %}
+            {%else%}
+                <h2 class="mb-0 fw-bold">Management: <span class="text-primary">{{instance_name}}</span></h2>
+                {%if not is_deployed%}
                     <span class="badge bg-warning text-dark">Deployment in Progress / Not Active</span>
-                {% endif %}
-            {% endif %}
+                {%endif%}
+            {%endif%}
         </div>
         <div class="col-md-4 text-md-end mt-3 mt-md-0">
-            {% if not instance_name %}
+            {%if not instance_name%}
                 <button type="button" class="btn btn-primary btn-lg shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="deploy">
                     <i class="bi bi-rocket-takeoff me-2"></i>Deploy Instance
                 </button>
-            {% elif is_deployed %}
+            {%elif is_deployed%}
                 <button type="button" class="btn btn-outline-primary shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="update">
                     <i class="bi bi-arrow-repeat me-2"></i>Update Instance
                 </button>
-            {% endif %}
+            {%endif%}
         </div>
     </div>
 
@@ -43,15 +43,15 @@
                 </div>
                 <div class="modal-body p-4">
                     <form id="deploy-form" class="instance-action-form" style="display:none;">
-                        {% csrf_token %}
+                        {%csrf_token%}
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Instance Name</label>
-                            <input type="text" name="InstanceName" class="form-control" value="{{ instance_name }}" placeholder="e.g. my_server" pattern="^[a-z0-9_]+$" required>
+                            <input type="text" name="InstanceName" class="form-control" value="{{instance_name}}" placeholder="e.g. my_server" pattern="^[a-z0-9_]+$" required>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Repository URL</label>
                             <div class="input-group">
-                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{repo_url}}" required>
                                 <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags">
                                     <i class="bi bi-arrow-clockwise"></i>
                                 </button>
@@ -60,9 +60,9 @@
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Version (Tag/Branch)</label>
                             <select name="RepositoryBranch" class="form-select branch-select" required>
-                                {% for branch in branches %}
-                                    <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
-                                {% endfor %}
+                                {%for branch in branches%}
+                                    <option value="{{branch}}" {%if branch == repo_branch%}selected{%endif%}>{{branch}}</option>
+                                {%endfor%}
                             </select>
                             <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
                         </div>
@@ -71,24 +71,24 @@
                     </form>
 
                     <form id="update-form" class="instance-action-form" style="display:none;">
-                        {% csrf_token %}
+                        {%csrf_token%}
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Instance Name</label>
-                            <input type="text" name="InstanceName" class="form-control bg-light" value="{{ instance_name }}" readonly>
+                            <input type="text" name="InstanceName" class="form-control bg-light" value="{{instance_name}}" readonly>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Repository URL</label>
                             <div class="input-group">
-                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{repo_url}}" required>
                                 <button class="btn btn-secondary fetch-branches-btn" type="button"><i class="bi bi-arrow-clockwise"></i></button>
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Update to Version</label>
                             <select name="RepositoryBranch" class="form-select branch-select" required>
-                                {% for branch in branches %}
-                                    <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
-                                {% endfor %}
+                                {%for branch in branches%}
+                                    <option value="{{branch}}" {%if branch == repo_branch%}selected{%endif%}>{{branch}}</option>
+                                {%endfor%}
                             </select>
                             <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
                         </div>
@@ -100,26 +100,26 @@
         </div>
     </div>
 
-    {% if is_deployed %}
+    {%if is_deployed%}
     <div class="card mb-4 border-0 shadow-sm bg-light">
         <div class="card-body">
             <h5 class="card-title mb-3 fw-bold">Global Container Actions</h5>
             <div class="d-flex flex-wrap gap-2">
                 <form id="start-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    {%csrf_token%}
+                    <input type="hidden" name="InstanceName" value="{{instance_name}}">
                     <input type="hidden" name="action" value="start_all">
                     <button type="submit" class="btn btn-success w-100 px-4"><i class="bi bi-play-fill"></i> Start All</button>
                 </form>
                 <form id="restart-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    {%csrf_token%}
+                    <input type="hidden" name="InstanceName" value="{{instance_name}}">
                     <input type="hidden" name="action" value="restart_all">
                     <button type="submit" class="btn btn-info text-white w-100 px-4"><i class="bi bi-arrow-clockwise"></i> Restart All</button>
                 </form>
                 <form id="down-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    {%csrf_token%}
+                    <input type="hidden" name="InstanceName" value="{{instance_name}}">
                     <input type="hidden" name="action" value="stop_all">
                     <button type="submit" class="btn btn-danger w-100 px-4"><i class="bi bi-stop-fill"></i> Stop All</button>
                 </form>
@@ -128,47 +128,47 @@
     </div>
 
     <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-5">
-        {% for item in containers %}
-        {% with container=item.container ports=item.ports %}
+        {%for item in containers%}
+        {%with container=item.container ports=item.ports%}
         <div class="col">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                    <h6 class="mb-0 fw-bold text-truncate" style="max-width: 70%;">{{ container.name }}</h6>
-                    <span class="badge {% if container.status == 'running' %}bg-success{% elif container.status == 'exited' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
-                        {{ container.status|title }}
+                    <h6 class="mb-0 fw-bold text-truncate" style="max-width: 70%;">{{container.name}}</h6>
+                    <span class="badge {%if container.status == 'running'%}bg-success{%elif container.status == 'exited'%}bg-danger{%else%}bg-warning text-dark{%endif%}">
+                        {{container.status|title}}
                     </span>
                 </div>
                 <div class="card-body py-2">
-                    <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                    <div class="small text-muted mb-2">ID: <code>{{container.short_id}}</code></div>
                     <ul class="list-unstyled small mb-0">
-                        <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                        <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                        <li><strong>Service:</strong> {{container.labels.com.docker.compose.service}}</li>
+                        <li class="text-truncate"><strong>Ports:</strong> {{ports|join:", "|default:"None"}}</li>
                     </ul>
                 </div>
                 <div class="card-footer bg-white border-top-0 pb-3">
                     <div class="btn-group w-100 shadow-sm">
-                        <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
-                            {% csrf_token %}
-                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                            <input type="hidden" name="container_id" value="{{ container.id }}">
+                        <form id="start-form-{{container.id}}" class="w-100 container-control-form">
+                            {%csrf_token%}
+                            <input type="hidden" name="InstanceName" value="{{instance_name}}">
+                            <input type="hidden" name="container_id" value="{{container.id}}">
                             <input type="hidden" name="action" value="start">
-                            <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %}><i class="bi bi-play-fill"></i></button>
+                            <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {%if container.status == 'running'%}disabled{%endif%}><i class="bi bi-play-fill"></i></button>
                         </form>
-                        <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
-                            {% csrf_token %}
-                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                            <input type="hidden" name="container_id" value="{{ container.id }}">
+                        <form id="stop-form-{{container.id}}" class="w-100 container-control-form">
+                            {%csrf_token%}
+                            <input type="hidden" name="InstanceName" value="{{instance_name}}">
+                            <input type="hidden" name="container_id" value="{{container.id}}">
                             <input type="hidden" name="action" value="stop">
-                            <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %}><i class="bi bi-stop-fill"></i></button>
+                            <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {%if container.status != 'running'%}disabled{%endif%}><i class="bi bi-stop-fill"></i></button>
                         </form>
-                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}"><i class="bi bi-terminal"></i></button>
-                        <button type="button" class="btn btn-sm btn-outline-dark w-100" data-bs-toggle="modal" data-bs-target="#fileManagerModal" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}"><i class="bi bi-files"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{container.id}}"><i class="bi bi-terminal"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-dark w-100" data-bs-toggle="modal" data-bs-target="#fileManagerModal" data-container-id="{{container.id}}" data-container-name="{{container.name}}"><i class="bi bi-files"></i></button>
                     </div>
                 </div>
             </div>
         </div>
-        {% endwith %}
-        {% endfor %}
+        {%endwith%}
+        {%endfor%}
     </div>
 
     <div class="modal fade" id="logsModal" tabindex="-1" aria-hidden="true">
@@ -244,7 +244,7 @@
             </div>
         </div>
     </div>
-    {% endif %}
+    {%endif%}
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -266,10 +266,10 @@ $(document).ready(function() {
 
     // --- AUTOMATIC LOADING STATE FOR REDIRECTED USERS ---
     // If we have an instance name but it's not deployed yet, show the loader automatically
-    {% if instance_name and not is_deployed %}
+    {%if instance_name and not is_deployed%}
         showLoading("Deployment in progress...", "Your instance is being created. Please wait.");
         startStatusPolling();
-    {% endif %}
+    {%endif%}
 
     // --- DEPLOY / UPDATE LOGIC ---
     $(document).on('submit', 'form.instance-action-form', function(e) {
@@ -403,7 +403,7 @@ $(document).ready(function() {
         $('#file-list').html('<li class="list-group-item small text-muted">Loading...</li>');
         $.post(`${basePath}/container/${currentContainerId}/file/list/`, {
             path: currentPath,
-            instance_name: '{{ instance_name }}',
+            instance_name: '{{instance_name}}',
             csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
         }, r => {
             let files = r.files || [];
@@ -436,7 +436,7 @@ $(document).ready(function() {
             $('#file-content').val('Reading content...');
             $('#edit-file-name').text(selectedFilePath);
             $.post(`${basePath}/container/${currentContainerId}/file/read/`, {
-                path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+                path: selectedFilePath, instance_name: '{{instance_name}}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
             }, r => $('#file-content').val(r.content || ''));
         }
     });
@@ -466,7 +466,7 @@ $(document).ready(function() {
 
     $('#save-file').click(() => {
         $.post(`${basePath}/container/${currentContainerId}/file/write/`, {
-            path: selectedFilePath, content: $('#file-content').val(), instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+            path: selectedFilePath, content: $('#file-content').val(), instance_name: '{{instance_name}}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
         }, () => alert('Saved successfully'));
     });
 
@@ -479,7 +479,7 @@ $(document).ready(function() {
             const reader = new FileReader();
             reader.onload = (e) => {
                 $.post(`${basePath}/container/${currentContainerId}/file/upload/`, {
-                    path: currentPath, filename: f.name, file_data: e.target.result.split(',')[1], instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+                    path: currentPath, filename: f.name, file_data: e.target.result.split(',')[1], instance_name: '{{instance_name}}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
                 }, () => {
                     done++;
                     $('.progress-bar').css('width', (done/files.length*100)+'%');
@@ -500,4 +500,4 @@ $(document).ready(function() {
     #logs-content::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
     #loading-overlay { display: none; }
 </style>
-{% endblock content %}
+{%endblock content%}

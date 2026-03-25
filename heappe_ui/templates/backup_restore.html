@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block title %}Database Backup & Restore{% endblock %}
+{%block title%}Database Backup & Restore{%endblock%}
 
-{% block content %}
+{%block content%}
 <div class="container-fluid py-4 px-lg-5 min-vh-100">
     <!-- Page Header -->
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
@@ -17,7 +17,7 @@
         </div>
         <div class="d-flex align-items-center gap-2">
             <form method="post" class="m-0" onsubmit="return confirm('Trigger a Full Database Backup?');">
-                {% csrf_token %}
+                {%csrf_token%}
                 <input type="hidden" name="action" value="backup_database">
                 <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm"
                     title="Triggers a full database backup via HEAppE Management API.">
@@ -26,7 +26,7 @@
             </form>
 
             <form method="post" class="m-0" onsubmit="return confirm('Create a backup of database transaction logs?');">
-                {% csrf_token %}
+                {%csrf_token%}
                 <input type="hidden" name="action" value="backup_transaction_logs">
                 <button type="submit" class="btn btn-white px-3 fw-semibold border shadow-xs">
                     <i class="bi bi-journal-text me-2"></i> Log Backup
@@ -51,14 +51,14 @@
                                 <div class="col-auto">
                                     <div class="input-group input-group-sm rounded-3 overflow-hidden border">
                                         <span class="input-group-text bg-light border-0 small text-muted">From</span>
-                                        <input type="datetime-local" name="from" value="{{ filters.from }}"
+                                        <input type="datetime-local" name="from" value="{{filters.from}}"
                                             class="form-control border-0 bg-white small" style="width: 180px;">
                                     </div>
                                 </div>
                                 <div class="col-auto">
                                     <div class="input-group input-group-sm rounded-3 overflow-hidden border">
                                         <span class="input-group-text bg-light border-0 small text-muted">To</span>
-                                        <input type="datetime-local" name="to" value="{{ filters.to }}"
+                                        <input type="datetime-local" name="to" value="{{filters.to}}"
                                             class="form-control border-0 bg-white small" style="width: 180px;">
                                     </div>
                                 </div>
@@ -66,9 +66,9 @@
                                     <select name="type"
                                         class="form-select form-select-sm border bg-white rounded-3 small"
                                         style="width: 120px;">
-                                        <option value="" {% if not filters.type %}selected{% endif %}>All Types</option>
-                                        <option value="0" {% if filters.is_type_0 %}selected{% endif %}>Full</option>
-                                        <option value="1" {% if filters.is_type_1 %}selected{% endif %}>Logs</option>
+                                        <option value="" {%if not filters.type%}selected{%endif%}>All Types</option>
+                                        <option value="0" {%if filters.is_type_0%}selected{%endif%}>Full</option>
+                                        <option value="1" {%if filters.is_type_1%}selected{%endif%}>Logs</option>
                                     </select>
                                 </div>
                                 <div class="col-auto">
@@ -84,7 +84,7 @@
 
                 <!-- List Body -->
                 <div class="card-body p-0">
-                    {% if backups %}
+                    {%if backups%}
                     <div class="table-responsive">
                         <table class="table table-modern align-middle mb-0">
                             <thead>
@@ -97,7 +97,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for b in backups %}
+                                {%for b in backups%}
                                 <tr>
                                     <td class="ps-4">
                                         <div class="d-flex align-items-center">
@@ -106,47 +106,47 @@
                                             </div>
                                             <div>
                                                 <code
-                                                    class="text-dark bg-indigo-soft px-2 py-1 rounded small fw-bold">{{ b.file_name }}</code>
+                                                    class="text-dark bg-indigo-soft px-2 py-1 rounded small fw-bold">{{b.file_name}}</code>
                                             </div>
                                         </div>
                                     </td>
                                     <td>
-                                        {% if b.type == 1 %}
+                                        {%if b.type == 1%}
                                         <span
                                             class="badge rounded-pill bg-amber-soft text-amber px-3 py-1 fw-bold small">LOGS</span>
-                                        {% else %}
+                                        {%else%}
                                         <span
                                             class="badge rounded-pill bg-indigo-soft text-indigo px-3 py-1 fw-bold small">FULL</span>
-                                        {% endif %}
+                                        {%endif%}
                                     </td>
                                     <td>
                                         <div class="d-flex align-items-center small text-muted">
                                             <i class="bi bi-calendar3 me-2 opacity-50"></i>
-                                            {{ b.time_stamp }}
+                                            {{b.time_stamp}}
                                         </div>
                                     </td>
                                     <td class="text-end fw-semibold">
-                                        {% if b.file_size_mb %}
-                                        <span class="text-dark">{{ b.file_size_mb }}</span> <span
+                                        {%if b.file_size_mb%}
+                                        <span class="text-dark">{{b.file_size_mb}}</span> <span
                                             class="text-muted small">MB</span>
-                                        {% else %}
+                                        {%else%}
                                         <span class="text-muted">–</span>
-                                        {% endif %}
+                                        {%endif%}
                                     </td>
                                     <td class="text-end pe-4">
                                         <form method="post" class="m-0 d-inline-block"
-                                            onsubmit="return confirm('WARNING: Are you sure you want to restore the database from {{ b.file_name }}?\n\nThis will OVERWRITE the current database and CANNOT BE UNDONE.');">
-                                            {% csrf_token %}
+                                            onsubmit="return confirm('WARNING: Are you sure you want to restore the database from {{b.file_name}}?\n\nThis will OVERWRITE the current database and CANNOT BE UNDONE.');">
+                                            {%csrf_token%}
                                             <input type="hidden" name="action" value="restore_database">
-                                            <input type="hidden" name="backup_file_name" value="{{ b.file_name }}">
+                                            <input type="hidden" name="backup_file_name" value="{{b.file_name}}">
                                             <div class="d-flex justify-content-end align-items-center gap-3">
                                                 <div class="form-check form-switch glass-card px-2 py-1 rounded-pill d-flex align-items-center border mb-0"
                                                     style="font-size: 0.75rem;">
                                                     <input class="form-check-input mt-0 me-1" type="checkbox"
-                                                        name="include_logs" id="includeLogs{{ forloop.counter }}"
+                                                        name="include_logs" id="includeLogs{{forloop.counter}}"
                                                         checked>
                                                     <label class="form-check-label fw-bold text-muted mb-0"
-                                                        for="includeLogs{{ forloop.counter }}">
+                                                        for="includeLogs{{forloop.counter}}">
                                                         Logs
                                                     </label>
                                                 </div>
@@ -158,11 +158,11 @@
                                         </form>
                                     </td>
                                 </tr>
-                                {% endfor %}
+                                {%endfor%}
                             </tbody>
                         </table>
                     </div>
-                    {% else %}
+                    {%else%}
                     <div class="text-center py-5">
                         <div class="empty-state-icon mx-auto mb-3">
                             <i class="bi bi-search fs-1 opacity-25"></i>
@@ -171,7 +171,7 @@
                         <p class="text-muted mb-0 px-4">Your current filters didn't match any backups. Try adjusting
                             dates or type.</p>
                     </div>
-                    {% endif %}
+                    {%endif%}
                 </div>
             </div>
         </div>
@@ -214,4 +214,4 @@
         justify-content: center;
     }
 </style>
-{% endblock %}
+{%endblock%}

@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block title %}HEAppE Profile{% endblock %}
+{%block title%}HEAppE Profile{%endblock%}
 
-{% block content %}
+{%block content%}
 <div class="container mt-5">
     <div class="row justify-content-center">
         <div class="col-md-6">
@@ -11,48 +11,48 @@
                     <h5 class="mb-0">HEAppE Profile</h5>
                 </div>
                 <div class="card-body">
-                    {% if user.is_authenticated %}
-                        <p><strong>Username:</strong> {{ user.username }}</p>
-                        <p><strong>HEAppE Host:</strong> {{ request.session.heappe_host }}</p>
+                    {%if user.is_authenticated%}
+                        <p><strong>Username:</strong> {{user.username}}</p>
+                        <p><strong>HEAppE Host:</strong> {{request.session.heappe_host}}</p>
                         <p>
                             <strong>Session Code:</strong>
                             <button id="toggle-session" class="btn btn-sm btn-outline-secondary">
                                 🔒 Show
                             </button>
-                            <span id="session-code" style="display:none;">{{ request.session.heappe_session_code }}</span>
+                            <span id="session-code" style="display:none;">{{request.session.heappe_session_code}}</span>
                         </p>
                         <p><strong>Last Auth:</strong>
-                            {% if last_auth %}
-                                {{ last_auth | date:"d.m.Y H:i:s" }} UTC
-                            {% else %}
+                            {%if last_auth%}
+                                {{last_auth | date:"d.m.Y H:i:s"}} UTC
+                            {%else%}
                                 Never
-                            {% endif %}
+                            {%endif%}
                         </p>
 
 
                         <hr>
 
 
-                        {% if user.is_superuser %}
+                        {%if user.is_superuser%}
                             <div class="mt-4 p-3 border border-danger rounded">
                                 <h6 class="text-danger mb-3">SERVER MAINTENANCE (Admin Only)</h6>
 
-                                <a href="{% url 'update_server_page' %}" class="btn btn-danger w-100 mb-2">
+                                <a href="{%url 'update_server_page'%}" class="btn btn-danger w-100 mb-2">
                                     Update Application
                                 </a>
                             </div>
                             <hr>
-                        {% endif %}
+                        {%endif%}
                         {# -------------------------------------------------------- #}
 
-                        <form method="post" action="{% url 'logout' %}">
-                            {% csrf_token %}
+                        <form method="post" action="{%url 'logout'%}">
+                            {%csrf_token%}
                             <button type="submit" class="btn btn-outline-danger w-100">Logout</button>
                         </form>
-                    {% else %}
+                    {%else%}
                         <p class="text-danger">You are not logged in.</p>
-                        <a href="{% url 'login' %}" class="btn btn-primary">Login</a>
-                    {% endif %}
+                        <a href="{%url 'login'%}" class="btn btn-primary">Login</a>
+                    {%endif%}
                 </div>
             </div>
         </div>
@@ -76,4 +76,4 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 });
 </script>
-{% endblock %}
+{%endblock%}

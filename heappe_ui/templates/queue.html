@@ -1,9 +1,9 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block title %}{{ node_type.name|default:"New Queue" }}{% endblock %}
+{%block title%}{{node_type.name|default:"New Queue"}}{%endblock%}
 
-{% block content %}
-<h1 class="mb-4 text-center">{{ node_type.name|default:"Create New Queue" }}</h1>
+{%block content%}
+<h1 class="mb-4 text-center">{{node_type.name|default:"Create New Queue"}}</h1>
 
 <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
     <div class="card-header d-flex align-items-center">
@@ -12,69 +12,69 @@
     </div>
 
     <div class="card-body">
-        {% if not filetransfer_methods %}
+        {%if not filetransfer_methods%}
         <div class="alert alert-warning text-center" role="alert">
             You need to add a File Transfer Method before managing the queue.
             <button class="btn btn-sm btn-warning ms-2" data-bs-toggle="modal" data-bs-target="#createFileTransferModal">Add Now</button>
         </div>
-        {% else %}
+        {%else%}
 
         <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="{% if node_type.id %}update_queue{% else %}create_queue{% endif %}">
+            {%csrf_token%}
+            <input type="hidden" name="action" value="{%if node_type.id%}update_queue{%else%}create_queue{%endif%}">
             
             <div class="row g-3">
                 <div class="col-md-2">
                     <label class="form-label">Id</label>
-                    <input type="number" class="form-control" value="{{ node_type.id }}" readonly disabled>
-                    <input type="hidden" name="Id" value="{{ node_type.id }}">
+                    <input type="number" class="form-control" value="{{node_type.id}}" readonly disabled>
+                    <input type="hidden" name="Id" value="{{node_type.id}}">
                 </div>
 
                 <div class="col-md-4">
                     <label class="form-label">Name</label>
-                    <input type="text" class="form-control" name="Name" value="{{ node_type.name }}" required>
+                    <input type="text" class="form-control" name="Name" value="{{node_type.name}}" required>
                 </div>
 
                 <div class="col-md-6">
                     <label class="form-label">Description</label>
-                    <input type="text" class="form-control" name="Description" value="{{ node_type.description }}">
+                    <input type="text" class="form-control" name="Description" value="{{node_type.description}}">
                 </div>
 
                 <div class="col-md-2">
                     <label class="form-label">Number Of Nodes</label>
-                    <input type="number" class="form-control" name="NumberOfNodes" value="{{ node_type.number_of_nodes|default:1 }}">
+                    <input type="number" class="form-control" name="NumberOfNodes" value="{{node_type.number_of_nodes|default:1}}">
                 </div>
 
                 <div class="col-md-3">
                     <label class="form-label">Cores/GPU per Node</label>
-                    <input type="number" class="form-control" name="CoresPerNode" value="{{ node_type.cores_per_node|default:1 }}">
+                    <input type="number" class="form-control" name="CoresPerNode" value="{{node_type.cores_per_node|default:1}}">
                 </div>
 
                 <div class="col-md-3">
                     <label class="form-label">Max Walltime</label>
-                    <input type="number" class="form-control" name="MaxWalltime" value="{{ node_type.max_walltime }}">
+                    <input type="number" class="form-control" name="MaxWalltime" value="{{node_type.max_walltime}}">
                 </div>
 
                 <div class="col-md-4">
                     <label class="form-label">Queue Name</label>
-                    <input type="text" class="form-control" name="Queue" value="{{ node_type.queue }}">
+                    <input type="text" class="form-control" name="Queue" value="{{node_type.queue}}">
                 </div>
 
                 <div class="col-md-4">
                     <label class="form-label">Quality Of Service</label>
-                    <input type="text" class="form-control" name="QualityOfService" value="{{ node_type.quality_of_service }}">
+                    <input type="text" class="form-control" name="QualityOfService" value="{{node_type.quality_of_service}}">
                 </div>
 
                 <div class="col-md-4">
                     <label class="form-label">File Transfer Method</label>
                     <div class="input-group">
                         <select name="FileTransferMethodId" class="form-select" required>
-                            <option value="" disabled {% if not node_type.file_transfer_method_id %}selected{% endif %}>Select...</option>
-                            {% for ft in filetransfer_methods %}
-                            <option value="{{ ft.id }}" {% if node_type.file_transfer_method_id == ft.id %}selected{% endif %}>
-                                {{ ft.server_hostname }} ({{ ft.protocol_name }})
+                            <option value="" disabled {%if not node_type.file_transfer_method_id%}selected{%endif%}>Select...</option>
+                            {%for ft in filetransfer_methods%}
+                            <option value="{{ft.id}}" {%if node_type.file_transfer_method_id == ft.id%}selected{%endif%}>
+                                {{ft.server_hostname}} ({{ft.protocol_name}})
                             </option>
-                            {% endfor %}
+                            {%endfor%}
                         </select>
                         <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#createFileTransferModal">+</button>
                     </div>
@@ -84,12 +84,12 @@
                     <label class="form-label">Queue Group (Aggregation)</label>
                     <div class="input-group">
                         <select id="groupId" name="ClusterNodeTypeAggregationId" class="form-select">
-                            <option value="" {% if not node_type.cluster_node_type_aggregation %}selected{% endif %}>None</option>
-                            {% for group in queue_groups %}
-                            <option value="{{ group.id }}" {% if node_type.cluster_node_type_aggregation.id == group.id %}selected{% endif %}>
-                                {{ group.name }}
+                            <option value="" {%if not node_type.cluster_node_type_aggregation%}selected{%endif%}>None</option>
+                            {%for group in queue_groups%}
+                            <option value="{{group.id}}" {%if node_type.cluster_node_type_aggregation.id == group.id%}selected{%endif%}>
+                                {{group.name}}
                             </option>
-                            {% endfor %}
+                            {%endfor%}
                         </select>
                         <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#createAggregationModal">+</button>
                     </div>
@@ -98,16 +98,16 @@
 
             <div class="mt-4 d-flex justify-content-between">
                 <div>
-                    {% if node_type.id %}
+                    {%if node_type.id%}
                     <button type="submit" class="btn btn-primary">Update Queue</button>
-                    {% else %}
+                    {%else%}
                     <button type="submit" class="btn btn-success">Create Queue</button>
-                    {% endif %}
+                    {%endif%}
                 </div>
                 <button type="button" class="btn btn-secondary" onclick="history.back()">Back</button>
             </div>
         </form>
-        {% endif %}
+        {%endif%}
     </div>
 </div>
 
@@ -122,4 +122,4 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
-{% endblock %}
+{%endblock%}

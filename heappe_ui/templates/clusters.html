@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block content %}
+{%block content%}
 <div class="container py-4">
     <div class="card glass-card border-0 mb-4 overflow-hidden">
         <div class="card-header bg-transparent border-0 d-flex align-items-center py-3 px-4">
@@ -14,7 +14,7 @@
                 </div>
             </div>
             <div class="ms-auto d-flex align-items-center gap-2">
-                <a href="{% url 'cluster_create' %}" class="btn btn-sm btn-indigo text-white">
+                <a href="{%url 'cluster_create'%}" class="btn btn-sm btn-indigo text-white">
                     <i class="bi bi-plus-lg me-1"></i> Add Cluster
                 </a>
                 <button class="btn btn-sm btn-glass-secondary" onclick="location.reload();">
@@ -24,7 +24,7 @@
         </div>
 
         <div class="card-body p-0">
-            {% if clusters %}
+            {%if clusters%}
             <div class="table-responsive">
                 <table class="table table-modern mb-0">
                     <thead>
@@ -39,38 +39,36 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for cluster in clusters %}
+                        {%for cluster in clusters%}
                         <tr>
                             <td class="ps-4">
-                                <span class="badge bg-light text-dark font-monospace">{{ cluster.id }}</span>
+                                <span class="badge bg-light text-dark font-monospace">{{cluster.id}}</span>
                             </td>
                             <td>
-                                <div class="fw-semibold text-indigo">{{ cluster.name }}</div>
-                                <div class="small text-muted d-lg-none">{{ cluster.domain_name|default:"" }}</div>
+                                <div class="fw-semibold text-indigo">{{cluster.name}}</div>
+                                <div class="small text-muted d-lg-none">{{cluster.domain_name|default:""}}</div>
                             </td>
                             <td class="d-none d-md-table-cell text-truncate" style="max-width: 250px;">
-                                {{ cluster.description }}
+                                {{cluster.description}}
                             </td>
                             <td class="d-none d-lg-table-cell">
-                                <div class="small fw-medium">{{ cluster.master_node_name|default:"-" }}</div>
-                                <div class="small text-muted">{{ cluster.domain_name|default:"" }}</div>
+                                <div class="small fw-medium">{{cluster.master_node_name|default:"-"}}</div>
+                                <div class="small text-muted">{{cluster.domain_name|default:""}}</div>
                             </td>
                             <td>
-                                <span class="badge bg-emerald-soft text-emerald">{{ cluster.scheduler_name|default:"-"
-                                    }}</span>
+ <span class="badge bg-emerald-soft text-emerald">{{cluster.scheduler_name|default:"-"}}</span>
                             </td>
                             <td class="d-none d-xl-table-cell">
-                                <div class="small text-muted"><i class="bi bi-shield-lock me-1"></i>{{
-                                    cluster.connection_protocol_name|default:"-" }}</div>
-                                <div class="small text-muted">Port: {{ cluster.port|default:"-" }}</div>
+ <div class="small text-muted"><i class="bi bi-shield-lock me-1"></i>{{cluster.connection_protocol_name|default:"-"}}</div>
+                                <div class="small text-muted">Port: {{cluster.port|default:"-"}}</div>
                             </td>
                             <td class="text-end pe-4">
                                 <div class="btn-group">
-                                    <a href="{% url 'cluster_detail' cluster.id %}"
+                                    <a href="{%url 'cluster_detail' cluster.id%}"
                                         class="btn btn-sm btn-light border-0" title="View Detail">
                                         <i class="bi bi-eye text-primary"></i>
                                     </a>
-                                    <a href="{% url 'cluster_delete' cluster.id %}"
+                                    <a href="{%url 'cluster_delete' cluster.id%}"
                                         class="btn btn-sm btn-light border-0"
                                         onclick="return confirm('Are you sure you want to delete this cluster?');"
                                         title="Delete">
@@ -79,17 +77,17 @@
                                 </div>
                             </td>
                         </tr>
-                        {% endfor %}
+                        {%endfor%}
                     </tbody>
                 </table>
             </div>
-            {% else %}
+            {%else%}
             <div class="p-5 text-center">
                 <i class="bi bi-device-hdd fs-1 text-muted"></i>
                 <p class="mt-2 mb-0 text-muted">No clusters available.</p>
             </div>
-            {% endif %}
+            {%endif%}
         </div>
     </div>
 </div>
-{% endblock %}
+{%endblock%}

@@ -79,7 +79,7 @@
     </div>
 
     <div class="card-body p-0">
-      {% if formulas %}
+      {%if formulas%}
       <div class="table-responsive">
         <table class="table table-modern mb-0">
           <thead>
@@ -92,32 +92,32 @@
             </tr>
           </thead>
           <tbody>
-            {% for formula in formulas %}
+            {%for formula in formulas%}
             <tr>
-              <td class="ps-4"><span class="badge bg-light text-dark font-monospace">{{ formula.id }}</span></td>
+              <td class="ps-4"><span class="badge bg-light text-dark font-monospace">{{formula.id}}</span></td>
               <td>
-                <code class="bg-light p-2 rounded text-indigo fw-bold">{{ formula.formula }}</code>
+                <code class="bg-light p-2 rounded text-indigo fw-bold">{{formula.formula}}</code>
               </td>
               <td class="d-none d-lg-table-cell">
-                <div class="small fw-medium text-emerald">From: {{ formula.validity_from }}</div>
-                <div class="small text-muted">To: {{ formula.validity_to }}</div>
+                <div class="small fw-medium text-emerald">From: {{formula.validity_from}}</div>
+                <div class="small text-muted">To: {{formula.validity_to}}</div>
               </td>
               <td class="d-none d-xl-table-cell">
-                <div class="small text-muted">Created: {{ formula.created_at }}</div>
-                <div class="small text-muted">Modified: {{ formula.modified_at }}</div>
+                <div class="small text-muted">Created: {{formula.created_at}}</div>
+                <div class="small text-muted">Modified: {{formula.modified_at}}</div>
               </td>
               <td class="text-end pe-4">
                 <div class="btn-group">
                   <button class="btn btn-sm btn-light border-0" data-bs-toggle="modal"
-                    data-bs-target="#editFormulaModal" data-id="{{ formula.id }}" data-formula="{{ formula.formula }}"
-                    data-validity-from="{{ formula.validity_from }}" data-validity-to="{{ formula.validity_to }}"
+                    data-bs-target="#editFormulaModal" data-id="{{formula.id}}" data-formula="{{formula.formula}}"
+                    data-validity-from="{{formula.validity_from}}" data-validity-to="{{formula.validity_to}}"
                     title="Edit">
                     <i class="bi bi-pencil-square text-primary"></i>
                   </button>
                   <form method="post" class="d-inline">
-                    {% csrf_token %}
+                    {%csrf_token%}
                     <input type="hidden" name="action" value="unassign_formula" />
-                    <input type="hidden" name="FormulaId" value="{{ formula.id }}" />
+                    <input type="hidden" name="FormulaId" value="{{formula.id}}" />
                     <button type="submit" class="btn btn-sm btn-light border-0"
                       onclick="return confirm('Are you sure you want to unassign this formula?');" title="Unassign">
                       <i class="bi bi-trash text-danger"></i>
@@ -126,16 +126,16 @@
                 </div>
               </td>
             </tr>
-            {% endfor %}
+            {%endfor%}
           </tbody>
         </table>
       </div>
-      {% else %}
+      {%else%}
       <div class="p-5 text-center">
         <i class="bi bi-calculator fs-1 text-muted"></i>
         <p class="mt-2 mb-0 text-muted">No formulas assigned to this project.</p>
       </div>
-      {% endif %}
+      {%endif%}
     </div>
   </div>
 </div>
@@ -145,7 +145,7 @@
   <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content border-0 shadow-lg">
       <form method="post">
-        {% csrf_token %}
+        {%csrf_token%}
         <input type="hidden" name="action" value="add_formula">
         <div class="modal-header border-0 bg-emerald-soft py-3">
           <h5 class="modal-title fw-bold text-emerald"><i class="bi bi-plus-circle me-2"></i>Create New Formula</h5>
@@ -158,26 +158,26 @@
 
               <p class="small text-muted mb-2">Metrics</p>
               <div class="d-flex flex-wrap gap-2 mb-3">
-                {% for operand in ACCOUNTING_NUMBERS %}
+                {%for operand in ACCOUNTING_NUMBERS%}
                 <span class="badge rounded-pill token-badge token-number draggable" draggable="true"
-                  data-value="{{ operand }}">{{ operand }}</span>
-                {% endfor %}
+                  data-value="{{operand}}">{{operand}}</span>
+                {%endfor%}
               </div>
 
               <p class="small text-muted mb-2">Time/Units</p>
               <div class="d-flex flex-wrap gap-2 mb-3">
-                {% for operand in ACCOUNTING_TIMES %}
+                {%for operand in ACCOUNTING_TIMES%}
                 <span class="badge rounded-pill token-badge token-time draggable" draggable="true"
-                  data-value="{{ operand }}">{{ operand }}</span>
-                {% endfor %}
+                  data-value="{{operand}}">{{operand}}</span>
+                {%endfor%}
               </div>
 
               <p class="small text-muted mb-2">Operators</p>
               <div class="d-flex flex-wrap gap-2 mb-3">
-                {% for operator in ACCOUNTING_OPERATORS %}
+                {%for operator in ACCOUNTING_OPERATORS%}
                 <span class="badge rounded-pill token-badge token-operator draggable" draggable="true"
-                  data-value="{{ operator }}">{{ operator }}</span>
-                {% endfor %}
+                  data-value="{{operator}}">{{operator}}</span>
+                {%endfor%}
               </div>
 
               <hr class="my-4">
@@ -225,7 +225,7 @@
   <div class="modal-dialog modal-xl modal-dialog-centered">
     <div class="modal-content border-0 shadow-lg">
       <form method="post">
-        {% csrf_token %}
+        {%csrf_token%}
         <input type="hidden" name="action" value="edit_formula">
         <input type="hidden" name="FormulaId" id="editFormulaId">
         <div class="modal-header border-0 bg-indigo-soft py-3">
@@ -237,22 +237,22 @@
             <div class="col-lg-4 border-end">
               <h6 class="fw-bold mb-3">Available Tokens</h6>
               <div class="d-flex flex-wrap gap-2 mb-3">
-                {% for operand in ACCOUNTING_NUMBERS %}
+                {%for operand in ACCOUNTING_NUMBERS%}
                 <span class="badge rounded-pill token-badge token-number draggable" draggable="true"
-                  data-value="{{ operand }}">{{ operand }}</span>
-                {% endfor %}
+                  data-value="{{operand}}">{{operand}}</span>
+                {%endfor%}
               </div>
               <div class="d-flex flex-wrap gap-2 mb-3">
-                {% for operand in ACCOUNTING_TIMES %}
+                {%for operand in ACCOUNTING_TIMES%}
                 <span class="badge rounded-pill token-badge token-time draggable" draggable="true"
-                  data-value="{{ operand }}">{{ operand }}</span>
-                {% endfor %}
+                  data-value="{{operand}}">{{operand}}</span>
+                {%endfor%}
               </div>
               <div class="d-flex flex-wrap gap-2 mb-3">
-                {% for operator in ACCOUNTING_OPERATORS %}
+                {%for operator in ACCOUNTING_OPERATORS%}
                 <span class="badge rounded-pill token-badge token-operator draggable" draggable="true"
-                  data-value="{{ operator }}">{{ operator }}</span>
-                {% endfor %}
+                  data-value="{{operator}}">{{operator}}</span>
+                {%endfor%}
               </div>
               <hr class="my-3">
               <div class="input-group input-group-sm">
@@ -296,7 +296,7 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow-lg">
       <form method="post">
-        {% csrf_token %}
+        {%csrf_token%}
         <input type="hidden" name="action" value="assign_formula">
         <div class="modal-header border-0 bg-primary-soft py-3">
           <h5 class="modal-title fw-bold text-primary"><i class="bi bi-link-45deg me-2"></i>Assign Formula</h5>
@@ -307,9 +307,9 @@
             <label class="form-label fw-semibold">Select Formula</label>
             <select class="form-select border-0 bg-light" name="FormulaId" required>
               <option value="" selected disabled>Choose from library...</option>
-              {% for formula in all_formulas %}
-              <option value="{{ formula.id }}">{{ formula.formula }} (ID: {{ formula.id }})</option>
-              {% endfor %}
+              {%for formula in all_formulas%}
+              <option value="{{formula.id}}">{{formula.formula}} (ID: {{formula.id}})</option>
+              {%endfor%}
             </select>
           </div>
         </div>

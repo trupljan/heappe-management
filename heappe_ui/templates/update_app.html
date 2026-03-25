@@ -1,8 +1,8 @@
-{% extends 'base.html' %}
+{%extends 'base.html'%}
 
-{% block title %}System Update | HEAppE Admin{% endblock %}
+{%block title%}System Update | HEAppE Admin{%endblock%}
 
-{% block content %}
+{%block content%}
 <div class="container-fluid py-5 px-lg-5 min-vh-100 d-flex align-items-center justify-content-center bg-light-soft">
     <div class="col-md-8 col-lg-6 col-xl-5">
         <!-- Main Update Card -->
@@ -20,13 +20,13 @@
                 <div class="alert alert-indigo bg-indigo-soft border-0 text-indigo rounded-4 small mb-4 d-flex">
                     <i class="bi bi-info-circle-fill me-3 fs-5"></i>
                     <div>
-                        Deployment will pull the latest codebase from <strong>{{ GIT_BRANCH }}</strong> and perform a
+                        Deployment will pull the latest codebase from <strong>{{GIT_BRANCH}}</strong> and perform a
                         graceful service restart.
                     </div>
                 </div>
 
                 <form id="updateForm">
-                    {% csrf_token %}
+                    {%csrf_token%}
                     <div class="mb-4">
                         <label for="username"
                             class="form-label small fw-bold text-muted text-uppercase letter-spacing-1">Admin
@@ -58,7 +58,7 @@
                             <span id="btnSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"
                                 aria-hidden="true"></span>
                         </button>
-                        <a href="{% url 'dashboard_view' %}"
+                        <a href="{%url 'dashboard_view'%}"
                             class="btn btn-link text-muted small text-decoration-none text-center">
                             <i class="bi bi-arrow-left me-1"></i> Return to Workspace
                         </a>
@@ -80,8 +80,7 @@
 
             <div class="card-footer bg-light-soft border-0 py-3 px-4 text-center">
                 <span class="text-muted small">Target Revision: <span
-                        class="badge bg-white border text-dark fw-bold px-2 rounded-pill shadow-xs">{{ GIT_BRANCH
-                        }}</span></span>
+ class="badge bg-white border text-dark fw-bold px-2 rounded-pill shadow-xs">{{GIT_BRANCH}}</span></span>
             </div>
         </div>
     </div>
@@ -127,7 +126,7 @@
 
             if (response.ok) {
                 showStatus(result.message || 'Deployment success. Syncing core...', 'success');
-                setTimeout(() => window.location.href = "{% url 'dashboard_view' %}", 3000);
+                setTimeout(() => window.location.href = "{%url 'dashboard_view'%}", 3000);
             } else {
                 showStatus(result.message || 'Deployment authorization failed.', 'danger');
                 resetBtn();
@@ -195,4 +194,4 @@
         transform: scale(0.98);
     }
 </style>
-{% endblock %}
+{%endblock%}

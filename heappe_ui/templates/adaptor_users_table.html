@@ -110,21 +110,19 @@
                 <li class="nav-item">
                     <button class="nav-link active" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane"
                         type="button">
-                        In Project <span class="badge bg-white text-primary ms-1 shadow-sm" id="countIn">{{
-                            adaptor_users|length }}</span>
+ In Project <span class="badge bg-white text-primary ms-1 shadow-sm" id="countIn">{{adaptor_users|length}}</span>
                     </button>
                 </li>
                 <li class="nav-item">
                     <button class="nav-link" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane"
                         type="button">
-                        Available <span class="badge bg-white text-muted ms-1 shadow-sm" id="countOut">{{
-                            adaptor_users_not_in_project|length }}</span>
+ Available <span class="badge bg-white text-muted ms-1 shadow-sm" id="countOut">{{adaptor_users_not_in_project|length}}</span>
                     </button>
                 </li>
             </ul>
             <div class="vr mx-1 d-none d-md-block"></div>
             <div class="btn-group">
-                <a href="{% url 'adaptor_user_create' %}" class="btn btn-sm btn-indigo text-white"><i
+                <a href="{%url 'adaptor_user_create'%}" class="btn btn-sm btn-indigo text-white"><i
                         class="bi bi-person-plus me-1"></i> Create</a>
                 <button class="btn btn-sm btn-glass-secondary px-2" onclick="location.reload();"><i
                         class="bi bi-arrow-clockwise"></i></button>
@@ -147,49 +145,49 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for adaptor_user in adaptor_users %}
+                            {%for adaptor_user in adaptor_users%}
                             <tr>
-                                <td><span class="text-muted small">#{{ adaptor_user.id }}</span></td>
+                                <td><span class="text-muted small">#{{adaptor_user.id}}</span></td>
                                 <td>
                                     <div class="d-flex align-items-center">
-                                        <div class="user-avatar me-2">{{ adaptor_user.username|make_list|first|upper }}
+                                        <div class="user-avatar me-2">{{adaptor_user.username|make_list|first|upper}}
                                         </div>
-                                        <div class="fw-semibold">{{ adaptor_user.username }}</div>
+                                        <div class="fw-semibold">{{adaptor_user.username}}</div>
                                     </div>
                                 </td>
                                 <td>
                                     <div class="d-flex align-items-center flex-wrap gap-2">
-                                        <div class="d-flex flex-wrap gap-2 role-container-{{ adaptor_user.username }}">
-                                            {% for group in adaptor_user.adaptor_user_groups|dictsort:"name" %}
-                                            {% if group.project.id == project.id %}
-                                            {% for role in group.roles %}
+                                        <div class="d-flex flex-wrap gap-2 role-container-{{adaptor_user.username}}">
+                                            {%for group in adaptor_user.adaptor_user_groups|dictsort:"name"%}
+                                            {%if group.project.id == project.id%}
+                                            {%for role in group.roles%}
                                             <div class="role-badge-modern">
                                                 <div class="d-flex flex-column me-2">
-                                                    <span class="role-name-text">{{ role }}</span>
+                                                    <span class="role-name-text">{{role}}</span>
                                                     <span class="group-name-text text-truncate"
-                                                        style="max-width: 150px;">{{ group.name }}</span>
+                                                        style="max-width: 150px;">{{group.name}}</span>
                                                 </div>
                                                 <form method="post"
-                                                    action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}"
+                                                    action="{%url 'adaptor_user_unassign_from_project' adaptor_user.username%}"
                                                     class="d-inline">
-                                                    {% csrf_token %}
-                                                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                    <input type="hidden" name="Role" value="{{ role }}">
+                                                    {%csrf_token%}
+                                                    <input type="hidden" name="ProjectId" value="{{project.id}}">
+                                                    <input type="hidden" name="Role" value="{{role}}">
                                                     <button type="submit" class="btn-close"
                                                         style="width: 8px; height: 8px;"
-                                                        onclick="return confirm('Remove {{ role }}?');"></button>
+                                                        onclick="return confirm('Remove {{role}}?');"></button>
                                                 </form>
                                             </div>
-                                            {% endfor %}
-                                            {% endif %}
-                                            {% endfor %}
+                                            {%endfor%}
+                                            {%endif%}
+                                            {%endfor%}
                                         </div>
 
                                         <form method="post"
-                                            action="{% url 'adaptor_user_assign_to_project' adaptor_user.username %}"
+                                            action="{%url 'adaptor_user_assign_to_project' adaptor_user.username%}"
                                             class="ms-auto ps-3 ajax-assign-form" data-table="in">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                            {%csrf_token%}
+                                            <input type="hidden" name="ProjectId" value="{{project.id}}">
                                             <input type="hidden" name="role_name_display" class="role-name-display">
                                             <div class="input-group input-group-sm rounded-3 overflow-hidden shadow-xs"
                                                 style="width: 220px;">
@@ -209,11 +207,11 @@
                                     </div>
                                 </td>
                                 <td class="text-end pe-3">
-                                    <a href="{% url 'adaptor_user_detail' adaptor_user.username %}"
+                                    <a href="{%url 'adaptor_user_detail' adaptor_user.username%}"
                                         class="btn btn-sm btn-light border-0"><i class="bi bi-info-circle"></i></a>
                                 </td>
                             </tr>
-                            {% endfor %}
+                            {%endfor%}
                         </tbody>
                     </table>
                 </div>
@@ -231,21 +229,21 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for user in adaptor_users_not_in_project %}
+                            {%for user in adaptor_users_not_in_project%}
                             <tr>
                                 <td>
                                     <div class="d-flex align-items-center">
-                                        <div class="user-avatar me-2">{{ user.username|make_list|first|upper }}</div>
-                                        <div class="fw-semibold">{{ user.username }}</div>
+                                        <div class="user-avatar me-2">{{user.username|make_list|first|upper}}</div>
+                                        <div class="fw-semibold">{{user.username}}</div>
                                     </div>
                                 </td>
-                                <td><span class="badge bg-light text-dark font-monospace">#{{ user.id }}</span></td>
+                                <td><span class="badge bg-light text-dark font-monospace">#{{user.id}}</span></td>
                                 <td class="text-end">
                                     <form method="post"
-                                        action="{% url 'adaptor_user_assign_to_project' user.username %}"
+                                        action="{%url 'adaptor_user_assign_to_project' user.username%}"
                                         class="d-inline-block ajax-assign-form" data-table="out">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                        {%csrf_token%}
+                                        <input type="hidden" name="ProjectId" value="{{project.id}}">
                                         <input type="hidden" name="role_name_display" class="role-name-display">
                                         <div class="input-group input-group-sm rounded-3 overflow-hidden shadow-xs"
                                             style="width: 260px;">
@@ -264,7 +262,7 @@
                                     </form>
                                 </td>
                             </tr>
-                            {% endfor %}
+                            {%endfor%}
                         </tbody>
                     </table>
                 </div>

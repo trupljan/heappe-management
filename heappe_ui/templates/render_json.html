@@ -1,24 +1,24 @@
-{% if data.items %}
+{%if data.items%}
 <ul class="list-group ms-3 mt-2">
-    {% for key, value in data.items %}
+    {%for key, value in data.items%}
         <li class="list-group-item">
-            <strong>{{ key }}:</strong>
-            {% if value.items or value.0 is not None %}
-                {% render_json value %}
-            {% else %}
-                {{ value }}
-            {% endif %}
+            <strong>{{key}}:</strong>
+            {%if value.items or value.0 is not None%}
+                {%render_json value%}
+            {%else%}
+                {{value}}
+            {%endif%}
         </li>
-    {% endfor %}
+    {%endfor%}
 </ul>
-{% elif data.0 is not None %}
+{%elif data.0 is not None%}
 <ul class="list-group ms-3 mt-2">
-    {% for item in data %}
+    {%for item in data%}
         <li class="list-group-item">
-            {% render_json item %}
+            {%render_json item%}
         </li>
-    {% endfor %}
+    {%endfor%}
 </ul>
-{% else %}
-    {{ data }}
-{% endif %}
+{%else%}
+    {{data}}
+{%endif%}

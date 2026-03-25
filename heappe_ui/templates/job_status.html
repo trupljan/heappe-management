@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block title %}Job Details - {{ job.name }}{% endblock %}
+{%block title%}Job Details - {{job.name}}{%endblock%}
 
-{% block content %}
+{%block content%}
 <style>
   .status-container {
     max-width: 1400px;
@@ -128,9 +128,9 @@
 <div class="status-container">
   <nav aria-label="breadcrumb" class="mb-5 breadcrumb-modern">
     <ol class="breadcrumb mb-0">
-      <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}"
+      <li class="breadcrumb-item"><a href="{%url 'dashboard_view'%}"
           class="text-decoration-none text-muted fw-bold small text-uppercase">Infrastructure</a></li>
-      <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}"
+      <li class="breadcrumb-item"><a href="{%url 'dashboard_view'%}"
           class="text-decoration-none text-muted fw-bold small text-uppercase">Jobs</a></li>
       <li class="breadcrumb-item active text-primary fw-bold small text-uppercase" aria-current="page">Execution Details
       </li>
@@ -140,20 +140,20 @@
   <div class="row g-4 align-items-end mb-5">
     <div class="col-lg-8">
       <div class="d-flex align-items-center mb-2">
-        <div class="badge bg-primary-subtle text-primary mb-0 me-3 px-3">JOB ID: #{{ job.id }}</div>
-        {% if job.state == 16 %}
+        <div class="badge bg-primary-subtle text-primary mb-0 me-3 px-3">JOB ID: #{{job.id}}</div>
+        {%if job.state == 16%}
         <span class="badge bg-success-subtle text-success border border-success-subtle">Completed Successfully</span>
-        {% elif job.state == 32 %}
+        {%elif job.state == 32%}
         <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Execution Failed</span>
-        {% elif job.state == 8 %}
+        {%elif job.state == 8%}
         <span
           class="badge bg-warning-subtle text-warning border border-warning-subtle animate-pulse text-dark">Currently
           Running</span>
-        {% else %}
+        {%else%}
         <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Awaiting Processing</span>
-        {% endif %}
+        {%endif%}
       </div>
-      <h1 class="display-5 fw-bold text-dark mb-0">{{ job.name }}</h1>
+      <h1 class="display-5 fw-bold text-dark mb-0">{{job.name}}</h1>
     </div>
     <div class="col-lg-4 text-lg-end">
       <div class="d-flex gap-2 justify-content-lg-end">
@@ -166,8 +166,8 @@
           </button>
           <ul class="dropdown-menu dropdown-menu-end shadow-lg border-0 p-2" style="min-width: 220px;">
             <li>
-              <form method="post" action="{% url 'job_status_view' job.id %}">
-                {% csrf_token %}
+              <form method="post" action="{%url 'job_status_view' job.id%}">
+                {%csrf_token%}
                 <input type="hidden" name="action" value="cancel_job">
                 <button type="submit" class="dropdown-item py-2 d-flex align-items-center"
                   onclick="return confirm('Abort execution for this job?');">
@@ -180,8 +180,8 @@
               <hr class="dropdown-divider my-2 opacity-50">
             </li>
             <li>
-              <form method="post" action="{% url 'job_status_view' job.id %}">
-                {% csrf_token %}
+              <form method="post" action="{%url 'job_status_view' job.id%}">
+                {%csrf_token%}
                 <input type="hidden" name="action" value="delete_job">
                 <button type="submit" class="dropdown-item py-2 d-flex align-items-center text-danger"
                   onclick="return confirm('Permanently delete this job?');">
@@ -202,42 +202,41 @@
     <div class="timeline-wrapper px-4">
       <div class="timeline-track">
         <div class="timeline-progress"
-          style="width: {% if job.state == 16 %}100%{% elif job.state == 8 %}60%{% elif job.state >= 2 %}33%{% else %}5%{% endif %}">
+          style="width: {%if job.state == 16%}100%{%elif job.state == 8%}60%{%elif job.state >= 2%}33%{%else%}5%{%endif%}">
         </div>
       </div>
       <div class="d-flex justify-content-between position-relative">
         <div class="text-center">
-          <div class="timeline-step {% if job.state >= 1 %}active completed{% endif %}">
+          <div class="timeline-step {%if job.state >= 1%}active completed{%endif%}">
             <i class="bi bi-pencil-square"></i>
             <span class="timeline-label">Config</span>
           </div>
-          <div class="mt-5 smaller text-muted">{{ job.creation_time|date:"H:i" }}</div>
+          <div class="mt-5 smaller text-muted">{{job.creation_time|date:"H:i"}}</div>
         </div>
         <div class="text-center">
           <div
-            class="timeline-step {% if job.state >= 2 %}active{% if job.state > 2 %} completed{% endif %}{% endif %}">
+            class="timeline-step {%if job.state >= 2%}active{%if job.state > 2%} completed{%endif%}{%endif%}">
             <i class="bi bi-send-check"></i>
             <span class="timeline-label">Submit</span>
           </div>
-          <div class="mt-5 smaller text-muted">{{ job.submit_time|date:"H:i"|default:"--" }}</div>
+          <div class="mt-5 smaller text-muted">{{job.submit_time|date:"H:i"|default:"--"}}</div>
         </div>
         <div class="text-center">
           <div
-            class="timeline-step {% if job.state >= 8 %}active{% if job.state > 8 %} completed{% endif %}{% endif %}">
+            class="timeline-step {%if job.state >= 8%}active{%if job.state > 8%} completed{%endif%}{%endif%}">
             <i class="bi bi-play-fill text-lg"></i>
             <span class="timeline-label">Running</span>
           </div>
-          <div class="mt-5 smaller text-muted">{{ job.start_time|date:"H:i"|default:"--" }}</div>
+          <div class="mt-5 smaller text-muted">{{job.start_time|date:"H:i"|default:"--"}}</div>
         </div>
         <div class="text-center">
           <div
-            class="timeline-step {% if job.state == 16 %}active completed{% endif %}{% if job.state == 32 or job.state == 64 %}active bg-danger border-danger text-white{% endif %}">
+            class="timeline-step {%if job.state == 16%}active completed{%endif%}{%if job.state == 32 or job.state == 64%}active bg-danger border-danger text-white{%endif%}">
             <i
-              class="bi {% if job.state == 16 %}bi-check-lg{% elif job.state == 32 or job.state == 64 %}bi-x-lg{% else %}bi-flag{% endif %}"></i>
-            <span class="timeline-label">{% if job.state == 32 %}Failed{% elif job.state == 64 %}Canceled{% else
-              %}Finish{% endif %}</span>
+              class="bi {%if job.state == 16%}bi-check-lg{%elif job.state == 32 or job.state == 64%}bi-x-lg{%else%}bi-flag{%endif%}"></i>
+            <span class="timeline-label">{%if job.state == 32%}Failed{%elif job.state == 64%}Canceled{%else%}Finish{%endif%}</span>
           </div>
-          <div class="mt-5 smaller text-muted">{{ job.end_time|date:"H:i"|default:"--" }}</div>
+          <div class="mt-5 smaller text-muted">{{job.end_time|date:"H:i"|default:"--"}}</div>
         </div>
       </div>
     </div>
@@ -251,19 +250,18 @@
           <div class="d-flex justify-content-between align-items-center">
             <div class="small fw-semibold text-muted font-heading">Project Context</div>
             <div class="badge bg-primary-subtle text-primary border-0 rounded-pill px-3 py-2">
-              {% if project.name and project.name != "string" %}
-              {{ project.name }}
-              {% elif job.sub_project and job.sub_project != "string" %}
-              {{ job.sub_project }}
-              {% else %}
+              {%if project.name and project.name != "string"%}
+              {{project.name}}
+              {%elif job.sub_project and job.sub_project != "string"%}
+              {{job.sub_project}}
+              {%else%}
               Global Infrastructure
-              {% endif %}
+              {%endif%}
             </div>
           </div>
           <div class="d-flex justify-content-between align-items-center">
             <div class="small fw-semibold text-muted font-heading">Allocated Runtime</div>
-            <div class="fw-bold text-dark"><i class="bi bi-clock me-1 text-primary"></i> {{
-              job.total_allocated_time|default:"0s" }}</div>
+ <div class="fw-bold text-dark"><i class="bi bi-clock me-1 text-primary"></i> {{job.total_allocated_time|default:"0s"}}</div>
           </div>
           <div class="d-flex justify-content-between align-items-center">
             <div class="small fw-semibold text-muted font-heading">Primary Submitter</div>
@@ -283,11 +281,11 @@
         </div>
         <div class="d-flex gap-4">
           <div class="text-center">
-            <div class="fs-2 fw-bold">{{ job.tasks|length }}</div>
+            <div class="fs-2 fw-bold">{{job.tasks|length}}</div>
             <div class="extra-small text-uppercase fw-bold text-white-50">Units</div>
           </div>
           <div class="border-start border-white border-opacity-20 ps-4 text-center">
-            <div class="fs-2 fw-bold">{% if job.state == 16 %}OK{% elif job.state == 8 %}LIVE{% else %}--{% endif %}
+            <div class="fs-2 fw-bold">{%if job.state == 16%}OK{%elif job.state == 8%}LIVE{%else%}--{%endif%}
             </div>
             <div class="extra-small text-uppercase fw-bold text-white-50">State</div>
           </div>
@@ -306,35 +304,32 @@
   </h4>
 
   <div class="row g-4">
-    {% for task in job.tasks %}
+    {%for task in job.tasks%}
     <div class="col-12">
       <div class="card task-unit-card overflow-hidden">
         <div class="d-flex flex-column flex-md-row">
           <div class="p-4 bg-light d-flex flex-column align-items-center justify-content-center text-center"
             style="min-width: 140px; border-right: 1px solid rgba(0,0,0,0.05);">
             <div
-              class="p-3 {% if task.state == 16 %}bg-success-subtle text-success{% elif task.state == 32 or task.state == 64 %}bg-danger-subtle text-danger{% elif task.state == 8 %}bg-warning-subtle text-warning{% else %}bg-secondary-subtle text-secondary{% endif %} rounded-circle mb-3">
+              class="p-3 {%if task.state == 16%}bg-success-subtle text-success{%elif task.state == 32 or task.state == 64%}bg-danger-subtle text-danger{%elif task.state == 8%}bg-warning-subtle text-warning{%else%}bg-secondary-subtle text-secondary{%endif%} rounded-circle mb-3">
               <i
-                class="bi {% if task.state == 16 %}bi-check-circle-fill{% elif task.state == 32 %}bi-bug-fill{% elif task.state == 8 %}bi-rocket-takeoff-fill{% else %}bi-clock{% endif %} fs-4"></i>
+                class="bi {%if task.state == 16%}bi-check-circle-fill{%elif task.state == 32%}bi-bug-fill{%elif task.state == 8%}bi-rocket-takeoff-fill{%else%}bi-clock{%endif%} fs-4"></i>
             </div>
-            <span class="smaller fw-bold text-uppercase text-muted">ID: #{{ task.id }}</span>
+            <span class="smaller fw-bold text-uppercase text-muted">ID: #{{task.id}}</span>
           </div>
           <div class="p-4 flex-grow-1">
             <div class="d-flex justify-content-between flex-wrap gap-3 mb-4">
               <div>
-                <h5 class="fw-bold text-dark mb-1">{{ task.name }}</h5>
+                <h5 class="fw-bold text-dark mb-1">{{task.name}}</h5>
                 <div class="d-flex gap-2">
-                  <span class="spec-tag"><i class="bi bi-cpu me-1"></i>Node: {{ task.node_type.name|default:"Auto"
-                    }}</span>
-                  <span class="spec-tag"><i class="bi bi-stopwatch me-1"></i>{{ task.allocated_time|default:"0s"
-                    }}</span>
+ <span class="spec-tag"><i class="bi bi-cpu me-1"></i>Node: {{task.node_type.name|default:"Auto"}}</span>
+ <span class="spec-tag"><i class="bi bi-stopwatch me-1"></i>{{task.allocated_time|default:"0s"}}</span>
                 </div>
               </div>
               <div class="text-md-end">
                 <span
-                  class="badge rounded-pill {% if task.state == 16 %}bg-success{% elif task.state == 8 %}bg-warning text-dark{% elif task.state == 32 %}bg-danger{% else %}bg-secondary{% endif %} px-3 py-2">
-                  {% if task.state == 16 %}COMPLETED{% elif task.state == 8 %}RUNNING{% elif task.state == 32 %}ERROR{%
-                  else %}AWAITING{% endif %}
+                  class="badge rounded-pill {%if task.state == 16%}bg-success{%elif task.state == 8%}bg-warning text-dark{%elif task.state == 32%}bg-danger{%else%}bg-secondary{%endif%} px-3 py-2">
+                  {%if task.state == 16%}COMPLETED{%elif task.state == 8%}RUNNING{%elif task.state == 32%}ERROR{%else%}AWAITING{%endif%}
                 </span>
               </div>
             </div>
@@ -343,37 +338,35 @@
               <div class="col-md-3">
                 <label class="text-muted d-block fw-bold text-uppercase smaller mb-2">Compute Cores</label>
                 <div class="d-flex flex-wrap gap-1">
-                  {% for core in task.allocated_core_ids %}
-                  <span class="badge border bg-white text-primary fw-bold" style="font-size: 0.65rem;">C{{ core
-                    }}</span>
-                  {% empty %}
+                  {%for core in task.allocated_core_ids%}
+ <span class="badge border bg-white text-primary fw-bold" style="font-size: 0.65rem;">C{{core}}</span>
+                  {%empty%}
                   <span class="text-muted italic small">N/A</span>
-                  {% endfor %}
+                  {%endfor%}
                 </div>
               </div>
               <div class="col-md-5">
                 <label class="text-muted d-block fw-bold text-uppercase smaller mb-2">Infrastructure Project</label>
-                <span class="fw-bold">{{ task.node_type.project.name|default:"Default Cluster Project" }}</span>
-                <div class="text-muted extra-small">{{ task.node_type.project.accounting_string|default:"" }}</div>
+                <span class="fw-bold">{{task.node_type.project.name|default:"Default Cluster Project"}}</span>
+                <div class="text-muted extra-small">{{task.node_type.project.accounting_string|default:""}}</div>
               </div>
               <div class="col-md-4">
                 <label class="text-muted d-block fw-bold text-uppercase smaller mb-2">Command Template</label>
-                <span class="fw-bold text-primary">{{ task.node_type.project.command_template.name|default:"Standard
-                  Executable" }}</span>
+ <span class="fw-bold text-primary">{{task.node_type.project.command_template.name|default:"Standard Executable"}}</span>
               </div>
             </div>
 
-            {% if task.error_message or task.reason %}
+            {%if task.error_message or task.reason%}
             <div class="mt-4 p-3 bg-danger-subtle text-danger rounded-3 smaller d-flex align-items-center">
               <i class="bi bi-info-circle-fill me-2 fs-5"></i>
-              <div><strong>Error Log:</strong> {{ task.error_message|default:task.reason }}</div>
+              <div><strong>Error Log:</strong> {{task.error_message|default:task.reason}}</div>
             </div>
-            {% endif %}
+            {%endif%}
           </div>
         </div>
       </div>
     </div>
-    {% endfor %}
+    {%endfor%}
   </div>
 
   <!-- Cluster Artifacts -->
@@ -396,32 +389,31 @@
             </tr>
           </thead>
           <tbody>
-            {% for file in changed_files %}
+            {%for file in changed_files%}
             <tr>
               <td class="ps-4">
                 <div class="d-flex align-items-center">
                   <div class="p-2 bg-primary-subtle text-primary rounded-2 me-3"><i class="bi bi-file-earmark-text"></i>
                   </div>
-                  <span class="fw-bold">{{ file.file_name }}</span>
+                  <span class="fw-bold">{{file.file_name}}</span>
                 </div>
               </td>
-              <td><span class="small text-muted fw-bold">{{ file.last_modified_date|date:"Y-m-d H:i:s"|default:"--"
-                  }}</span></td>
+ <td><span class="small text-muted fw-bold">{{file.last_modified_date|date:"Y-m-d H:i:s"|default:"--"}}</span></td>
               <td class="text-end pe-4">
                 <button class="btn btn-sm btn-primary rounded-pill px-4 shadow-sm"
-                  onclick="viewTaskFile({{ job.id }}, 0, '{{ file.file_name }}')">
+                  onclick="viewTaskFile({{job.id}}, 0, '{{file.file_name}}')">
                   <i class="bi bi-eye me-1"></i> Inspect File
                 </button>
               </td>
             </tr>
-            {% empty %}
+            {%empty%}
             <tr>
               <td colspan="3" class="text-center py-5">
                 <div class="text-muted opacity-50"><i class="bi bi-folder-x fs-1"></i></div>
                 <p class="text-muted mt-3 fw-bold">No generated artifacts available for this job yet.</p>
               </td>
             </tr>
-            {% endfor %}
+            {%endfor%}
           </tbody>
         </table>
       </div>
@@ -473,7 +465,7 @@
     <div class="collapse" id="rawResponseCollapse">
       <div class="card bg-dark text-light border-0 shadow-lg p-3">
         <pre class="m-0 smaller"
-          style="color: #94a3b8; max-height: 400px; white-space: pre-wrap;">{{ job.to_str }}</pre>
+          style="color: #94a3b8; max-height: 400px; white-space: pre-wrap;">{{job.to_str}}</pre>
       </div>
     </div>
   </div>
@@ -536,4 +528,4 @@
     });
   }
 </script>
-{% endblock %}
+{%endblock%}

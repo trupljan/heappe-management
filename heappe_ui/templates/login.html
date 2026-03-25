@@ -1,9 +1,9 @@
-{% extends "base.html" %}
-{% load static %}
+{%extends "base.html"%}
+{%load static%}
 
 
 
-{% block content %}
+{%block content%}
 
 <div class="container">
     <div class="row justify-content-center">
@@ -16,12 +16,12 @@
                         <h5 class="fw-bold">HEAppE Admin Login</h5>
                     </div>
 
-                    {% if error %}
-                    <div class="alert alert-danger py-2">{{ error }}</div>
-                    {% endif %}
+                    {%if error%}
+                    <div class="alert alert-danger py-2">{{error}}</div>
+                    {%endif%}
 
                     <form method="post">
-                        {% csrf_token %}
+                        {%csrf_token%}
                         <div class="mb-3">
                             <label for="username" class="form-label">Username</label>
                             <input type="text" class="form-control" id="username" name="username" required autofocus>
@@ -35,10 +35,10 @@
                 </div>
             </div>
             <p class="text-center text-muted mt-3" style="font-size: 0.9rem;">
-                &copy; {{ year|default:2025 }} HEAppE Admin
+                &copy; {{year|default:2025}} HEAppE Admin
             </p>
         </div>
     </div>
 </div>
 
-{% endblock %}
+{%endblock%}

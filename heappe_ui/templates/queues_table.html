@@ -11,11 +11,11 @@
                 </div>
             </div>
             <div class="ms-auto d-flex gap-2">
-                {% if cluster.id %}
-                <a href="{% url 'queue_create' cluster.id %}" class="btn btn-sm btn-emerald text-white">
+                {%if cluster.id%}
+                <a href="{%url 'queue_create' cluster.id%}" class="btn btn-sm btn-emerald text-white">
                     <i class="bi bi-plus-lg me-1"></i> Add Queue
                 </a>
-                {% endif %}
+                {%endif%}
                 <button class="btn btn-sm btn-glass-secondary" onclick="location.reload();">
                     <i class="bi bi-arrow-clockwise me-1"></i> Reload
                 </button>
@@ -23,7 +23,7 @@
         </div>
 
         <div class="card-body p-0">
-            {% if queues %}
+            {%if queues%}
             <div class="table-responsive">
                 <table class="table table-modern mb-0">
                     <thead>
@@ -38,33 +38,32 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for queue in queues %}
+                        {%for queue in queues%}
                         <tr>
                             <td class="ps-4">
-                                <span class="badge bg-light text-dark font-monospace">{{ queue.id }}</span>
+                                <span class="badge bg-light text-dark font-monospace">{{queue.id}}</span>
                             </td>
                             <td>
-                                <div class="fw-semibold">{{ queue.name }}</div>
+                                <div class="fw-semibold">{{queue.name}}</div>
                             </td>
                             <td class="d-none d-md-table-cell text-truncate" style="max-width: 200px;">
-                                {{ queue.description }}
+                                {{queue.description}}
                             </td>
                             <td>
                                 <div class="d-flex align-items-center gap-2">
                                     <span class="badge bg-indigo-soft text-indigo" title="Nodes">
-                                        <i class="bi bi-server me-1"></i>{{ queue.number_of_nodes }}
+                                        <i class="bi bi-server me-1"></i>{{queue.number_of_nodes}}
                                     </span>
                                     <span class="badge bg-primary-soft text-primary" title="Cores per Node">
-                                        <i class="bi bi-cpu me-1"></i>{{ queue.cores_per_node }}
+                                        <i class="bi bi-cpu me-1"></i>{{queue.cores_per_node}}
                                     </span>
                                 </div>
                             </td>
                             <td class="d-none d-lg-table-cell">
-                                <span class="text-muted small"><i class="bi bi-clock me-1"></i>{{ queue.max_walltime
-                                    }}s</span>
+ <span class="text-muted small"><i class="bi bi-clock me-1"></i>{{queue.max_walltime}}s</span>
                             </td>
                             <td class="d-none d-xl-table-cell">
-                                <span class="badge bg-light text-muted">{{ queue.fileTransferMethodName }}</span>
+                                <span class="badge bg-light text-muted">{{queue.fileTransferMethodName}}</span>
                             </td>
                             <td class="text-end pe-4">
                                 <div class="dropdown">
@@ -73,38 +72,38 @@
                                         <i class="bi bi-three-dots"></i>
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
-                                        <li><a class="dropdown-item" href="{% url 'queue_detail' queue.id %}"><i
+                                        <li><a class="dropdown-item" href="{%url 'queue_detail' queue.id%}"><i
                                                     class="bi bi-info-circle me-2"></i>Detail</a></li>
-                                        {% if cluster.id %}
+                                        {%if cluster.id%}
                                         <li>
                                             <hr class="dropdown-divider">
                                         </li>
                                         <li>
-                                            <form action="{% url 'queue_delete' queue.id %}" method="post"
+                                            <form action="{%url 'queue_delete' queue.id%}" method="post"
                                                 class="d-inline">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+                                                {%csrf_token%}
+                                                <input type="hidden" name="ClusterId" value="{{cluster.id}}">
                                                 <button type="submit" class="dropdown-item text-danger"
                                                     onclick="return confirm('Delete this queue?');">
                                                     <i class="bi bi-trash me-2"></i>Delete
                                                 </button>
                                             </form>
                                         </li>
-                                        {% endif %}
+                                        {%endif%}
                                     </ul>
                                 </div>
                             </td>
                         </tr>
-                        {% endfor %}
+                        {%endfor%}
                     </tbody>
                 </table>
             </div>
-            {% else %}
+            {%else%}
             <div class="p-5 text-center">
                 <i class="bi bi-layers fs-1 text-muted"></i>
                 <p class="mt-2 mb-0 text-muted">No queues available for this cluster.</p>
             </div>
-            {% endif %}
+            {%endif%}
         </div>
     </div>
 </div>

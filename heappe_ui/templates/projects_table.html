@@ -12,17 +12,17 @@
       </div>
 
       <div class="ms-auto d-flex gap-2">
-        {% if cluster.id %}
+        {%if cluster.id%}
         <button class="btn btn-sm btn-glass-primary" data-bs-toggle="modal" data-bs-target="#assignProjectToCluster">
           <i class="bi bi-link-45deg me-1"></i> Assign to Cluster
         </button>
-        {% endif %}
-        {% if queue_group %}
+        {%endif%}
+        {%if queue_group%}
         <button class="btn btn-sm btn-glass-primary" data-bs-toggle="modal" data-bs-target="#assignProjectToGroup">
           <i class="bi bi-layers me-1"></i> Assign to Group
         </button>
-        {% endif %}
-        <a href="{% url 'project_create' %}" class="btn btn-sm btn-emerald text-white">
+        {%endif%}
+        <a href="{%url 'project_create'%}" class="btn btn-sm btn-emerald text-white">
           <i class="bi bi-plus-lg me-1"></i> New Project
         </a>
         <button class="btn btn-sm btn-glass-secondary" onclick="location.reload();">
@@ -32,7 +32,7 @@
     </div>
 
     <div class="card-body p-0">
-      {% if projects %}
+      {%if projects%}
       <div class="table-responsive">
         <table class="table table-modern mb-0">
           <thead>
@@ -47,18 +47,17 @@
             </tr>
           </thead>
           <tbody>
-            {% for project in projects %}
+            {%for project in projects%}
             <tr>
-              <td class="ps-4"><span class="badge bg-light text-dark font-monospace">{{ project.id }}</span></td>
-              <td><span class="fw-semibold">{{ project.name }}</span></td>
-              <td><a href="mailto:{{ project.PIEmail }}" class="text-decoration-none text-muted small"><i
-                    class="bi bi-envelope me-1"></i>{{ project.PIEmail }}</a></td>
-              <td class="d-none d-md-table-cell text-truncate" style="max-width: 200px;">{{ project.description }}</td>
-              <td class="d-none d-lg-table-cell"><span class="badge bg-indigo-soft text-indigo">{{
-                  project.accounting_string }}</span></td>
+              <td class="ps-4"><span class="badge bg-light text-dark font-monospace">{{project.id}}</span></td>
+              <td><span class="fw-semibold">{{project.name}}</span></td>
+              <td><a href="mailto:{{project.PIEmail}}" class="text-decoration-none text-muted small"><i
+                    class="bi bi-envelope me-1"></i>{{project.PIEmail}}</a></td>
+              <td class="d-none d-md-table-cell text-truncate" style="max-width: 200px;">{{project.description}}</td>
+ <td class="d-none d-lg-table-cell"><span class="badge bg-indigo-soft text-indigo">{{project.accounting_string}}</span></td>
               <td class="d-none d-xl-table-cell">
-                <div class="small text-muted">From: {{ project.start_date }}</div>
-                <div class="small text-muted">To: {{ project.end_date }}</div>
+                <div class="small text-muted">From: {{project.start_date}}</div>
+                <div class="small text-muted">To: {{project.end_date}}</div>
               </td>
               <td class="text-end pe-4">
                 <div class="dropdown">
@@ -66,56 +65,56 @@
                     <i class="bi bi-three-dots"></i>
                   </button>
                   <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
-                    <li><a class="dropdown-item" href="{% url 'project_detail' project.id %}"><i
+                    <li><a class="dropdown-item" href="{%url 'project_detail' project.id%}"><i
                           class="bi bi-info-circle me-2"></i>Detail</a></li>
-                    <li><a class="dropdown-item" href="{% url 'accounting' project.id %}"><i
+                    <li><a class="dropdown-item" href="{%url 'accounting' project.id%}"><i
                           class="bi bi-calculator me-2"></i>Accounting</a></li>
-                    {% if cluster.id %}
+                    {%if cluster.id%}
                     <li>
                       <hr class="dropdown-divider">
                     </li>
                     <li>
-                      <form action="{% url 'delete_assignment' project.id %}" method="post" class="d-inline">
-                        {% csrf_token %}
+                      <form action="{%url 'delete_assignment' project.id%}" method="post" class="d-inline">
+                        {%csrf_token%}
                         <input type="hidden" name="action" value="delete_assignment">
-                        <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+                        <input type="hidden" name="ClusterId" value="{{cluster.id}}">
                         <button type="submit" class="dropdown-item text-danger"
                           onclick="return confirm('Unassign this project?');">
                           <i class="bi bi-link-45deg me-2"></i>Unassign
                         </button>
                       </form>
                     </li>
-                    {% endif %}
-                    {% if queue_group %}
+                    {%endif%}
+                    {%if queue_group%}
                     <li>
                       <hr class="dropdown-divider">
                     </li>
                     <li>
                       <form method="post" class="d-inline">
-                        {% csrf_token %}
+                        {%csrf_token%}
                         <input type="hidden" name="action" value="unassign_project_to_group">
-                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                        <input type="hidden" name="ProjectId" value="{{project.id}}">
                         <button type="submit" class="dropdown-item text-danger"
                           onclick="return confirm('Unassign from group?');">
                           <i class="bi bi-layers me-2"></i>Unassign
                         </button>
                       </form>
                     </li>
-                    {% endif %}
+                    {%endif%}
                   </ul>
                 </div>
               </td>
             </tr>
-            {% endfor %}
+            {%endfor%}
           </tbody>
         </table>
       </div>
-      {% else %}
+      {%else%}
       <div class="p-5 text-center">
         <i class="bi bi-inbox fs-1 text-muted"></i>
         <p class="mt-2 mb-0 text-muted">No projects available.</p>
       </div>
-      {% endif %}
+      {%endif%}
     </div>
   </div>
 </div>
@@ -128,18 +127,18 @@
         <h5 class="modal-title fw-bold text-indigo"><i class="bi bi-link-45deg me-2"></i>Assign to Cluster</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <form method="post" action="{% url 'project_assign_to_cluster' %}">
+      <form method="post" action="{%url 'project_assign_to_cluster'%}">
         <div class="modal-body p-4">
-          {% csrf_token %}
+          {%csrf_token%}
           <input type="hidden" name="action" value="assign_cluster">
-          <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+          <input type="hidden" name="ClusterId" value="{{cluster.id}}">
           <div class="mb-3">
             <label class="form-label fw-semibold">Select Project</label>
             <select class="form-select border-0 bg-light" name="ProjectId" required>
               <option value="" disabled selected>Choose a project...</option>
-              {% for project in projectsForCurrentUser %}
-              <option value="{{ project.id }}">{{ project.name }}</option>
-              {% endfor %}
+              {%for project in projectsForCurrentUser%}
+              <option value="{{project.id}}">{{project.name}}</option>
+              {%endfor%}
             </select>
           </div>
           <div class="mb-3">
@@ -172,16 +171,16 @@
       </div>
       <form method="post">
         <div class="modal-body p-4">
-          {% csrf_token %}
+          {%csrf_token%}
           <input type="hidden" name="action" value="assign_project_to_group">
-          <input type="hidden" name="GroupId" value="{{ queue_group.id }}">
+          <input type="hidden" name="GroupId" value="{{queue_group.id}}">
           <div class="mb-3">
             <label class="form-label fw-semibold">Select Project</label>
             <select class="form-select border-0 bg-light" id="projectSelectGroup" name="ProjectId" required>
               <option value="" disabled selected>Choose a project...</option>
-              {% for project in not_assigned_projects %}
-              <option value="{{ project.id }}" data-usage-type="{{ project.usage_type }}">{{ project.name }}</option>
-              {% endfor %}
+              {%for project in not_assigned_projects%}
+              <option value="{{project.id}}" data-usage-type="{{project.usage_type}}">{{project.name}}</option>
+              {%endfor%}
             </select>
           </div>
           <div class="mb-3">

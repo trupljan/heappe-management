@@ -1,21 +1,21 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block content %}
+{%block content%}
 
 
 <h1 class="mb-4 text-center">
-  {% if command_template %}{{ command_template.Name }}{% else %}New Command Template{% endif %}
+  {%if command_template%}{{command_template.Name}}{%else%}New Command Template{%endif%}
 </h1>
 
 <div class="container">
-  {% if command_template.id and not command_template.project_id %}
+  {%if command_template.id and not command_template.project_id%}
   <div class="alert alert-warning text-center col-12 col-xl-10 mx-auto" role="alert">
     This command template is shared across all projects and cannot be edited.
   </div>
   <div class="d-flex justify-content-center">
-    <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-secondary">Back</a>
+    <a href="{%url 'project_detail' project.id%}?tab=commandtemplates" class="btn btn-secondary">Back</a>
   </div>
-  {% else %}
+  {%else%}
   <!-- Command Template Form -->
   <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
     <div class="card-header d-flex align-items-center">
@@ -24,126 +24,126 @@
     </div>
     <div class="card-body">
       <form method="post">
-        {% csrf_token %}
+        {%csrf_token%}
         <input type="hidden" name="action"
-          value="{% if command_template %}update_command_template{% else %}create_command_template{% endif %}">
-        <input type="hidden" name="Id" value="{{ command_template.Id|default:0 }}">
-        <input type="hidden" name="ProjectId" value="{{ project_id }}">
+          value="{%if command_template%}update_command_template{%else%}create_command_template{%endif%}">
+        <input type="hidden" name="Id" value="{{command_template.Id|default:0}}">
+        <input type="hidden" name="ProjectId" value="{{project_id}}">
         <div class="row g-3">
-          {% if command_template %}
+          {%if command_template%}
           <div class="col-md-3">
             <label class="form-label">Id</label>
-            <input type="number" class="form-control" name="Id" value="{{ command_template.id|default:0 }}" readonly
+            <input type="number" class="form-control" name="Id" value="{{command_template.id|default:0}}" readonly
               disabled>
           </div>
-          {% endif %}
-          {% if command_template %}
+          {%endif%}
+          {%if command_template%}
           <div class="col-md-9">
             <label class="form-label">Name</label>
-            <input type="text" class="form-control" name="Name" value="{{ command_template.name|default:'' }}" required>
+            <input type="text" class="form-control" name="Name" value="{{command_template.name|default:''}}" required>
           </div>
-          {% else %}
+          {%else%}
           <div class="col-md-12">
             <label class="form-label">Name</label>
-            <input type="text" class="form-control" name="Name" value="{{ command_template.name|default:'' }}" required>
+            <input type="text" class="form-control" name="Name" value="{{command_template.name|default:''}}" required>
           </div>
-          {% endif %}
+          {%endif%}
           <div class="col-md-6">
             <label class="form-label">Description</label>
             <input type="text" class="form-control" name="Description"
-              value="{{ command_template.description|default:'' }}">
+              value="{{command_template.description|default:''}}">
           </div>
           <div class="col-md-6">
             <label class="form-label">Extended Allocation Command</label>
             <input type="text" class="form-control" name="ExtendedAllocationCommand"
-              value="{{ command_template.extended_allocation_command|default:'' }}">
+              value="{{command_template.extended_allocation_command|default:''}}">
           </div>
-          {% if v620_check %}
-          {% if project %}
+          {%if v620_check%}
+          {%if project%}
           <div class="col-md-6">
             <label class="form-label">KeyScripts Directory Path</label>
             <input type="email" class="form-control" name="KeyScriptsDirectoryPath" readonly disabled
-              value="{{ project.key_scripts_directory_path|default:'' }}">
+              value="{{project.key_scripts_directory_path|default:''}}">
           </div>
-          {% endif %}
-          {% endif %}
+          {%endif%}
+          {%endif%}
           <div class="col-md-6">
             <label class="form-label">Executable File</label>
             <input type="text" class="form-control" name="ExecutableFile"
-              value="{{ command_template.executable_file|default:'' }}">
+              value="{{command_template.executable_file|default:''}}">
           </div>
           <div class="col-md-6">
             <label class="form-label">Preparation Script</label>
             <input type="text" class="form-control" name="PreparationScript"
-              value="{{ command_template.preparation_script|default:'' }}">
+              value="{{command_template.preparation_script|default:''}}">
           </div>
           <div class="col-md-12">
             <label class="form-label">Command Parameters</label>
             <input type="text" class="form-control" name="CommandParameters"
-              value="{{ command_template.command_parameters|default:'' }}" disabled readonly>
+              value="{{command_template.command_parameters|default:''}}" disabled readonly>
           </div>
           <div class="col-md-3 d-flex align-items-center">
             <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" name="IsGeneric" {% if command_template.is_generic %}checked{% endif %} disabled readonly>
+              <input class="form-check-input" type="checkbox" name="IsGeneric" {%if command_template.is_generic%}checked{%endif%} disabled readonly>
               <label class="form-check-label">Is Generic</label>
             </div>
           </div>
-          {% if command_template %}
+          {%if command_template%}
           <div class="col-md-3 d-flex align-items-center">
             <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" name="IsEnabled" {% if command_template.is_enabled %}checked{% endif %}>
+              <input class="form-check-input" type="checkbox" name="IsEnabled" {%if command_template.is_enabled%}checked{%endif%}>
               <label class="form-check-label">Is Enabled</label>
             </div>
           </div>
-          {% endif %}
+          {%endif%}
           <div class="col-md-3">
             <label class="form-label">Cluster Node Type</label>
             <select class="form-control" name="ClusterNodeTypeId">
-              <option value="0" {% if command_template.cluster_node_type_id|default:0 == 0 %}selected{% endif %}>-- Select
+              <option value="0" {%if command_template.cluster_node_type_id|default:0 == 0%}selected{%endif%}>-- Select
                 Node Type --</option>
 
               {# Seskupení podle názvu clusteru #}
-              {% regroup node_types by cluster_name as cluster_list %}
+              {%regroup node_types by cluster_name as cluster_list%}
 
-              {% for cluster in cluster_list %}
-              <optgroup label="Cluster: {{ cluster.grouper }}">
-                {% for node_type in cluster.list %}
-                <option value="{{ node_type.id }}" {% if command_template.cluster_node_type_id|default:0 == node_type.id %}selected{% endif %}>
-                  {{ node_type.name }} (Cluster: {{ cluster.grouper }})
+              {%for cluster in cluster_list%}
+              <optgroup label="Cluster: {{cluster.grouper}}">
+                {%for node_type in cluster.list%}
+                <option value="{{node_type.id}}" {%if command_template.cluster_node_type_id|default:0 == node_type.id%}selected{%endif%}>
+                  {{node_type.name}} (Cluster: {{cluster.grouper}})
                 </option>
-                {% endfor %}
+                {%endfor%}
               </optgroup>
-              {% endfor %}
+              {%endfor%}
             </select>
           </div>
-          {% if false %}
+          {%if false%}
           <div class="col-md-3">
             <label class="form-label">Created From Generic Template ID</label>
             <input type="number" class="form-control" name="CreatedFromGenericTemplateId"
-              value="{{ command_template.created_from_generic_template_id|default:0 }}" disabled readonly>
+              value="{{command_template.created_from_generic_template_id|default:0}}" disabled readonly>
           </div>
-          {% endif %}
+          {%endif%}
         </div>
         <div class="mt-4 d-flex justify-content-between">
-          {% if command_template %}
+          {%if command_template%}
           <button type="submit" class="btn btn-primary">Save</button>
-          {% else %}
+          {%else%}
           <button type="submit" class="btn btn-primary">Create new</button>
-          {% endif %}
-          <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-secondary">Back</a>
+          {%endif%}
+          <a href="{%url 'project_detail' project.id%}?tab=commandtemplates" class="btn btn-secondary">Back</a>
         </div>
       </form>
     </div>
   </div>
 
   <!-- Template Parameters Table -->
-  {% if not command_template %}
+  {%if not command_template%}
   <div class="d-flex justify-content-center align-items-center">
     <div class="alert alert-info text-center col-12 col-xl-10 mx-auto" role="alert">
       Template parameters can be added after creating the command template.
     </div>
   </div>
-  {% else %}
+  {%else%}
   <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
     <div class="card-header d-flex align-items-center">
       <strong>Template Parameters</strong>
@@ -154,7 +154,7 @@
       </div>
     </div>
     <div class="card-body p-0">
-      {% if command_template.template_parameters %}
+      {%if command_template.template_parameters%}
       <div class="table-responsive">
         <table class="table table-striped mb-0">
           <thead class="table-light">
@@ -167,41 +167,41 @@
             </tr>
           </thead>
           <tbody>
-            {% for param in command_template.template_parameters %}
+            {%for param in command_template.template_parameters%}
             <tr>
-              <td>{{ param.id }}</td>
-              <td>{{ param.identifier }}</td>
-              <td>{{ param.description }}</td>
-              <td>{{ param.query }}</td>
+              <td>{{param.id}}</td>
+              <td>{{param.identifier}}</td>
+              <td>{{param.description}}</td>
+              <td>{{param.query}}</td>
               <td>
                 <button class="btn btn-sm btn-secondary me-2" data-bs-toggle="modal"
                   data-bs-target="#editParameterModal"
-                  onclick="document.querySelector('#editParameterModal input[name=ParameterId]').value='{{ param.id }}'; document.querySelector('#editParameterModal input[name=Identifier]').value='{{ param.identifier }}'; document.querySelector('#editParameterModal input[name=Description]').value='{{ param.description }}'; document.querySelector('#editParameterModal input[name=Query]').value='{{ param.query }}';">Edit</button>
+                  onclick="document.querySelector('#editParameterModal input[name=ParameterId]').value='{{param.id}}'; document.querySelector('#editParameterModal input[name=Identifier]').value='{{param.identifier}}'; document.querySelector('#editParameterModal input[name=Description]').value='{{param.description}}'; document.querySelector('#editParameterModal input[name=Query]').value='{{param.query}}';">Edit</button>
                 <form method="post" class="d-inline">
-                  {% csrf_token %}
+                  {%csrf_token%}
                   <input type="hidden" name="action" value="delete_parameter">
-                  <input type="hidden" name="ParameterId" value="{{ param.id }}">
-                  <input type="hidden" name="CommandTemplateId" value="{{ command_template.id }}">
+                  <input type="hidden" name="ParameterId" value="{{param.id}}">
+                  <input type="hidden" name="CommandTemplateId" value="{{command_template.id}}">
                   <button type="submit" class="btn btn-sm btn-danger"
                     onclick="return confirm('Are you sure you want to delete this parameter?');">Delete</button>
                 </form>
               </td>
             </tr>
-            {% endfor %}
+            {%endfor%}
           </tbody>
         </table>
       </div>
-      {% else %}
+      {%else%}
       <p class="p-3 mb-0">No template parameters available.</p>
-      {% endif %}
+      {%endif%}
     </div>
   </div>
-  {% endif %}
-  {% endif %}
+  {%endif%}
+  {%endif%}
 </div>
 
 <!-- Add Parameter Modal -->
-{% if command_template.project_id != 0 and command_template.project_id != null %}
+{%if command_template.project_id != 0 and command_template.project_id != null%}
 <div class="modal fade" id="addParameterModal" tabindex="-1" aria-labelledby="addParameterModalLabel"
   aria-hidden="true">
   <div class="modal-dialog">
@@ -212,9 +212,9 @@
       </div>
       <div class="modal-body">
         <form method="post" id="addParameterForm">
-          {% csrf_token %}
+          {%csrf_token%}
           <input type="hidden" name="action" value="add_parameter">
-          <input type="hidden" name="CommandTemplateId" value="{{ command_template.id|default:0 }}">
+          <input type="hidden" name="CommandTemplateId" value="{{command_template.id|default:0}}">
           <div id="parameters-container">
             <div class="parameter-form mb-4">
               <div class="mb-3">
@@ -252,23 +252,23 @@
       </div>
       <div class="modal-body">
         <form method="post">
-          {% csrf_token %}
+          {%csrf_token%}
           <input type="hidden" name="action" value="update_parameter">
-          <input type="hidden" name="ParameterId" value="{{ edit_parameter.id|default_if_none:0 }}">
-          <input type="hidden" name="CommandTemplateId" value="{{ command_template.id|default:0 }}">
+          <input type="hidden" name="ParameterId" value="{{edit_parameter.id|default_if_none:0}}">
+          <input type="hidden" name="CommandTemplateId" value="{{command_template.id|default:0}}">
           <div class="mb-3">
             <label class="form-label">Identifier</label>
             <input type="text" class="form-control" name="Identifier"
-              value="{{ edit_parameter.identifier|default_if_none:'' }}" required>
+              value="{{edit_parameter.identifier|default_if_none:''}}" required>
           </div>
           <div class="mb-3">
             <label class="form-label">Description</label>
             <input type="text" class="form-control" name="Description"
-              value="{{ edit_parameter.description|default_if_none:'' }}">
+              value="{{edit_parameter.description|default_if_none:''}}">
           </div>
           <div class="mb-3">
             <label class="form-label">Query</label>
-            <input type="text" class="form-control" name="Query" value="{{ edit_parameter.query|default_if_none:'' }}">
+            <input type="text" class="form-control" name="Query" value="{{edit_parameter.query|default_if_none:''}}">
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -279,7 +279,7 @@
     </div>
   </div>
 </div>
-{% endif %}
+{%endif%}
 
 <script>
   function addParameterForm() {
@@ -304,4 +304,4 @@
     container.insertAdjacentHTML('beforeend', newForm);
   }
 </script>
-{% endblock %}
+{%endblock%}

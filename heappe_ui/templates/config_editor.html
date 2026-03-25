@@ -1,9 +1,9 @@
-{% extends "base.html" %}
-{% load static %}
+{%extends "base.html"%}
+{%load static%}
 
-{% block title %}Configuration Wizard{% endblock %}
+{%block title%}Configuration Wizard{%endblock%}
 
-{% block content %}
+{%block content%}
 <div id="app" class="container py-5">
     <div class="row justify-content-center">
         <div class="col-12 col-xl-10">
@@ -273,7 +273,7 @@
         el: '#app',
         delimiters: ['${', '}'],
         data: {
-            config: {{ config| safe }},
+            config: {{config| safe}},
         currentStep: 0,
         requiredFields: [
         'ConnectionStrings.MiddlewareContext',
@@ -386,4 +386,4 @@
     }
     });
 </script>
-{% endblock %}
+{%endblock%}

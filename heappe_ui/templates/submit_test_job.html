@@ -1,12 +1,12 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block content %}
+{%block content%}
 
 <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
   <div class="card-header"><strong>Submit Job</strong></div>
   <div class="card-body">
     <form method="post">
-      {% csrf_token %}
+      {%csrf_token%}
       <input type="hidden" name="action" value="submit_job">
 
       <!-- Job Level Fields -->
@@ -18,16 +18,16 @@
 
       <div class="mb-3">
         <label for="project" class="form-label">Project</label>
-        <input type="hidden" class="form-control" id="ProjectId" name="ProjectId" value="{{ project.id }}">
+        <input type="hidden" class="form-control" id="ProjectId" name="ProjectId" value="{{project.id}}">
         <input type="text" class="form-control" id="Project" name="Project" readonly disabled
-          value="{{ project.name }}">
+          value="{{project.name}}">
       </div>
 
       <div class="mb-3">
         <label for="cluster" class="form-label">Cluster</label>
-        <input type="hidden" class="form-control" id="ClusterId" name="ClusterId" value="{{ cluster.id }}">
+        <input type="hidden" class="form-control" id="ClusterId" name="ClusterId" value="{{cluster.id}}">
         <input type="text" class="form-control" id="Cluster" name="Cluster" readonly disabled
-          value="{{ cluster.name }}">
+          value="{{cluster.name}}">
       </div>
 
       <div class="mb-3">
@@ -77,38 +77,38 @@
       <div class="mb-3">
         <label for="node_type" class="form-label">Queue</label>
         <input type="hidden" class="form-control" id="ClusterNodeTypeId" name="ClusterNodeTypeId"
-          value="{{ node_type.id }}">
+          value="{{node_type.id}}">
         <input type="text" class="form-control" id="ClusterNodeType" name="ClusterNodeType" readonly disabled
-          value="{{ node_type.name }}">
+          value="{{node_type.name}}">
       </div>
 
       <div class="mb-3">
         <label class="form-label">Command Template</label>
-        <input type="hidden" name="CommandTemplateId" value="{{ command_template.id }}">
-        <input type="text" class="form-control" readonly disabled value="{{ command_template.name }}">
+        <input type="hidden" name="CommandTemplateId" value="{{command_template.id}}">
+        <input type="text" class="form-control" readonly disabled value="{{command_template.name}}">
       </div>
 
       <!-- Command Template Parameters -->
-      {% if command_template.template_parameters %}
+      {%if command_template.template_parameters%}
       <h6 class="mb-3">Command Template Parameters</h6>
-      {% for param in command_template.template_parameters %}
+      {%for param in command_template.template_parameters%}
       <div class="mb-3">
-        <label for="param_{{ param.identifier }}" class="form-label">{{ param.description|default:param.identifier }}</label>
-        {% if param.query %}
+        <label for="param_{{param.identifier}}" class="form-label">{{param.description|default:param.identifier}}</label>
+        {%if param.query%}
         <!-- For now, use text input; handle query-based options (e.g., select) in the view by pre-processing options as a list -->
-        <input type="text" class="form-control" id="param_{{ param.identifier }}"
-          name="TemplateParameters[{{ param.identifier }}]"
-          placeholder="Enter value for {{ param.description|default:param.identifier }} (query: {{ param.query }})"
+        <input type="text" class="form-control" id="param_{{param.identifier}}"
+          name="TemplateParameters[{{param.identifier}}]"
+          placeholder="Enter value for {{param.description|default:param.identifier}} (query: {{param.query}})"
           required>
-        <small class="form-text text-muted">Query hint: {{ param.query }}</small>
-        {% else %}
-        <input type="text" class="form-control" id="param_{{ param.identifier }}"
-          name="TemplateParameters[{{ param.identifier }}]"
-          placeholder="Enter value for {{ param.description|default:param.identifier }}" required>
-        {% endif %}
+        <small class="form-text text-muted">Query hint: {{param.query}}</small>
+        {%else%}
+        <input type="text" class="form-control" id="param_{{param.identifier}}"
+          name="TemplateParameters[{{param.identifier}}]"
+          placeholder="Enter value for {{param.description|default:param.identifier}}" required>
+        {%endif%}
       </div>
-      {% endfor %}
-      {% endif %}
+      {%endfor%}
+      {%endif%}
 
       <div class="form-check mb-3">
         <input class="form-check-input" type="checkbox" value="true" id="exclusive" name="IsExclusive">
@@ -125,4 +125,4 @@
   </div>
 </div>
 
-{% endblock %}
+{%endblock%}

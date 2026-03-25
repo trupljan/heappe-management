@@ -1,36 +1,36 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block title %}{{ queue_group.name }}{% endblock %}
+{%block title%}{{queue_group.name}}{%endblock%}
 
-{% block content %}
+{%block content%}
 
-{% if queue_group %}
+{%if queue_group%}
 <!-- Navbar -->
 <nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
   <div class="container justify-content-center">
     <ul class="nav nav-pills">
       <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Queue Group Detail</a>
+        <a class="nav-link {%if active_tab == 'detail'%}active{%endif%}" href="?tab=detail">Queue Group Detail</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'queues' %}active{% endif %}" href="?tab=queues">Queues</a>
+        <a class="nav-link {%if active_tab == 'queues'%}active{%endif%}" href="?tab=queues">Queues</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'formulas' %}active{% endif %}" href="?tab=formulas">Formulas</a>
+        <a class="nav-link {%if active_tab == 'formulas'%}active{%endif%}" href="?tab=formulas">Formulas</a>
       </li>
       <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'projects' %}active{% endif %}" href="?tab=projects">Projects</a>
+        <a class="nav-link {%if active_tab == 'projects'%}active{%endif%}" href="?tab=projects">Projects</a>
       </li>
     </ul>
   </div>
 </nav>
-{% endif %}
+{%endif%}
 
-<h1 class="mb-4 text-center">{{ queue_group.name }}</h1>
+<h1 class="mb-4 text-center">{{queue_group.name}}</h1>
 
 <div class="container">
 
-  {% if active_tab == 'detail' %}
+  {%if active_tab == 'detail'%}
   <!-- Queue Group Detail Form -->
   <div class="col-12 col-xl-10 mx-auto card mb-4 shadow-sm">
     <div class="card-header d-flex align-items-center">
@@ -39,22 +39,22 @@
     </div>
     <div class="card-body">
       <form method="post">
-        {% csrf_token %}
+        {%csrf_token%}
         <div class="row g-3">
 
           <div class="col-md-3">
             <label class="form-label">Id</label>
-            <input type="number" class="form-control" name="Id" value="{{ queue_group.id }}" readonly disabled>
+            <input type="number" class="form-control" name="Id" value="{{queue_group.id}}" readonly disabled>
           </div>
 
           <div class="col-md-9">
             <label class="form-label">Name</label>
-            <input type="text" class="form-control" name="Name" value="{{ queue_group.name }}" required>
+            <input type="text" class="form-control" name="Name" value="{{queue_group.name}}" required>
           </div>
 
           <div class="col-md-12">
             <label class="form-label">Description</label>
-            <textarea class="form-control" name="Description" rows="2">{{ queue_group.description }}</textarea>
+            <textarea class="form-control" name="Description" rows="2">{{queue_group.description}}</textarea>
           </div>
 
           <div class="col-md-6">
@@ -78,8 +78,8 @@
             const customInput = document.getElementById('customAllocationInput');
 
             // hodnoty z backendu
-            const backendValue = "{{ queue_group.allocation_type }}";
-            const customValue = "{{ queue_group.allocation_type_custom }}";
+            const backendValue = "{{queue_group.allocation_type}}";
+            const customValue = "{{queue_group.allocation_type_custom}}";
             console.log(backendValue)
 
             // kontrola a nastavení při načtení
@@ -106,37 +106,37 @@
           <div class="col-md-6">
             <label class="form-label">Validity From</label>
             <input type="datetime-local" class="form-control" name="ValidityFrom"
-              value="{{ queue_group.validity_from }}">
+              value="{{queue_group.validity_from}}">
           </div>
 
           <div class="col-md-6">
             <label class="form-label">Validity To</label>
-            <input type="datetime-local" class="form-control" name="ValidityTo" value="{{ queue_group.validity_to }}">
+            <input type="datetime-local" class="form-control" name="ValidityTo" value="{{queue_group.validity_to}}">
           </div>
 
         </div>
 
         <div class="mt-4 d-flex justify-content-between">
-          {% if queue_group %}
+          {%if queue_group%}
           <input type="hidden" name="action" value="queue_group_modify">
           <button type="submit" class="btn btn-primary">Save</button>
-          {% else %}
+          {%else%}
           <input type="hidden" name="action" value="queue_group_create">
           <button type="submit" class="btn btn-primary">Create</button>
-          {% endif %}
-          <a href="{% url 'queue_groups' %}" class="btn btn-secondary">Back</a>
+          {%endif%}
+          <a href="{%url 'queue_groups'%}" class="btn btn-secondary">Back</a>
         </div>
       </form>
     </div>
   </div>
 
-  {% elif active_tab == 'queues' %}
-  {% include "queues_table.html" %}
-  {% elif active_tab == 'formulas' %}
-  {% include "formulas_table.html" %}
-  {% elif active_tab == 'projects' %}
-  {% include "projects_table.html" %}
-  {% endif %}
+  {%elif active_tab == 'queues'%}
+  {%include "queues_table.html"%}
+  {%elif active_tab == 'formulas'%}
+  {%include "formulas_table.html"%}
+  {%elif active_tab == 'projects'%}
+  {%include "projects_table.html"%}
+  {%endif%}
 </div>
 
-{% endblock %}
+{%endblock%}

@@ -1,19 +1,19 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block content %}
+{%block content%}
 <div class="container py-4">
-    <h2 class="mb-4 text-center">Queue groups for {{ project.name }} project</h2>
+    <h2 class="mb-4 text-center">Queue groups for {{project.name}} project</h2>
 
     <div class="mb-4">
     <form method="POST" id="add-queue-group-form" class="row g-2 align-items-end justify-content-end">
-        {% csrf_token %}
+        {%csrf_token%}
         <div class="col-md-2">
             <label for="queueGroupSelect" class="form-label">Queue Group</label>
             <select class="form-select" id="queueGroupSelect" name="ClusterNodeTypeAggregationId" required>
                 <option value="">Select a queue group</option>
-                {% for group in queue_groups %}
-                    <option value="{{ group.id }}">{{ group.name }}</option>
-                {% endfor %}
+                {%for group in queue_groups%}
+                    <option value="{{group.id}}">{{group.name}}</option>
+                {%endfor%}
             </select>
         </div>
         <div class="col-md-3">
@@ -21,15 +21,15 @@
             <div class="input-group">
                 <input type="number" class="form-control" name="AllocationAmount" placeholder="Amount" required>
                 <span class="input-group-text  bg-light text-dark">
-                    {% if project.usage_type == 1 %} NodeHours
-                    {% elif project.usage_type == 2 %} CoreHours
-                    {% endif %}
+                    {%if project.usage_type == 1%} NodeHours
+                    {%elif project.usage_type == 2%} CoreHours
+                    {%endif%}
                 </span>
             </div>
         </div>
 
 
-        <input type="hidden" name="ProjectId" value="{{ project_id }}">
+        <input type="hidden" name="ProjectId" value="{{project_id}}">
         <input type="hidden" name="action" value="assign-queue-group-to-project">
         <div class="col-md-1">
             <button type="submit" class="btn btn-primary w-100">Assign</button>
@@ -39,32 +39,32 @@
 
 
     <div class="row">
-        {% for p_agg in project_aggregations %}
+        {%for p_agg in project_aggregations%}
         <div class="col-md-6">
             <div class="card shadow-sm mb-4">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <strong>{{ p_agg.group.name }}</strong>
-                    <span class="badge bg-secondary">{{ p_agg.project.name }}</span>
-                    <span class="badge bg-dark">{{ p_agg.allocation_amount }} {% if p_agg.project.usage_type == 1 %} NodeHours {% elif p_agg.project.usage_type == 2 %} CoreHours {% endif %}</span>
+                    <strong>{{p_agg.group.name}}</strong>
+                    <span class="badge bg-secondary">{{p_agg.project.name}}</span>
+                    <span class="badge bg-dark">{{p_agg.allocation_amount}} {%if p_agg.project.usage_type == 1%} NodeHours {%elif p_agg.project.usage_type == 2%} CoreHours {%endif%}</span>
                     <form method="POST" id="" class="row g-2 align-items-end justify-content-end">
-                        {% csrf_token %}
-                         <input type="hidden" name="MappingId" value="{{ p_agg.cluster_node_type_aggregation_id }}">
+                        {%csrf_token%}
+                         <input type="hidden" name="MappingId" value="{{p_agg.cluster_node_type_aggregation_id}}">
                             <input type="hidden" name="action" value="unassign_queue_group_from_project">
-                            <input type="hidden" name="ProjectId" value="{{ project_id }}">
+                            <input type="hidden" name="ProjectId" value="{{project_id}}">
                             <button type="submit" class="btn btn-danger btn-sm">Unassign</button>
                     </form>
                 </div>
                 <div class="card-body p-0">
                     <div class="card-header  align-items-center">
-                      {% for queue in  p_agg.queues %}
-                          <span class="badge rounded-pill bg-primary mr-1">{{ queue.name }}</span>
+                      {%for queue in p_agg.queues%}
+                          <span class="badge rounded-pill bg-primary mr-1">{{queue.name}}</span>
 
-                      {% endfor %}
+                      {%endfor%}
                     </div>
                 </div>
 
                 <div class="card-body p-0">
-                    {% if p_agg.group.accountings %}
+                    {%if p_agg.group.accountings%}
                     <div class="table-responsive">
                         <table class="table table-sm table-striped mb-0">
                             <thead class="table-light">
@@ -76,32 +76,32 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for accounting in p_agg.group.accountings %}
+                                {%for accounting in p_agg.group.accountings%}
                                 <tr>
-                                    <td>{{ accounting.formula }}</td>
-                                    <td>{% if accounting.validity_from %}{{ accounting.validity_from }}{% else %}—{% endif %}</td>
-                                    <td>{% if accounting.validity_to %}{{ accounting.validity_to }}{% else %}—{% endif %}</td>
+                                    <td>{{accounting.formula}}</td>
+                                    <td>{%if accounting.validity_from%}{{accounting.validity_from}}{%else%}—{%endif%}</td>
+                                    <td>{%if accounting.validity_to%}{{accounting.validity_to}}{%else%}—{%endif%}</td>
                                     <td>
-                                        {% if accounting.is_active %}
+                                        {%if accounting.is_active%}
                                             <span class="badge bg-success">Active</span>
-                                        {% else %}
+                                        {%else%}
                                             <span class="badge bg-secondary">Inactive</span>
-                                        {% endif %}
+                                        {%endif%}
                                     </td>
                                 </tr>
-                                {% endfor %}
+                                {%endfor%}
                             </tbody>
                         </table>
                     </div>
-                    {% else %}
+                    {%else%}
                         <p class="p-3 text-center mb-0">No accountings</p>
-                    {% endif %}
+                    {%endif%}
                 </div>
             </div>
         </div>
-        {% empty %}
+        {%empty%}
             <p class="text-center">No project aggregations available.</p>
-        {% endfor %}
+        {%endfor%}
     </div>
 </div>
-{% endblock %}
+{%endblock%}

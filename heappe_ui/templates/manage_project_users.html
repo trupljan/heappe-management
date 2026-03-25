@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+{%extends "base.html"%}
 
-{% block content %}
+{%block content%}
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 
 <style>
@@ -17,57 +17,57 @@
 
 <div class="container-fluid mt-3">
 
-    {% if messages %}
+    {%if messages%}
     <div class="messages mb-4">
-        {% for message in messages %}
-        <div class="alert {% if 'adaptor-user-api-key' in message.tags %}alert-primary{% else %}alert-info{% endif %} alert-dismissible fade show shadow-sm border-0" role="alert">
-            {% if "adaptor-user-api-key" in message.tags %}
+        {%for message in messages%}
+        <div class="alert {%if 'adaptor-user-api-key' in message.tags%}alert-primary{%else%}alert-info{%endif%} alert-dismissible fade show shadow-sm border-0" role="alert">
+            {%if "adaptor-user-api-key" in message.tags%}
                 <h5 class="alert-heading fw-bold"><i class="fas fa-key me-2"></i>API KEY GENERATED</h5>
                 <p class="mb-0 small text-uppercase fw-bold">Important: Copy this key now. You will not see it again.</p>
-                <div class="api-key-box" id="apiKeyContent">{{ message|safe }}</div>
+                <div class="api-key-box" id="apiKeyContent">{{message|safe}}</div>
                 <button class="btn btn-sm btn-dark mt-2" onclick="copyToClipboard('apiKeyContent')">
                     <i class="fas fa-copy me-1"></i> Copy Key to Clipboard
                 </button>
-            {% else %}
-                <i class="fas fa-info-circle me-2"></i> {{ message }}
-            {% endif %}
+            {%else%}
+                <i class="fas fa-info-circle me-2"></i> {{message}}
+            {%endif%}
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
-        {% endfor %}
+        {%endfor%}
     </div>
-    {% endif %}
+    {%endif%}
 
     <div class="d-flex justify-content-between align-items-center bg-white p-3 mb-4 shadow-sm rounded border-start border-4 border-primary">
         <div>
             <h4 class="mb-0 fw-bold text-dark"><i class="fas fa-users-cog me-2 text-primary"></i>External User Management</h4>
-            {% if project %}
-                <span class="text-muted small">Project: <strong class="text-primary">{{ project.name }}</strong> (ID: {{ project.id }})</span>
-            {% endif %}
+            {%if project%}
+                <span class="text-muted small">Project: <strong class="text-primary">{{project.name}}</strong> (ID: {{project.id}})</span>
+            {%endif%}
         </div>
         <div class="d-flex align-items-center gap-2">
             <button type="button" class="btn btn-success btn-sm fw-bold px-3 shadow-sm" data-bs-toggle="modal" data-bs-target="#createUserModal">
                 <i class="fas fa-user-plus me-1"></i> Create User
             </button>
             <div class="text-end ms-2">
-                <select id="projectSelector" class="form-select border-primary fw-bold form-select-sm shadow-sm" data-base-url="{% url 'manage_project_adaptor_users_base' %}" style="min-width: 220px;">
+                <select id="projectSelector" class="form-select border-primary fw-bold form-select-sm shadow-sm" data-base-url="{%url 'manage_project_adaptor_users_base'%}" style="min-width: 220px;">
                     <option value="">-- Switch Project Context --</option>
-                    {% for p in all_projects %}
-                    <option value="{{ p.id }}" {% if project and p.id == project.id %}selected{% endif %}>{{ p.name }}</option>
-                    {% endfor %}
+                    {%for p in all_projects%}
+                    <option value="{{p.id}}" {%if project and p.id == project.id%}selected{%endif%}>{{p.name}}</option>
+                    {%endfor%}
                 </select>
             </div>
         </div>
     </div>
 
-    {% if project %}
+    {%if project%}
     <div class="card mb-4 shadow-sm border-0">
         <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 border-bottom">
             <ul class="nav nav-tabs card-header-tabs border-bottom-0" id="userTabs" role="tablist">
                 <li class="nav-item">
-                    <button class="nav-link active text-uppercase" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button" role="tab">In Project ({{ adaptor_users|length }})</button>
+                    <button class="nav-link active text-uppercase" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button" role="tab">In Project ({{adaptor_users|length}})</button>
                 </li>
                 <li class="nav-item">
-                    <button class="nav-link text-uppercase" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button" role="tab">Available Accounts ({{ available_users|length }})</button>
+                    <button class="nav-link text-uppercase" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button" role="tab">Available Accounts ({{available_users|length}})</button>
                 </li>
             </ul>
         </div>
@@ -85,30 +85,30 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for user in adaptor_users %}
+                                {%for user in adaptor_users%}
                                 <tr>
-                                    <td class="fw-bold text-dark">{{ user.username }}</td>
+                                    <td class="fw-bold text-dark">{{user.username}}</td>
                                     <td>
                                         <div class="d-flex flex-wrap gap-2">
-                                            {% for role in user.roles %}
+                                            {%for role in user.roles%}
                                             <div class="role-badge">
-                                                <span class="role-name">{{ role }}</span>
+                                                <span class="role-name">{{role}}</span>
                                                 <form method="POST" class="m-0 p-0">
-                                                    {% csrf_token %}
+                                                    {%csrf_token%}
                                                     <input type="hidden" name="action" value="unassign">
-                                                    <input type="hidden" name="username" value="{{ user.username }}">
-                                                    <input type="hidden" name="role_name" value="{{ role }}">
-                                                    <button type="submit" class="btn-close" style="font-size: 0.5rem;" onclick="return confirm('Remove {{ role }} from {{ user.username }}?');"></button>
+                                                    <input type="hidden" name="username" value="{{user.username}}">
+                                                    <input type="hidden" name="role_name" value="{{role}}">
+                                                    <button type="submit" class="btn-close" style="font-size: 0.5rem;" onclick="return confirm('Remove {{role}} from {{user.username}}?');"></button>
                                                 </form>
                                             </div>
-                                            {% endfor %}
+                                            {%endfor%}
                                         </div>
                                     </td>
                                     <td class="text-end">
-                                        <a href="{% url 'adaptor_user_detail' user.username %}" class="btn btn-sm btn-outline-secondary px-3 py-1">Detail</a>
+                                        <a href="{%url 'adaptor_user_detail' user.username%}" class="btn btn-sm btn-outline-secondary px-3 py-1">Detail</a>
                                     </td>
                                 </tr>
-                                {% endfor %}
+                                {%endfor%}
                             </tbody>
                         </table>
                     </div>
@@ -124,14 +124,14 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for user in available_users %}
+                                {%for user in available_users%}
                                 <tr>
-                                    <td class="fw-bold text-dark">{{ user.username }}</td>
+                                    <td class="fw-bold text-dark">{{user.username}}</td>
                                     <td class="text-end">
                                         <form method="POST" class="input-group input-group-sm justify-content-end">
-                                            {% csrf_token %}
+                                            {%csrf_token%}
                                             <input type="hidden" name="action" value="assign">
-                                            <input type="hidden" name="username" value="{{ user.username }}">
+                                            <input type="hidden" name="username" value="{{user.username}}">
                                             <select name="role_id" class="form-select border-secondary-subtle w-auto" required>
                                                 <option value="" disabled selected>Select Role...</option>
                                                 <option value="1">Administrator</option>
@@ -143,7 +143,7 @@
                                         </form>
                                     </td>
                                 </tr>
-                                {% endfor %}
+                                {%endfor%}
                             </tbody>
                         </table>
                     </div>
@@ -151,15 +151,15 @@
             </div>
         </div>
     </div>
-    {% endif %}
+    {%endif%}
 </div>
 
 <div class="modal fade" id="createUserModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog">
         <div class="modal-content text-dark">
-            <form id="quickCreateForm" method="POST" action="{% url 'adaptor_user_create' %}">
-                {% csrf_token %}
-                <input type="hidden" name="next" value="{{ request.path }}">
+            <form id="quickCreateForm" method="POST" action="{%url 'adaptor_user_create'%}">
+                {%csrf_token%}
+                <input type="hidden" name="next" value="{{request.path}}">
 
                 <div class="modal-header bg-dark text-white py-2">
                     <h5 class="modal-title small fw-bold">CREATE SERVICE ACCOUNT</h5>
@@ -220,4 +220,4 @@
         }
     });
 </script>
-{% endblock %}
+{%endblock%}
