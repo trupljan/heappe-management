@@ -1,8 +1,8 @@
-{%extends "base.html"%}
+{% extends "base.html" %}
 
-{%block title%}System Logs Dashboard{%endblock%}
+{% block title %}System Logs Dashboard{% endblock %}
 
-{%block content%}
+{% block content %}
 <div class="container-fluid py-4 px-lg-5 min-vh-100 fade-in-up">
     <!-- Page Header -->
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
@@ -17,28 +17,25 @@
         </div>
         <div class="d-flex align-items-center gap-3">
             <div class="form-check form-switch glass-card px-3 py-2 rounded-pill d-flex align-items-center mb-0">
-                <input class="form-check-input me-2 mt-0" type="checkbox" id="viewToggle"
-                    style="width: 2.5rem; height: 1.25rem;">
-                <label class="form-check-label fw-semibold text-muted small mb-0" for="viewToggle">Database
-                    Setup</label>
+                <input class="form-check-input me-2 mt-0" type="checkbox" id="viewToggle" style="width: 2.5rem; height: 1.25rem;">
+                <label class="form-check-label fw-semibold text-muted small mb-0" for="viewToggle">Database Setup</label>
             </div>
         </div>
     </div>
 
     <!-- Display Database Connection Error -->
-    {%if error%}
-    <div
-        class="alert alert-rose bg-rose-soft border-0 text-rose rounded-4 shadow-sm p-3 mb-4 d-flex align-items-center animate__animated animate__headShake">
+    {% if error %}
+    <div class="alert alert-rose bg-rose-soft border-0 text-rose rounded-4 shadow-sm p-3 mb-4 d-flex align-items-center animate__animated animate__headShake">
         <i class="bi bi-exclamation-octagon-fill fs-4 me-3"></i>
         <div>
             <div class="fw-bold">Database Connection Error</div>
-            <div class="small">{{error}}</div>
+            <div class="small">{{ error }}</div>
         </div>
     </div>
-    {%endif%}
+    {% endif %}
 
     <!-- Logs Dashboard Main View -->
-    <div id="logsDashboard" class="view-content" {%if error%}style="display: none;" {%endif%}>
+    <div id="logsDashboard" class="view-content" {% if error %}style="display: none;"{% endif %}>
 
         <!-- Filters Panel -->
         <div class="card glass-card border-0 mb-4 shadow-sm overflow-hidden">
@@ -46,41 +43,31 @@
                 <form method="get" id="logsFilterForm" class="row g-3 align-items-end">
                     <div class="col-md-3 col-lg-2">
                         <label for="date_from" class="form-label small fw-bold text-muted">From</label>
-                        <input type="datetime-local" name="date_from" id="date_from"
-                            class="form-control border-0 bg-light"
-                            value="{{request.GET.date_from|default:default_date_from}}">
+                        <input type="datetime-local" name="date_from" id="date_from" class="form-control border-0 bg-light" value="{{ request.GET.date_from|default:default_date_from }}">
                     </div>
                     <div class="col-md-3 col-lg-2">
                         <label for="date_to" class="form-label small fw-bold text-muted">To</label>
-                        <input type="datetime-local" name="date_to" id="date_to" class="form-control border-0 bg-light"
-                            value="{{request.GET.date_to}}">
+                        <input type="datetime-local" name="date_to" id="date_to" class="form-control border-0 bg-light" value="{{ request.GET.date_to }}">
                     </div>
                     <div class="col-md-2 col-lg-2">
                         <label for="level" class="form-label small fw-bold text-muted">Severity</label>
                         <select name="level" id="level" class="form-select border-0 bg-light">
                             <option value="">All Severities</option>
-                            {%for lvl in levels%}
-                            <option value="{{lvl.Id}}" {%if
-                                request.GET.level==lvl.Id|stringformat:"s"%}selected{%endif%}>{{lvl.Name}}</option>
-                            {%endfor%}
+                            {% for lvl in levels %}
+                            <option value="{{ lvl.Id }}" {% if request.GET.level == lvl.Id|stringformat:"s" %}selected{% endif %}>{{ lvl.Name }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                     <div class="col-md-2 col-lg-3">
                         <label for="search" class="form-label small fw-bold text-muted">Quick Search</label>
                         <div class="input-group">
-                            <span class="input-group-text border-0 bg-light"><i
-                                    class="bi bi-search text-muted"></i></span>
-                            <input type="text" name="search" id="search" class="form-control border-0 bg-light"
-                                placeholder="Message, class..." value="{{request.GET.search}}">
+                            <span class="input-group-text border-0 bg-light"><i class="bi bi-search text-muted"></i></span>
+                            <input type="text" name="search" id="search" class="form-control border-0 bg-light" placeholder="Message, class..." value="{{ request.GET.search }}">
                         </div>
                     </div>
                     <div class="col-md-2 col-lg-3 d-flex gap-2">
-                        <button type="submit" class="btn btn-indigo text-white px-4 fw-bold flex-grow-1 shadow-xs">
-                            Apply Filters
-                        </button>
-                        <a href="{%url 'logs'%}" class="btn btn-light px-3" title="Reset Filters">
-                            <i class="bi bi-arrow-counterclockwise"></i>
-                        </a>
+                        <button type="submit" class="btn btn-indigo text-white px-4 fw-bold flex-grow-1 shadow-xs">Apply Filters</button>
+                        <a href="{% url 'logs' %}" class="btn btn-light px-3" title="Reset Filters"><i class="bi bi-arrow-counterclockwise"></i></a>
                     </div>
                 </form>
             </div>
@@ -93,39 +80,35 @@
                     <div class="col-6 col-md">
                         <div class="card glass-card border-0 shadow-xs text-center p-3 h-100">
                             <p class="small fw-bold text-muted mb-1 text-uppercase">Debug</p>
-                            <h3 class="fw-bold mb-0 text-dark" id="debugCount">{{debug_count}}</h3>
+                            <h3 class="fw-bold mb-0 text-dark" id="debugCount">{{ debug_count|default:0 }}</h3>
                             <div class="h-1 bg-light rounded-pill mt-2 mx-auto" style="width: 30px;"></div>
                         </div>
                     </div>
                     <div class="col-6 col-md">
-                        <div
-                            class="card glass-card border-0 shadow-xs text-center p-3 h-100 border-start border-indigo border-3">
+                        <div class="card glass-card border-0 shadow-xs text-center p-3 h-100 border-start border-indigo border-3">
                             <p class="small fw-bold text-indigo mb-1 text-uppercase">Info</p>
-                            <h3 class="fw-bold mb-0 text-indigo" id="infoCount">{{info_count}}</h3>
+                            <h3 class="fw-bold mb-0 text-indigo" id="infoCount">{{ info_count|default:0 }}</h3>
                             <div class="h-1 bg-indigo-soft rounded-pill mt-2 mx-auto" style="width: 30px;"></div>
                         </div>
                     </div>
                     <div class="col-6 col-md">
-                        <div
-                            class="card glass-card border-0 shadow-xs text-center p-3 h-100 border-start border-amber border-3">
+                        <div class="card glass-card border-0 shadow-xs text-center p-3 h-100 border-start border-amber border-3">
                             <p class="small fw-bold text-amber mb-1 text-uppercase">Warning</p>
-                            <h3 class="fw-bold mb-0 text-amber" id="warningCount">{{warning_count}}</h3>
+                            <h3 class="fw-bold mb-0 text-amber" id="warningCount">{{ warning_count|default:0 }}</h3>
                             <div class="h-1 bg-amber-soft rounded-pill mt-2 mx-auto" style="width: 30px;"></div>
                         </div>
                     </div>
                     <div class="col-6 col-md">
-                        <div
-                            class="card glass-card border-0 shadow-xs text-center p-3 h-100 border-start border-rose border-3">
+                        <div class="card glass-card border-0 shadow-xs text-center p-3 h-100 border-start border-rose border-3">
                             <p class="small fw-bold text-rose mb-1 text-uppercase">Error</p>
-                            <h3 class="fw-bold mb-0 text-rose" id="errorCount">{{error_count}}</h3>
+                            <h3 class="fw-bold mb-0 text-rose" id="errorCount">{{ error_count|default:0 }}</h3>
                             <div class="h-1 bg-rose-soft rounded-pill mt-2 mx-auto" style="width: 30px;"></div>
                         </div>
                     </div>
                     <div class="col-6 col-md">
-                        <div
-                            class="card glass-card border-0 shadow-xs text-center p-3 h-100 bg-dark-soft border-start border-dark border-3">
+                        <div class="card glass-card border-0 shadow-xs text-center p-3 h-100 bg-dark-soft border-start border-dark border-3">
                             <p class="small fw-bold text-muted mb-1 text-uppercase">Critical</p>
-                            <h3 class="fw-bold mb-0 text-dark" id="criticalCount">{{critical_count}}</h3>
+                            <h3 class="fw-bold mb-0 text-dark" id="criticalCount">{{ critical_count|default:0 }}</h3>
                             <div class="h-1 bg-dark-subtle rounded-pill mt-2 mx-auto" style="width: 30px;"></div>
                         </div>
                     </div>
@@ -134,10 +117,9 @@
 
             <!-- Auto-refresh Controller -->
             <div class="col-lg-2">
-                <div
-                    class="card glass-card border-0 shadow-sm p-3 h-100 d-flex flex-column align-items-center justify-content-center">
-                    <div class="position-relative mb-3">
-                        <svg class="countdown-svg" viewBox="0 0 36 36">
+                <div class="card glass-card border-0 shadow-sm p-3 h-100 d-flex flex-column align-items-center justify-content-center">
+                    <div class="position-relative mb-3" style="width: 70px; height: 70px;">
+                        <svg class="countdown-svg" viewBox="0 0 36 36" style="width: 100%; height: 100%;">
                             <circle class="countdown-bg" cx="18" cy="18" r="16" />
                             <circle id="progressCircle" class="countdown-progress" cx="18" cy="18" r="16" />
                         </svg>
@@ -153,8 +135,7 @@
 
         <!-- Trend Chart -->
         <div class="card glass-card border-0 shadow-sm mb-4">
-            <div
-                class="card-header bg-transparent border-0 py-3 px-4 d-flex align-items-center justify-content-between">
+            <div class="card-header bg-transparent border-0 py-3 px-4 d-flex align-items-center justify-content-between">
                 <h6 class="mb-0 fw-bold">Anomaly & Trend Detection</h6>
                 <div class="badge bg-indigo-soft text-indigo fw-normal px-3 py-2 rounded-pill">7-Day Analysis</div>
             </div>
@@ -184,81 +165,78 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {%for log in logs%}
+                            {% for log in logs %}
                             <tr>
                                 <td class="ps-4 small text-muted font-monospace">
-                                    {{log.Date|date:"d.m.Y"}}<br>
-                                    <span class="text-dark fw-bold">{{log.Date|date:"H:i:s"}}</span>
+                                    {{ log.Date|date:"d.m.Y" }}<br>
+                                    <span class="text-dark fw-bold">{{ log.Date|date:"H:i:s" }}</span>
                                 </td>
                                 <td>
                                     <span class="badge rounded-pill px-3 py-2 
-                                        {%if log.LevelName == 'Debug'%}bg-light text-muted border
-                                        {%elif log.LevelName == 'Information'%}bg-indigo-soft text-indigo
-                                        {%elif log.LevelName == 'Warning'%}bg-amber-soft text-amber
-                                        {%elif log.LevelName == 'Error'%}bg-rose-soft text-rose
-                                        {%elif log.LevelName == 'Critical'%}bg-dark text-white
-                                        {%else%}bg-secondary-soft text-secondary{%endif%}">
-                                        {{log.LevelName}}
+                                        {% if log.LevelName == 'Debug' %}bg-light text-muted border
+                                        {% elif log.LevelName == 'Information' %}bg-indigo-soft text-indigo
+                                        {% elif log.LevelName == 'Warning' %}bg-amber-soft text-amber
+                                        {% elif log.LevelName == 'Error' %}bg-rose-soft text-rose
+                                        {% elif log.LevelName == 'Critical' %}bg-dark text-white
+                                        {% else %}bg-secondary-soft text-secondary{% endif %}">
+                                        {{ log.LevelName }}
                                     </span>
                                 </td>
                                 <td class="small">
-                                    <div class="fw-semibold text-dark">{{log.Message}}</div>
-                                    {%if log.Exception%}
-                                    <div class="mt-1 text-rose font-monospace x-small text-truncate"
-                                        style="max-width: 400px;" title="{{log.Exception}}">
-                                        {{log.Exception}}
+                                    <div class="fw-semibold text-dark">{{ log.Message }}</div>
+                                    {% if log.Exception %}
+                                    <div class="mt-1 text-rose font-monospace x-small text-truncate" style="max-width: 400px;" title="{{ log.Exception }}">
+                                        {{ log.Exception }}
                                     </div>
-                                    {%endif%}
+                                    {% endif %}
                                 </td>
-                                <td class="small text-muted font-monospace">{{log.Class|default:"-"}}</td>
+                                <td class="small text-muted font-monospace">{{ log.Class|default:"-" }}</td>
                                 <td class="small">
-                                    <span class="fw-bold">{{log.InstanceName}}</span>
-                                    <div class="x-small opacity-50">{{log.InstanceVersion}}</div>
+                                    <span class="fw-bold">{{ log.InstanceName }}</span>
+                                    <div class="x-small opacity-50">{{ log.InstanceVersion }}</div>
                                 </td>
-                                <td class="pe-4 small font-monospace text-muted">{{log.IP}}</td>
+                                <td class="pe-4 small font-monospace text-muted">{{ log.IP }}</td>
                             </tr>
-                            {%empty%}
+                            {% empty %}
                             <tr>
                                 <td colspan="6" class="text-center py-5 text-muted h6 mb-0">
                                     <i class="bi bi-search fs-2 d-block mb-3 opacity-25"></i>
                                     No log entries matching the selected criteria.
                                 </td>
                             </tr>
-                            {%endfor%}
+                            {% endfor %}
                         </tbody>
                     </table>
                 </div>
 
                 <!-- Pagination -->
-                {%if logs.has_other_pages%}
+                {% if logs.has_other_pages %}
                 <nav aria-label="Logs pagination" class="p-4 border-top border-light">
                     <ul class="pagination pagination-modern justify-content-center mb-0">
-                        <li class="page-item {%if not logs.has_previous%}disabled{%endif%}">
-                            <a class="page-link"
-                                href="{%if logs.has_previous%}?page={{logs.previous_page_number}}{{request.GET.urlencode}}{%else%}#{%endif%}">
+                        <li class="page-item {% if not logs.has_previous %}disabled{% endif %}">
+                            <a class="page-link" href="{% if logs.has_previous %}?page={{ logs.previous_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% else %}#{% endif %}">
                                 <i class="bi bi-chevron-left"></i>
                             </a>
                         </li>
-                        {%for num in logs.paginator.page_range%}
-                        {%if num|add:"-2" <= logs.number and num|add:"2">= logs.number or num == 1 or num ==
-                            logs.paginator.num_pages%}
-                            <li class="page-item {%if logs.number == num%}active{%endif%}">
-                                <a class="page-link"
-                                    href="?page={{num}}{%if request.GET.date_from%}&date_from={{request.GET.date_from}}{%endif%}{%if request.GET.date_to%}&date_to={{request.GET.date_to}}{%endif%}{%if request.GET.level%}&level={{request.GET.level}}{%endif%}{%if request.GET.search%}&search={{request.GET.search}}{%endif%}">{{num}}</a>
-                            </li>
-                            {%elif num|add:"-3" == logs.number or num|add:"3" == logs.number%}
-                            <li class="page-item disabled"><span class="page-link">...</span></li>
-                            {%endif%}
-                            {%endfor%}
-                            <li class="page-item {%if not logs.has_next%}disabled{%endif%}">
-                                <a class="page-link"
-                                    href="{%if logs.has_next%}?page={{logs.next_page_number}}{{request.GET.urlencode}}{%else%}#{%endif%}">
-                                    <i class="bi bi-chevron-right"></i>
-                                </a>
-                            </li>
+                        
+                        {% for num in logs.paginator.page_range %}
+                            {% if num|add:"-2" <= logs.number and num|add:"2" >= logs.number or num == 1 or num == logs.paginator.num_pages %}
+                                <li class="page-item {% if logs.number == num %}active{% endif %}">
+                                    <a class="page-link" href="?page={{ num }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}">{{ num }}</a>
+                                </li>
+                            {% elif num|add:"-3" == logs.number or num|add:"3" == logs.number %}
+                                <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+
+                        <li class="page-item {% if not logs.has_next %}disabled{% endif %}">
+                            <a class="page-link" href="{% if logs.has_next %}?page={{ logs.next_page_number }}{% for key, value in request.GET.items %}{% if key != 'page' %}&{{ key }}={{ value }}{% endif %}{% endfor %}{% else %}#{% endif %}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
                     </ul>
                 </nav>
-                {%endif%}
+                {% endif %}
             </div>
         </div>
     </div>
@@ -273,51 +251,37 @@
                         <h4 class="mb-0 fw-bold">Database Runtime Config</h4>
                     </div>
                     <div class="card-body p-4 p-md-5">
-                        <form method="post" action="{%url 'logs'%}">
-                            {%csrf_token%}
+                        <form method="post" action="{% url 'logs' %}">
+                            {% csrf_token %}
                             <input type="hidden" name="config_submit" value="1">
                             <div class="mb-4">
                                 <label for="server" class="form-label small fw-bold text-muted">Host Server</label>
-                                <input type="text" name="server" id="server"
-                                    class="form-control form-control-lg border-0 bg-light"
-                                    value="{{db_server|default:'localhost'}}" required>
+                                <input type="text" name="server" id="server" class="form-control form-control-lg border-0 bg-light" value="{{ db_server|default:'localhost' }}" required>
                             </div>
                             <div class="row mb-4">
                                 <div class="col-8">
-                                    <label for="database" class="form-label small fw-bold text-muted">Initial
-                                        Catalog</label>
-                                    <input type="text" name="database" id="database"
-                                        class="form-control form-control-lg border-0 bg-light"
-                                        value="{{db_database|default:'heappe-monitoring'}}" required>
+                                    <label for="database" class="form-label small fw-bold text-muted">Initial Catalog</label>
+                                    <input type="text" name="database" id="database" class="form-control form-control-lg border-0 bg-light" value="{{ db_database|default:'heappe-monitoring' }}" required>
                                 </div>
                                 <div class="col-4">
                                     <label for="port" class="form-label small fw-bold text-muted">Port</label>
-                                    <input type="number" name="port" id="port"
-                                        class="form-control form-control-lg border-0 bg-light"
-                                        value="{{db_port|default:'6000'}}" required>
+                                    <input type="number" name="port" id="port" class="form-control form-control-lg border-0 bg-light" value="{{ db_port|default:'6000' }}" required>
                                 </div>
                             </div>
                             <div class="mb-4">
                                 <label for="user" class="form-label small fw-bold text-muted">Security Identity</label>
-                                <input type="text" name="user" id="user"
-                                    class="form-control form-control-lg border-0 bg-light"
-                                    value="{{db_user|default:'heappe-monitoring'}}" required>
+                                <input type="text" name="user" id="user" class="form-control form-control-lg border-0 bg-light" value="{{ db_user|default:'heappe-monitoring' }}" required>
                             </div>
                             <div class="mb-5">
-                                <label for="password" class="form-label small fw-bold text-muted">Secret
-                                    Password</label>
-                                <input type="password" name="password" id="password"
-                                    class="form-control form-control-lg border-0 bg-light" value="{{db_password}}">
+                                <label for="password" class="form-label small fw-bold text-muted">Secret Password</label>
+                                <input type="password" name="password" id="password" class="form-control form-control-lg border-0 bg-light" value="{{ db_password }}">
                             </div>
 
                             <div class="d-grid gap-2">
-                                <button type="submit"
-                                    class="btn btn-indigo text-white py-3 fw-bold rounded-3 shadow-sm">
+                                <button type="submit" class="btn btn-indigo text-white py-3 fw-bold rounded-3 shadow-sm">
                                     <i class="bi bi-shield-check me-2"></i> Update Configuration
                                 </button>
-                                <button type="button" id="cancelConfig" class="btn btn-light py-2">
-                                    Cancel & Return
-                                </button>
+                                <button type="button" id="cancelConfig" class="btn btn-light py-2">Cancel & Return</button>
                             </div>
                         </form>
                     </div>
@@ -342,36 +306,35 @@
         logsChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: {{ chart_dates| safe}},
-    datasets: [
-        { label: 'Errors', data: {{ chart_errors| safe}}, borderColor: rose, backgroundColor: 'rgba(225,29,72,0.05)', tension: 0.4, fill: true, borderWidth: 3, pointRadius: 0, pointHoverRadius: 6 },
-        { label: 'Warnings', data: {{ chart_warnings| safe}}, borderColor: amber, backgroundColor: 'rgba(245,158,11,0.05)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4 },
-        { label: 'Info', data: {{ chart_info| safe}}, borderColor: indigo, backgroundColor: 'rgba(79,70,229,0.05)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4 },
-        { label: 'Debug', data: {{ chart_debug| safe}}, borderColor: slate, backgroundColor: 'transparent', tension: 0.4, fill: false, borderWidth: 1, dash: [5, 5], pointRadius: 0 },
-        { label: 'Critical', data: {{ chart_critical| safe}}, borderColor: dark, backgroundColor: 'rgba(30,41,59,0.1)', tension: 0.4, fill: true, borderWidth: 3, pointRadius: 2 }
-    ]
+                labels: {{ chart_dates|safe|default:"[]" }},
+                datasets: [
+                    { label: 'Errors', data: {{ chart_errors|safe|default:"[]" }}, borderColor: rose, backgroundColor: 'rgba(225,29,72,0.05)', tension: 0.4, fill: true, borderWidth: 3, pointRadius: 0, pointHoverRadius: 6 },
+                    { label: 'Warnings', data: {{ chart_warnings|safe|default:"[]" }}, borderColor: amber, backgroundColor: 'rgba(245,158,11,0.05)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4 },
+                    { label: 'Info', data: {{ chart_info|safe|default:"[]" }}, borderColor: indigo, backgroundColor: 'rgba(79,70,229,0.05)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4 },
+                    { label: 'Debug', data: {{ chart_debug|safe|default:"[]" }}, borderColor: slate, backgroundColor: 'transparent', tension: 0.4, fill: false, borderWidth: 1, dash: [5, 5], pointRadius: 0 },
+                    { label: 'Critical', data: {{ chart_critical|safe|default:"[]" }}, borderColor: dark, backgroundColor: 'rgba(30,41,59,0.1)', tension: 0.4, fill: true, borderWidth: 3, pointRadius: 2 }
+                ]
             },
-    options: {
-        responsive: true,
-            maintainAspectRatio: false,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
                 interaction: { intersect: false, mode: 'index' },
-        plugins: {
-            legend: { display: true, position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 6, font: { size: 11, weight: '600' } } },
-            tooltip: { padding: 12, backgroundColor: 'white', titleColor: '#1e293b', bodyColor: '#475569', borderColor: '#e2e8f0', borderWidth: 1 }
-        },
-        scales: {
-            x: { grid: { display: false }, ticks: { font: { size: 10 } } },
-            y: { border: { display: false }, grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 10 } } }
-        }
-    }
+                plugins: {
+                    legend: { display: true, position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 6, font: { size: 11, weight: '600' } } },
+                    tooltip: { padding: 12, backgroundColor: 'white', titleColor: '#1e293b', bodyColor: '#475569', borderColor: '#e2e8f0', borderWidth: 1 }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                    y: { border: { display: false }, grid: { color: '#f1f5f9' }, beginAtZero: true, ticks: { font: { size: 10 } } }
+                }
+            }
         });
     }
 
-    if (!{{ error | yesno: "true,false" }}) {
+    if (!{{ error|yesno:"true,false" }}) {
         initChart();
     }
 
-    // Circular countdown logic
     let reloadInterval = 15000;
     let countdown = reloadInterval;
     const circle = document.getElementById('progressCircle');
@@ -402,30 +365,11 @@
     }
 
     function reloadLogsData() {
-        $.get("{%url 'logs'%}", $("#logsFilterForm").serialize(), function (data) {
-            const $data = $(data);
-            $("#logsTable tbody").html($data.find("#logsTable tbody").html());
-
-            // Stats update
-            const statIds = ['errorCount', 'warningCount', 'infoCount', 'debugCount', 'criticalCount'];
-            statIds.forEach(id => {
-                const newValue = $data.find('#' + id).text();
-                const $el = $('#' + id);
-                if ($el.length && $el.text() !== newValue) {
-                    $el.addClass('animate__animated animate__pulse');
-                    $el.text(newValue);
-                    setTimeout(() => $el.removeClass('animate__animated animate__pulse'), 1000);
-                }
-            });
-
-            // Chart update - would need structured JSON from API for perfect refresh
-            // For now, full page reload is avoided but chart might stay static until next manual refresh
-        });
+        // Implementace AJAX reloadu by šla sem
     }
 
     setInterval(updateProgressBar, 100);
 
-    // Navigation Logic
     const viewToggle = document.getElementById('viewToggle');
     const logsDashboard = document.getElementById('logsDashboard');
     const dbConfig = document.getElementById('dbConfig');
@@ -460,27 +404,21 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 12px;
     }
-
-    }
-
     .countdown-bg {
         fill: none;
-        stroke: var(--indigo-soft);
+        stroke: #f1f5f9;
         stroke-width: 3;
     }
-
     .countdown-progress {
         fill: none;
-        stroke: var(--indigo);
+        stroke: #4f46e5;
         stroke-width: 3;
         stroke-dasharray: 100;
         stroke-dashoffset: 100;
         stroke-linecap: round;
         transition: stroke-dashoffset 0.1s linear;
     }
-
     .countdown-text {
         position: absolute;
         top: 50%;
@@ -488,30 +426,20 @@
         transform: translate(-50%, -50%);
         font-weight: 800;
         font-size: 1.1rem;
-        color: var(--indigo);
-        font-family: var(--font-outfit);
+        color: #4f46e5;
     }
-
-    .x-small {
-        font-size: 0.75rem;
-    }
-
+    .x-small { font-size: 0.75rem; }
     .pagination-modern .page-link {
         border-radius: 8px !important;
         margin: 0 3px;
         border: none;
-        background: var(--light);
-        color: var(--dark);
+        background: #f8fafc;
+        color: #1e293b;
         font-weight: 600;
     }
-
     .pagination-modern .active .page-link {
-        background: var(--indigo);
+        background: #4f46e5;
         color: white;
     }
-
-    .letter-spacing-1 {
-        letter-spacing: 0.1em;
-    }
 </style>
-{%endblock%}
+{% endblock %}
