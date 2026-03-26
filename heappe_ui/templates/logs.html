@@ -3,7 +3,7 @@
 {%block title%}System Logs Dashboard{%endblock%}
 
 {%block content%}
-<div class="container-fluid py-4 px-lg-5 min-vh-100">
+<div class="container-fluid py-4 px-lg-5 min-vh-100 fade-in-up">
     <!-- Page Header -->
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <div class="d-flex align-items-center">
@@ -60,7 +60,8 @@
                         <select name="level" id="level" class="form-select border-0 bg-light">
                             <option value="">All Severities</option>
                             {%for lvl in levels%}
-                            <option value="{{lvl.Id}}" {%if request.GET.level==lvl.Id|stringformat:"s"%}selected{%endif%}>{{lvl.Name}}</option>
+                            <option value="{{lvl.Id}}" {%if
+                                request.GET.level==lvl.Id|stringformat:"s"%}selected{%endif%}>{{lvl.Name}}</option>
                             {%endfor%}
                         </select>
                     </div>
@@ -239,7 +240,8 @@
                             </a>
                         </li>
                         {%for num in logs.paginator.page_range%}
- {%if num|add:"-2" <= logs.number and num|add:"2">= logs.number or num == 1 or num == logs.paginator.num_pages%}
+                        {%if num|add:"-2" <= logs.number and num|add:"2">= logs.number or num == 1 or num ==
+                            logs.paginator.num_pages%}
                             <li class="page-item {%if logs.number == num%}active{%endif%}">
                                 <a class="page-link"
                                     href="?page={{num}}{%if request.GET.date_from%}&date_from={{request.GET.date_from}}{%endif%}{%if request.GET.date_to%}&date_to={{request.GET.date_to}}{%endif%}{%if request.GET.level%}&level={{request.GET.level}}{%endif%}{%if request.GET.search%}&search={{request.GET.search}}{%endif%}">{{num}}</a>
@@ -263,9 +265,9 @@
 
     <!-- Database Configuration Panel -->
     <div id="dbConfig" class="view-content d-none">
-        <div class="row justify-content-center">
+        <div class="row justify-content-center pt-5">
             <div class="col-lg-6 col-xl-5">
-                <div class="card glass-card border-0 shadow-lg animate__animated animate__fadeInUp">
+                <div class="card glass-card border-0 shadow-lg">
                     <div class="card-header bg-indigo text-white p-4 text-center">
                         <i class="bi bi-database-gear fs-1 mb-2 d-block"></i>
                         <h4 class="mb-0 fw-bold">Database Runtime Config</h4>
@@ -340,13 +342,13 @@
         logsChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: {{chart_dates| safe}},
+                labels: {{ chart_dates| safe}},
     datasets: [
-        { label: 'Errors', data: {{chart_errors| safe}}, borderColor: rose, backgroundColor: 'rgba(225,29,72,0.05)', tension: 0.4, fill: true, borderWidth: 3, pointRadius: 0, pointHoverRadius: 6 },
-        { label: 'Warnings', data: {{chart_warnings| safe}}, borderColor: amber, backgroundColor: 'rgba(245,158,11,0.05)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4 },
-        { label: 'Info', data: {{chart_info| safe}}, borderColor: indigo, backgroundColor: 'rgba(79,70,229,0.05)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4 },
-        { label: 'Debug', data: {{chart_debug| safe}}, borderColor: slate, backgroundColor: 'transparent', tension: 0.4, fill: false, borderWidth: 1, dash: [5, 5], pointRadius: 0 },
-        { label: 'Critical', data: {{chart_critical| safe}}, borderColor: dark, backgroundColor: 'rgba(30,41,59,0.1)', tension: 0.4, fill: true, borderWidth: 3, pointRadius: 2 }
+        { label: 'Errors', data: {{ chart_errors| safe}}, borderColor: rose, backgroundColor: 'rgba(225,29,72,0.05)', tension: 0.4, fill: true, borderWidth: 3, pointRadius: 0, pointHoverRadius: 6 },
+        { label: 'Warnings', data: {{ chart_warnings| safe}}, borderColor: amber, backgroundColor: 'rgba(245,158,11,0.05)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4 },
+        { label: 'Info', data: {{ chart_info| safe}}, borderColor: indigo, backgroundColor: 'rgba(79,70,229,0.05)', tension: 0.4, fill: true, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4 },
+        { label: 'Debug', data: {{ chart_debug| safe}}, borderColor: slate, backgroundColor: 'transparent', tension: 0.4, fill: false, borderWidth: 1, dash: [5, 5], pointRadius: 0 },
+        { label: 'Critical', data: {{ chart_critical| safe}}, borderColor: dark, backgroundColor: 'rgba(30,41,59,0.1)', tension: 0.4, fill: true, borderWidth: 3, pointRadius: 2 }
     ]
             },
     options: {
@@ -355,7 +357,7 @@
                 interaction: { intersect: false, mode: 'index' },
         plugins: {
             legend: { display: true, position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 6, font: { size: 11, weight: '600' } } },
-            tooltip: { borderSide: 8, padding: 12, backgroundColor: 'white', titleColor: '#1e293b', bodyColor: '#475569', borderColor: '#e2e8f0', borderWidth: 1 }
+            tooltip: { padding: 12, backgroundColor: 'white', titleColor: '#1e293b', bodyColor: '#475569', borderColor: '#e2e8f0', borderWidth: 1 }
         },
         scales: {
             x: { grid: { display: false }, ticks: { font: { size: 10 } } },
@@ -365,7 +367,7 @@
         });
     }
 
-    if (!{{error | yesno: "true,false"}}) {
+    if (!{{ error | yesno: "true,false" }}) {
         initChart();
     }
 
@@ -375,15 +377,18 @@
     const circle = document.getElementById('progressCircle');
     const number = document.getElementById('countdownNumber');
     const autoRefreshCheckbox = document.getElementById('autoRefresh');
-    let autoReloadActive = autoRefreshCheckbox.checked;
+    let autoReloadActive = autoRefreshCheckbox ? autoRefreshCheckbox.checked : false;
 
-    autoRefreshCheckbox.addEventListener('change', () => {
-        autoReloadActive = autoRefreshCheckbox.checked;
-        if (autoReloadActive) countdown = reloadInterval;
-    });
+    if (autoRefreshCheckbox) {
+        autoRefreshCheckbox.addEventListener('change', () => {
+            autoReloadActive = autoRefreshCheckbox.checked;
+            if (autoReloadActive) countdown = reloadInterval;
+        });
+    }
 
     function updateProgressBar() {
         if (!autoReloadActive || !document.getElementById('dbConfig').classList.contains('d-none')) return;
+        if (!circle || !number) return;
 
         countdown -= 100;
         if (countdown <= 0) {
@@ -406,7 +411,7 @@
             statIds.forEach(id => {
                 const newValue = $data.find('#' + id).text();
                 const $el = $('#' + id);
-                if ($el.text() !== newValue) {
+                if ($el.length && $el.text() !== newValue) {
                     $el.addClass('animate__animated animate__pulse');
                     $el.text(newValue);
                     setTimeout(() => $el.removeClass('animate__animated animate__pulse'), 1000);
@@ -427,6 +432,7 @@
     const cancelConfigBtn = document.getElementById('cancelConfig');
 
     function switchView(showConfig) {
+        if (!logsDashboard || !dbConfig) return;
         if (showConfig) {
             logsDashboard.classList.add('d-none');
             dbConfig.classList.remove('d-none');
@@ -436,11 +442,15 @@
         }
     }
 
-    viewToggle.addEventListener('change', () => switchView(viewToggle.checked));
-    cancelConfigBtn.addEventListener('click', () => {
-        viewToggle.checked = false;
-        switchView(false);
-    });
+    if (viewToggle) {
+        viewToggle.addEventListener('change', () => switchView(viewToggle.checked));
+    }
+    if (cancelConfigBtn) {
+        cancelConfigBtn.addEventListener('click', () => {
+            if (viewToggle) viewToggle.checked = false;
+            switchView(false);
+        });
+    }
 </script>
 
 <style>
@@ -453,14 +463,6 @@
         border-radius: 12px;
     }
 
-    .bg-dark-soft {
-        background-color: rgba(30, 41, 59, 0.03);
-    }
-
-    .countdown-svg {
-        width: 64px;
-        height: 64px;
-        transform: rotate(-90deg);
     }
 
     .countdown-bg {

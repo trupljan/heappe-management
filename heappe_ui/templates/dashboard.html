@@ -3,107 +3,14 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<style>
-    .dashboard-container {
-        padding: 2rem;
-        max-width: 1600px;
-        margin: 0 auto;
-    }
-
-    .stat-card {
-        border: none !important;
-        border-radius: 1.25rem !important;
-        background: #ffffff;
-        overflow: hidden;
-        position: relative;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        z-index: 1;
-    }
-
-    .stat-card:hover {
-        transform: translateY(-8px);
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
-    }
-
-    .stat-card::before {
-        content: "";
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 4px;
-        background: var(--card-accent, #4361ee);
-    }
-
-    .glass-card {
-        background: rgba(255, 255, 255, 0.7);
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 1.25rem;
-    }
-
-    .chart-container {
-        height: 350px;
-        position: relative;
-    }
-
-    .hpc-table thead th {
-        background: #f8fafc;
-        border-bottom: 2px solid #e2e8f0;
-        color: #64748b;
-        font-weight: 700;
-        text-transform: uppercase;
-        font-size: 0.75rem;
-        letter-spacing: 0.05em;
-        padding: 1rem 1.5rem;
-    }
-
-    .hpc-table tbody td {
-        padding: 1rem 1.5rem;
-        vertical-align: middle;
-        border-bottom: 1px solid #f1f5f9;
-        font-size: 0.925rem;
-    }
-
-    .btn-action {
-        width: 32px;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        transition: all 0.2s;
-    }
-
-    .bg-primary-soft {
-        background-color: rgba(67, 97, 238, 0.1);
-    }
-
-    .pulse-indicator {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
-        background: #10b981;
-        border-radius: 50%;
-        margin-right: 8px;
-        animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-        0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
-        70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
-        100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
-    }
-</style>
-
-<div class="dashboard-container">
+<div class="dashboard-container fade-in-up">
     <div class="row mb-5 align-items-center">
         <div class="col-md-7">
             <h2 class="display-6 fw-bold mb-1">System Dashboard</h2>
             <p class="text-muted lead mb-0 d-flex align-items-center">
                 <span class="pulse-indicator"></span>
-                Connected to: <strong class="ms-2 text-dark">{{ request.session.chosen_instance|default:"None" }}</strong>
+                Connected to: <strong class="ms-2 text-dark">{{ request.session.chosen_instance|default:"None"
+                    }}</strong>
                 <span class="mx-3 text-light-50">|</span>
                 <span class="small"><i class="bi bi-clock me-1"></i> Last update: {% now "H:i" %}</span>
             </p>
@@ -204,7 +111,8 @@
                 <div class="card-body px-4 pt-0">
                     <div class="list-group list-group-flush">
                         {% for cluster in clusters %}
-                        <div class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between">
+                        <div
+                            class="list-group-item px-0 py-3 border-bottom d-flex align-items-center justify-content-between">
                             <div class="d-flex align-items-center">
                                 <div class="bg-light p-2 rounded-3 me-3">
                                     <i class="bi bi-hdd-network text-primary"></i>
@@ -214,7 +122,8 @@
                                     <small class="text-muted">{{ cluster.node_types|length }} Node Types</small>
                                 </div>
                             </div>
-                            <a href="{% url 'cluster_detail' cluster.id %}" class="btn btn-sm btn-light rounded-pill px-3">View</a>
+                            <a href="{% url 'cluster_detail' cluster.id %}"
+                                class="btn btn-sm btn-light rounded-pill px-3">View</a>
                         </div>
                         {% empty %}
                         <div class="text-center py-5">
@@ -227,14 +136,15 @@
         </div>
     </div>
 
-    <div class="card glass-card shadow-sm border-0 mb-5 overflow-hidden">
+    <div class="card glass-card shadow-sm border-0 mb-5 overflow-hidden fade-in-up">
         <div class="card-header bg-white border-0 py-4 px-4 d-flex justify-content-between align-items-center">
             <div>
                 <h5 class="fw-bold mb-0">Recent Activity Stream</h5>
                 <small class="text-muted">Sorted by ID</small>
             </div>
             <form class="d-flex gap-2 align-items-center" method="get">
-                <input type="datetime-local" name="time_from" class="form-control form-control-sm" value="{{ time_from }}">
+                <input type="datetime-local" name="time_from" class="form-control form-control-sm"
+                    value="{{ time_from }}">
                 <span class="text-muted">to</span>
                 <input type="datetime-local" name="time_to" class="form-control form-control-sm" value="{{ time_to }}">
                 <button type="submit" class="btn btn-sm btn-primary px-3">Filter</button>
@@ -260,24 +170,30 @@
                                 <div class="small text-muted font-monospace">#{{ job.id }}</div>
                             </td>
                             <td>
-                                <span class="badge rounded-pill 
+                                <span
+                                    class="badge rounded-pill 
                                     {% if job.state == 1 %}bg-secondary{% elif job.state == 8 %}bg-warning text-dark{% elif job.state == 16 %}bg-success{% elif job.state == 32 %}bg-danger{% else %}bg-primary{% endif %}">
-                                    {% if job.state == 1 %}Configuring{% elif job.state == 8 %}Running{% elif job.state == 16 %}Finished{% elif job.state == 32 %}Failed{% elif job.state == 64 %}Canceled{% else %}Pending{% endif %}
+                                    {% if job.state == 1 %}Configuring{% elif job.state == 8 %}Running{% elif job.state
+                                    == 16 %}Finished{% elif job.state == 32 %}Failed{% elif job.state == 64 %}Canceled{%
+                                    else %}Pending{% endif %}
                                 </span>
                             </td>
                             <td>
                                 <div class="d-flex align-items-center">
-                                    <img src="https://ui-avatars.com/api/?name={{ job.submitter|default:'A' }}&background=random&size=24" class="rounded-circle me-2">
+                                    <img src="https://ui-avatars.com/api/?name={{ job.submitter|default:'A' }}&background=random&size=24"
+                                        class="rounded-circle me-2">
                                     <span>{{ job.submitter|default:"System" }}</span>
                                 </div>
                             </td>
                             <td><span class="badge bg-light text-dark border">{{ job.tasks|length }} Units</span></td>
                             <td class="text-end pe-4">
                                 <div class="btn-group">
-                                    <button class="btn btn-sm btn-light btn-action" data-bs-toggle="modal" data-bs-target="#jobModal{{ forloop.counter }}">
+                                    <button class="btn btn-sm btn-light btn-action" data-bs-toggle="modal"
+                                        data-bs-target="#jobModal{{ forloop.counter }}">
                                         <i class="bi bi-eye text-primary"></i>
                                     </button>
-                                    <a href="{% url 'job_status_view' job.id %}" class="btn btn-sm btn-light btn-action">
+                                    <a href="{% url 'job_status_view' job.id %}"
+                                        class="btn btn-sm btn-light btn-action">
                                         <i class="bi bi-graph-up-arrow text-info"></i>
                                     </a>
                                 </div>
@@ -289,14 +205,17 @@
                                 <div class="modal-content border-0 shadow-lg">
                                     <div class="modal-header bg-dark text-white">
                                         <h5 class="modal-title">{{ job.name }}</h5>
-                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                        <button type="button" class="btn-close btn-close-white"
+                                            data-bs-dismiss="modal"></button>
                                     </div>
                                     <div class="modal-body bg-light">
                                         <div class="list-group shadow-sm">
                                             {% for task in job.tasks %}
-                                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                            <div
+                                                class="list-group-item d-flex justify-content-between align-items-center">
                                                 <span>{{ task.name }}</span>
-                                                <span class="badge bg-primary rounded-pill">State: {{ task.state }}</span>
+                                                <span class="badge bg-primary rounded-pill">State: {{ task.state
+                                                    }}</span>
                                             </div>
                                             {% endfor %}
                                         </div>
@@ -305,7 +224,9 @@
                             </div>
                         </div>
                         {% empty %}
-                        <tr><td colspan="5" class="text-center py-5 text-muted">No jobs found.</td></tr>
+                        <tr>
+                            <td colspan="5" class="text-center py-5 text-muted">No jobs found.</td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -317,11 +238,16 @@
                 <nav>
                     <ul class="pagination pagination-sm mb-0">
                         {% if page_obj.has_previous %}
-                        <li class="page-item"><a class="page-link" href="?page=1&{{ request.GET.urlencode|safe }}">First</a></li>
-                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode|safe }}">Prev</a></li>
+                        <li class="page-item"><a class="page-link"
+                                href="?page=1&{{ request.GET.urlencode|safe }}">First</a></li>
+                        <li class="page-item"><a class="page-link"
+                                href="?page={{ page_obj.previous_page_number }}&{{ request.GET.urlencode|safe }}">Prev</a>
+                        </li>
                         {% endif %}
                         {% if page_obj.has_next %}
-                        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode|safe }}">Next</a></li>
+                        <li class="page-item"><a class="page-link"
+                                href="?page={{ page_obj.next_page_number }}&{{ request.GET.urlencode|safe }}">Next</a>
+                        </li>
                         {% endif %}
                     </ul>
                 </nav>
@@ -342,27 +268,27 @@
                 datasets: [{
                     label: 'Jobs',
                     data: [
-                        {{ job_counts.Configuring|default:0 }},
-                        {{ job_counts.Submitted|default:0 }},
-                        {{ job_counts.Queued|default:0 }},
-                        {{ job_counts.Running|default:0 }},
-                        {{ job_counts.Finished|default:0 }},
-                        {{ job_counts.Failed|default:0 }},
-                        {{ job_counts.Canceled|default:0 }}
+                        {{ job_counts.Configuring |default: 0 }},
+                {{ job_counts.Submitted |default: 0 }},
+                        {{ job_counts.Queued |default: 0 }},
+        {{ job_counts.Running |default: 0 }},
+        {{ job_counts.Finished |default: 0 }},
+        {{ job_counts.Failed |default: 0 }},
+        {{ job_counts.Canceled |default: 0 }}
                     ],
-                    backgroundColor: ['#64748b', '#0dcaf0', '#4361ee', '#ff9f1c', '#2ec4b6', '#e71d36', '#1e293b'],
-                    borderRadius: 6
+        backgroundColor: ['#64748b', '#0dcaf0', '#4361ee', '#ff9f1c', '#2ec4b6', '#e71d36', '#1e293b'],
+        borderRadius: 6
                 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true, ticks: { precision: 0 } },
-                    x: { grid: { display: false } }
-                },
-                plugins: { legend: { display: false } }
-            }
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: { beginAtZero: true, ticks: { precision: 0 } },
+            x: { grid: { display: false } }
+        },
+        plugins: { legend: { display: false } }
+    }
         });
     });
 </script>
