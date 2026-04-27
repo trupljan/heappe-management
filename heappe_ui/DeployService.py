@@ -169,6 +169,8 @@ HOST_DATA_STAGING_CONTAINER_MAP_FOLD_PATH=/opt/heappe
 DATABASE_FULL_BACKUP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/backups/database
 DATABASE_LOGS_BACKUP_HOST_MAP_FOLD_NAME={self.config.base_path}{instance_name}/backups/database/logs
 
+HOST_KRB5_CONF_PATH={self.config.base_path}{instance_name}/app/confs/krb5.conf
+
 # Only for Local Cluster mode
 HOST_LOCAL_NAME=localhpc-{instance_name}
 HOST_LOCAL_PORT={ports['local_port']}
