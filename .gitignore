@@ -1,5 +1,10 @@
 db.sqlite3
 venv/
+.venv/
 __pycache__/
 .vscode/
 /.idea/*
+uv.lock
+*.egg-info/
+dist/
+build/
