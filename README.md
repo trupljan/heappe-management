@@ -19,6 +19,10 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # 2. Sync dependencies (creates .venv with Python 3.12)
 uv sync
 
+# 2.5 Use local py4heappe for future release
+# Change your local path
+uv pip install -e ~/<change_this>/Py4HEAppE
+
 # 3. Run database migrations
 uv run python manage.py migrate
 
