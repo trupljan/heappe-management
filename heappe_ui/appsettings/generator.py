@@ -469,7 +469,7 @@ def generate_appsettings_v6_2_1(
         automigrate: bool = True,
         version: str = None,
         deployed_ip: str = None):
-    appsettings = generate_appsettings_v6_1_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
+    appsettings = generate_appsettings_v6_2_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
     #bgworker RoleAssignmentSyncCheck = 3600
     appsettings['BackGroundThreadSettings']['RoleAssignmentSyncCheck'] = 3600
     appsettings['RoleAssignments'] = {
