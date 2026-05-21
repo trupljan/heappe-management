@@ -125,14 +125,11 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
             for project in node_type['projects']
         }
         context['projects'] = list(node_types_projects.values())
-        user_api = hp.UserAndLimitationManagementApi(request.api_instance)
-        projects_for_user = user_api.heappe_user_and_limitation_management_projects_for_current_user_get(
-            SessionCode=request.session_code
-        )
+        all_projects = controller.heappe_management_projects_get(SessionCode=request.session_code) or []
         seen_ids = {p['id'] for p in context['projects']}
         context['projectsForCurrentUser'] = [
-            item.project for item in projects_for_user
-            if item.project.id not in seen_ids
+            p for p in all_projects
+            if p.id not in seen_ids
         ]
         context['queues'] = cluster.to_dict()['node_types']
 
