@@ -37,4 +37,17 @@ class HeappeSessionMiddleware:
         except Exception as e:
             print(f"[middleware] Error in HeappeSessionMiddleware: {e}")
 
+        # Check if this is a mutating request that should invalidate the metadata cache globally
+        if request.method in ["POST", "PUT", "DELETE"]:
+            path = request.path
+            if any(p in path for p in ["/clusters/", "/queues/", "/projects/", "/command-templates/", "/queue-groups/"]):
+                import os
+                from django.conf import settings
+                timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
+                try:
+                    with open(timestamp_file, "w") as f:
+                        f.write(str(time.time()))
+                except Exception as ex:
+                    print(f"[middleware] Error updating metadata timestamp: {ex}")
+
         return self.get_response(request)

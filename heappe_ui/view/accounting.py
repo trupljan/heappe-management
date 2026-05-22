@@ -15,13 +15,60 @@ def accounting_view(request, project_id:int):
         if action == "unassign_queue_group_from_project":
             return unassign_queue_group_from_project(request)
 
-    # Fetch data from API
-    accountings = controller.heappe_management_accountings_get(SessionCode=request.session_code) or []
-    queue_groups = controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code) or []
-    mappings = controller.heappe_management_cluster_node_type_aggregation_accountings_get(
-        SessionCode=request.session_code
-    ) or []
-    queues = controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code) or []
+    # Fetch data from API using cache helper
+    import time
+    import os
+    from django.conf import settings
+
+    timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
+    last_global_mod = 0.0
+    if os.path.exists(timestamp_file):
+        try:
+            with open(timestamp_file, "r") as f:
+                last_global_mod = float(f.read().strip())
+        except Exception:
+            pass
+
+    def get_cached_metadata(key, api_call, model_class_name):
+        cache_val = request.session.get(key)
+        cache_time = request.session.get(f"{key}_time", 0)
+        if not cache_val or (time.time() - cache_time > 300) or (cache_time < last_global_mod):
+            try:
+                raw_data = api_call()
+                cache_val = [controller.api_client.sanitize_for_serialization(x) for x in raw_data] if raw_data else []
+                request.session[key] = cache_val
+                request.session[f"{key}_time"] = time.time()
+            except Exception:
+                cache_val = request.session.get(key) or []
+
+        objects = []
+        for x in cache_val:
+            try:
+                objects.append(controller.api_client._ApiClient__deserialize(x, model_class_name))
+            except Exception:
+                pass
+        return objects
+
+    accountings = get_cached_metadata(
+        "accountings_cache",
+        lambda: controller.heappe_management_accountings_get(SessionCode=request.session_code),
+        "AccountingExt"
+    )
+    queue_groups = get_cached_metadata(
+        "queue_groups_cache",
+        lambda: controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code),
+        "ClusterNodeTypeAggregationExt"
+    )
+    mappings = get_cached_metadata(
+        "mappings_cache",
+        lambda: controller.heappe_management_cluster_node_type_aggregation_accountings_get(SessionCode=request.session_code),
+        "ClusterNodeTypeAggregationAccountingExt"
+    )
+    queues = get_cached_metadata(
+        "node_types_cache",
+        lambda: controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code),
+        "ClusterNodeTypeExt"
+    )
 
     from collections import defaultdict
 
@@ -35,7 +82,11 @@ def accounting_view(request, project_id:int):
 
     project = controller.heappe_management_project_get(SessionCode=request.session_code, Id=project_id)
 
-    projects = controller.heappe_management_projects_get(SessionCode=request.session_code) or []
+    projects = get_cached_metadata(
+        "projects_list_cache",
+        lambda: controller.heappe_management_projects_get(SessionCode=request.session_code),
+        "ProjectExt"
+    )
 
     project_mappings = {}
 

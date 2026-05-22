@@ -425,14 +425,10 @@
                                             </div>
                                         </div>
                                     </td>
-                                    <td class="text-center py-3">
-                                        {% if account.is_initialized %}
-                                            <div class="text-success fw-bold">Active</div>
-                                            <small class="text-muted">●</small>
-                                        {% else %}
-                                            <div class="text-danger fw-bold">Inactive</div>
-                                            <small class="text-muted">●</small>
-                                        {% endif %}
+                                    <td class="text-center py-3 hpc-status-placeholder" data-username="{{ account.username }}">
+                                        <div class="spinner-border spinner-border-sm text-secondary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
                                     </td>
                                     <td class="text-end pe-4 py-3">
                                         <div class="d-grid gap-2 action-stack">
@@ -698,6 +694,30 @@ function showFeedback(feedbackId) {
         setTimeout(() => feedbackElement.classList.add('d-none'), 2000);
     }
 }
+
+// --- Asynchronous HPC Connection Status Checks ---
+document.addEventListener('DOMContentLoaded', function () {
+    const placeholders = document.querySelectorAll('.hpc-status-placeholder');
+    placeholders.forEach(function (el) {
+        const username = el.getAttribute('data-username');
+        const projectId = '{{ project.id }}';
+        if (username && projectId) {
+            fetch(`/projects/${projectId}/?action=check_hpc_status&username=${encodeURIComponent(username)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.is_initialized) {
+                        el.innerHTML = '<div class="text-success fw-bold">Active</div><small class="text-muted">●</small>';
+                    } else {
+                        el.innerHTML = '<div class="text-danger fw-bold">Inactive</div><small class="text-muted">●</small>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching status for ' + username, error);
+                    el.innerHTML = '<div class="text-danger fw-bold">Error</div><small class="text-muted">●</small>';
+                });
+        }
+    });
+});
 
 // Initialize Tooltips
 document.addEventListener('DOMContentLoaded', function () {

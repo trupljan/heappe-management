@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+import time
+from django.http import JsonResponse
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
 
@@ -18,10 +21,37 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
     controller = hp.ManagementApi(request.api_instance)
     session_code = request.session_code
 
+    if request.GET.get("action") == "check_hpc_status":
+        username = request.GET.get("username")
+        try:
+            status_results = controller.heappe_management_cluster_account_status_get(
+                ProjectId=project_id, Username=username, SessionCode=session_code
+            )
+            init_ok = sum(1 for s in status_results if s.is_initialized)
+            is_initialized = (len(status_results) > 0 and init_ok == len(status_results))
+            return JsonResponse({"username": username, "is_initialized": is_initialized})
+        except Exception as ex:
+            return JsonResponse({"username": username, "is_initialized": False, "error": str(ex)}, status=500)
+
     if _tab is not None:
         tab = _tab
     else:
         tab = request.GET.get("tab", "detail")
+
+    # Check if a forced cache refresh is requested
+    force_refresh = request.GET.get("refresh") == "1"
+
+    # Check global metadata modification file to invalidate cache across different users' sessions
+    import os
+    from django.conf import settings
+    timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
+    last_global_mod = 0.0
+    if os.path.exists(timestamp_file):
+        try:
+            with open(timestamp_file, "r") as f:
+                last_global_mod = float(f.read().strip())
+        except Exception:
+            pass
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -36,78 +66,125 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         if action == "rename_hpc_account": return rename_hpc_account(request)
         if action == "delete_hpc_account": return delete_hpc_account(request)
 
-    clusters_raw = controller.heappe_management_clusters_get(SessionCode=session_code)
-    cluster_lookup = {c.id: c.name for c in clusters_raw}
-    clusters = [c.to_dict() for c in clusters_raw]
+    # Initialize context variables with defaults
+    clusters = []
+    not_assigned_clusters = []
+    project_assignments = []
+    command_templates = []
+    project_accounts = []
+    node_types = []
+    adaptor_users = []
+    adaptor_users_not_in_project = []
+    ui_features = {}
 
-    all_node_types_raw = controller.heappe_management_cluster_node_types_get(SessionCode=session_code)
-    node_type_map = {nt.id: nt.to_dict() for nt in all_node_types_raw}
-
-    for c_obj in clusters_raw:
-        for nt in c_obj.node_types:
-            if nt.id in node_type_map:
-                node_type_map[nt.id]['cluster_name'] = c_obj.name
-
+    # Always fetch core project details
     project_data = controller.heappe_management_project_get(Id=project_id, SessionCode=session_code).to_dict()
 
-    all_templates_raw = controller.heappe_management_command_templates_get(SessionCode=session_code,
-                                                                           ProjectId=project_id)
-    all_templates = [ct.to_dict() for ct in all_templates_raw]
+    # Cache feature support for adaptor users in the session to avoid redundant API calls
+    has_adaptor_users_key = f"has_adaptor_users_{project_id}"
+    has_adaptor_users = None if force_refresh else request.session.get(has_adaptor_users_key)
+    if has_adaptor_users is None:
+        try:
+            controller.heappe_management_adaptor_users_in_project_get(
+                SessionCode=session_code, ProjectId=project_id
+            )
+            has_adaptor_users = True
+        except Exception:
+            has_adaptor_users = False
+        request.session[has_adaptor_users_key] = has_adaptor_users
 
-    if filter_type == "shared":
-        command_templates = [ct for ct in all_templates if ct['project_id'] == 0]
-    elif filter_type == "own":
-        command_templates = [ct for ct in all_templates if ct['project_id'] == project_id]
-    else:
-        command_templates = [ct for ct in all_templates if ct['project_id'] in (0, project_id)]
-
-    dict_ntypes = {}
-    for ct in command_templates:
-        nt_id = ct.get('cluster_node_type_id')
-        if nt_id and nt_id in node_type_map:
-            dict_ntypes[nt_id] = node_type_map[nt_id]
-
-    project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
-        ProjectId=project_id, SessionCode=session_code
-    )]
-
-    user_status_cache = {}
-    for pa in project_accounts:
-        pa['key_type_name'] = KEY_TYPE_CHOICES.get(pa.get('key_type'), 'Unknown')
-        username = pa.get('username')
-        if username not in user_status_cache:
-            try:
-                status_results = controller.heappe_management_cluster_account_status_get(
-                    ProjectId=project_id, Username=username, SessionCode=session_code
-                )
-                init_ok = sum(1 for s in status_results if s.is_initialized)
-                user_status_cache[username] = (len(status_results) > 0 and init_ok == len(status_results))
-            except Exception:
-                user_status_cache[username] = False
-        pa['is_initialized'] = user_status_cache[username]
-
-    adaptor_users, adaptor_users_not_in_project, ui_features = [], [], {}
-    try:
-        adaptor_users = [u.to_dict() for u in controller.heappe_management_adaptor_users_in_project_get(
-            SessionCode=session_code, ProjectId=project_id
-        )]
-        all_adaptor_users = [u.to_dict() for u in
-                             controller.heappe_management_adaptor_users_get(SessionCode=session_code)]
-        existing_ids = {u['id'] for u in adaptor_users}
-        adaptor_users_not_in_project = [u for u in all_adaptor_users if u['id'] not in existing_ids]
+    if has_adaptor_users:
         ui_features.update({'adaptor_users': True, 'adaptor_users_not_in_project': True})
-    except Exception:
-        pass
 
-    assignments_raw = controller.heappe_management_project_assignment_to_clusters_get(
-        ProjectId=project_id, SessionCode=session_code
-    )
-    project_assignments = [a.to_dict() for a in assignments_raw]
-    assigned_ids = {a['cluster_id'] for a in project_assignments}
-    not_assigned_clusters = [c for c in clusters if c['id'] not in assigned_ids]
+    # Caching helper for clusters metadata with 5-minute (300 seconds) expiration TTL
+    def get_cached_clusters():
+        clusters_cache = request.session.get("clusters_cache")
+        clusters_time = request.session.get("clusters_cache_time", 0)
+        if force_refresh or not clusters_cache or (time.time() - clusters_time > 300) or (clusters_time < last_global_mod):
+            clusters_raw = controller.heappe_management_clusters_get(SessionCode=session_code)
+            clusters_cache = [c.to_dict() for c in clusters_raw]
+            request.session["clusters_cache"] = clusters_cache
+            request.session["clusters_cache_time"] = time.time()
+        return clusters_cache
 
-    for a in project_assignments:
-        a['cluster_name'] = cluster_lookup.get(a['cluster_id'], "Unknown")
+    if tab == "detail":
+        clusters = get_cached_clusters()
+        cluster_lookup = {c['id']: c['name'] for c in clusters}
+
+        assignments_raw = controller.heappe_management_project_assignment_to_clusters_get(
+            ProjectId=project_id, SessionCode=session_code
+        )
+        project_assignments = [a.to_dict() for a in assignments_raw]
+        assigned_ids = {a['cluster_id'] for a in project_assignments}
+        not_assigned_clusters = [c for c in clusters if c['id'] not in assigned_ids]
+
+        for a in project_assignments:
+            a['cluster_name'] = cluster_lookup.get(a['cluster_id'], "Unknown")
+
+    elif tab == "commandtemplates":
+        all_templates_raw = controller.heappe_management_command_templates_get(
+            SessionCode=session_code, ProjectId=project_id
+        )
+        all_templates = [ct.to_dict() for ct in all_templates_raw]
+
+        if filter_type == "shared":
+            command_templates = [ct for ct in all_templates if ct['project_id'] == 0]
+        elif filter_type == "own":
+            command_templates = [ct for ct in all_templates if ct['project_id'] == project_id]
+        else:
+            command_templates = [ct for ct in all_templates if ct['project_id'] in (0, project_id)]
+
+        # Fetch/Cache node types and clusters to map cluster names to queues with 5-minute (300s) TTL
+        node_types_cache = request.session.get("node_types_cache")
+        node_types_time = request.session.get("node_types_cache_time", 0)
+        if force_refresh or not node_types_cache or (time.time() - node_types_time > 300) or (node_types_time < last_global_mod):
+            all_node_types_raw = controller.heappe_management_cluster_node_types_get(SessionCode=session_code)
+            node_types_cache = [nt.to_dict() for nt in all_node_types_raw]
+            request.session["node_types_cache"] = node_types_cache
+            request.session["node_types_cache_time"] = time.time()
+
+        node_type_map = {nt['id']: nt for nt in node_types_cache}
+
+        clusters_cache = get_cached_clusters()
+        for c_obj in clusters_cache:
+            for nt in c_obj.get('node_types', []):
+                if nt['id'] in node_type_map:
+                    node_type_map[nt['id']]['cluster_name'] = c_obj['name']
+
+        dict_ntypes = {}
+        for ct in command_templates:
+            nt_id = ct.get('cluster_node_type_id')
+            if nt_id and nt_id in node_type_map:
+                dict_ntypes[nt_id] = node_type_map[nt_id]
+        node_types = list(dict_ntypes.values())
+
+    elif tab == "accounts":
+        project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
+            ProjectId=project_id, SessionCode=session_code
+        )]
+        for pa in project_accounts:
+            pa['key_type_name'] = KEY_TYPE_CHOICES.get(pa.get('key_type'), 'Unknown')
+
+    elif tab == "adaptor_users" and has_adaptor_users:
+        try:
+            adaptor_users = [u.to_dict() for u in controller.heappe_management_adaptor_users_in_project_get(
+                SessionCode=session_code, ProjectId=project_id
+            )]
+            
+            # Cache all adaptor users
+            all_adaptor_users_cache = request.session.get("all_adaptor_users_cache")
+            all_adaptor_users_time = request.session.get("all_adaptor_users_cache_time", 0)
+            if force_refresh or not all_adaptor_users_cache or (time.time() - all_adaptor_users_time > 300) or (all_adaptor_users_time < last_global_mod):
+                all_adaptor_users_raw = controller.heappe_management_adaptor_users_get(SessionCode=session_code)
+                all_adaptor_users_cache = [u.to_dict() for u in all_adaptor_users_raw]
+                request.session["all_adaptor_users_cache"] = all_adaptor_users_cache
+                request.session["all_adaptor_users_cache_time"] = time.time()
+            all_adaptor_users = all_adaptor_users_cache
+
+            existing_ids = {u['id'] for u in adaptor_users}
+            adaptor_users_not_in_project = [u for u in all_adaptor_users if u['id'] not in existing_ids]
+        except Exception:
+            pass
 
     return render(request, "project.html", {
         "project": project_data,
@@ -117,7 +194,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "active_tab": tab,
         "command_templates": command_templates,
         "project_accounts": project_accounts,
-        "node_types": list(dict_ntypes.values()),
+        "node_types": node_types,
         "adaptor_users": adaptor_users,
         "adaptor_users_not_in_project": adaptor_users_not_in_project,
         "ui_features": ui_features,
