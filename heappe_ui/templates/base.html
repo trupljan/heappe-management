@@ -85,6 +85,7 @@
                         </div>
 
                         {% if request.session.chosen_instance %}
+                            <button class="btn btn-sm btn-outline-warning px-3" onclick="refreshCache()"><i class="bi bi-arrow-clockwise"></i> Sync Cache</button>
                             <a class="btn btn-sm btn-outline-light px-3" href="{% url 'reconnect_view' %}">Reconnect {{ request.session.chosen_instance }}</a>
                             <a class="btn btn-sm btn-outline-light px-3" href="{% url 'instance_credentials_list' %}">Switch Instance</a>
                         {% endif %}
@@ -225,6 +226,12 @@
             navigator.clipboard.writeText(key).then(() => {
                 btn.textContent = "Copied";
             });
+        }
+
+        function refreshCache() {
+            const url = new URL(window.location.href);
+            url.searchParams.set('refresh', '1');
+            window.location.href = url.toString();
         }
     </script>
 </body>

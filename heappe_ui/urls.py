@@ -86,4 +86,5 @@ urlpatterns = [
     path('manage-external-users/', views.manage_project_adaptor_users, name='manage_project_adaptor_users_base'),
     path('manage-external-users/<int:project_id>/', views.manage_project_adaptor_users,
          name='manage_project_adaptor_users'),
+    path('api/invalidate-cache/', views.invalidate_cache_api, name='invalidate_cache_api'),
 ]
