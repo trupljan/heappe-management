@@ -494,7 +494,7 @@ document.addEventListener('DOMContentLoaded', function() {
         
         liveJobModal.show();
 
-        const url = `/job-live-details/${jobId}/`;
+        const url = "{% url 'job_live_details_partial' 0 %}".replace('0', jobId);
         fetch(url)
             .then(response => {
                 if (!response.ok) {
