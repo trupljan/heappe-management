@@ -600,59 +600,98 @@ def check_for_updates(request):
     import time
     now = time.time()
     last_check = request.session.get("last_update_check_time", 0)
+    force = request.GET.get('force') == '1'
 
-    # Cache check result for 15 minutes (900 seconds)
-    if now - last_check < 900 and "update_available" in request.session:
+    # Cache check result for 15 minutes (900 seconds), unless forced
+    if not force and now - last_check < 900 and "update_available" in request.session:
         return JsonResponse({
             'update_available': request.session.get("update_available"),
-            'local': request.session.get("update_local", ""),
-            'remote': request.session.get("update_remote", ""),
-            'branch': request.session.get("update_branch", ""),
+            'current_version': request.session.get("update_current_version", ""),
+            'latest_version': request.session.get("update_latest_version", ""),
             'changes': request.session.get("update_changes", [])
         })
 
     repo_path = settings.BASE_DIR
+    update_available = False
+    current_version = "unknown"
+    latest_version = ""
+    changes = []
+
+    def parse_ver(v):
+        try:
+            return [int(x) for x in v.split('-')[0].split('.') if x.isdigit()]
+        except Exception:
+            return [0]
+
     try:
-        subprocess.run(['git', 'fetch', '--all'], cwd=repo_path, check=True, timeout=15, capture_output=True)
+        # 1. Get current base tag (e.g. "1.1.0" from "v1.1.0-230-gabcdef")
+        try:
+            current_version = subprocess.check_output(
+                ['git', 'describe', '--tags', '--abbrev=0'],
+                cwd=repo_path, stderr=subprocess.DEVNULL, timeout=5
+            ).decode().strip().lstrip('vV')
+        except Exception:
+            current_version = subprocess.check_output(
+                ['git', 'describe', '--tags', '--always'],
+                cwd=repo_path, stderr=subprocess.DEVNULL, timeout=5
+            ).decode().strip().lstrip('vV')
 
-        local_hash = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo_path).decode().strip()
-        branch = subprocess.check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=repo_path).decode().strip()
-        remote_hash = subprocess.check_output(['git', 'rev-parse', '@{u}'], cwd=repo_path).decode().strip()
+        # 2. Get all remote tags via git ls-remote (no full fetch needed)
+        raw = subprocess.check_output(
+            ['git', 'ls-remote', '--tags', 'origin'],
+            cwd=repo_path, timeout=15, stderr=subprocess.DEVNULL
+        ).decode().strip()
 
-        update_available = local_hash != remote_hash
-        commit_messages = []
+        tags = []
+        for line in raw.splitlines():
+            parts = line.split('\t')
+            if len(parts) == 2 and not parts[1].endswith('^{}'):
+                tag = parts[1].replace('refs/tags/', '').strip().lstrip('vV')
+                # Only semver-like tags (e.g. 1.2.3)
+                base = tag.split('-')[0]
+                if base and all(c.isdigit() or c == '.' for c in base):
+                    tags.append(tag)
 
-        if update_available:
-            log_output = subprocess.check_output(
-                ['git', 'log', 'HEAD..@{u}', '--format=%s'],
-                cwd=repo_path
-            ).decode().strip()
+        tags.sort(key=parse_ver, reverse=True)
 
-            if log_output:
-                commit_messages = log_output.split('\n')
-
-        # Store in session cache
-        request.session["last_update_check_time"] = now
-        request.session["update_available"] = update_available
-        request.session["update_local"] = local_hash[:7]
-        request.session["update_remote"] = remote_hash[:7]
-        request.session["update_branch"] = branch
-        request.session["update_changes"] = commit_messages
-
-        return JsonResponse({
-            'update_available': update_available,
-            'local': local_hash[:7],
-            'remote': remote_hash[:7],
-            'branch': branch,
-            'changes': commit_messages
-        })
-
+        if tags:
+            latest_version = tags[0]
+            try:
+                if parse_ver(latest_version) > parse_ver(current_version):
+                    update_available = True
+                    # Try to get recent commit messages between tags
+                    try:
+                        log = subprocess.check_output(
+                            ['git', 'log', f'v{current_version}..v{latest_version}', '--format=%s'],
+                            cwd=repo_path, timeout=10, stderr=subprocess.DEVNULL
+                        ).decode().strip()
+                        if log:
+                            changes = log.split('\n')[:10]
+                    except Exception:
+                        pass
+            except Exception:
+                if latest_version.split('-')[0] != current_version.split('-')[0]:
+                    update_available = True
 
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr.decode() if e.stderr else str(e)
-        return JsonResponse({'error': f'Git error: {error_msg}'}, status=500)
+        return JsonResponse({'error': f'Git error: {error_msg}', 'update_available': False}, status=500)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({'error': str(e), 'update_available': False}, status=500)
+
+    # Store in session cache
+    request.session["last_update_check_time"] = now
+    request.session["update_available"] = update_available
+    request.session["update_current_version"] = current_version
+    request.session["update_latest_version"] = latest_version
+    request.session["update_changes"] = changes
+
+    return JsonResponse({
+        'update_available': update_available,
+        'current_version': current_version,
+        'latest_version': latest_version,
+        'changes': changes
+    })
 
 
 # ... tvoje existující error handling ...

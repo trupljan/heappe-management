@@ -129,17 +129,20 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg border-0">
                 <div class="modal-header bg-light">
-                    <h5 class="modal-title fw-bold">System Update</h5>
+                    <h5 class="modal-title fw-bold">Admin Panel Update</h5>
+                    <div id="modal-version-badge" class="d-none ms-3"></div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" id="modalCloseX"></button>
                 </div>
                 <div class="modal-body">
                     <div id="update-init-view">
-                        <p class="mb-1 fw-bold small text-primary">New changes detected:</p>
+                        <p class="mb-1 fw-bold small text-primary" id="update-changes-header">New changes detected:</p>
                         <div id="commit-messages" class="changelog-box mb-3"></div>
 
-                        <div class="alert alert-warning py-2 small shadow-sm">
+                        <div class="alert alert-danger py-2 small mb-0">
                             <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                            <strong>Notice:</strong> The application will restart. Management UI will be temporarily unavailable for 30-60s.
+                            <strong>Downtime Notice:</strong> The Admin Panel will <strong>restart</strong> during this update.
+                            The management UI will be <strong>unavailable for ~30–60 seconds</strong>.
+                            Make sure no critical operations are running before proceeding.
                         </div>
                     </div>
 
@@ -150,7 +153,10 @@
                     </div>
                 </div>
                 <div class="modal-footer bg-light" id="modalFooter">
-                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Later</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="recheck-btn" onclick="recheckUpdates()">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Recheck
+                    </button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="snoozeUpdate(24)" data-bs-dismiss="modal">Remind me tomorrow</button>
                     <button type="button" id="start-update-btn" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
                         Start Update Now
                     </button>
@@ -186,41 +192,101 @@
                     const container = document.getElementById('commit-messages');
                     const noticeAlert = document.querySelector('#update-init-view .alert');
                     const startUpdateBtn = document.getElementById('start-update-btn');
+                    const changesHeader = document.getElementById('update-changes-header');
+                    const versionBadge = document.getElementById('modal-version-badge');
 
                     if (data.update_available) {
+                        // Show the navbar Update button
                         document.getElementById('update-notification-item').classList.remove('d-none');
+
+                        // Show version badge in modal header
+                        if (versionBadge && data.current_version && data.latest_version) {
+                            versionBadge.classList.remove('d-none');
+                            versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
+                        }
+
+                        // Fill changelog
                         if (container) {
                             if (data.changes && data.changes.length > 0) {
                                 container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
                             } else {
-                                container.innerHTML = '<div class="text-muted small italic">New version available.</div>';
+                                container.innerHTML = `<div class="text-muted small">New version <strong>v${data.latest_version}</strong> is available.</div>`;
                             }
                         }
 
-                        // Show Bootstrap Toast notification
-                        const toastEl = document.getElementById('updateToast');
-                        if (toastEl) {
-                            const toast = new bootstrap.Toast(toastEl, { autohide: false });
-                            toast.show();
+                        // Show Bootstrap Toast — only if NOT snoozed
+                        const snoozedUntil = parseInt(localStorage.getItem('update_toast_snoozed') || '0');
+                        if (Date.now() > snoozedUntil) {
+                            const toastEl = document.getElementById('updateToast');
+                            if (toastEl) {
+                                const toast = new bootstrap.Toast(toastEl, { autohide: false });
+                                toast.show();
+                            }
                         }
                     } else {
                         // System is up to date
+                        if (changesHeader) changesHeader.textContent = 'Status:';
                         if (container) {
-                            container.innerHTML = '<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date.</div>';
+                            const verInfo = data.current_version ? ` (v${data.current_version})` : '';
+                            container.innerHTML = `<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date${verInfo}.</div>`;
                         }
-                        if (noticeAlert) {
-                            noticeAlert.classList.add('d-none');
-                        }
-                        if (startUpdateBtn) {
-                            startUpdateBtn.classList.add('d-none');
-                        }
-                        const changesHeader = document.querySelector('#update-init-view p');
-                        if (changesHeader) {
-                            changesHeader.textContent = "Status:";
-                        }
+                        if (noticeAlert) noticeAlert.classList.add('d-none');
+                        if (startUpdateBtn) startUpdateBtn.classList.add('d-none');
+                        // Show Recheck button
+                        const recheckBtn = document.getElementById('recheck-btn');
+                        if (recheckBtn) recheckBtn.classList.remove('d-none');
                     }
+                })
+                .catch(err => {
+                    console.warn('Update check failed:', err);
                 });
         });
+
+        function recheckUpdates() {
+            const container = document.getElementById('commit-messages');
+            const recheckBtn = document.getElementById('recheck-btn');
+            if (container) container.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Checking for updates...</div>';
+            if (recheckBtn) recheckBtn.disabled = true;
+
+            fetch('{% url "check_updates" %}?force=1')
+                .then(r => r.json())
+                .then(data => {
+                    const noticeAlert = document.querySelector('#update-init-view .alert');
+                    const startUpdateBtn = document.getElementById('start-update-btn');
+                    const changesHeader = document.getElementById('update-changes-header');
+                    const versionBadge = document.getElementById('modal-version-badge');
+
+                    if (data.update_available) {
+                        document.getElementById('update-notification-item').classList.remove('d-none');
+                        if (versionBadge && data.current_version && data.latest_version) {
+                            versionBadge.classList.remove('d-none');
+                            versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
+                        }
+                        if (changesHeader) changesHeader.textContent = 'New changes detected:';
+                        if (container) {
+                            if (data.changes && data.changes.length > 0) {
+                                container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
+                            } else {
+                                container.innerHTML = `<div class="text-muted small">New version <strong>v${data.latest_version}</strong> is available.</div>`;
+                            }
+                        }
+                        if (noticeAlert) noticeAlert.classList.remove('d-none');
+                        if (startUpdateBtn) startUpdateBtn.classList.remove('d-none');
+                        if (recheckBtn) recheckBtn.classList.add('d-none');
+                    } else {
+                        if (changesHeader) changesHeader.textContent = 'Status:';
+                        if (container) {
+                            const verInfo = data.current_version ? ` (v${data.current_version})` : '';
+                            container.innerHTML = `<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date${verInfo}.</div>`;
+                        }
+                        if (recheckBtn) recheckBtn.disabled = false;
+                    }
+                })
+                .catch(err => {
+                    if (container) container.innerHTML = '<div class="text-danger small">Check failed. Please try again.</div>';
+                    if (recheckBtn) recheckBtn.disabled = false;
+                });
+        }
 
         function confirmAndDeploy() {
             if (!confirm("Are you sure you want to start the update process now?")) return;
@@ -275,6 +341,16 @@
             url.searchParams.set('refresh', '1');
             window.location.href = url.toString();
         }
+        function snoozeUpdate(hours = 24) {
+            localStorage.setItem('update_toast_snoozed', Date.now() + hours * 3600 * 1000);
+            // Close toast if open
+            const toastEl = document.getElementById('updateToast');
+            if (toastEl) {
+                const t = bootstrap.Toast.getInstance(toastEl);
+                if (t) t.hide();
+            }
+        }
+
     </script>
 
     <!-- Toast Container for Notifications -->
@@ -286,13 +362,13 @@
                         <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true"></span>
                         <strong class="text-warning">Update Available!</strong>
                     </div>
-                    <div class="mt-2 small text-light">
-                        A new version of the HEAppE Admin Panel is available.
-                        <div class="mt-2">
-                            <button type="button" class="btn btn-warning btn-sm fw-bold me-1" data-bs-toggle="modal" data-bs-target="#updateModal" data-bs-dismiss="toast">Update Now</button>
-                            <button type="button" class="btn btn-outline-light btn-sm text-white" data-bs-dismiss="toast">Later</button>
+                        <div class="mt-2 small text-light" id="updateToastVersion">
+                            A new version of the HEAppE Admin Panel is available.
+                            <div class="mt-2">
+                                <button type="button" class="btn btn-warning btn-sm fw-bold me-1" data-bs-toggle="modal" data-bs-target="#updateModal" data-bs-dismiss="toast">Update Now</button>
+                                <button type="button" class="btn btn-outline-light btn-sm text-white" onclick="snoozeUpdate(24)" data-bs-dismiss="toast">Later (24h)</button>
+                            </div>
                         </div>
-                    </div>
                 </div>
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
             </div>
