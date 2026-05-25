@@ -665,6 +665,20 @@ from django.http import JsonResponse
 
 
 def check_for_updates(request):
+    import time
+    now = time.time()
+    last_check = request.session.get("last_update_check_time", 0)
+
+    # Cache check result for 15 minutes (900 seconds)
+    if now - last_check < 900 and "update_available" in request.session:
+        return JsonResponse({
+            'update_available': request.session.get("update_available"),
+            'local': request.session.get("update_local", ""),
+            'remote': request.session.get("update_remote", ""),
+            'branch': request.session.get("update_branch", ""),
+            'changes': request.session.get("update_changes", [])
+        })
+
     repo_path = settings.BASE_DIR
     try:
         subprocess.run(['git', 'fetch', '--all'], cwd=repo_path, check=True, timeout=15, capture_output=True)
@@ -684,6 +698,14 @@ def check_for_updates(request):
 
             if log_output:
                 commit_messages = log_output.split('\n')
+
+        # Store in session cache
+        request.session["last_update_check_time"] = now
+        request.session["update_available"] = update_available
+        request.session["update_local"] = local_hash[:7]
+        request.session["update_remote"] = remote_hash[:7]
+        request.session["update_branch"] = branch
+        request.session["update_changes"] = commit_messages
 
         return JsonResponse({
             'update_available': update_available,

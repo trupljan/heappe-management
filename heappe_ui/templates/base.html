@@ -71,6 +71,8 @@
                              <li><a class="dropdown-item" href="{% url 'deploy_view' request.session.chosen_instance %}">Application Control</a></li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{% url 'logs' %}">Logs</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'update_server_page' %}"><i class="bi bi-arrow-up-circle me-1"></i> System Update</a></li>
                         </ul>
                     </li>
                     <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center" href="{% url 'deploy_view' %}"><i class="bi bi-cloud-arrow-up me-1"></i> Deploy</a></li>
@@ -171,10 +173,19 @@
                     if (data.update_available) {
                         document.getElementById('update-notification-item').classList.remove('d-none');
                         const container = document.getElementById('commit-messages');
-                        if (data.changes && data.changes.length > 0) {
-                            container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
-                        } else {
-                            container.innerHTML = '<div class="text-muted small italic">New version available.</div>';
+                        if (container) {
+                            if (data.changes && data.changes.length > 0) {
+                                container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
+                            } else {
+                                container.innerHTML = '<div class="text-muted small italic">New version available.</div>';
+                            }
+                        }
+
+                        // Show Bootstrap Toast notification
+                        const toastEl = document.getElementById('updateToast');
+                        if (toastEl) {
+                            const toast = new bootstrap.Toast(toastEl, { autohide: false });
+                            toast.show();
                         }
                     }
                 });
@@ -234,5 +245,27 @@
             window.location.href = url.toString();
         }
     </script>
+
+    <!-- Toast Container for Notifications -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1055;">
+        <div id="updateToast" class="toast align-items-center text-white bg-dark border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true"></span>
+                        <strong class="text-warning">Update Available!</strong>
+                    </div>
+                    <div class="mt-2 small text-light">
+                        A new version of the HEAppE Admin Panel is available.
+                        <div class="mt-2">
+                            <a href="{% url 'update_server_page' %}" class="btn btn-warning btn-sm fw-bold me-1">Update Now</a>
+                            <button type="button" class="btn btn-outline-light btn-sm text-white" data-bs-dismiss="toast">Later</button>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
