@@ -51,9 +51,12 @@ ACCOUNTING_NUMBERS = [
 
 def _create_payload(session_code: str, data: Dict[str, Any], id_field: Optional[str] = None) -> Dict[str, Any]:
     """Create a standardized payload for API requests."""
+    body = {**data}
+    if session_code:
+        body["SessionCode"] = session_code
     payload = {
         "_preload_content": False,
-        "body": {"SessionCode": session_code, **data}
+        "body": body
     }
     if id_field and id_field in data:
         payload["body"]["Id"] = data[id_field]
