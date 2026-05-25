@@ -322,6 +322,7 @@
                             data-date="{{ error.Date|date:'c' }}"
                             data-user="{{ error.UserName|default:'' }}"
                             data-job="{{ error.JobId|default:'' }}"
+                            data-instance="{{ error.InstanceName }}"
                             data-class="{{ error.Class }}"
                             data-message="{{ error.Message }}"
                             data-exception="{{ error.Exception|default:'' }}"
@@ -580,9 +581,10 @@
         const date = activeErrorRow.getAttribute('data-date');
         const user = activeErrorRow.getAttribute('data-user');
         const job = activeErrorRow.getAttribute('data-job');
+        const instance = activeErrorRow.getAttribute('data-instance') || '';
 
         // Query API
-        const url = `{% url 'logs_analyzer_context_api' %}?error_id=${errorId}&mode=${mode}&date=${encodeURIComponent(date)}&user=${encodeURIComponent(user)}&job_id=${job}`;
+        const url = `{% url 'logs_analyzer_context_api' %}?error_id=${errorId}&mode=${mode}&date=${encodeURIComponent(date)}&user=${encodeURIComponent(user)}&job_id=${job}&instance=${encodeURIComponent(instance)}`;
         
         try {
             const response = await fetch(url);

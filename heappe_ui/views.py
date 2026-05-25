@@ -1552,6 +1552,20 @@ def logs_analyzer_context_api(request):
     user_name = request.GET.get('user')
     job_id = request.GET.get('job_id')
     
+    # Safe parsing of error_id
+    try:
+        error_id_int = int(error_id) if error_id and error_id != 'undefined' else 1
+    except ValueError:
+        error_id_int = 1
+        
+    # Safe parsing of job_id
+    job_id_int = None
+    if job_id and job_id != 'None' and job_id != 'undefined' and job_id != '':
+        try:
+            job_id_int = int(job_id)
+        except ValueError:
+            pass
+            
     # Parse date
     if error_date_str:
         try:
@@ -1590,25 +1604,44 @@ def logs_analyzer_context_api(request):
         levels_map = {row['Id']: row['Name'] for row in level_rows}
         
         # Build query
-        query = """
+        query_base = """
             SELECT TOP 15 l.*
             FROM dbo.Log l
-            WHERE l.Date <= %s AND l.InstanceName = %s
+            WHERE l.Date <= %s
         """
-        params = [error_date, instance_name or instance]
+        params = [error_date]
+        
+        # We will try filtering by InstanceName first
+        query = query_base + " AND l.InstanceName = %s"
+        params_with_instance = params + [instance_name or instance]
         
         if mode == 'user' and user_name:
             query += " AND l.UserName = %s"
-            params.append(user_name)
-        elif mode == 'job' and job_id:
+            params_with_instance.append(user_name)
+        elif mode == 'job' and job_id_int is not None:
             query += " AND l.JobId = %s"
-            params.append(int(job_id))
+            params_with_instance.append(job_id_int)
             
         query += " ORDER BY l.Date DESC"
         
-        cursor.execute(query, params)
+        cursor.execute(query, params_with_instance)
         rows = cursor.fetchall()
         
+        # Fallback: if no rows are found, try without InstanceName filter
+        if not rows:
+            query_fallback = query_base
+            params_fallback = params.copy()
+            if mode == 'user' and user_name:
+                query_fallback += " AND l.UserName = %s"
+                params_fallback.append(user_name)
+            elif mode == 'job' and job_id_int is not None:
+                query_fallback += " AND l.JobId = %s"
+                params_fallback.append(job_id_int)
+                
+            query_fallback += " ORDER BY l.Date DESC"
+            cursor.execute(query_fallback, params_fallback)
+            rows = cursor.fetchall()
+            
         for r in rows:
             r['LevelName'] = levels_map.get(r['LevelId'], 'Information')
             # Format datetime to string for json serialization
@@ -1624,7 +1657,7 @@ def logs_analyzer_context_api(request):
         
     except Exception:
         is_demo = True
-        context_logs = _get_mock_context_logs(int(error_id or 1), mode, user_name, job_id)
+        context_logs = _get_mock_context_logs(error_id_int, mode, user_name, job_id_int)
 
     return JsonResponse({
         'status': 'success',
@@ -1723,7 +1756,7 @@ def _get_mock_context_logs(error_id, mode, user_name, job_id):
             "UserId": 42 if user_name == 'johndoe' else (1 if user_name == 'admin' else None),
             "UserName": user_name or ("johndoe" if error_id == 1 else ("admin" if error_id == 2 else None)),
             "UserEmail": f"{user_name}@it4i.cz" if user_name else None,
-            "JobId": int(job_id) if job_id else (45091 if error_id == 1 else (45092 if error_id == 2 else None)),
+            "JobId": job_id if job_id is not None else (45091 if error_id == 1 else (45092 if error_id == 2 else None)),
             "Message": msg,
             "Class": clz,
             "Exception": ""
