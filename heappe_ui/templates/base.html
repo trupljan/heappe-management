@@ -65,10 +65,23 @@
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="sysDrop" data-bs-toggle="dropdown"><i class="bi bi-graph-up me-1"></i> System Management</a>
+                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center position-relative" href="#" id="sysDrop" data-bs-toggle="dropdown">
+                            <i class="bi bi-graph-up me-1"></i> System Management
+                            {% if middleware_update_available %}
+                                <span class="position-absolute top-0 start-100 translate-middle p-1 bg-warning border border-light rounded-circle animate-pulse" style="margin-top: 5px; margin-left: -10px;" title="Middleware update available!"></span>
+                            {% endif %}
+                        </a>
                         <ul class="dropdown-menu">
                             {% if request.session.chosen_instance %}
                              <li><a class="dropdown-item" href="{% url 'deploy_view' request.session.chosen_instance %}">Application Control</a></li>
+                             <li>
+                                 <a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'deploy_view' request.session.chosen_instance %}">
+                                     <span><i class="bi bi-arrow-repeat me-1"></i> Update Middleware</span>
+                                     {% if middleware_update_available %}
+                                         <span class="badge bg-warning text-dark ms-2 animate-pulse" title="Update Available: {{ middleware_latest_version }}"><i class="bi bi-exclamation-triangle-fill"></i></span>
+                                     {% endif %}
+                                 </a>
+                             </li>
                             {% endif %}
                             <li><a class="dropdown-item" href="{% url 'logs' %}">Logs</a></li>
                             <li><hr class="dropdown-divider"></li>

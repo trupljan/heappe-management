@@ -89,6 +89,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'heappe_ui.context_processors.git_version_renderer',
+                'heappe_ui.context_processors.middleware_update_renderer',
             ],
         },
     },
