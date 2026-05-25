@@ -1,3 +1,4 @@
+{% load custom_filters %}
 <div class="modal-header bg-dark text-white border-bottom-0 p-4">
     <div class="d-flex align-items-center gap-3">
         <div class="bg-primary bg-gradient rounded-3 p-2 text-white d-flex align-items-center justify-content-center" style="width: 45px; height: 45px;">
@@ -42,25 +43,25 @@
         <div class="col-sm-6 col-md-3">
             <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
                 <div class="text-muted small fw-semibold mb-1"><i class="bi bi-clock-history me-1 text-secondary"></i>Created</div>
-                <div class="fw-bold text-dark fs-6">{{ job.creation_time|default:"N/A" }}</div>
+                <div class="fw-bold text-dark fs-6">{{ job.creation_time|format_datetime|default:"N/A" }}</div>
             </div>
         </div>
         <div class="col-sm-6 col-md-3">
             <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
                 <div class="text-muted small fw-semibold mb-1"><i class="bi bi-cloud-arrow-up me-1 text-info"></i>Submitted</div>
-                <div class="fw-bold text-dark fs-6">{{ job.submit_time|default:"Not submitted" }}</div>
+                <div class="fw-bold text-dark fs-6">{{ job.submit_time|format_datetime|default:"Not submitted" }}</div>
             </div>
         </div>
         <div class="col-sm-6 col-md-3">
             <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
                 <div class="text-muted small fw-semibold mb-1"><i class="bi bi-play-fill me-1 text-success"></i>Started</div>
-                <div class="fw-bold text-dark fs-6">{{ job.start_time|default:"Not started" }}</div>
+                <div class="fw-bold text-dark fs-6">{{ job.start_time|format_datetime|default:"Not started" }}</div>
             </div>
         </div>
         <div class="col-sm-6 col-md-3">
             <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
                 <div class="text-muted small fw-semibold mb-1"><i class="bi bi-stop-fill me-1 text-danger"></i>Ended</div>
-                <div class="fw-bold text-dark fs-6">{{ job.end_time|default:"Not ended" }}</div>
+                <div class="fw-bold text-dark fs-6">{{ job.end_time|format_datetime|default:"Not ended" }}</div>
             </div>
         </div>
     </div>
@@ -142,11 +143,11 @@
                             
                             <div class="col-md-6">
                                 <span class="text-muted d-block small">Start Time</span>
-                                <span class="fw-semibold text-dark">{{ task.start_time|default:"Not started" }}</span>
+                                <span class="fw-semibold text-dark">{{ task.start_time|format_datetime|default:"Not started" }}</span>
                             </div>
                             <div class="col-md-6">
                                 <span class="text-muted d-block small">End Time</span>
-                                <span class="fw-semibold text-dark">{{ task.end_time|default:"Not finished" }}</span>
+                                <span class="fw-semibold text-dark">{{ task.end_time|format_datetime|default:"Not finished" }}</span>
                             </div>
                             
                             <div class="col-12"><hr class="my-2 opacity-10"></div>

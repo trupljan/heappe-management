@@ -2,6 +2,7 @@
 
 {% block content %}
 {% load static %}
+{% load custom_filters %}
     
     
     
@@ -252,133 +253,178 @@
                                 </div>
                             </div>
                             <div class="col-md-6 text-md-end text-muted small">
-                                <span>Get real-time details, task schedules, and core allocations direct from the HEAppE scheduler.</span>
+                                <span>Get real-time details, task schedules, and core allocations direct from the HEAppE.</span>
                             </div>
                         </div>
                     </div>
 
-                    <ul class="list-group list-group-flush">
-                        {% for job_item in job_details %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ job_item.name }} (ID: {{ job_item.id }})
-                            {% if job_item.state == 1 %}
-                                <span class="badge rounded-pill bg-secondary text-white">Configuring</span>
-                            {% elif job_item.state == 2 %}
-                                <span class="badge rounded-pill bg-info text-white">Submitted</span>
-                            {% elif job_item.state == 4 %}
-                                <span class="badge rounded-pill bg-primary text-white">Queued</span>
-                            {% elif job_item.state == 8 %}
-                                <span class="badge rounded-pill bg-warning text-dark">Running</span>
-                            {% elif job_item.state == 16 %}
-                                <span class="badge rounded-pill bg-success text-white">Finished</span>
-                            {% elif job_item.state == 32 %}
-                                <span class="badge rounded-pill bg-danger text-white">Failed</span>
-                            {% elif job_item.state == 64 %}
-                                <span class="badge rounded-pill bg-dark text-white">Canceled</span>
-                            {% elif job_item.state == 128 %}
-                                <span class="badge rounded-pill bg-secondary text-white">Waiting For Service Account</span>
-                            {% elif job_item.state == 256 %}
-                                <span class="badge rounded-pill bg-secondary text-white">Deleted</span>
-                            {% endif %}
-                            <div class="d-flex gap-2">
-                                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}">
-                                    Details
-                                </button>
-                                <button type="button" class="btn btn-primary btn-sm btn-trigger-live" data-job-id="{{ job_item.id }}">
-                                    <i class="bi bi-cpu me-1"></i>Live Info
-                                </button>
-                            </div>
-                        </li>
-                        {# Job Modal #}
-                        <div class="modal fade" id="jobModal{{ job_item.id }}" tabindex="-1" aria-labelledby="jobModalLabel{{ job_item.id }}" aria-hidden="true">
-                            <div class="modal-dialog modal-lg modal-dialog-centered">
-                                <div class="modal-content border-primary shadow">
-                                    <div class="modal-header bg-primary text-white">
-                                        <h5 class="modal-title" id="jobModalLabel{{ job_item.id }}">
-                                            Job: {{ job_item.name }} (ID: {{ job_item.id }})
-                                        </h5>
-                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                        <div class="row mb-3">
-                                            <div class="col-md-6">
-                                                <p><strong>State:</strong>
-                                                    {% block job_state_badge %}
-                                                        {% if job_item.state == 1 %}
-                                                            <span class="badge bg-secondary text-white">Configuring</span>
-                                                        {% elif job_item.state == 2 %}
-                                                            <span class="badge bg-info text-white">Submitted</span>
-                                                        {% elif job_item.state == 4 %}
-                                                            <span class="badge bg-primary text-white">Queued</span>
-                                                        {% elif job_item.state == 8 %}
-                                                            <span class="badge bg-warning text-dark">Running</span>
-                                                        {% elif job_item.state == 16 %}
-                                                            <span class="badge bg-success text-white">Finished</span>
-                                                        {% elif job_item.state == 32 %}
-                                                            <span class="badge bg-danger text-white">Failed</span>
-                                                        {% elif job_item.state == 64 %}
-                                                            <span class="badge bg-dark text-white">Canceled</span>
-                                                        {% elif job_item.state == 128 %}
-                                                            <span class="badge bg-secondary text-white">Waiting For Service Account</span>
-                                                        {% elif job_item.state == 256 %}
-                                                            <span class="badge bg-secondary text-white">Deleted</span>
-                                                        {% endif %}
-                                                    {% endblock %}
-                                                </p>
-                                                <p><strong>Submitter:</strong> {{ job_item.submitter|default:"N/A" }}</p>
-                                                <p><strong>Creation Time:</strong> {{ job_item.creation_time|default:"N/A" }}</p>
-                                                <p><strong>Submit Time:</strong> {{ job_item.submit_time|default:"N/A" }}</p>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <p><strong>Start Time:</strong> {{ job_item.start_time|default:"N/A" }}</p>
-                                                <p><strong>End Time:</strong> {{ job_item.end_time|default:"N/A" }}</p>
-                                                <p><strong>Total Tasks:</strong> {{ job_item.tasks|length }}</p>
-                                            </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="submittedJobsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width: 80px;">ID</th>
+                                    <th>Job Name</th>
+                                    <th style="width: 140px;">State</th>
+                                    <th>Submitter</th>
+                                    <th>Submitted At</th>
+                                    <th>Time Frame</th>
+                                    <th class="text-center" style="width: 90px;">Tasks</th>
+                                    <th class="text-end" style="width: 200px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for job_item in job_details %}
+                                <tr>
+                                    <td class="fw-semibold text-secondary">#{{ job_item.id }}</td>
+                                    <td class="fw-bold text-dark">{{ job_item.name }}</td>
+                                    <td>
+                                        {% if job_item.state == 1 %}
+                                            <span class="badge rounded-pill bg-secondary text-white">Configuring</span>
+                                        {% elif job_item.state == 2 %}
+                                            <span class="badge rounded-pill bg-info text-white">Submitted</span>
+                                        {% elif job_item.state == 4 %}
+                                            <span class="badge rounded-pill bg-primary text-white">Queued</span>
+                                        {% elif job_item.state == 8 %}
+                                            <span class="badge rounded-pill bg-warning text-dark">Running</span>
+                                        {% elif job_item.state == 16 %}
+                                            <span class="badge rounded-pill bg-success text-white">Finished</span>
+                                        {% elif job_item.state == 32 %}
+                                            <span class="badge rounded-pill bg-danger text-white">Failed</span>
+                                        {% elif job_item.state == 64 %}
+                                            <span class="badge rounded-pill bg-dark text-white">Canceled</span>
+                                        {% elif job_item.state == 128 %}
+                                            <span class="badge rounded-pill bg-secondary text-white">Waiting For Service Account</span>
+                                        {% elif job_item.state == 256 %}
+                                            <span class="badge rounded-pill bg-secondary text-white">Deleted</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small"><i class="bi bi-person me-1"></i>{{ job_item.submitter|default:"N/A" }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="small text-dark">{{ job_item.submit_time|format_datetime|default:"Not submitted" }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="small text-muted">
+                                            {% if job_item.start_time %}
+                                                <div><i class="bi bi-play-fill text-success me-1"></i>{{ job_item.start_time|format_datetime }}</div>
+                                            {% endif %}
+                                            {% if job_item.end_time %}
+                                                <div><i class="bi bi-stop-fill text-danger me-1"></i>{{ job_item.end_time|format_datetime }}</div>
+                                            {% endif %}
+                                            {% if not job_item.start_time and not job_item.end_time %}
+                                                <span class="text-muted">N/A</span>
+                                            {% endif %}
                                         </div>
-                                        <hr>
-                                        <h6 class="text-primary">Tasks</h6>
-                                        <div class="list-group">
-                                            {% for task in job_item.tasks %}
-                                            <div class="list-group-item list-group-item-action mb-2 shadow-sm rounded">
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <strong>{{ task.name }}</strong> (ID: {{ task.id }})
-                                                    {% if task.state == 1 %}
-                                                        <span class="badge bg-secondary text-white">Configuring</span>
-                                                    {% elif task.state == 2 %}
-                                                        <span class="badge bg-info text-white">Submitted</span>
-                                                    {% elif task.state == 4 %}
-                                                        <span class="badge bg-primary text-white">Queued</span>
-                                                    {% elif task.state == 8 %}
-                                                        <span class="badge bg-warning text-dark">Running</span>
-                                                    {% elif task.state == 16 %}
-                                                        <span class="badge bg-success text-white">Finished</span>
-                                                    {% elif task.state == 32 %}
-                                                        <span class="badge bg-danger text-white">Failed</span>
-                                                    {% elif task.state == 64 %}
-                                                        <span class="badge bg-dark text-white">Canceled</span>
-                                                    {% else %}
-                                                        <span class="badge bg-secondary text-white">{{ task.state }}</span>
-                                                    {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-light text-dark border fw-bold">{{ job_item.tasks|length }}</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}">
+                                                Details
+                                            </button>
+                                            <button type="button" class="btn btn-primary btn-sm btn-trigger-live" data-job-id="{{ job_item.id }}">
+                                                <i class="bi bi-cpu me-1"></i>Live Info
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {# Job Modal #}
+                                <div class="modal fade" id="jobModal{{ job_item.id }}" tabindex="-1" aria-labelledby="jobModalLabel{{ job_item.id }}" aria-hidden="true">
+                                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                                        <div class="modal-content border-primary shadow">
+                                            <div class="modal-header bg-primary text-white">
+                                                <h5 class="modal-title" id="jobModalLabel{{ job_item.id }}">
+                                                    Job: {{ job_item.name }} (ID: {{ job_item.id }})
+                                                </h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="row mb-3">
+                                                    <div class="col-md-6">
+                                                        <p><strong>State:</strong>
+                                                            {% if job_item.state == 1 %}
+                                                                <span class="badge bg-secondary text-white">Configuring</span>
+                                                            {% elif job_item.state == 2 %}
+                                                                <span class="badge bg-info text-white">Submitted</span>
+                                                            {% elif job_item.state == 4 %}
+                                                                <span class="badge bg-primary text-white">Queued</span>
+                                                            {% elif job_item.state == 8 %}
+                                                                <span class="badge bg-warning text-dark">Running</span>
+                                                            {% elif job_item.state == 16 %}
+                                                                <span class="badge bg-success text-white">Finished</span>
+                                                            {% elif job_item.state == 32 %}
+                                                                <span class="badge bg-danger text-white">Failed</span>
+                                                            {% elif job_item.state == 64 %}
+                                                                <span class="badge bg-dark text-white">Canceled</span>
+                                                            {% elif job_item.state == 128 %}
+                                                                <span class="badge bg-secondary text-white">Waiting For Service Account</span>
+                                                            {% elif job_item.state == 256 %}
+                                                                <span class="badge bg-secondary text-white">Deleted</span>
+                                                            {% endif %}
+                                                        </p>
+                                                        <p><strong>Submitter:</strong> {{ job_item.submitter|default:"N/A" }}</p>
+                                                        <p><strong>Creation Time:</strong> {{ job_item.creation_time|format_datetime|default:"N/A" }}</p>
+                                                        <p><strong>Submit Time:</strong> {{ job_item.submit_time|format_datetime|default:"N/A" }}</p>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <p><strong>Start Time:</strong> {{ job_item.start_time|format_datetime|default:"N/A" }}</p>
+                                                        <p><strong>End Time:</strong> {{ job_item.end_time|format_datetime|default:"N/A" }}</p>
+                                                        <p><strong>Total Tasks:</strong> {{ job_item.tasks|length }}</p>
+                                                    </div>
                                                 </div>
-                                                <small>
-                                                    Start: {{ task.start_time|default:"N/A" }} |
-                                                    End: {{ task.end_time|default:"N/A" }} |
-                                                    Usage: {{ task.usage|default:"N/A" }}
-                                                </small>
+                                                <hr>
+                                                <h6 class="text-primary">Tasks</h6>
+                                                <div class="list-group">
+                                                    {% for task in job_item.tasks %}
+                                                    <div class="list-group-item list-group-item-action mb-2 shadow-sm rounded">
+                                                        <div class="d-flex justify-content-between align-items-center">
+                                                            <strong>{{ task.name }}</strong> (ID: {{ task.id }})
+                                                            {% if task.state == 1 %}
+                                                                <span class="badge bg-secondary text-white">Configuring</span>
+                                                            {% elif task.state == 2 %}
+                                                                <span class="badge bg-info text-white">Submitted</span>
+                                                            {% elif task.state == 4 %}
+                                                                <span class="badge bg-primary text-white">Queued</span>
+                                                            {% elif task.state == 8 %}
+                                                                <span class="badge bg-warning text-dark">Running</span>
+                                                            {% elif task.state == 16 %}
+                                                                <span class="badge bg-success text-white">Finished</span>
+                                                            {% elif task.state == 32 %}
+                                                                <span class="badge bg-danger text-white">Failed</span>
+                                                            {% elif task.state == 64 %}
+                                                                <span class="badge bg-dark text-white">Canceled</span>
+                                                            {% else %}
+                                                                <span class="badge bg-secondary text-white">{{ task.state }}</span>
+                                                            {% endif %}
+                                                        </div>
+                                                        <small>
+                                                            Start: {{ task.start_time|format_datetime|default:"N/A" }} |
+                                                            End: {{ task.end_time|format_datetime|default:"N/A" }} |
+                                                            Usage: {{ task.usage|default:"N/A" }}
+                                                        </small>
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
                                             </div>
-                                            {% endfor %}
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Close</button>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Close</button>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                        {% empty %}
-                        <li class="list-group-item">No jobs available in the selected time window</li>
-                        {% endfor %}
-                    </ul>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="8" class="text-center py-4 text-muted">
+                                        <i class="bi bi-info-circle me-1"></i>No jobs available in the selected time window
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
 <nav aria-label="Page navigation">
   <ul class="pagination justify-content-center mt-3">
     {# předchozí stránka #}
