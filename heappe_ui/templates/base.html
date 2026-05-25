@@ -93,11 +93,6 @@
 
                 <div class="d-flex align-items-center gap-2">
                     {% if user.is_authenticated %}
-                        <div id="update-notification-item" class="d-none">
-                            <button class="btn btn-warning btn-sm fw-bold px-3 animate-pulse" data-bs-toggle="modal" data-bs-target="#updateModal">
-                                <i class="bi bi-arrow-up-circle-fill me-1"></i> Update Available
-                            </button>
-                        </div>
 
                         {% if request.session.chosen_instance %}
                             <button class="btn btn-sm btn-outline-warning px-3" onclick="refreshCache()"><i class="bi bi-arrow-clockwise"></i> Sync Cache</button>
@@ -196,8 +191,6 @@
                     const versionBadge = document.getElementById('modal-version-badge');
 
                     if (data.update_available) {
-                        // Show the navbar Update button
-                        document.getElementById('update-notification-item').classList.remove('d-none');
 
                         // Show version badge in modal header
                         if (versionBadge && data.current_version && data.latest_version) {
@@ -257,7 +250,6 @@
                     const versionBadge = document.getElementById('modal-version-badge');
 
                     if (data.update_available) {
-                        document.getElementById('update-notification-item').classList.remove('d-none');
                         if (versionBadge && data.current_version && data.latest_version) {
                             versionBadge.classList.remove('d-none');
                             versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
