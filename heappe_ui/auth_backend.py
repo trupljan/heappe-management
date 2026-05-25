@@ -40,7 +40,40 @@ def patch_api_client(api_instance):
                 if hasattr(body, 'session_code') and (getattr(body, 'session_code') is None or getattr(body, 'session_code') == ''):
                     body.session_code = None
 
-        return original_call_api(*bound_args.args, **bound_args.kwargs)
+        # Outgoing Request Log
+        resource_path = bound_args.arguments.get('resource_path', 'unknown')
+        print(f"[HEAppE API Request] Outgoing path: {resource_path}")
+        if body:
+            print(f"[HEAppE API Request] Body payload: {body}")
+
+        try:
+            response = original_call_api(*bound_args.args, **bound_args.kwargs)
+            # Incoming Response Log
+            print(f"[HEAppE API Response] Success on: {resource_path}")
+            if hasattr(response, 'data'):
+                # Preload content = False -> response is RESTResponse with .data (bytes)
+                data = response.data
+                if isinstance(data, bytes):
+                    try:
+                        data = data.decode('utf-8')
+                    except Exception:
+                        pass
+                print(f"[HEAppE API Response Content]: {data}")
+            else:
+                # Preload content = True -> response is deserialized model
+                try:
+                    if hasattr(response, 'to_dict'):
+                        print(f"[HEAppE API Response Content]: {response.to_dict()}")
+                    elif hasattr(response, 'to_str'):
+                        print(f"[HEAppE API Response Content]: {response.to_str()}")
+                    else:
+                        print(f"[HEAppE API Response Content]: {response}")
+                except Exception as ex:
+                    print(f"[HEAppE API Response Content] Serialization error: {ex}")
+            return response
+        except Exception as e:
+            print(f"[HEAppE API Response] Exception raised on: {resource_path} | Details: {e}")
+            raise
 
     api_instance.call_api = patched_call_api
     return api_instance

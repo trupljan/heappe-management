@@ -238,12 +238,15 @@ def dashboard_view(request):
             TimeTo=time_to
         )
 
-        # Rozbalit všechny job_itemy do jednoho seznamu
         all_jobs = []
+        seen_job_ids = set()
         for job in job_details_raw:
             for cluster in job.clusters:
                 for node_type in cluster.cluster_node_types:
-                    all_jobs.extend(node_type.jobs)
+                    for job_item in node_type.jobs:
+                        if job_item.id not in seen_job_ids:
+                            seen_job_ids.add(job_item.id)
+                            all_jobs.append(job_item)
         all_jobs.sort(key=lambda x: x.id or 0, reverse=True)
 
 
