@@ -661,7 +661,8 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
 
         if deployed_version and latest_version:
             def clean_ver(v):
-                return [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
+                res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
+                return res if res else [0]
             try:
                 if clean_ver(latest_version) > clean_ver(deployed_version):
                     update_available = True

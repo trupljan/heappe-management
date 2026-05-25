@@ -44,13 +44,7 @@ def middleware_update_renderer(request):
     now = time.time()
     last_check = request.session.get("last_middleware_check_time", 0)
 
-    # Cache check result for 15 minutes (900 seconds)
-    if now - last_check < 900 and "middleware_update_available" in request.session:
-        return {
-            'middleware_update_available': request.session.get("middleware_update_available"),
-            'middleware_deployed_version': request.session.get("middleware_deployed_version"),
-            'middleware_latest_version': request.session.get("middleware_latest_version"),
-        }
+
 
     deployed_version = ""
     latest_version = ""
@@ -104,7 +98,8 @@ def middleware_update_renderer(request):
             latest_version = branches[0].lstrip("vV")
             
             def clean_ver(v):
-                return [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
+                res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
+                return res if res else [0]
             
             try:
                 if clean_ver(latest_version) > clean_ver(deployed_version):
