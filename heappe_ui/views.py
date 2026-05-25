@@ -602,8 +602,8 @@ def check_for_updates(request):
     last_check = request.session.get("last_update_check_time", 0)
     force = request.GET.get('force') == '1'
 
-    # Cache check result for 15 minutes (900 seconds), unless forced
-    if not force and now - last_check < 900 and "update_available" in request.session:
+    # Cache valid only if new-format keys exist (prevents stale data from old hash-based implementation)
+    if not force and now - last_check < 900 and "update_current_version" in request.session:
         return JsonResponse({
             'update_available': request.session.get("update_available"),
             'current_version': request.session.get("update_current_version", ""),
