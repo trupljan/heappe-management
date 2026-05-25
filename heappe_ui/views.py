@@ -1367,6 +1367,11 @@ def invalidate_cache_api(request):
     from django.conf import settings
     from django.http import JsonResponse
 
+    timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
+    try:
+        with open(timestamp_file, "w") as f:
+            f.write(str(time.time()))
+        return JsonResponse({"status": "ok", "message": "Cache invalidated globally"})
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
