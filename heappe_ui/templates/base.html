@@ -72,7 +72,7 @@
                             {% endif %}
                             <li><a class="dropdown-item" href="{% url 'logs' %}">Logs</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'update_server_page' %}"><i class="bi bi-arrow-up-circle me-1"></i> System Update</a></li>
+                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#updateModal"><i class="bi bi-arrow-up-circle me-1"></i> System Update</a></li>
                         </ul>
                     </li>
                     <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center" href="{% url 'deploy_view' %}"><i class="bi bi-cloud-arrow-up me-1"></i> Deploy</a></li>
@@ -138,7 +138,7 @@
                 </div>
                 <div class="modal-footer bg-light" id="modalFooter">
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Later</button>
-                    <button type="button" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
+                    <button type="button" id="start-update-btn" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
                         Start Update Now
                     </button>
                 </div>
@@ -170,9 +170,12 @@
             fetch('{% url "check_updates" %}')
                 .then(r => r.json())
                 .then(data => {
+                    const container = document.getElementById('commit-messages');
+                    const noticeAlert = document.querySelector('#update-init-view .alert');
+                    const startUpdateBtn = document.getElementById('start-update-btn');
+
                     if (data.update_available) {
                         document.getElementById('update-notification-item').classList.remove('d-none');
-                        const container = document.getElementById('commit-messages');
                         if (container) {
                             if (data.changes && data.changes.length > 0) {
                                 container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
@@ -186,6 +189,21 @@
                         if (toastEl) {
                             const toast = new bootstrap.Toast(toastEl, { autohide: false });
                             toast.show();
+                        }
+                    } else {
+                        // System is up to date
+                        if (container) {
+                            container.innerHTML = '<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date.</div>';
+                        }
+                        if (noticeAlert) {
+                            noticeAlert.classList.add('d-none');
+                        }
+                        if (startUpdateBtn) {
+                            startUpdateBtn.classList.add('d-none');
+                        }
+                        const changesHeader = document.querySelector('#update-init-view p');
+                        if (changesHeader) {
+                            changesHeader.textContent = "Status:";
                         }
                     }
                 });
@@ -258,7 +276,7 @@
                     <div class="mt-2 small text-light">
                         A new version of the HEAppE Admin Panel is available.
                         <div class="mt-2">
-                            <a href="{% url 'update_server_page' %}" class="btn btn-warning btn-sm fw-bold me-1">Update Now</a>
+                            <button type="button" class="btn btn-warning btn-sm fw-bold me-1" data-bs-toggle="modal" data-bs-target="#updateModal" data-bs-dismiss="toast">Update Now</button>
                             <button type="button" class="btn btn-outline-light btn-sm text-white" data-bs-dismiss="toast">Later</button>
                         </div>
                     </div>

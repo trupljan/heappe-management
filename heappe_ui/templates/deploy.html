@@ -34,6 +34,29 @@
         </div>
     </div>
 
+    {% if instance_name and is_deployed %}
+        {% if update_available %}
+            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between p-3 mb-4 animate-fade-in">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true"></span>
+                    <div>
+                        <strong class="text-warning-emphasis">Update Available:</strong> A new version of HEAppE Middleware is available (deployed: <code>{{ deployed_version }}</code>, latest: <code>{{ latest_version }}</code>).
+                    </div>
+                </div>
+                <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="update">
+                    <i class="bi bi-arrow-repeat me-1"></i>Update Now
+                </button>
+            </div>
+        {% else %}
+            <div class="alert alert-light border shadow-sm p-3 mb-4 d-flex align-items-center gap-2">
+                <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                <div>
+                    Deployed Version: <strong>{{ deployed_version|default:"Unknown" }}</strong> <span class="badge bg-success-subtle text-success border border-success-subtle ms-1">Latest Version</span>
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+
     <div class="modal fade" id="deployUpdateModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content shadow-lg border-0">

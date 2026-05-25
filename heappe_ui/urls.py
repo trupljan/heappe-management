@@ -56,7 +56,6 @@ urlpatterns = [
     path('command-templates/<int:command_template_id>/modify/', views.command_template_modify, name='command_template_modify'),
     path('command-templates/<int:command_template_id>/delete/', views.command_template_delete, name='command_template_delete'),
 
-    path('update-app/', views.update_app, name='update_app'),
 
     path('instances/', views.instance_credentials_list, name='instance_credentials_list'),
     path('instances/<int:pk>/choose/', views.instance_credentials_list, name='instance_credentials_list'),
@@ -65,8 +64,6 @@ urlpatterns = [
     path('instances/<int:pk>/delete/', views.instance_credentials_delete, name='instance_credentials_delete'),
     path('instances/choose/', views.chose_instance_view, name='chose_instance_view'),
 
-    path('update/', views.update_server_page, name='update_server_page'),
-    path('api/check-repo/', views.check_repo_and_fetch_branches, name='check_repo_and_fetch_branches'),
     path('api/deploy-direct/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
     path('fetch-branches/', views.fetch_repo_branches, name='fetch_branches'),
 

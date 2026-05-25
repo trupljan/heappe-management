@@ -620,6 +620,55 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
         except InstanceCredentials.DoesNotExist:
             instance_service = None
 
+    deployed_version = ""
+    latest_version = branches[0].lstrip("vV") if branches else ""
+    update_available = False
+
+    if instance_name:
+        # 1. Try to get deployed version from Health check
+        try:
+            if instance_service:
+                host = instance_service.heappe_host
+                port = instance_service.heappe_port
+                # Construct host URL
+                host_url = f"{host}:{port}"
+                if not host_url.startswith('http'):
+                    host_url = 'http://' + host_url
+                
+                config = hp.Configuration()
+                config.host = host_url
+                config.verify_ssl = True
+                
+                api_client = hp.ApiClient(config)
+                controller = hp.HealthApi(api_client)
+                health_info = controller.heappe_health_get()
+                if health_info and health_info.version:
+                    deployed_version = health_info.version.lstrip("vV")
+        except Exception as e:
+            print(f"Healthcheck failed for {instance_name}, falling back to appsettings: {e}")
+
+        # 2. Fallback to appsettings.json if health check failed or returned empty
+        if not deployed_version:
+            appsettings_path = os.path.join(base_path, instance_name, "app", "confs", "appsettings.json")
+            if os.path.exists(appsettings_path):
+                try:
+                    import json
+                    with open(appsettings_path, "r", encoding="utf-8") as f:
+                        appsettings_data = json.load(f)
+                    deployed_version = appsettings_data.get("ApplicationAPISettings", {}).get("DeploymentSettings", {}).get("Version", "").lstrip("vV")
+                except Exception as e:
+                    print(f"Error reading appsettings.json: {e}")
+
+        if deployed_version and latest_version:
+            def clean_ver(v):
+                return [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
+            try:
+                if clean_ver(latest_version) > clean_ver(deployed_version):
+                    update_available = True
+            except Exception:
+                if latest_version.lower().lstrip('v') != deployed_version.lower().lstrip('v'):
+                    update_available = True
+
     try:
         client = docker.from_env()
 
@@ -733,7 +782,10 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
         "repo_branch": branches[0] if branches else "main",
         "branches": branches,
         "instance_service": instance_service,
-        "is_deployed": instance_service.is_deployed if instance_service else False
+        "is_deployed": instance_service.is_deployed if instance_service else False,
+        "deployed_version": deployed_version,
+        "latest_version": latest_version,
+        "update_available": update_available,
     }
     return render(request, "deploy.html", context)
 
