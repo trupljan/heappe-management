@@ -7,9 +7,6 @@
     <div class="flex justify-between items-center mb-4">
         <h1 class="text-3xl font-bold text-gray-900 text-center">
             System Logs Dashboard
-            <a href="{% url 'logs_analyzer' %}" class="text-decoration-none" title="Open Experimental Analyzer">
-                <i class="bi bi-cpu text-gray-400 hover:text-gray-600 ms-2" style="font-size: 1.2rem; vertical-align: middle;"></i>
-            </a>
         </h1>
         <div class="form-check form-switch">
             <input class="form-check-input" type="checkbox" id="viewToggle">
@@ -125,7 +122,7 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                     {% for log in logs %}
-                    <tr class="hover:bg-gray-50 transition-colors">
+                    <tr class="hover:bg-gray-50 transition-colors cursor-pointer" onclick="showLogContext(this)" data-date="{{ log.Date|date:'Y-m-d H:i:s.u' }}" data-instance="{{ log.InstanceName }}">
                         <td class="px-4 py-2 text-sm text-gray-900">{{ log.Date|date:"d.m.Y H:i:s" }}</td>
                         <td class="px-4 py-2 text-sm">
                             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
@@ -341,6 +338,147 @@
         logsDashboard.classList.remove('hidden');
         if (!{{ error|yesno:"true,false" }}) {
             initChart();
+        }
+    });
+    </script>
+
+    <!-- Log Context Modal -->
+    <div class="modal fade" id="logContextModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content shadow-2xl border-0 bg-white text-dark">
+                <div class="modal-header border-bottom bg-gray-50 py-3 px-4 flex justify-between items-center">
+                    <div>
+                        <h5 class="modal-title fw-bold text-gray-900" id="contextModalLabel">Preceding Log Events</h5>
+                        <p class="text-xs text-gray-500 mb-0">Showing 15 preceding log entries leading up to the selected event.</p>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <!-- Filters/Toggles inside modal -->
+                    <div class="bg-gray-100 py-2 px-4 border-bottom flex justify-between items-center">
+                        <div class="flex items-center gap-2">
+                            <label class="form-check-label text-xs fw-bold text-gray-600 mb-0 me-2" for="contextFilterInstance">Filter by same instance only</label>
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input" type="checkbox" id="contextFilterInstance" checked>
+                            </div>
+                        </div>
+                        <span class="text-xs text-gray-500 italic" id="contextTargetTime"></span>
+                    </div>
+                    <!-- Log content area -->
+                    <div class="overflow-y-auto max-h-96 p-0" id="contextLogsContainer" style="font-family: monospace;">
+                        <div class="flex justify-center items-center py-5">
+                            <div class="spinner-border text-primary" role="status"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-gray-50 border-top py-2 px-4 flex justify-between">
+                    <span class="text-xs text-gray-500">Selected event is highlighted in yellow.</span>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .text-xxs {
+            font-size: 0.72rem;
+        }
+        .border-bottom {
+            border-bottom: 1px solid #e5e7eb;
+        }
+    </style>
+
+    <script>
+    let currentContextRow = null;
+
+    function showLogContext(row) {
+        currentContextRow = row;
+        const logDate = row.dataset.date;
+        const instanceName = row.dataset.instance;
+        const sameInstance = document.getElementById('contextFilterInstance').checked;
+
+        // Set date in header
+        document.getElementById('contextTargetTime').innerText = `Target Time: ${logDate}`;
+
+        // Show spinner
+        document.getElementById('contextLogsContainer').innerHTML = `
+            <div class="flex justify-center items-center py-5 my-4">
+                <div class="spinner-border text-primary" role="status"></div>
+            </div>
+        `;
+
+        // Open modal
+        const modalEl = document.getElementById('logContextModal');
+        const myModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        myModal.show();
+
+        // Fetch preceding logs
+        fetchPrecedingLogs(logDate, instanceName, sameInstance);
+    }
+
+    function fetchPrecedingLogs(date, instance, sameInstance) {
+        const url = `{% url 'logs_context_api' %}?date=${encodeURIComponent(date)}&instance=${encodeURIComponent(instance)}&same_instance=${sameInstance}`;
+        
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    if (data.logs.length === 0) {
+                        document.getElementById('contextLogsContainer').innerHTML = '<div class="text-center py-5 text-gray-500">No preceding logs found.</div>';
+                        return;
+                    }
+
+                    let logsHtml = '';
+                    data.logs.forEach((log, index) => {
+                        const isTarget = (index === data.logs.length - 1); // Clicked log is the last one in chronological order
+                        const rowBg = isTarget ? 'bg-warning bg-opacity-25 border-l-4 border-warning font-semibold' : 'hover:bg-gray-50 border-l-4 border-transparent';
+                        
+                        let levelBadge = '';
+                        if (log.LevelName === 'Debug') levelBadge = 'bg-gray-200 text-gray-800';
+                        else if (log.LevelName === 'Information') levelBadge = 'bg-blue-100 text-blue-800';
+                        else if (log.LevelName === 'Warning') levelBadge = 'bg-yellow-100 text-yellow-800';
+                        else if (log.LevelName === 'Error') levelBadge = 'bg-red-100 text-red-800';
+                        else if (log.LevelName === 'Critical') levelBadge = 'bg-dark text-white';
+                        
+                        let msgHtml = log.Message;
+                        if (log.Exception && log.Exception !== '-' && log.Exception !== '') {
+                            msgHtml += `<pre class="mt-1 p-2 bg-red-50 text-red-700 text-xxs rounded overflow-x-auto" style="white-space: pre-wrap; word-break: break-all;">${log.Exception}</pre>`;
+                        }
+
+                        let timePart = log.Date;
+                        if (log.Date.includes(' ')) {
+                            timePart = log.Date.split(' ')[1];
+                        }
+
+                        logsHtml += `
+                            <div class="py-2 px-3 border-bottom ${rowBg} flex flex-col md:flex-row md:items-start gap-2 text-dark">
+                                <div class="text-gray-500 whitespace-nowrap text-xs md:w-32">${timePart}</div>
+                                <div class="md:w-24">
+                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xxs font-semibold ${levelBadge}">
+                                        ${log.LevelName}
+                                    </span>
+                                </div>
+                                <div class="text-gray-600 text-xs md:w-40 truncate" title="${log.Class}">${log.Class}</div>
+                                <div class="flex-grow text-gray-900 break-words text-xs">${msgHtml}</div>
+                            </div>
+                        `;
+                    });
+                    document.getElementById('contextLogsContainer').innerHTML = logsHtml;
+                } else {
+                    document.getElementById('contextLogsContainer').innerHTML = `<div class="alert alert-danger m-3 text-xs">${data.message || 'Failed to fetch preceding logs.'}</div>`;
+                }
+            })
+            .catch(err => {
+                document.getElementById('contextLogsContainer').innerHTML = `<div class="alert alert-danger m-3 text-xs">Error loading logs: ${err}</div>`;
+            });
+    }
+
+    // Handle toggle change inside modal
+    document.getElementById('contextFilterInstance').addEventListener('change', function() {
+        if (currentContextRow) {
+            const logDate = currentContextRow.dataset.date;
+            const instanceName = currentContextRow.dataset.instance;
+            fetchPrecedingLogs(logDate, instanceName, this.checked);
         }
     });
     </script>

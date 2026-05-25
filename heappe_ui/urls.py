@@ -71,8 +71,7 @@ urlpatterns = [
     path('fetch-branches/', views.fetch_repo_branches, name='fetch_branches'),
 
     path("logs/", views.log_viewer_view, name="logs"),
-    path("logs/analyzer/", views.logs_analyzer_view, name="logs_analyzer"),
-    path("logs/analyzer/context/", views.logs_analyzer_context_api, name="logs_analyzer_context_api"),
+    path("logs/context/", views.logs_context_api, name="logs_context_api"),
     path('logs/<str:container_id>/', views.container_logs_view, name='container_logs'),
     path("fetch-new-logs/", views.fetch_new_logs, name="fetch_new_logs"),
 
