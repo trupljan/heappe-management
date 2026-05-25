@@ -1367,10 +1367,361 @@ def invalidate_cache_api(request):
     from django.conf import settings
     from django.http import JsonResponse
 
-    timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
-    try:
-        with open(timestamp_file, "w") as f:
-            f.write(str(time.time()))
-        return JsonResponse({"status": "ok", "message": "Cache invalidated globally"})
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@login_required
+def logs_analyzer_view(request):
+    instance = request.session.get('chosen_instance', 'develop')
+    credentials = get_instance_settings(instance_name=instance)
+    db_settings = {}
+    if credentials:
+        db_settings = {
+            'server': credentials.log_db_host,
+            'port': credentials.log_db_port,
+            'user': credentials.log_db_user,
+            'password': credentials.log_db_password,
+            'database': credentials.log_db_database,
+            'tds_version': '8.0',
+        }
+
+    errors = []
+    is_demo_mode = False
+    error_msg = None
+
+    try:
+        # Check if database is fully configured
+        if not db_settings or not db_settings.get('server') or not db_settings.get('database'):
+            raise DatabaseSettingsError("Log database is not configured. Falling back to Demo Mode.")
+        
+        # Connect and fetch latest errors
+        conn = pymssql.connect(**db_settings)
+        cursor = conn.cursor(as_dict=True)
+        
+        # Fetch LoggingLevelType first
+        cursor.execute("SELECT * FROM LoggingLevelType")
+        level_rows = cursor.fetchall()
+        levels_map = {row['Id']: row['Name'] for row in level_rows}
+        
+        # Fetch errors
+        cursor.execute("""
+            SELECT TOP 50 l.*
+            FROM dbo.Log l
+            WHERE l.LevelId IN (4, 5)
+            ORDER BY l.Date DESC
+        """)
+        rows = cursor.fetchall()
+        for r in rows:
+            r['LevelName'] = levels_map.get(r['LevelId'], 'Error' if r['LevelId'] == 4 else 'Critical')
+            errors.append(r)
+            
+        cursor.close()
+        conn.close()
+    except Exception as e:
+        is_demo_mode = True
+        error_msg = str(e)
+        errors = _get_mock_errors(instance)
+
+    return render(request, 'logs_analyzer.html', {
+        'errors': errors,
+        'is_demo_mode': is_demo_mode,
+        'error_msg': error_msg,
+        'instance': instance,
+    })
+
+
+def _get_mock_errors(instance):
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    
+    mock_templates = [
+        {
+            "Id": 1,
+            "IP": "192.168.1.105",
+            "InstanceName": instance,
+            "InstanceVersion": "v6.0.0",
+            "LevelId": 4,
+            "LevelName": "Error",
+            "Date": now - timedelta(minutes=5),
+            "UserId": 42,
+            "UserName": "johndoe",
+            "UserEmail": "john.doe@it4i.cz",
+            "JobId": 45091,
+            "Message": "Failed to allocate resource: CPU limit exceeded on node node-042.",
+            "Class": "HEAppE.Core.Scheduler",
+            "Exception": "ResourceAllocationException: Requested cores (128) exceeds current free capacity on node-042.\n   at HEAppE.Core.Scheduler.AllocationManager.Allocate(JobContext context)\n   at HEAppE.Core.Scheduler.SubmitTask.Execute()"
+        },
+        {
+            "Id": 2,
+            "IP": "192.168.1.102",
+            "InstanceName": instance,
+            "InstanceVersion": "v6.0.0",
+            "LevelId": 4,
+            "LevelName": "Error",
+            "Date": now - timedelta(minutes=18),
+            "UserId": 1,
+            "UserName": "admin",
+            "UserEmail": "admin@it4i.cz",
+            "JobId": 45092,
+            "Message": "Database connection timed out during active transaction commit.",
+            "Class": "HEAppE.Core.Database",
+            "Exception": "TimeoutException: Database transaction checkout failed to commit within 15 seconds.\n   at HEAppE.Core.Database.ConnectionPool.Commit(Transaction tx)\n   at HEAppE.Core.Services.JobService.UpdateState(Int32 jobId, Int32 state)"
+        },
+        {
+            "Id": 3,
+            "IP": "10.0.4.15",
+            "InstanceName": instance,
+            "InstanceVersion": "v6.0.0",
+            "LevelId": 5,
+            "LevelName": "Critical",
+            "Date": now - timedelta(minutes=42),
+            "UserId": None,
+            "UserName": None,
+            "UserEmail": None,
+            "JobId": None,
+            "Message": "Staging area space critical: less than 1% free space left.",
+            "Class": "HEAppE.Core.Storage",
+            "Exception": "IOException: Disk full on partition /var/heappe/staging\n   at System.IO.DiskSpaceTracker.CheckStorageLimits()\n   at HEAppE.Core.Storage.StagingCleanupManager.Run()"
+        },
+        {
+            "Id": 4,
+            "IP": "192.168.1.109",
+            "InstanceName": instance,
+            "InstanceVersion": "v6.0.0",
+            "LevelId": 4,
+            "LevelName": "Error",
+            "Date": now - timedelta(hours=1, minutes=5),
+            "UserId": 18,
+            "UserName": "cluster_agent",
+            "UserEmail": "agent@it4i.cz",
+            "JobId": 45095,
+            "Message": "Unauthorized attempt to access job data for JobId #45095.",
+            "Class": "HEAppE.Core.Security",
+            "Exception": "SecurityException: Principal has insufficient permissions to modify or access this job context.\n   at HEAppE.Core.Security.AuthManager.VerifyAccess(UserPrincipal principal, Job job)"
+        },
+        {
+            "Id": 5,
+            "IP": "127.0.0.1",
+            "InstanceName": instance,
+            "InstanceVersion": "v6.0.0",
+            "LevelId": 5,
+            "LevelName": "Critical",
+            "Date": now - timedelta(hours=2, minutes=10),
+            "UserId": None,
+            "UserName": None,
+            "UserEmail": None,
+            "JobId": None,
+            "Message": "Vault token renewal failed: secret engine unreachable.",
+            "Class": "HEAppE.Core.Security",
+            "Exception": "VaultException: Service unavailable (status code 503)\n   at HEAppE.Core.Security.VaultClient.RenewToken(String token)\n   at HEAppE.Core.Security.VaultTokenRefresher.Tick()"
+        },
+        {
+            "Id": 6,
+            "IP": "192.168.1.200",
+            "InstanceName": instance,
+            "InstanceVersion": "v6.0.0",
+            "LevelId": 4,
+            "LevelName": "Error",
+            "Date": now - timedelta(hours=3, minutes=30),
+            "UserId": 12,
+            "UserName": "api_user",
+            "UserEmail": "api@it4i.cz",
+            "JobId": None,
+            "Message": "Scheduler synchronization failed: response code 503 from backend.",
+            "Class": "HEAppE.Core.Api",
+            "Exception": "HttpRequestException: Server returned service unavailable status.\n   at HEAppE.Core.Api.BackendClient.SyncSchedulerState()\n   at HEAppE.Core.Services.SyncService.Process()"
+        }
+    ]
+    return mock_templates
+
+
+@login_required
+def logs_analyzer_context_api(request):
+    error_id = request.GET.get('error_id')
+    mode = request.GET.get('mode', 'instance') # instance, user, job
+    
+    # We also pass search details from frontend just in case
+    error_date_str = request.GET.get('date')
+    instance_name = request.GET.get('instance')
+    user_name = request.GET.get('user')
+    job_id = request.GET.get('job_id')
+    
+    # Parse date
+    if error_date_str:
+        try:
+            error_date = datetime.fromisoformat(error_date_str.replace('Z', '+00:00'))
+        except Exception:
+            error_date = datetime.now()
+    else:
+        error_date = datetime.now()
+
+    # Database settings
+    instance = request.session.get('chosen_instance', 'develop')
+    credentials = get_instance_settings(instance_name=instance)
+    db_settings = {}
+    if credentials:
+        db_settings = {
+            'server': credentials.log_db_host,
+            'port': credentials.log_db_port,
+            'user': credentials.log_db_user,
+            'password': credentials.log_db_password,
+            'database': credentials.log_db_database,
+            'tds_version': '8.0',
+        }
+
+    context_logs = []
+    is_demo = False
+
+    try:
+        if not db_settings or not db_settings.get('server') or not db_settings.get('database'):
+            raise DatabaseSettingsError()
+            
+        conn = pymssql.connect(**db_settings)
+        cursor = conn.cursor(as_dict=True)
+        
+        cursor.execute("SELECT * FROM LoggingLevelType")
+        level_rows = cursor.fetchall()
+        levels_map = {row['Id']: row['Name'] for row in level_rows}
+        
+        # Build query
+        query = """
+            SELECT TOP 15 l.*
+            FROM dbo.Log l
+            WHERE l.Date <= %s AND l.InstanceName = %s
+        """
+        params = [error_date, instance_name or instance]
+        
+        if mode == 'user' and user_name:
+            query += " AND l.UserName = %s"
+            params.append(user_name)
+        elif mode == 'job' and job_id:
+            query += " AND l.JobId = %s"
+            params.append(int(job_id))
+            
+        query += " ORDER BY l.Date DESC"
+        
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+        
+        for r in rows:
+            r['LevelName'] = levels_map.get(r['LevelId'], 'Information')
+            # Format datetime to string for json serialization
+            if isinstance(r['Date'], datetime):
+                r['Date'] = r['Date'].strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+            context_logs.append(r)
+            
+        cursor.close()
+        conn.close()
+        
+        # Chronological order
+        context_logs.reverse()
+        
+    except Exception:
+        is_demo = True
+        context_logs = _get_mock_context_logs(int(error_id or 1), mode, user_name, job_id)
+
+    return JsonResponse({
+        'status': 'success',
+        'is_demo': is_demo,
+        'logs': context_logs
+    })
+
+
+def _get_mock_context_logs(error_id, mode, user_name, job_id):
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    logs = []
+    
+    # We generate context depending on error_id
+    if error_id == 1: # CPU Limit error
+        base_time = now - timedelta(minutes=5)
+        raw_logs = [
+            ("Information", "HEAppE.Core.Scheduler", "Job submission request for JobId #45091 (NodeCount=8, CoreCount=128) by user johndoe.", -120),
+            ("Debug", "HEAppE.Core.Scheduler", "Validating limits for user 'johndoe'. Max cores allowed: 512, currently using: 256.", -100),
+            ("Debug", "HEAppE.Core.Scheduler", "Scheduler queued JobId #45091 in queue 'Q_Standard'.", -90),
+            ("Information", "HEAppE.Core.Scheduler", "Scheduler assigned JobId #45091 to cluster node-042.", -60),
+            ("Debug", "HEAppE.Core.Api", "Sending deployment command payload to sshagent for node-042.", -45),
+            ("Debug", "HEAppE.Core.Api", "Executing remote command: /opt/heappe/bin/run_hpc_job.sh --job-id 45091.", -30),
+            ("Warning", "HEAppE.Core.Scheduler", "Node node-042 reported high memory load: 94%.", -10),
+            ("Error", "HEAppE.Core.Scheduler", "Failed to allocate resource: CPU limit exceeded on node node-042.", 0),
+        ]
+    elif error_id == 2: # DB Timeout error
+        base_time = now - timedelta(minutes=18)
+        raw_logs = [
+            ("Information", "HEAppE.Core.Api", "Transaction checkout request received for session admin_session_91a.", -50),
+            ("Debug", "HEAppE.Core.Database", "Acquired DB connection from connection pool (Active connections: 48/50).", -40),
+            ("Debug", "HEAppE.Core.Database", "Executing query: UPDATE JobState SET State = 4 WHERE Id = 45092.", -30),
+            ("Warning", "HEAppE.Core.Database", "DB lock contention detected on table JobState for page 984.", -20),
+            ("Warning", "HEAppE.Core.Database", "Retrying transaction commit (attempt 1/3)...", -10),
+            ("Error", "HEAppE.Core.Database", "Database connection timed out during active transaction commit.", 0),
+        ]
+    elif error_id == 3: # Disk full error
+        base_time = now - timedelta(minutes=42)
+        raw_logs = [
+            ("Information", "HEAppE.Core.Storage", "Staging folder clean-up task initiated by scheduler.", -300),
+            ("Information", "HEAppE.Core.Storage", "Checked directory size for /opt/heappe-deployment/develop/staging/temp: 954 GB.", -240),
+            ("Warning", "HEAppE.Core.Storage", "Failed to remove temporary file: Permission denied for /opt/heappe-deployment/develop/staging/temp/job_4412_out.tar.", -180),
+            ("Warning", "HEAppE.Core.Storage", "Clean-up task completed with warnings. Freed 0 bytes.", -120),
+            ("Critical", "HEAppE.Core.Storage", "Staging area space critical: less than 1% free space left.", 0),
+        ]
+    elif error_id == 4: # Unauthorized JobAccess error
+        base_time = now - timedelta(hours=1, minutes=5)
+        raw_logs = [
+            ("Debug", "HEAppE.Core.Security", "Authenticating user 'cluster_agent' via session token.", -50),
+            ("Information", "HEAppE.Core.Security", "User 'cluster_agent' authenticated successfully (Roles: Agent).", -45),
+            ("Debug", "HEAppE.Core.Api", "API call received: GetJobDetails for JobId #45095.", -40),
+            ("Debug", "HEAppE.Core.Security", "Checking ownership permissions for principal 'cluster_agent' on JobId #45095.", -20),
+            ("Error", "HEAppE.Core.Security", "Unauthorized attempt to access job data for JobId #45095.", 0),
+        ]
+    elif error_id == 5: # Vault error
+        base_time = now - timedelta(hours=2, minutes=10)
+        raw_logs = [
+            ("Information", "HEAppE.Core.Security", "Vault client tick interval reached (300s).", -300),
+            ("Debug", "HEAppE.Core.Security", "Vault client sending token renewal request to http://vault:8200.", -200),
+            ("Warning", "HEAppE.Core.Security", "Connection to Vault host timed out. Retrying in 10s...", -150),
+            ("Warning", "HEAppE.Core.Security", "Vault client sending token renewal request to http://vault:8200 (Attempt 2/3).", -140),
+            ("Critical", "HEAppE.Core.Security", "Vault token renewal failed: secret engine unreachable.", 0),
+        ]
+    else: # API Sync error
+        base_time = now - timedelta(hours=3, minutes=30)
+        raw_logs = [
+            ("Information", "HEAppE.Core.Api", "Synchronization routine started.", -60),
+            ("Debug", "HEAppE.Core.Api", "Connecting to backend service at https://backend.heappe.org/api/sync.", -45),
+            ("Warning", "HEAppE.Core.Api", "HTTP request to backend service failed (status code: 503 Service Unavailable).", -30),
+            ("Information", "HEAppE.Core.Api", "Retrying backend sync in 10 seconds...", -20),
+            ("Error", "HEAppE.Core.Api", "Scheduler synchronization failed: response code 503 from backend.", 0)
+        ]
+
+    # Now filter by mode
+    for level, clz, msg, offset in raw_logs:
+        log_date = base_time + timedelta(seconds=offset)
+        
+        # User filter check
+        if mode == 'user' and user_name and user_name != 'admin' and user_name != 'johndoe' and user_name != 'cluster_agent' and user_name != 'api_user':
+            # Skip logs that don't match the requested user
+            continue
+            
+        # Job filter check
+        if mode == 'job' and job_id and str(job_id) not in msg:
+            # Skip if doesn't match job id
+            continue
+            
+        logs.append({
+            "Id": len(logs) + 100,
+            "IP": "192.168.1.100",
+            "InstanceName": "develop",
+            "InstanceVersion": "v6.0.0",
+            "LevelId": 2 if level == "Information" else (1 if level == "Debug" else (3 if level == "Warning" else (4 if level == "Error" else 5))),
+            "LevelName": level,
+            "Date": log_date.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3],
+            "UserId": 42 if user_name == 'johndoe' else (1 if user_name == 'admin' else None),
+            "UserName": user_name or ("johndoe" if error_id == 1 else ("admin" if error_id == 2 else None)),
+            "UserEmail": f"{user_name}@it4i.cz" if user_name else None,
+            "JobId": int(job_id) if job_id else (45091 if error_id == 1 else (45092 if error_id == 2 else None)),
+            "Message": msg,
+            "Class": clz,
+            "Exception": ""
+        })
+        
+    return logs

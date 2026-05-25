@@ -1,0 +1,650 @@
+{% extends "base.html" %}
+
+{% block title %}Experimental Log Analyzer{% endblock %}
+
+{% block content %}
+<style>
+    /* Dark Theme & Premium Styles for Analyzer */
+    .analyzer-container {
+        background-color: #0f0f1a;
+        color: #e2e8f0;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        min-height: 85vh;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .analyzer-header {
+        background: linear-gradient(135deg, #1e1b4b 0%, #0f0f1a 100%);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* Glassmorphic Cards */
+    .glass-card {
+        background: rgba(30, 27, 75, 0.3);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(99, 102, 241, 0.15);
+        border-color: rgba(99, 102, 241, 0.3);
+    }
+
+    /* Custom Scrollbar */
+    .custom-scroll::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.1);
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Slidable Context Drawer */
+    .context-drawer {
+        position: fixed;
+        top: 0;
+        right: -550px;
+        width: 520px;
+        height: 100vh;
+        background: #111022;
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: -10px 0 40px rgba(0, 0, 0, 0.8);
+        z-index: 1060;
+        transition: right 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .context-drawer.open {
+        right: 0;
+    }
+
+    .drawer-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.65);
+        z-index: 1050;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+        backdrop-filter: blur(4px);
+    }
+
+    .drawer-backdrop.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    /* Timeline styling */
+    .timeline {
+        position: relative;
+        padding-left: 32px;
+        list-style: none;
+    }
+
+    .timeline::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 15px;
+        width: 2px;
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .timeline-item {
+        position: relative;
+        margin-bottom: 24px;
+    }
+
+    .timeline-badge {
+        position: absolute;
+        top: 2px;
+        left: -26px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        text-align: center;
+        font-size: 11px;
+        line-height: 20px;
+        color: #fff;
+        background: #475569;
+        box-shadow: 0 0 0 4px #111022;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .timeline-badge.bg-error {
+        background: #ef4444;
+        box-shadow: 0 0 8px rgba(239, 68, 68, 0.6), 0 0 0 4px #111022;
+    }
+
+    .timeline-badge.bg-warn {
+        background: #f59e0b;
+        box-shadow: 0 0 8px rgba(245, 158, 11, 0.6), 0 0 0 4px #111022;
+    }
+
+    .timeline-badge.bg-info {
+        background: #3b82f6;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.6), 0 0 0 4px #111022;
+    }
+
+    .timeline-badge.bg-debug {
+        background: #6b7280;
+        box-shadow: 0 0 0 4px #111022;
+    }
+
+    /* Glow Badges */
+    .glow-badge-error {
+        box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+        border: 1px solid rgba(239, 68, 68, 0.6);
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+    }
+
+    .glow-badge-critical {
+        box-shadow: 0 0 12px rgba(244, 63, 94, 0.6);
+        border: 1px solid rgba(244, 63, 94, 0.8);
+        background: rgba(244, 63, 94, 0.2);
+        color: #fda4af;
+        animation: pulse-glow 2s infinite;
+    }
+
+    @keyframes pulse-glow {
+        0%, 100% { box-shadow: 0 0 12px rgba(244, 63, 94, 0.5); }
+        50% { box-shadow: 0 0 20px rgba(244, 63, 94, 0.8); }
+    }
+
+    /* Interactive List Items */
+    .error-row {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+    .error-row:hover {
+        background-color: rgba(255, 255, 255, 0.03) !important;
+    }
+
+    /* Context tab styling */
+    .drawer-nav-tabs .nav-link {
+        color: #94a3b8;
+        border: none;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        padding: 8px 16px;
+        font-weight: 600;
+        background: transparent;
+    }
+
+    .drawer-nav-tabs .nav-link.active {
+        color: #818cf8;
+        border-bottom: 2px solid #818cf8;
+        background: transparent;
+    }
+
+    .drawer-nav-tabs .nav-link:hover:not(.active) {
+        color: #cbd5e1;
+    }
+
+    /* Stack Trace container */
+    .stacktrace-box {
+        background: #09090e;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        color: #fda4af;
+        font-family: monospace;
+        font-size: 11px;
+        padding: 10px;
+        border-radius: 4px;
+        max-height: 180px;
+        overflow-y: auto;
+    }
+
+    /* Demo banner */
+    .demo-banner {
+        background: linear-gradient(90deg, #312e81 0%, #1e1b4b 100%);
+        border: 1px dashed #6366f1;
+        border-radius: 8px;
+        color: #c7d2fe;
+    }
+</style>
+
+<div class="container-fluid px-4 py-4 min-vh-100" style="background: #030303;">
+    
+    <!-- Title Area -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h3 class="fw-bold text-white d-flex align-items-center mb-1">
+                <i class="bi bi-cpu text-indigo-400 me-2" style="color: #818cf8;"></i>
+                Log Analyzer <span class="badge bg-secondary ms-2 bg-opacity-25 text-indigo-200" style="font-size: 0.75rem;">Experimental</span>
+            </h3>
+            <p class="text-muted small mb-0">High-performance deep error context tracer | Instance: <b>{{ instance|upper }}</b></p>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <a href="{% url 'logs' %}" class="btn btn-sm btn-outline-secondary text-white border-secondary border-opacity-50">
+                <i class="bi bi-arrow-left"></i> Standard Logs
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="analyzer-container p-4">
+        
+        <!-- Graceful Demo Mode Banner -->
+        {% if is_demo_mode %}
+        <div class="demo-banner p-3 mb-4 d-flex justify-content-between align-items-center shadow-sm">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-info-circle-fill fs-4 me-3 text-indigo-300" style="color: #a5b4fc;"></i>
+                <div>
+                    <h6 class="fw-bold mb-0">Interactive Demo Mode Active</h6>
+                    <small class="opacity-75">No Log Database configuration detected (or connection timed out). Displaying rich mock data for verification of error tracing context.</small>
+                </div>
+            </div>
+            <div>
+                <a href="{% url 'logs' %}?config=1" class="btn btn-xs btn-indigo btn-sm fw-bold px-3" style="background: #4f46e5; color: white;">
+                    Configure Log DB
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Filter / Stats Area -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-8">
+                <div class="glass-card p-3 h-100 d-flex align-items-center">
+                    <div class="w-100">
+                        <div class="row g-2">
+                            <div class="col">
+                                <input type="text" id="analyzerSearch" class="form-control form-control-sm bg-dark text-white border-secondary border-opacity-25" placeholder="Search error messages or locations...">
+                            </div>
+                            <div class="col-auto">
+                                <select id="analyzerLevel" class="form-select form-select-sm bg-dark text-white border-secondary border-opacity-25">
+                                    <option value="">All Errors</option>
+                                    <option value="error">Error Only</option>
+                                    <option value="critical">Critical Only</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="glass-card p-3 h-100 d-flex align-items-center justify-content-around text-center">
+                    <div>
+                        <span class="text-muted small text-uppercase">Error Count</span>
+                        <h3 class="fw-bold mb-0 text-danger mt-1">{{ errors|length }}</h3>
+                    </div>
+                    <div class="vr bg-secondary opacity-25"></div>
+                    <div>
+                        <span class="text-muted small text-uppercase">Trace Depth</span>
+                        <h3 class="fw-bold mb-0 text-indigo-400 mt-1" style="color: #818cf8;">15 Logs</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Errors Grid Table -->
+        <div class="glass-card overflow-hidden">
+            <div class="table-responsive custom-scroll" style="max-height: 60vh;">
+                <table class="table table-dark table-hover mb-0 align-middle" id="errorsTable">
+                    <thead>
+                        <tr style="border-bottom: 2px solid rgba(255, 255, 255, 0.08); font-size: 0.85rem; color: #94a3b8;">
+                            <th class="py-3 px-4">Timestamp</th>
+                            <th class="py-3">Level</th>
+                            <th class="py-3">User</th>
+                            <th class="py-3">Class/Location</th>
+                            <th class="py-3">Error Message</th>
+                            <th class="py-3 text-end px-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for error in errors %}
+                        <tr class="error-row border-bottom border-secondary border-opacity-10" 
+                            data-id="{{ error.Id }}"
+                            data-date="{{ error.Date|date:'c' }}"
+                            data-user="{{ error.UserName|default:'' }}"
+                            data-job="{{ error.JobId|default:'' }}"
+                            data-class="{{ error.Class }}"
+                            data-message="{{ error.Message }}"
+                            data-exception="{{ error.Exception|default:'' }}"
+                            onclick="openContextDrawer(this)">
+                            
+                            <td class="py-3 px-4 text-nowrap text-secondary" style="font-size: 0.85rem;">
+                                {{ error.Date|date:"d.m.Y H:i:s" }}
+                            </td>
+                            <td class="py-3">
+                                <span class="badge {% if error.LevelName == 'Critical' %}glow-badge-critical{% else %}glow-badge-error{% endif %} px-2 py-1 text-uppercase" style="font-size: 0.7rem; font-weight: bold;">
+                                    {{ error.LevelName }}
+                                </span>
+                            </td>
+                            <td class="py-3 text-indigo-200">
+                                {% if error.UserName %}
+                                    <span title="{{ error.UserEmail }}"><i class="bi bi-person me-1"></i>{{ error.UserName }}</span>
+                                {% else %}
+                                    <span class="text-secondary opacity-50">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3 text-secondary text-nowrap" style="font-size: 0.85rem; max-width: 150px; overflow: hidden; text-overflow: ellipsis;">
+                                {{ error.Class }}
+                            </td>
+                            <td class="py-3 fw-medium text-white-50" style="max-width: 380px; overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem;">
+                                {{ error.Message }}
+                            </td>
+                            <td class="py-3 text-end px-4">
+                                <button class="btn btn-xs btn-indigo btn-sm py-1 px-3 text-white border-0" style="background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);">
+                                    Trace Context <i class="bi bi-chevron-right ms-1"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="bi bi-check-circle-fill text-success fs-3 d-block mb-2"></i>
+                                No active errors found in this log interval.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Sliding Context Drawer -->
+<div class="context-drawer" id="contextDrawer">
+    
+    <!-- Drawer Header -->
+    <div class="p-3 d-flex justify-content-between align-items-center border-bottom border-secondary border-opacity-25" style="background: rgba(30, 27, 75, 0.4);">
+        <div>
+            <h5 class="fw-bold mb-0 text-white"><i class="bi bi-clock-history text-indigo-400 me-2"></i>Error Origin Trace</h5>
+            <small class="text-muted">Analyzing preceding system and user flow</small>
+        </div>
+        <button type="button" class="btn-close btn-close-white" onclick="closeContextDrawer()"></button>
+    </div>
+
+    <!-- Drawer Body -->
+    <div class="p-4 flex-grow-1 overflow-auto custom-scroll" style="background: #111022;">
+        
+        <!-- Error Focus Summary Card -->
+        <div class="card bg-dark bg-opacity-50 border-danger border-opacity-25 p-3 mb-4">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="badge glow-badge-error text-uppercase" id="drawerErrorLevel" style="font-size: 0.7rem;">Error</span>
+                <span class="text-muted small" id="drawerErrorTimestamp"></span>
+            </div>
+            <h6 class="fw-bold text-white mb-2" id="drawerErrorMessage"></h6>
+            <div class="text-secondary small mb-2"><i class="bi bi-tag-fill me-1"></i> Class: <span class="text-indigo-200" id="drawerErrorClass"></span></div>
+            <div class="text-secondary small mb-3" id="drawerUserContainer" style="display: none;"><i class="bi bi-person-fill me-1"></i> User: <span class="text-indigo-200" id="drawerErrorUser"></span></div>
+            
+            <!-- Exception Stack Trace Expander -->
+            <div id="drawerExceptionContainer" style="display: none;">
+                <button class="btn btn-xs btn-outline-danger btn-sm w-100 text-start py-1 px-2 border-danger border-opacity-20 d-flex justify-content-between align-items-center mb-2" 
+                        type="button" data-bs-toggle="collapse" data-bs-target="#collapseException">
+                    <span>Show Exception details</span>
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+                <div class="collapse" id="collapseException">
+                    <pre class="stacktrace-box custom-scroll mb-0" id="drawerErrorException"></pre>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tracing Mode Tabs -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="text-uppercase text-muted fw-bold small mb-0">Trace Context Mode</h6>
+        </div>
+        <ul class="nav drawer-nav-tabs mb-3 border-bottom border-secondary border-opacity-10" id="traceModeTabs">
+            <li class="nav-item">
+                <button class="nav-link active" onclick="loadTraceLogs('instance')"><i class="bi bi-server me-1"></i> Instance</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="userTabBtn" onclick="loadTraceLogs('user')"><i class="bi bi-person-circle me-1"></i> User Actions</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="jobTabBtn" onclick="loadTraceLogs('job')"><i class="bi bi-briefcase me-1"></i> Job Lifecycle</button>
+            </li>
+        </ul>
+
+        <!-- Timeline Loading Spinner -->
+        <div class="text-center py-5" id="timelineLoader" style="display: none;">
+            <div class="spinner-border text-indigo-400" role="status" style="width: 2.5rem; height: 2.5rem; color: #818cf8;"></div>
+            <p class="text-muted mt-3 small">Tracing preceding logs...</p>
+        </div>
+
+        <!-- Empty State -->
+        <div class="text-center py-4 text-muted" id="timelineEmpty" style="display: none;">
+            <i class="bi bi-journal-x fs-2 mb-2 d-block text-secondary opacity-50"></i>
+            No preceding log context found matching these filters.
+        </div>
+
+        <!-- Interactive Timeline Container -->
+        <div id="timelineContainer">
+            <ul class="timeline" id="timelineList">
+                <!-- Dynamically filled timeline items -->
+            </ul>
+        </div>
+
+    </div>
+</div>
+
+<!-- Backdrop -->
+<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeContextDrawer()"></div>
+
+<!-- Javascript Controller for Dynamic Logs Loading -->
+<script>
+    let activeErrorRow = null;
+    let currentTraceMode = 'instance';
+
+    // Filter table entries
+    document.getElementById('analyzerSearch').addEventListener('input', filterErrors);
+    document.getElementById('analyzerLevel').addEventListener('change', filterErrors);
+
+    function filterErrors() {
+        const query = document.getElementById('analyzerSearch').value.toLowerCase();
+        const levelFilter = document.getElementById('analyzerLevel').value;
+        const rows = document.querySelectorAll('#errorsTable tbody tr.error-row');
+
+        rows.forEach(row => {
+            const message = row.getAttribute('data-message').toLowerCase();
+            const clz = row.getAttribute('data-class').toLowerCase();
+            const level = row.querySelector('.badge').textContent.toLowerCase();
+            
+            const matchQuery = !query || message.includes(query) || clz.includes(query);
+            const matchLevel = !levelFilter || level.includes(levelFilter);
+
+            if (matchQuery && matchLevel) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    function openContextDrawer(row) {
+        // Highlight row
+        if (activeErrorRow) {
+            activeErrorRow.classList.remove('table-active');
+        }
+        activeErrorRow = row;
+        row.classList.add('table-active');
+
+        // Extract metadata
+        const id = row.getAttribute('data-id');
+        const date = row.getAttribute('data-date');
+        const user = row.getAttribute('data-user');
+        const job = row.getAttribute('data-job');
+        const clz = row.getAttribute('data-class');
+        const msg = row.getAttribute('data-message');
+        const exception = row.getAttribute('data-exception');
+        
+        // Format timestamp readable
+        const formattedDate = new Date(date).toLocaleString();
+
+        // Update Drawer Header Details
+        document.getElementById('drawerErrorLevel').textContent = row.querySelector('.badge').textContent;
+        document.getElementById('drawerErrorLevel').className = row.querySelector('.badge').className;
+        document.getElementById('drawerErrorTimestamp').textContent = formattedDate;
+        document.getElementById('drawerErrorMessage').textContent = msg;
+        document.getElementById('drawerErrorClass').textContent = clz;
+
+        // User container
+        if (user) {
+            document.getElementById('drawerErrorUser').textContent = user;
+            document.getElementById('drawerUserContainer').style.display = '';
+            document.getElementById('userTabBtn').style.display = '';
+        } else {
+            document.getElementById('drawerUserContainer').style.display = 'none';
+            document.getElementById('userTabBtn').style.display = 'none';
+        }
+
+        // Job Tab Container
+        if (job) {
+            document.getElementById('jobTabBtn').style.display = '';
+        } else {
+            document.getElementById('jobTabBtn').style.display = 'none';
+        }
+
+        // Exception box
+        if (exception) {
+            document.getElementById('drawerErrorException').textContent = exception;
+            document.getElementById('drawerExceptionContainer').style.display = '';
+            // Close collapse on fresh open
+            const collapseElement = document.getElementById('collapseException');
+            if (collapseElement.classList.contains('show')) {
+                new bootstrap.Collapse(collapseElement).hide();
+            }
+        } else {
+            document.getElementById('drawerExceptionContainer').style.display = 'none';
+        }
+
+        // Reset tabs selection
+        document.querySelectorAll('#traceModeTabs .nav-link').forEach(btn => btn.classList.remove('active'));
+        document.querySelector('#traceModeTabs .nav-link').classList.add('active');
+        currentTraceMode = 'instance';
+
+        // Load trace logs
+        loadTraceLogs('instance');
+
+        // Open Drawer
+        document.getElementById('contextDrawer').classList.add('open');
+        document.getElementById('drawerBackdrop').classList.add('show');
+    }
+
+    function closeContextDrawer() {
+        document.getElementById('contextDrawer').classList.remove('open');
+        document.getElementById('drawerBackdrop').classList.remove('show');
+        if (activeErrorRow) {
+            activeErrorRow.classList.remove('table-active');
+            activeErrorRow = null;
+        }
+    }
+
+    async function loadTraceLogs(mode) {
+        if (!activeErrorRow) return;
+        currentTraceMode = mode;
+
+        // Update tabs active state
+        const tabs = document.querySelectorAll('#traceModeTabs .nav-link');
+        tabs.forEach(btn => btn.classList.remove('active'));
+        
+        // Find which tab button was clicked
+        if (mode === 'instance') tabs[0].classList.add('active');
+        else if (mode === 'user') tabs[1].classList.add('active');
+        else if (mode === 'job') tabs[2].classList.add('active');
+
+        // Show spinner
+        document.getElementById('timelineContainer').style.display = 'none';
+        document.getElementById('timelineEmpty').style.display = 'none';
+        document.getElementById('timelineLoader').style.display = '';
+
+        const errorId = activeErrorRow.getAttribute('data-id');
+        const date = activeErrorRow.getAttribute('data-date');
+        const user = activeErrorRow.getAttribute('data-user');
+        const job = activeErrorRow.getAttribute('data-job');
+
+        // Query API
+        const url = `{% url 'logs_analyzer_context_api' %}?error_id=${errorId}&mode=${mode}&date=${encodeURIComponent(date)}&user=${encodeURIComponent(user)}&job_id=${job}`;
+        
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            document.getElementById('timelineLoader').style.display = 'none';
+            
+            if (data.status === 'success' && data.logs && data.logs.length > 0) {
+                renderTimeline(data.logs);
+                document.getElementById('timelineContainer').style.display = '';
+            } else {
+                document.getElementById('timelineEmpty').style.display = '';
+            }
+        } catch (e) {
+            console.error("Context fetch failed: ", e);
+            document.getElementById('timelineLoader').style.display = 'none';
+            document.getElementById('timelineEmpty').style.display = '';
+        }
+    }
+
+    function renderTimeline(logs) {
+        const timelineList = document.getElementById('timelineList');
+        timelineList.innerHTML = '';
+
+        logs.forEach(log => {
+            const li = document.createElement('li');
+            li.className = 'timeline-item';
+
+            // Get level badge styling
+            let badgeClass = 'bg-info';
+            let badgeIcon = '<i class="bi bi-info-circle-fill"></i>';
+            if (log.LevelName === 'Error') {
+                badgeClass = 'bg-error';
+                badgeIcon = '<i class="bi bi-exclamation-triangle-fill"></i>';
+            } else if (log.LevelName === 'Critical') {
+                badgeClass = 'bg-error';
+                badgeIcon = '<i class="bi bi-slash-circle-fill"></i>';
+            } else if (log.LevelName === 'Warning') {
+                badgeClass = 'bg-warn';
+                badgeIcon = '<i class="bi bi-exclamation-circle-fill"></i>';
+            } else if (log.LevelName === 'Debug') {
+                badgeClass = 'bg-debug';
+                badgeIcon = '<i class="bi bi-bug-fill"></i>';
+            }
+
+            // Create timestamp relative or absolute
+            const logDate = new Date(log.Date);
+            const formattedTime = logDate.toLocaleTimeString();
+
+            // Construct content
+            li.innerHTML = `
+                <div class="timeline-badge ${badgeClass}">${badgeIcon}</div>
+                <div class="p-3 bg-dark bg-opacity-20 rounded border border-secondary border-opacity-10">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-bold text-light" style="font-size: 0.85rem;">${log.Class}</span>
+                        <span class="text-muted" style="font-size: 0.75rem;">${formattedTime}</span>
+                    </div>
+                    <p class="mb-0 text-white-50" style="font-size: 0.85rem; word-break: break-word;">${log.Message}</p>
+                </div>
+            `;
+            timelineList.appendChild(li);
+        });
+    }
+</script>
+{% endblock %}

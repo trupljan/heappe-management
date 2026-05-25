@@ -79,6 +79,17 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
 
     # Always fetch core project details
     project_data = controller.heappe_management_project_get(Id=project_id, SessionCode=session_code).to_dict()
+    # Retrieve raw project data to extract PIEmail, which is discarded by the Swagger model
+    try:
+        raw_resp = controller.heappe_management_project_get(
+            Id=project_id, SessionCode=session_code, _preload_content=False
+        )
+        import json
+        raw_data = json.loads(raw_resp.data.decode('utf-8'))
+        project_data['pi_email'] = raw_data.get('PIEmail') or raw_data.get('pi_email')
+        project_data['PIEmail'] = project_data['pi_email']
+    except Exception as e:
+        print(f"Error fetching raw project details for PIEmail: {e}")
 
     # Cache feature support for adaptor users in the session to avoid redundant API calls
     has_adaptor_users_key = f"has_adaptor_users_{project_id}"
@@ -373,7 +384,26 @@ def project_create(request: HttpRequest) -> HttpResponse:
 @login_required
 def project_list(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
-    projects = [p.to_dict() for p in controller.heappe_management_projects_get(SessionCode=request.session_code)]
+    
+    # Retrieve raw projects list to extract PIEmail, which is discarded by the Swagger model
+    try:
+        raw_resp = controller.heappe_management_projects_get(
+            SessionCode=request.session_code, _preload_content=False
+        )
+        import json
+        raw_projects = json.loads(raw_resp.data.decode('utf-8'))
+        raw_by_id = {p.get('Id'): p for p in raw_projects}
+    except Exception as e:
+        print(f"Error fetching raw projects: {e}")
+        raw_by_id = {}
+
+    projects = []
+    for p in controller.heappe_management_projects_get(SessionCode=request.session_code):
+        p_dict = p.to_dict()
+        raw_proj = raw_by_id.get(p_dict.get('id'), {})
+        p_dict['pi_email'] = raw_proj.get('PIEmail') or raw_proj.get('pi_email')
+        p_dict['PIEmail'] = p_dict['pi_email']
+        projects.append(p_dict)
 
     if request.method == "POST":
         action = request.POST.get("action")
