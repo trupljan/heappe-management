@@ -236,6 +236,27 @@
                             </div>
                         </form>
                     </div>
+
+                    <!-- Live Job Query Section -->
+                    <div class="bg-light p-3 rounded mb-3 border border-light-subtle shadow-sm">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-6">
+                                <label for="live_job_id" class="form-label fw-bold small text-primary mb-1">
+                                    <i class="bi bi-cpu me-1"></i>Query Live Job Info (CurrentInfoForJob)
+                                </label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control form-control-sm" id="live_job_id" placeholder="Enter Job ID (e.g. 12345)">
+                                    <button class="btn btn-primary btn-sm" type="button" id="btn_query_live_job">
+                                        <i class="bi bi-search me-1"></i>Query details
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="col-md-6 text-md-end text-muted small">
+                                <span>Get real-time details, task schedules, and core allocations direct from the HEAppE scheduler.</span>
+                            </div>
+                        </div>
+                    </div>
+
                     <ul class="list-group list-group-flush">
                         {% for job_item in job_details %}
                         <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -259,9 +280,14 @@
                             {% elif job_item.state == 256 %}
                                 <span class="badge rounded-pill bg-secondary text-white">Deleted</span>
                             {% endif %}
-                            <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}">
-                                Details
-                            </button>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}">
+                                    Details
+                                </button>
+                                <button type="button" class="btn btn-primary btn-sm btn-trigger-live" data-job-id="{{ job_item.id }}">
+                                    <i class="bi bi-cpu me-1"></i>Live Info
+                                </button>
+                            </div>
                         </li>
                         {# Job Modal #}
                         <div class="modal fade" id="jobModal{{ job_item.id }}" tabindex="-1" aria-labelledby="jobModalLabel{{ job_item.id }}" aria-hidden="true">
@@ -395,6 +421,15 @@
     </div>
 </div>
 
+<!-- Live Job Details Modal -->
+<div class="modal fade" id="liveJobDetailsModal" tabindex="-1" aria-labelledby="liveJobDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden" id="liveJobDetailsModalContent">
+            <!-- Loaded dynamically via AJAX -->
+        </div>
+    </div>
+</div>
+
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
@@ -428,5 +463,92 @@
             scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
         }
     });
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const liveJobModal = new bootstrap.Modal(document.getElementById('liveJobDetailsModal'));
+    const liveJobModalContent = document.getElementById('liveJobDetailsModalContent');
+    const liveJobIdInput = document.getElementById('live_job_id');
+    const btnQueryLiveJob = document.getElementById('btn_query_live_job');
+
+    function fetchLiveJobDetails(jobId) {
+        if (!jobId) {
+            alert('Please enter a valid Job ID.');
+            return;
+        }
+
+        liveJobModalContent.innerHTML = `
+            <div class="modal-header bg-dark text-white border-bottom-0 p-4">
+                <h5 class="modal-title fw-bold">Live Job Details</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center py-5">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h5 class="mt-3 text-muted">Retrieving live job details...</h5>
+                <p class="text-muted small mb-0">Calling JobManagement/CurrentInfoForJob for Job ID: <strong>${jobId}</strong></p>
+            </div>
+        `;
+        
+        liveJobModal.show();
+
+        const url = `/job-live-details/${jobId}/`;
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.text();
+            })
+            .then(html => {
+                liveJobModalContent.innerHTML = html;
+            })
+            .catch(error => {
+                liveJobModalContent.innerHTML = `
+                    <div class="modal-header bg-danger text-white border-bottom-0 p-4">
+                        <h5 class="modal-title fw-bold">Query Failed</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-center">
+                        <div class="mb-3">
+                            <i class="bi bi-x-circle text-danger fs-1"></i>
+                        </div>
+                        <h4 class="fw-bold text-danger">An error occurred</h4>
+                        <p class="text-muted mb-3">Could not fetch details for Job ID <strong>${jobId}</strong>.</p>
+                        <p class="small text-danger bg-light p-2 rounded border"><code>${error.message}</code></p>
+                    </div>
+                    <div class="modal-footer bg-light border-top p-3">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                `;
+            });
+    }
+
+    if (btnQueryLiveJob) {
+        btnQueryLiveJob.addEventListener('click', function() {
+            const jobId = liveJobIdInput.value.trim();
+            fetchLiveJobDetails(jobId);
+        });
+        
+        liveJobIdInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                btnQueryLiveJob.click();
+            }
+        });
+    }
+
+    document.querySelectorAll('.btn-trigger-live').forEach(button => {
+        button.addEventListener('click', function() {
+            const jobId = this.getAttribute('data-job-id');
+            if (liveJobIdInput) {
+                liveJobIdInput.value = jobId;
+            }
+            fetchLiveJobDetails(jobId);
+        });
+    });
+});
 </script>
 {% endblock %}

@@ -49,6 +49,7 @@ urlpatterns = [
     path('projects/', views.project_list, name='project_list'),
     path('submit-test-job/<int:command_template_id>', views.submit_job_view, name="submit_job_view"),
     path('job-status/<int:job_id>', views.job_status_view, name="job_status_view"),
+    path('job-live-details/<int:job_id>/', views.job_live_details_partial, name='job_live_details_partial'),
 
     # Command Templates
     path('command-templates/<int:project_id>/new/', views.command_template_create, name='command_template_create'),

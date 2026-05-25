@@ -717,3 +717,23 @@ def delete_hpc_account(request: HttpRequest) -> HttpResponse:
     )
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
+
+
+@login_required
+def job_live_details_partial(request: HttpRequest, job_id: int) -> HttpResponse:
+    controller = hp.JobManagementApi(request.api_instance)
+    try:
+        result = controller.heappe_job_management_current_info_for_job_get(
+            SubmittedJobInfoId=job_id, SessionCode=request.session_code
+        )
+        if not result:
+            return render(request, "job_live_details_error_partial.html", {
+                "job_id": job_id,
+                "error": "No details returned for this Job ID."
+            })
+        return render(request, "job_live_details_partial.html", {"job": result})
+    except Exception as e:
+        return render(request, "job_live_details_error_partial.html", {
+            "job_id": job_id,
+            "error": str(e)
+        })
