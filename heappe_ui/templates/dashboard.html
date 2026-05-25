@@ -50,10 +50,10 @@
 
 <div class="container" xmlns="http://www.w3.org/1999/xhtml">
     {% if middleware_update_available %}
+        {% with snooze_key="middleware_update_snoozed__"|add:request.session.chosen_instance|add:"__"|add:middleware_latest_version %}
         <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between p-3 mb-4 animate-fade-in"
              id="middleware-update-banner"
-             data-instance="{{ request.session.chosen_instance }}"
-             data-latest="{{ middleware_latest_version }}">
+             data-snooze-key="{{ snooze_key }}">
             <div class="d-flex align-items-center gap-2">
                 <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true"></span>
                 <div>
@@ -69,30 +69,24 @@
                 <a href="{% url 'deploy_view' request.session.chosen_instance %}" class="btn btn-warning btn-sm fw-bold shadow-sm">
                     <i class="bi bi-arrow-repeat me-1"></i>Go to Update Page
                 </a>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="snoozeMiddlewareUpdate()" title="Remind me tomorrow">
+                <button type="button" class="btn btn-outline-secondary btn-sm"
+                    onclick="var b=document.getElementById('middleware-update-banner'); localStorage.setItem(b.dataset.snoozeKey, Date.now()+86400000); b.style.display='none';"
+                    title="Remind me tomorrow">
                     <i class="bi bi-bell-slash me-1"></i>Later (24h)
                 </button>
             </div>
         </div>
         <script>
-            (function() {
-                const banner = document.getElementById('middleware-update-banner');
+            document.addEventListener('DOMContentLoaded', function() {
+                var banner = document.getElementById('middleware-update-banner');
                 if (!banner) return;
-                const key = 'middleware_update_snoozed__' + banner.dataset.instance + '__' + banner.dataset.latest;
-                const snoozedUntil = parseInt(localStorage.getItem(key) || '0');
+                var snoozedUntil = parseInt(localStorage.getItem(banner.dataset.snoozeKey) || '0');
                 if (Date.now() < snoozedUntil) {
                     banner.style.display = 'none';
                 }
-            })();
-
-            function snoozeMiddlewareUpdate() {
-                const banner = document.getElementById('middleware-update-banner');
-                if (!banner) return;
-                const key = 'middleware_update_snoozed__' + banner.dataset.instance + '__' + banner.dataset.latest;
-                localStorage.setItem(key, Date.now() + 24 * 3600 * 1000);
-                banner.style.display = 'none';
-            }
+            });
         </script>
+        {% endwith %}
     {% endif %}
 
     <div class="row g-4 mb-4">
