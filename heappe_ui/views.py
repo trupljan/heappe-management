@@ -121,6 +121,50 @@ def profile_view(request):
     return render(request, "user_profile.html", {"user": request.user,  "last_auth": last_auth})
 
 @login_required
+def generate_session_code_view(request):
+    from django.http import JsonResponse
+    import py4heappe.heappe_v6.core as hp
+    import json
+    from heappe_ui.auth_backend import patch_api_client
+
+    username = request.session.get("heappe_username")
+    password = request.session.get("heappe_password")
+    host = request.session.get("heappe_host")
+
+    if not all([username, password, host]):
+        return JsonResponse({"status": "error", "message": "Missing credentials in session."}, status=400)
+
+    config = hp.Configuration()
+    host_url = 'http://' + host if not host.startswith('http') else host
+    config.host = host_url
+    config.verify_ssl = True
+
+    api_instance = hp.ApiClient(config)
+    patch_api_client(api_instance)
+
+    ulm = hp.UserAndLimitationManagementApi(api_instance)
+    cred = {
+        "_preload_content": False,
+        "body": {
+            "Credentials": {
+                "Username": username,
+                "Password": password,
+            }
+        }
+    }
+
+    try:
+        r = ulm.heappe_user_and_limitation_management_authenticate_user_password_post(**cred)
+        session_code = json.loads(r.data)
+        if session_code:
+            request.session["heappe_session_code"] = session_code
+            return JsonResponse({"status": "success", "session_code": session_code})
+        else:
+            return JsonResponse({"status": "error", "message": "HEAppE returned empty session code."}, status=500)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": f"Failed to authenticate with HEAppE: {str(e)}"}, status=500)
+
+@login_required
 def reconnect_view(request):
     request.session["force_reauth"] = True
     # reload

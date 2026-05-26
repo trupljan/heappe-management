@@ -16,10 +16,23 @@
                         <p><strong>HEAppE Host:</strong> {{ request.session.heappe_host }}</p>
                         <p>
                             <strong>Session Code:</strong>
-                            <button id="toggle-session" class="btn btn-sm btn-outline-secondary">
-                                🔒 Show
-                            </button>
-                            <span id="session-code" style="display:none;">{{ request.session.heappe_session_code }}</span>
+                            {% if request.session.heappe_session_code %}
+                                <span id="session-code" style="display:none;">{{ request.session.heappe_session_code }}</span>
+                                <button id="toggle-session" class="btn btn-sm btn-outline-secondary ms-1">
+                                    🔒 Show
+                                </button>
+                            {% else %}
+                                <span id="session-code-container">
+                                    <span class="text-muted small">None (API Key auth)</span>
+                                    <button id="btn-generate-session" class="btn btn-sm btn-warning ms-2 fw-semibold text-dark">
+                                        🔑 Get Session Code
+                                    </button>
+                                </span>
+                                <span id="session-code" style="display:none;"></span>
+                                <button id="toggle-session" class="btn btn-sm btn-outline-secondary ms-1" style="display:none;">
+                                    🔒 Show
+                                </button>
+                            {% endif %}
                         </p>
                         <p><strong>Last Auth:</strong>
                             {% if last_auth %}
@@ -63,6 +76,8 @@
 document.addEventListener("DOMContentLoaded", function() {
     const toggleButton = document.getElementById("toggle-session");
     const sessionCodeSpan = document.getElementById("session-code");
+    const btnGenerate = document.getElementById("btn-generate-session");
+    const container = document.getElementById("session-code-container");
 
     // Logika pro zobrazení/skrytí Session Code
     toggleButton.addEventListener("click", function() {
@@ -74,6 +89,41 @@ document.addEventListener("DOMContentLoaded", function() {
             toggleButton.textContent = "🔒 Show";
         }
     });
+
+    if (btnGenerate) {
+        btnGenerate.addEventListener("click", function() {
+            btnGenerate.disabled = true;
+            btnGenerate.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Generating...`;
+            
+            fetch("{% url 'generate_session_code_view' %}", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": "{{ csrf_token }}"
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    // Update UI
+                    sessionCodeSpan.textContent = data.session_code;
+                    sessionCodeSpan.style.display = "inline";
+                    if (container) container.style.display = "none";
+                    toggleButton.textContent = "🔓 Hide";
+                    toggleButton.style.display = "inline";
+                } else {
+                    alert("Error: " + data.message);
+                    btnGenerate.disabled = false;
+                    btnGenerate.innerHTML = "🔑 Get Session Code";
+                }
+            })
+            .catch(error => {
+                alert("Request failed: " + error);
+                btnGenerate.disabled = false;
+                btnGenerate.innerHTML = "🔑 Get Session Code";
+            });
+        });
+    }
 });
 </script>
 {% endblock %}
