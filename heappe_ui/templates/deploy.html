@@ -222,7 +222,7 @@
                 </div>
                 <div class="modal-body p-0 d-flex flex-column overflow-hidden">
                     <div id="fm-feedback"></div>
-                    <div class="row g-0 flex-grow-1">
+                    <div class="row g-0 flex-grow-1" style="min-height: 0;">
                         <div class="col-md-4 border-end bg-light d-flex flex-column h-100">
                             <div class="p-3 border-bottom">
                                 <nav aria-label="breadcrumb"><ol class="breadcrumb mb-2" id="breadcrumb-path"></ol></nav>
@@ -239,7 +239,7 @@
                                 <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#editor-pane"><i class="bi bi-pencil"></i> Editor</button></li>
                                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#upload-pane"><i class="bi bi-upload"></i> Upload</button></li>
                             </ul>
-                            <div class="tab-content flex-grow-1 overflow-auto p-3">
+                            <div class="tab-content flex-grow-1 overflow-hidden p-3">
                                 <div class="tab-pane fade show active h-100" id="editor-pane">
                                     <div id="editor-ui" style="display:none;" class="h-100 d-flex flex-column">
                                         <h6 class="text-muted small">Path: <span id="edit-file-name" class="fw-bold"></span></h6>
@@ -255,7 +255,7 @@
                                         <p>Select a file to edit</p>
                                     </div>
                                 </div>
-                                <div class="tab-pane fade" id="upload-pane">
+                                <div class="tab-pane fade h-100 overflow-auto" id="upload-pane">
                                     <div class="p-4 border rounded bg-light">
                                         <h6>Upload to current directory</h6>
                                         <input type="file" id="upload-input" class="form-control mb-3" multiple>
@@ -522,10 +522,32 @@ $(document).ready(function() {
 
 <style>
     .cursor-pointer { cursor: pointer; }
-    .file-item:hover { background-color: #f8f9fa; }
+    .file-item {
+        transition: background-color 0.2s ease, padding-left 0.2s ease;
+    }
+    .file-item:hover {
+        background-color: #e9ecef;
+        padding-left: 1.25rem;
+    }
     .breadcrumb-item a { text-decoration: none; }
     #logs-content::-webkit-scrollbar { width: 8px; }
     #logs-content::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    #file-list::-webkit-scrollbar, #file-content::-webkit-scrollbar { width: 6px; height: 6px; }
+    #file-list::-webkit-scrollbar-thumb, #file-content::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    #file-list::-webkit-scrollbar-thumb:hover, #file-content::-webkit-scrollbar-thumb:hover { background: #999; }
+    #file-list {
+        scroll-behavior: smooth;
+    }
+    #file-content {
+        line-height: 1.5;
+        resize: none;
+        border-color: #dee2e6;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    #file-content:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+    }
     #loading-overlay { display: none; }
 </style>
 {% endblock content %}
