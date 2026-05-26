@@ -33,7 +33,11 @@ def git_version_renderer(request):
 
 
 def middleware_update_renderer(request):
-    if not request.user.is_authenticated:
+    if not hasattr(request, 'user') or not request.user.is_authenticated:
+        return {}
+
+    path = request.path
+    if any(p in path for p in ["/instances/", "/logout/", "/login/", "/reconnect/"]):
         return {}
 
     instance_name = request.session.get("chosen_instance")

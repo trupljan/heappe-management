@@ -8,6 +8,10 @@ class HeappeSessionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        path = request.path
+        if any(p in path for p in ["/instances/", "/logout/", "/login/", "/reconnect/"]):
+            return self.get_response(request)
+
         if not hasattr(request, 'user') or not request.user.is_authenticated:
             return self.get_response(request)
 

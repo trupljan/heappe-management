@@ -8,6 +8,8 @@ import py4heappe.heappe_v6.core as hp
 
 
 def patch_api_client(api_instance):
+    if getattr(api_instance, '_is_patched', False):
+        return api_instance
     original_call_api = api_instance.call_api
     sig = inspect.signature(original_call_api)
 
