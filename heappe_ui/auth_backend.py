@@ -16,6 +16,10 @@ def patch_api_client(api_instance):
         bound_args = sig.bind(*args, **kwargs)
         bound_args.apply_defaults()
 
+        # Inject default _request_timeout if not specified
+        if bound_args.arguments.get('_request_timeout') is None:
+            bound_args.arguments['_request_timeout'] = 10.0
+
         # Modify query_params
         query_params = bound_args.arguments.get('query_params')
         if query_params:
