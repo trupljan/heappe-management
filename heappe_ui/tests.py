@@ -155,3 +155,13 @@ class HeappeExceptionMiddlewareTests(TestCase):
         self.assertEqual(data["status"], "success")
         self.assertEqual(data["session_code"], "generated_session_token_12345")
         self.assertEqual(request.session["heappe_session_code"], "generated_session_token_12345")
+
+    def test_custom_error_templates_exist(self):
+        from django.template import loader
+        try:
+            loader.get_template("404.html")
+            loader.get_template("500.html")
+            templates_ok = True
+        except Exception:
+            templates_ok = False
+        self.assertTrue(templates_ok, "Templates 404.html and 500.html must be discoverable by loader")
