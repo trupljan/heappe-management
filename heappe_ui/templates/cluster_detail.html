@@ -5,22 +5,20 @@
 {% block content %}
 
 {% if cluster %}
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
-  <div class="container justify-content-center">
-    <ul class="nav nav-pills">
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Cluster Detail</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'queues' %}active{% endif %}" href="?tab=queues">Queues</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'projects' %}active{% endif %}" href="?tab=projects">Projects</a>
-      </li>
-    </ul>
-  </div>
-</nav>
+<!-- Custom Nav Pills Wrapper -->
+<div class="d-flex justify-content-center mb-4 animate-fade-in">
+  <ul class="nav nav-pills p-2 rounded-3 border" style="background: var(--bg-surface-alt); border-color: var(--border-color) !important;">
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Cluster Detail</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'queues' %}active{% endif %}" href="?tab=queues">Queues</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if active_tab == 'projects' %}active{% endif %}" href="?tab=projects">Projects</a>
+    </li>
+  </ul>
+</div>
 {% endif %}
 
 <h1 class="mb-4 text-center">{{ cluster.name }}</h1>
@@ -123,7 +121,7 @@
     </div>
     <div class="card-body">
       {% if filetransfer_methods %}
-        <table class="table table-striped table-hover">
+        <table class="table table-hover">
           <thead>
             <tr>
               <th scope="col">Id</th>
@@ -187,21 +185,21 @@
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="add_filetransfer">
-        <div class="modal-header">
+        <div class="modal-header border-bottom border-light-subtle">
           <h5 class="modal-title">Add File Transfer Method</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label">Server Hostname</label>
+            <label class="form-label text-secondary small fw-semibold">Server Hostname</label>
             <input type="text" class="form-control" name="ServerHostname" required>
           </div>
         <div class="mb-3">
-            <label class="form-label">Port</label>
+            <label class="form-label text-secondary small fw-semibold">Port</label>
             <input type="number" class="form-control" name="Port" id="Port" optional>
           </div>
           <div class="mb-3">
-            <label class="form-label">Protocol</label>
+            <label class="form-label text-secondary small fw-semibold">Protocol</label>
             <select class="form-select" name="Protocol" required>
               {% for pid, pname in PROTOCOL_CHOICES %}
                 <option value="{{ pid }}">{{ pname }}</option>
@@ -209,7 +207,7 @@
             </select>
           </div>
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer border-top border-light-subtle">
           <button type="submit" class="btn btn-primary">Save</button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         </div>
@@ -226,21 +224,21 @@
         {% csrf_token %}
         <input type="hidden" name="action" value="edit_filetransfer">
         <input type="hidden" name="Id" id="editFileTransferId">
-        <div class="modal-header">
+        <div class="modal-header border-bottom border-light-subtle">
           <h5 class="modal-title">Edit File Transfer Method</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
           <div class="mb-3">
-            <label class="form-label">Server Hostname</label>
+            <label class="form-label text-secondary small fw-semibold">Server Hostname</label>
             <input type="text" class="form-control" name="ServerHostname" id="editServerHostname" required>
           </div>
             <div class="mb-3">
-            <label class="form-label">Port</label>
+            <label class="form-label text-secondary small fw-semibold">Port</label>
             <input type="number" class="form-control" name="Port" id="editPort" optional>
           </div>
           <div class="mb-3">
-            <label class="form-label">Protocol</label>
+            <label class="form-label text-secondary small fw-semibold">Protocol</label>
             <select class="form-select" name="Protocol" id="editProtocol" required>
               {% for pid, pname in PROTOCOL_CHOICES %}
                 <option value="{{ pid }}">{{ pname }}</option>
@@ -248,7 +246,7 @@
             </select>
           </div>
         </div>
-        <div class="modal-footer">
+        <div class="modal-footer border-top border-light-subtle">
           <button type="submit" class="btn btn-primary">Save Changes</button>
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         </div>

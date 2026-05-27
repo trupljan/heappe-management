@@ -90,66 +90,64 @@
         {% endwith %}
     {% endif %}
 
-    <div class="row g-4 mb-4">
+    <div class="row g-4 mb-4 animate-fade-in">
         {# HEAppE Info Card #}
-        <div class="col-md-4">
-            <div class="card shadow-sm p-3">
-                <h5 class="card-title"><i class="bi bi-info-circle me-2"></i>HEAppE Info</h5>
-                <hr>
-                <p class="mb-1"><strong>Name:</strong> {{ heappe.name|default:"N/A" }}</p>
-                <p class="mb-1"><strong>Description:</strong> {{ heappe.description|default:"N/A" }}</p>
-                <p class="mb-0"><strong>Version:</strong> {{ heappe.version|default:"N/A" }}</p>
+        <div class="col-md-4 d-flex flex-column gap-4">
+            <div class="card p-4">
+                <h5 class="card-title d-flex align-items-center mb-0"><i class="bi bi-info-circle me-2 text-info"></i>HEAppE Info</h5>
+                <hr style="border-color: var(--border-color); opacity: 1;" class="my-3">
+                <div class="d-flex flex-column gap-2 small">
+                    <div><span class="text-secondary fw-semibold">Name:</span> <span class="fw-bold">{{ heappe.name|default:"N/A" }}</span></div>
+                    <div><span class="text-secondary fw-semibold">Description:</span> <span>{{ heappe.description|default:"N/A" }}</span></div>
+                    <div><span class="text-secondary fw-semibold">Version:</span> <code class="text-info">{{ heappe.version|default:"N/A" }}</code></div>
+                </div>
             </div>
-            <br>
+            
             {# Health Check Card #}
-            <div class="card shadow-sm p-3">
-                <h5 class="card-title d-flex align-items-center">
-                    <i class="bi bi-heart-pulse me-2"></i>Health Check
+            <div class="card p-4">
+                <h5 class="card-title d-flex align-items-center mb-0">
+                    <i class="bi bi-heart-pulse me-2 {% if health.is_healthy %}text-success{% else %}text-danger{% endif %}"></i>Health Check
                 </h5>
-                <hr>
-                <p class="mb-2">
-                    <strong>Overall Status:</strong>
-                    <span class="badge {% if health.is_healthy %}bg-success{% else %}bg-danger{% endif %}">
-                        {% if health.is_healthy %}Healthy{% else %}Unhealthy{% endif %}
-                    </span>
-                </p>
-                <p class="mb-1"><strong>Version:</strong> {{ health.version|default:"N/A" }}</p>
-                <p class="mb-3 text-muted">
-                    <small><i class="bi bi-clock me-1"></i>{{ health.timestamp|default:"N/A" }}</small>
-                </p>
-                <h6 class="text-primary mt-3">Components</h6>
+                <hr style="border-color: var(--border-color); opacity: 1;" class="my-3">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div>
+                        <span class="text-secondary fw-semibold">Overall Status:</span>
+                        <span class="badge {% if health.is_healthy %}bg-success{% else %}bg-danger{% endif %} ms-2">
+                            {% if health.is_healthy %}Healthy{% else %}Unhealthy{% endif %}
+                        </span>
+                    </div>
+                    <span class="status-indicator {% if health.is_healthy %}healthy pulse-active{% else %}unhealthy{% endif %}"></span>
+                </div>
+                <div class="small mb-3">
+                    <div><span class="text-secondary fw-semibold">Version:</span> <code class="text-info">{{ health.version|default:"N/A" }}</code></div>
+                    <div class="text-secondary mt-1"><i class="bi bi-clock me-1"></i><small>{{ health.timestamp|default:"N/A" }}</small></div>
+                </div>
+                <h6 class="text-info mt-3 fw-bold small uppercase">COMPONENTS</h6>
                 <ul class="list-group list-group-flush small">
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        Database
+                    <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                        <span><i class="bi bi-database me-2 text-secondary"></i>Database</span>
                         <span class="badge {% if health.component.database.is_healthy %}bg-success{% else %}bg-danger{% endif %}">
                             {% if health.component.database.is_healthy %}Healthy{% else %}Unhealthy{% endif %}
                         </span>
                     </li>
-                    <li class="list-group-item">
-                        <div class="d-flex justify-content-between align-items-center">
-                            Vault
+                    <li class="list-group-item px-0">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span><i class="bi bi-shield-lock me-2 text-secondary"></i>Vault</span>
                             <span class="badge {% if health.component.vault.is_healthy %}bg-success{% else %}bg-danger{% endif %}">
                                 {% if health.component.vault.is_healthy %}Healthy{% else %}Unhealthy{% endif %}
                             </span>
                         </div>
                         {% if health.component.vault.info %}
-                        <div class="mt-3">
-                            <h6 class="fw-bold text-muted mb-2">
-                                <i class="bi bi-shield-lock me-2"></i>Vault Info
-                            </h6>
-                            <ul class="list-group list-group-flush small">
+                        <div class="mt-2 p-2 rounded" style="background: var(--bg-surface-alt); border: 1px solid var(--border-color);">
+                            <ul class="list-unstyled mb-0 small">
                                 {% for key, value in health.component.vault.info.items %}
-                                <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>
-                                        <i class="bi bi-{% if key == 'initialized' %}gear-fill{% elif key == 'sealed' %}lock-fill{% elif key == 'stand_by' %}hourglass-split{% else %}speedometer2{% endif %} me-2 text-secondary"></i>
+                                <li class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="text-secondary">
+                                        <i class="bi bi-{% if key == 'initialized' %}gear-fill{% elif key == 'sealed' %}lock-fill{% elif key == 'stand_by' %}hourglass-split{% else %}speedometer2{% endif %} me-1 small"></i>
                                         {{ key|title }}
                                     </span>
                                     <span class="fw-semibold text-{% if key == 'initialized' and value or key != 'initialized' and not value %}success{% else %}danger{% endif %}">
-                                        {% if value %}
-                                            <i class="bi bi-check-circle-fill me-1"></i>True
-                                        {% else %}
-                                            <i class="bi bi-x-circle-fill me-1"></i>False
-                                        {% endif %}
+                                        {% if value %}True{% else %}False{% endif %}
                                     </span>
                                 </li>
                                 {% endfor %}
@@ -162,59 +160,69 @@
         </div>
 
         {# Jobs Summary and Histogram #}
-        <div class="col-md-4">
-            <div class="card shadow-sm p-3">
-                <h5 class="card-title d-flex align-items-center">
-                    <i class="bi bi-bar-chart-line me-2"></i>Jobs Summary
+        <div class="col-md-4 d-flex flex-column gap-4">
+            <div class="card p-4">
+                <h5 class="card-title d-flex align-items-center mb-0">
+                    <i class="bi bi-bar-chart-line me-2 text-info"></i>Jobs Summary
                 </h5>
+                <hr style="border-color: var(--border-color); opacity: 1;" class="my-3">
                 <div class="card-body p-0">
                     <ul class="list-group list-group-flush">
                         {% for state, count in job_counts.items %}
-                        <li class="list-group-item d-flex justify-content-between align-items-center">
-                            {{ state }}
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0">
+                            <span>
+                                <i class="bi bi-tag-fill me-2 text-secondary"></i>{{ state }}
+                            </span>
                             <span class="badge rounded-pill" style="background-color: {% if state == 'Configuring' or state == 'WaitingForServiceAccount' or state == 'Deleted' %}#6c757d{% elif state == 'Submitted' %}#0dcaf0{% elif state == 'Queued' %}#0d6efd{% elif state == 'Running' %}#ffc107{% elif state == 'Finished' %}#198754{% elif state == 'Failed' %}#dc3545{% elif state == 'Canceled' %}#343a40{% endif %}; color: {% if state == 'Running' %}black{% else %}white{% endif %};">{{ count }}</span>
                         </li>
                         {% endfor %}
                     </ul>
                 </div>
             </div>
-            <br>
-            <div class="card shadow-sm p-3">
-                <h5 class="card-title"><i class="bi bi-bar-chart-line me-2"></i>Jobs</h5>
-                <canvas id="jobsStateChart"></canvas>
+            
+            <div class="card p-4">
+                <h5 class="card-title mb-0"><i class="bi bi-pie-chart me-2 text-info"></i>Jobs Visualization</h5>
+                <hr style="border-color: var(--border-color); opacity: 1;" class="my-3">
+                <div style="position: relative; height: 160px;">
+                    <canvas id="jobsStateChart"></canvas>
+                </div>
             </div>
         </div>
 
-        {# Total Clusters and Projects #}
-        <div class="col-md-2">
-            <div class="card shadow-sm p-3 text-center">
-                <h5 class="card-title"><i class="bi bi-server me-2"></i>Total Clusters</h5>
-                <p class="display-4 fw-bold mb-3">{{ clusters|length }}</p>
-                <a href="{% url 'cluster_list' %}" class="btn btn-secondary btn-sm">Manage</a>
-            </div>
-            <br>
-            <div class="card shadow-sm p-3 text-center">
-                <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Projects</h5>
-                <p class="display-4 fw-bold mb-3">{{ projects|length|default:"0" }}</p>
-                <a href="{% url 'project_list' %}" class="btn btn-secondary btn-sm">Manage</a>
+        {# Total Stats Cards #}
+        <div class="col-md-4">
+            <div class="row g-4 h-100">
+                <div class="col-6">
+                    <div class="card p-4 text-center d-flex flex-column justify-content-between h-100">
+                        <h6 class="card-title text-secondary mb-1"><i class="bi bi-server me-1 text-info"></i>Clusters</h6>
+                        <p class="display-4 fw-extrabold mb-3" style="background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{{ clusters|length }}</p>
+                        <a href="{% url 'cluster_list' %}" class="btn btn-secondary btn-sm w-100">Manage</a>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="card p-4 text-center d-flex flex-column justify-content-between h-100">
+                        <h6 class="card-title text-secondary mb-1"><i class="bi bi-people me-1 text-info"></i>Projects</h6>
+                        <p class="display-4 fw-extrabold mb-3" style="background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{{ projects|length|default:"0" }}</p>
+                        <a href="{% url 'project_list' %}" class="btn btn-secondary btn-sm w-100">Manage</a>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="card p-4 text-center d-flex flex-column justify-content-between h-100">
+                        <h6 class="card-title text-secondary mb-1"><i class="bi bi-list-task me-1 text-info"></i>Queues</h6>
+                        <p class="display-4 fw-extrabold mb-3" style="background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{{ queues|length|default:"0" }}</p>
+                        <a href="{% url 'queues_view' %}" class="btn btn-secondary btn-sm w-100">Manage</a>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="card p-4 text-center d-flex flex-column justify-content-between h-100">
+                        <h6 class="card-title text-secondary mb-1"><i class="bi bi-journal-text me-1 text-info"></i>Total Jobs</h6>
+                        <p class="display-4 fw-extrabold mb-3" style="background: linear-gradient(135deg, var(--accent-cyan) 0%, var(--accent-blue) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">{{ total_jobs|default:"0" }}</p>
+                        <button class="btn btn-secondary btn-sm w-100" disabled>Active</button>
+                    </div>
+                </div>
             </div>
         </div>
-
-        {# Total Queues and Jobs #}
-        <div class="col-md-2">
-            <div class="card shadow-sm p-3 text-center">
-                <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Queues</h5>
-                <p class="display-4 fw-bold mb-3">{{ queues|length|default:"0" }}</p>
-                <a href="{% url 'queues_view' %}" class="btn btn-secondary btn-sm">Manage</a>
-            </div>
-            <br>
-            <div class="card shadow-sm p-3 text-center">
-                <h5 class="card-title"><i class="bi bi-journal-text me-2"></i>Total Jobs</h5>
-                <p class="display-4 fw-bold mb-3">{{ total_jobs|default:"0" }}</p>
-                <button class="btn btn-secondary btn-sm" disabled>Manage</button>
-            </div>
-        </div>
-
+    </div>
         {# Submitted Jobs #}
         <div class="col-12">
             <div class="card shadow-sm p-3">
@@ -498,15 +506,48 @@
                     {{ job_counts.Deleted|default:0 }}
                 ],
                 backgroundColor: [
-                    '#6c757d', '#0dcaf0', '#0d6efd', '#ffc107', '#198754',
-                    '#dc3545', '#343a40', '#6c757d', '#6c757d'
-                ]
+                    'rgba(148, 163, 184, 0.4)',
+                    'rgba(6, 182, 212, 0.6)',
+                    'rgba(59, 130, 246, 0.6)',
+                    'rgba(245, 158, 11, 0.6)',
+                    'rgba(16, 185, 129, 0.6)',
+                    'rgba(244, 63, 94, 0.6)',
+                    'rgba(15, 23, 42, 0.8)',
+                    'rgba(148, 163, 184, 0.4)',
+                    'rgba(148, 163, 184, 0.4)'
+                ],
+                borderColor: [
+                    'rgba(148, 163, 184, 0.8)',
+                    'rgba(6, 182, 212, 1)',
+                    'rgba(59, 130, 246, 1)',
+                    'rgba(245, 158, 11, 1)',
+                    'rgba(16, 185, 129, 1)',
+                    'rgba(244, 63, 94, 1)',
+                    'rgba(15, 23, 42, 1)',
+                    'rgba(148, 163, 184, 0.8)',
+                    'rgba(148, 163, 184, 0.8)'
+                ],
+                borderWidth: 1,
+                borderRadius: 4
             }]
         },
         options: {
             responsive: true,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { display: false } 
+            },
+            scales: { 
+                x: {
+                    grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                    ticks: { color: '#64748b', font: { family: 'Outfit', size: 10 } }
+                },
+                y: { 
+                    beginAtZero: true, 
+                    ticks: { precision: 0, color: '#64748b', font: { family: 'Outfit', size: 10 } },
+                    grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                } 
+            }
         }
     });
 </script>
@@ -525,16 +566,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         liveJobModalContent.innerHTML = `
-            <div class="modal-header bg-dark text-white border-bottom-0 p-4">
+            <div class="modal-header border-bottom border-light-subtle p-4">
                 <h5 class="modal-title fw-bold">Live Job Details</h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body text-center py-5">
-                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                <div class="spinner-border text-info" role="status" style="width: 3rem; height: 3rem;">
                     <span class="visually-hidden">Loading...</span>
                 </div>
                 <h5 class="mt-3 text-muted">Retrieving live job details...</h5>
-                <p class="text-muted small mb-0">Calling JobManagement/CurrentInfoForJob for Job ID: <strong>${jobId}</strong></p>
+                <p class="text-secondary small mb-0">Calling JobManagement/CurrentInfoForJob for Job ID: <strong>${jobId}</strong></p>
             </div>
         `;
         
@@ -553,8 +594,8 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .catch(error => {
                 liveJobModalContent.innerHTML = `
-                    <div class="modal-header bg-danger text-white border-bottom-0 p-4">
-                        <h5 class="modal-title fw-bold">Query Failed</h5>
+                    <div class="modal-header border-bottom border-light-subtle p-4">
+                        <h5 class="modal-title fw-bold text-danger">Query Failed</h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body p-4 text-center">
@@ -562,10 +603,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             <i class="bi bi-x-circle text-danger fs-1"></i>
                         </div>
                         <h4 class="fw-bold text-danger">An error occurred</h4>
-                        <p class="text-muted mb-3">Could not fetch details for Job ID <strong>${jobId}</strong>.</p>
-                        <p class="small text-danger bg-light p-2 rounded border"><code>${error.message}</code></p>
+                        <p class="text-secondary mb-3">Could not fetch details for Job ID <strong>${jobId}</strong>.</p>
+                        <p class="small text-danger bg-dark p-2 rounded border border-danger-subtle"><code>${error.message}</code></p>
                     </div>
-                    <div class="modal-footer bg-light border-top p-3">
+                    <div class="modal-footer border-top border-light-subtle p-3">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                     </div>
                 `;

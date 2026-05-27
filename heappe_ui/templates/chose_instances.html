@@ -1,16 +1,23 @@
 {% extends "base.html" %}
+{% block title %}Choose Instance — HEAppE Management{% endblock %}
 {% block content %}
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card p-4 shadow-sm">
-                <h4 class="mb-4">Choose Instance</h4>
+<div class="container" style="min-height:80vh;display:flex;align-items:center;justify-content:center;">
+    <div style="width:100%;max-width:420px;">
+        <div class="card" style="box-shadow:0 20px 60px rgba(6,182,212,0.1);">
+            <div class="card-header text-center" style="padding:2rem 1.5rem 1.5rem;">
+                <div style="width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,var(--accent-blue),var(--accent-cyan));display:flex;align-items:center;justify-content:center;font-size:1.8rem;margin:0 auto 1rem;">
+                    <i class="bi bi-hdd-stack text-white"></i>
+                </div>
+                <h4 class="mb-1">Choose Instance</h4>
+                <p class="text-muted mb-0" style="font-size:0.85rem;">Select a HEAppE middleware instance to connect to</p>
+            </div>
+            <div class="card-body" style="padding:1.5rem;">
                 <form method="post">
                     {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="instance_id" class="form-label">Select Instance</label>
+                    <div class="mb-4">
+                        <label for="instance_id" class="form-label" style="font-size:0.85rem;font-weight:600;color:var(--text-muted);letter-spacing:0.05em;">SELECT INSTANCE</label>
                         <select class="form-select" id="instance_id" name="InstanceName" required>
-                            <option value="">-- Choose an instance --</option>
+                            <option value="">— Choose an instance —</option>
                             {% for inst in instances %}
                                 <option value="{{ inst.instance_name }}">
                                     {{ inst.instance_name }} ({{ inst.heappe_host }})
@@ -18,7 +25,9 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Save</button>
+                    <button type="submit" class="btn btn-primary w-100" style="padding:0.75rem;">
+                        <i class="bi bi-arrow-right-circle me-2"></i>Connect
+                    </button>
                 </form>
             </div>
         </div>

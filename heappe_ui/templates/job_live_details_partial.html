@@ -1,14 +1,14 @@
 {% load custom_filters %}
-<div class="modal-header bg-dark text-white border-bottom-0 p-4">
+<div class="modal-header border-bottom border-light-subtle p-4">
     <div class="d-flex align-items-center gap-3">
-        <div class="bg-primary bg-gradient rounded-3 p-2 text-white d-flex align-items-center justify-content-center" style="width: 45px; height: 45px;">
+        <div class="rounded-3 p-2 text-white d-flex align-items-center justify-content-center" style="width: 45px; height: 45px; background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-cyan) 100%);">
             <i class="bi bi-cpu fs-4 text-warning"></i>
         </div>
         <div>
-            <h5 class="modal-title fw-bold mb-0 text-white" id="liveJobDetailsModalLabel">
+            <h5 class="modal-title fw-bold mb-0 text-main" id="liveJobDetailsModalLabel">
                 {{ job.name }}
             </h5>
-            <small class="text-white-50">Job ID: <strong class="text-white">{{ job.id }}</strong></small>
+            <small class="text-secondary">Job ID: <strong class="text-info">{{ job.id }}</strong></small>
         </div>
     </div>
     <div class="ms-auto d-flex align-items-center gap-2">
@@ -17,9 +17,9 @@
         {% elif job.state == 2 %}
             <span class="badge bg-info px-3 py-2 text-white fw-bold">Submitted</span>
         {% elif job.state == 4 %}
-            <span class="badge bg-warning px-3 py-2 text-dark fw-bold">Queued</span>
+            <span class="badge bg-primary px-3 py-2 text-white fw-bold">Queued</span>
         {% elif job.state == 8 %}
-            <span class="badge bg-primary px-3 py-2 text-white fw-bold">Running</span>
+            <span class="badge bg-warning px-3 py-2 text-dark fw-bold">Running</span>
         {% elif job.state == 16 %}
             <span class="badge bg-success px-3 py-2 text-white fw-bold">Finished</span>
         {% elif job.state == 32 %}
@@ -33,35 +33,35 @@
         {% else %}
             <span class="badge bg-light px-3 py-2 text-dark border fw-bold">Unknown ({{ job.state }})</span>
         {% endif %}
-        <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
     </div>
 </div>
 
-<div class="modal-body p-4 bg-light-subtle">
+<div class="modal-body p-4">
     <!-- Meta Info Cards Grid -->
     <div class="row g-3 mb-4">
         <div class="col-sm-6 col-md-3">
-            <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
-                <div class="text-muted small fw-semibold mb-1"><i class="bi bi-clock-history me-1 text-secondary"></i>Created</div>
-                <div class="fw-bold text-dark fs-6">{{ job.creation_time|format_datetime|default:"N/A" }}</div>
+            <div class="p-3 rounded-3 border h-100" style="background: var(--bg-surface-alt); border-color: var(--border-color) !important;">
+                <div class="text-secondary small fw-semibold mb-1"><i class="bi bi-clock-history me-1 text-info"></i>Created</div>
+                <div class="fw-bold text-main small">{{ job.creation_time|format_datetime|default:"N/A" }}</div>
             </div>
         </div>
         <div class="col-sm-6 col-md-3">
-            <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
-                <div class="text-muted small fw-semibold mb-1"><i class="bi bi-cloud-arrow-up me-1 text-info"></i>Submitted</div>
-                <div class="fw-bold text-dark fs-6">{{ job.submit_time|format_datetime|default:"Not submitted" }}</div>
+            <div class="p-3 rounded-3 border h-100" style="background: var(--bg-surface-alt); border-color: var(--border-color) !important;">
+                <div class="text-secondary small fw-semibold mb-1"><i class="bi bi-cloud-arrow-up me-1 text-info"></i>Submitted</div>
+                <div class="fw-bold text-main small">{{ job.submit_time|format_datetime|default:"Not submitted" }}</div>
             </div>
         </div>
         <div class="col-sm-6 col-md-3">
-            <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
-                <div class="text-muted small fw-semibold mb-1"><i class="bi bi-play-fill me-1 text-success"></i>Started</div>
-                <div class="fw-bold text-dark fs-6">{{ job.start_time|format_datetime|default:"Not started" }}</div>
+            <div class="p-3 rounded-3 border h-100" style="background: var(--bg-surface-alt); border-color: var(--border-color) !important;">
+                <div class="text-secondary small fw-semibold mb-1"><i class="bi bi-play-fill me-1 text-success"></i>Started</div>
+                <div class="fw-bold text-main small">{{ job.start_time|format_datetime|default:"Not started" }}</div>
             </div>
         </div>
         <div class="col-sm-6 col-md-3">
-            <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
-                <div class="text-muted small fw-semibold mb-1"><i class="bi bi-stop-fill me-1 text-danger"></i>Ended</div>
-                <div class="fw-bold text-dark fs-6">{{ job.end_time|format_datetime|default:"Not ended" }}</div>
+            <div class="p-3 rounded-3 border h-100" style="background: var(--bg-surface-alt); border-color: var(--border-color) !important;">
+                <div class="text-secondary small fw-semibold mb-1"><i class="bi bi-stop-fill me-1 text-danger"></i>Ended</div>
+                <div class="fw-bold text-main small">{{ job.end_time|format_datetime|default:"Not ended" }}</div>
             </div>
         </div>
     </div>
@@ -69,17 +69,17 @@
     <!-- Extra metadata row -->
     <div class="row g-3 mb-4">
         <div class="col-md-6">
-            <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
-                <div class="text-muted small fw-semibold mb-1"><i class="bi bi-folder-fill me-1 text-warning"></i>Sub Project</div>
-                <div class="fw-bold text-dark fs-6 text-truncate" title="{{ job.sub_project|default:'None' }}">
+            <div class="p-3 rounded-3 border h-100" style="background: var(--bg-surface-alt); border-color: var(--border-color) !important;">
+                <div class="text-secondary small fw-semibold mb-1"><i class="bi bi-folder-fill me-1 text-warning"></i>Sub Project</div>
+                <div class="fw-bold text-main text-truncate" title="{{ job.sub_project|default:'None' }}">
                     {{ job.sub_project|default:"None" }}
                 </div>
             </div>
         </div>
         <div class="col-md-6">
-            <div class="p-3 bg-white rounded-3 border shadow-sm h-100">
-                <div class="text-muted small fw-semibold mb-1"><i class="bi bi-hourglass-split me-1 text-primary"></i>Allocated Time</div>
-                <div class="fw-bold text-dark fs-6">
+            <div class="p-3 rounded-3 border h-100" style="background: var(--bg-surface-alt); border-color: var(--border-color) !important;">
+                <div class="text-secondary small fw-semibold mb-1"><i class="bi bi-hourglass-split me-1 text-info"></i>Allocated Time</div>
+                <div class="fw-bold text-main">
                     {% if job.total_allocated_time %}
                         {{ job.total_allocated_time }} seconds
                     {% else %}
@@ -90,11 +90,11 @@
         </div>
     </div>
 
-    <hr class="my-4 opacity-25">
+    <hr class="my-4" style="border-color: var(--border-color); opacity: 1;">
 
     <!-- Tasks Header -->
     <div class="d-flex align-items-center justify-content-between mb-3">
-        <h6 class="fw-bold mb-0 text-primary d-flex align-items-center">
+        <h6 class="fw-bold mb-0 text-info d-flex align-items-center">
             <i class="bi bi-list-nested me-2"></i>Tasks ({{ job.tasks|length }})
         </h6>
     </div>
@@ -103,11 +103,11 @@
     <div class="row g-3">
         {% for task in job.tasks %}
             <div class="col-12">
-                <div class="card border border-light-subtle rounded-3 shadow-sm hover-shadow-task">
-                    <div class="card-header bg-light d-flex justify-content-between align-items-center p-3 border-bottom-0">
+                <div class="card border rounded-3 hover-shadow-task" style="background: var(--bg-surface-alt) !important;">
+                    <div class="card-header d-flex justify-content-between align-items-center p-3" style="border-bottom: 1px solid var(--border-color) !important;">
                         <div class="d-flex align-items-center gap-2">
-                            <i class="bi bi-gear-wide-connected text-primary"></i>
-                            <strong class="text-dark">Task #{{ task.id }}: {{ task.name }}</strong>
+                            <i class="bi bi-gear-wide-connected text-info"></i>
+                            <strong class="text-main">Task #{{ task.id }}: {{ task.name }}</strong>
                         </div>
                         <div>
                             {% if task.state == 1 %}
@@ -133,44 +133,44 @@
                             {% endif %}
                         </div>
                     </div>
-                    <div class="card-body p-3 border-top">
-                        <div class="row g-2 text-dark small">
-                            <div class="col-sm-6"><strong>Priority:</strong> {{ task.priority }}</div>
-                            <div class="col-sm-6"><strong>Allocated Time:</strong> {{ task.allocated_time|default:"N/A" }} seconds</div>
-                            <div class="col-sm-6"><strong>Cores:</strong> {{ task.allocated_core_ids|join:", "|default:"None" }}</div>
-                            <div class="col-sm-6"><strong>Hyper-Threading:</strong> {{ task.cpu_hyper_threading|default:"N/A" }}</div>
-                            <div class="col-12"><hr class="my-2 opacity-10"></div>
+                    <div class="card-body p-3">
+                        <div class="row g-2 text-secondary small">
+                            <div class="col-sm-6"><span class="text-secondary">Priority:</span> <strong class="text-main">{{ task.priority }}</strong></div>
+                            <div class="col-sm-6"><span class="text-secondary">Allocated Time:</span> <strong class="text-main">{{ task.allocated_time|default:"N/A" }} seconds</strong></div>
+                            <div class="col-sm-6"><span class="text-secondary">Cores:</span> <strong class="text-main">{{ task.allocated_core_ids|join:", "|default:"None" }}</strong></div>
+                            <div class="col-sm-6"><span class="text-secondary">Hyper-Threading:</span> <strong class="text-main">{{ task.cpu_hyper_threading|default:"N/A" }}</strong></div>
+                            <div class="col-12"><hr class="my-2" style="border-color: var(--border-color); opacity: 0.5;"></div>
                             
                             <div class="col-md-6">
-                                <span class="text-muted d-block small">Start Time</span>
-                                <span class="fw-semibold text-dark">{{ task.start_time|format_datetime|default:"Not started" }}</span>
+                                <span class="text-secondary d-block small">Start Time</span>
+                                <span class="fw-semibold text-main">{{ task.start_time|format_datetime|default:"Not started" }}</span>
                             </div>
                             <div class="col-md-6">
-                                <span class="text-muted d-block small">End Time</span>
-                                <span class="fw-semibold text-dark">{{ task.end_time|format_datetime|default:"Not finished" }}</span>
+                                <span class="text-secondary d-block small">End Time</span>
+                                <span class="fw-semibold text-main">{{ task.end_time|format_datetime|default:"Not finished" }}</span>
                             </div>
                             
-                            <div class="col-12"><hr class="my-2 opacity-10"></div>
+                            <div class="col-12"><hr class="my-2" style="border-color: var(--border-color); opacity: 0.5;"></div>
                             
                             <!-- Node type info -->
                             <div class="col-md-6">
-                                <span class="text-muted d-block small">Cluster Node Type</span>
-                                <span class="fw-semibold text-dark">{{ task.node_type.name }}</span>
+                                <span class="text-secondary d-block small">Cluster Node Type</span>
+                                <span class="fw-semibold text-main">{{ task.node_type.name }}</span>
                                 {% if task.node_type.description %}
-                                    <span class="text-muted d-block small">{{ task.node_type.description }}</span>
+                                    <span class="text-secondary d-block small">{{ task.node_type.description }}</span>
                                 {% endif %}
                             </div>
                             <div class="col-md-6">
-                                <span class="text-muted d-block small">HPC Project &amp; Accounting</span>
-                                <span class="fw-semibold text-dark">{{ task.node_type.project.name }}</span>
-                                <span class="text-muted d-block small">Accounting Code: <code>{{ task.node_type.project.accounting_string|default:"None" }}</code></span>
+                                <span class="text-secondary d-block small">HPC Project &amp; Accounting</span>
+                                <span class="fw-semibold text-main">{{ task.node_type.project.name }}</span>
+                                <span class="text-secondary d-block small">Accounting Code: <code class="text-info">{{ task.node_type.project.accounting_string|default:"None" }}</code></span>
                             </div>
                             
                             {% if task.error_message or task.reason %}
-                                <div class="col-12"><hr class="my-2 opacity-10"></div>
+                                <div class="col-12"><hr class="my-2" style="border-color: var(--border-color); opacity: 0.5;"></div>
                                 {% if task.error_message %}
                                     <div class="col-12 text-danger">
-                                        <strong>Error Message:</strong> <code>{{ task.error_message }}</code>
+                                        <strong>Error Message:</strong> <code class="text-danger bg-danger-subtle p-1 rounded border border-danger-subtle">{{ task.error_message }}</code>
                                     </div>
                                 {% endif %}
                                 {% if task.reason %}
@@ -185,8 +185,8 @@
             </div>
         {% empty %}
             <div class="col-12">
-                <div class="alert alert-light border text-center py-4">
-                    <i class="bi bi-info-circle text-muted fs-4 mb-2 d-block"></i>
+                <div class="alert alert-dark text-center py-4 border border-light-subtle">
+                    <i class="bi bi-info-circle text-secondary fs-4 mb-2 d-block"></i>
                     No tasks assigned to this job.
                 </div>
             </div>
@@ -194,7 +194,7 @@
     </div>
 </div>
 
-<div class="modal-footer bg-light border-top p-3 justify-content-between">
+<div class="modal-footer border-top border-light-subtle p-3 justify-content-between">
     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
     <a href="{% url 'job_status_view' job.id %}" class="btn btn-primary shadow-sm" target="_blank">
         <i class="bi bi-box-arrow-up-right me-1"></i> Open Dedicated Status Page
@@ -207,6 +207,7 @@
 }
 .hover-shadow-task:hover {
     transform: translateY(-2px);
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08) !important;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.2) !important;
+    border-color: rgba(6, 182, 212, 0.3) !important;
 }
 </style>

@@ -3,71 +3,92 @@
 {% block title %}HEAppE Profile{% endblock %}
 
 {% block content %}
-<div class="container mt-5">
+<div class="container py-4 animate-fade-in">
     <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">HEAppE Profile</h5>
+        <div class="col-md-7 col-lg-6">
+
+            <div class="card">
+                <div class="card-header d-flex align-items-center gap-3">
+                    <div class="text-white" style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--accent-blue),var(--accent-cyan));display:flex;align-items:center;justify-content:center;font-size:1.4rem;font-weight:700;flex-shrink:0;">
+                        {{ user.username|first|upper }}
+                    </div>
+                    <div>
+                        <h5 class="mb-0">{{ user.username }}</h5>
+                        <small class="text-muted">HEAppE Profile</small>
+                    </div>
                 </div>
+
                 <div class="card-body">
                     {% if user.is_authenticated %}
-                        <p><strong>Username:</strong> {{ user.username }}</p>
-                        <p><strong>HEAppE Host:</strong> {{ request.session.heappe_host }}</p>
-                        <p>
-                            <strong>Session Code:</strong>
-                            {% if request.session.heappe_session_code %}
-                                <span id="session-code" style="display:none;">{{ request.session.heappe_session_code }}</span>
-                                <button id="toggle-session" class="btn btn-sm btn-outline-secondary ms-1">
-                                    🔒 Show
-                                </button>
-                            {% else %}
-                                <span id="session-code-container">
-                                    <span class="text-muted small">None (API Key auth)</span>
-                                    <button id="btn-generate-session" class="btn btn-sm btn-warning ms-2 fw-semibold text-dark">
-                                        🔑 Get Session Code
-                                    </button>
-                                </span>
-                                <span id="session-code" style="display:none;"></span>
-                                <button id="toggle-session" class="btn btn-sm btn-outline-secondary ms-1" style="display:none;">
-                                    🔒 Show
-                                </button>
-                            {% endif %}
-                        </p>
-                        <p><strong>Last Auth:</strong>
-                            {% if last_auth %}
-                                {{ last_auth | date:"d.m.Y H:i:s" }} UTC
-                            {% else %}
-                                Never
-                            {% endif %}
-                        </p>
+                        <div class="mb-3" style="background:var(--bg-surface-alt);border:1px solid var(--border-color);border-radius:12px;padding:1.25rem;">
+                            <div class="row g-3">
+                                <div class="col-sm-4 text-muted" style="font-size:0.82rem;">HEAppE Host</div>
+                                <div class="col-sm-8">
+                                    <code style="color:var(--accent-cyan);font-size:0.82rem;">{{ request.session.heappe_host|default:"—" }}</code>
+                                </div>
 
+                                <div class="col-sm-4 text-muted" style="font-size:0.82rem;">Session Code</div>
+                                <div class="col-sm-8">
+                                    {% if request.session.heappe_session_code %}
+                                        <span id="session-code" style="display:none;font-family:monospace;font-size:0.8rem;color:var(--accent-cyan);">{{ request.session.heappe_session_code }}</span>
+                                        <span id="session-placeholder" style="font-size:0.82rem;color:var(--text-muted);">••••••••••••</span>
+                                        <button id="toggle-session" class="btn btn-sm btn-outline-secondary ms-1" style="font-size:0.75rem;padding:0.2rem 0.6rem;">
+                                            🔒 Show
+                                        </button>
+                                    {% else %}
+                                        <span id="session-code-container">
+                                            <span class="text-muted" style="font-size:0.82rem;">None (API Key auth)</span>
+                                            <button id="btn-generate-session" class="btn btn-sm btn-outline-warning ms-2" style="font-size:0.75rem;padding:0.2rem 0.6rem;">
+                                                🔑 Get Session Code
+                                            </button>
+                                        </span>
+                                        <span id="session-code" style="display:none;font-family:monospace;font-size:0.8rem;color:var(--accent-cyan);"></span>
+                                        <button id="toggle-session" class="btn btn-sm btn-outline-secondary ms-1" style="display:none;font-size:0.75rem;padding:0.2rem 0.6rem;">
+                                            🔒 Show
+                                        </button>
+                                    {% endif %}
+                                </div>
 
-                        <hr>
-
+                                <div class="col-sm-4 text-muted" style="font-size:0.82rem;">Last Auth</div>
+                                <div class="col-sm-8" style="font-size:0.82rem;">
+                                    {% if last_auth %}
+                                        {{ last_auth | date:"d.m.Y H:i:s" }} <span class="text-muted">UTC</span>
+                                    {% else %}
+                                        <span class="text-muted">Never</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
 
                         {% if user.is_superuser %}
-                            <div class="mt-4 p-3 border border-danger rounded">
-                                <h6 class="text-danger mb-3">SERVER MAINTENANCE (Admin Only)</h6>
-
-                                <button type="button" data-bs-toggle="modal" data-bs-target="#updateModal" class="btn btn-danger w-100 mb-2">
-                                    Update Application
+                            <div class="mb-3 p-3" style="border:1px solid var(--border-color);border-radius:12px;background:var(--bg-surface-alt);">
+                                <div class="d-flex align-items-center mb-3">
+                                    <i class="bi bi-shield-exclamation me-2" style="color:var(--accent-rose);"></i>
+                                    <strong style="color:var(--accent-rose);font-size:0.85rem;letter-spacing:0.05em;">SERVER MAINTENANCE</strong>
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle ms-2" style="font-size:0.7rem;">Admin Only</span>
+                                </div>
+                                <button type="button" data-bs-toggle="modal" data-bs-target="#updateModal" class="btn btn-danger w-100">
+                                    <i class="bi bi-arrow-repeat me-2"></i>Update Application
                                 </button>
                             </div>
-                            <hr>
                         {% endif %}
-                        {# -------------------------------------------------------- #}
 
                         <form method="post" action="{% url 'logout' %}">
                             {% csrf_token %}
-                            <button type="submit" class="btn btn-outline-danger w-100">Logout</button>
+                            <button type="submit" class="btn btn-outline-danger w-100">
+                                <i class="bi bi-box-arrow-right me-2"></i>Logout
+                            </button>
                         </form>
                     {% else %}
-                        <p class="text-danger">You are not logged in.</p>
-                        <a href="{% url 'login' %}" class="btn btn-primary">Login</a>
+                        <div class="text-center p-4">
+                            <i class="bi bi-person-x" style="font-size:3rem;color:var(--accent-rose);opacity:0.6;"></i>
+                            <p class="text-muted mt-3">You are not logged in.</p>
+                            <a href="{% url 'login' %}" class="btn btn-primary">Login</a>
+                        </div>
                     {% endif %}
                 </div>
             </div>
+
         </div>
     </div>
 </div>
@@ -76,19 +97,23 @@
 document.addEventListener("DOMContentLoaded", function() {
     const toggleButton = document.getElementById("toggle-session");
     const sessionCodeSpan = document.getElementById("session-code");
+    const sessionPlaceholder = document.getElementById("session-placeholder");
     const btnGenerate = document.getElementById("btn-generate-session");
     const container = document.getElementById("session-code-container");
 
-    // Logika pro zobrazení/skrytí Session Code
-    toggleButton.addEventListener("click", function() {
-        if (sessionCodeSpan.style.display === "none") {
-            sessionCodeSpan.style.display = "inline";
-            toggleButton.textContent = "🔓 Hide";
-        } else {
-            sessionCodeSpan.style.display = "none";
-            toggleButton.textContent = "🔒 Show";
-        }
-    });
+    if (toggleButton) {
+        toggleButton.addEventListener("click", function() {
+            if (sessionCodeSpan.style.display === "none") {
+                sessionCodeSpan.style.display = "inline";
+                if (sessionPlaceholder) sessionPlaceholder.style.display = "none";
+                toggleButton.textContent = "🔓 Hide";
+            } else {
+                sessionCodeSpan.style.display = "none";
+                if (sessionPlaceholder) sessionPlaceholder.style.display = "inline";
+                toggleButton.textContent = "🔒 Show";
+            }
+        });
+    }
 
     if (btnGenerate) {
         btnGenerate.addEventListener("click", function() {
@@ -105,12 +130,13 @@ document.addEventListener("DOMContentLoaded", function() {
             .then(response => response.json())
             .then(data => {
                 if (data.status === "success") {
-                    // Update UI
                     sessionCodeSpan.textContent = data.session_code;
                     sessionCodeSpan.style.display = "inline";
                     if (container) container.style.display = "none";
-                    toggleButton.textContent = "🔓 Hide";
-                    toggleButton.style.display = "inline";
+                    if (toggleButton) {
+                        toggleButton.textContent = "🔓 Hide";
+                        toggleButton.style.display = "inline";
+                    }
                 } else {
                     alert("Error: " + data.message);
                     btnGenerate.disabled = false;

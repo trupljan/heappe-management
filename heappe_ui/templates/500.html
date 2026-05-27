@@ -3,44 +3,25 @@
 {% block title %}Server Error (500){% endblock %}
 
 {% block content %}
-<div class="container py-5">
+<div class="container py-5 animate-fade-in">
     <div class="row justify-content-center">
-        <div class="col-md-8 col-lg-6">
-            <div class="card border-0 shadow-lg" style="border-radius: 16px; overflow: hidden; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);">
-                <!-- Card Header -->
-                <div class="card-header bg-danger text-white text-center py-4 border-0 position-relative">
-                    <div class="mb-2">
-                        <i class="bi bi-exclamation-octagon" style="font-size: 3.5rem;"></i>
+        <div class="col-md-7 col-lg-5">
+            <div class="card text-center">
+                <div class="card-body" style="padding:3rem 2rem;">
+                    <div style="font-size:7rem;font-weight:800;font-family:var(--font-heading);line-height:1;background:linear-gradient(135deg,var(--accent-rose),#f97316);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:1rem;">
+                        500
                     </div>
-                    <h3 class="fw-bold mb-0">Internal Server Error</h3>
-                    <p class="text-white-50 mb-0 mt-1 small">Something went wrong on our server. We are looking into it.</p>
-                </div>
-                
-                <!-- Card Body -->
-                <div class="card-body p-4 text-center">
-                    <div class="mb-4">
-                        <h1 class="display-1 fw-bold text-danger mb-0">500</h1>
-                        <p class="text-muted small mt-2">The server encountered an internal error or misconfiguration.</p>
-                    </div>
+                    <div style="width:60px;height:3px;background:linear-gradient(90deg,var(--accent-rose),#f97316);margin:0 auto 1.5rem;border-radius:2px;"></div>
+                    <h4 class="mb-2">Internal Server Error</h4>
+                    <p class="text-muted mb-4" style="font-size:0.9rem;">Something went wrong on our server. You can try reloading or switching HEAppE instances if the active instance is causing problems.</p>
 
-                    <div class="alert alert-light border shadow-sm mb-4">
-                        <span class="small text-muted">You can try reloading this page or switching HEAppE instances if the active instance is causing problems.</span>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="d-flex flex-column gap-2">
-                        <div class="row g-2">
-                            <div class="col-6">
-                                <button onclick="window.location.reload();" class="btn btn-primary w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2">
-                                    <i class="bi bi-arrow-clockwise"></i> Try Again
-                                </button>
-                            </div>
-                            <div class="col-6">
-                                <a href="{% url 'dashboard_view' %}" class="btn btn-outline-secondary w-100 py-2 fw-semibold d-flex align-items-center justify-content-center gap-2">
-                                    <i class="bi bi-house-door"></i> Dashboard
-                                </a>
-                            </div>
-                        </div>
+                    <div class="d-flex gap-2 justify-content-center">
+                        <button onclick="window.location.reload();" class="btn btn-primary">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Try Again
+                        </button>
+                        <a href="{% url 'dashboard_view' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-house-door me-1"></i>Dashboard
+                        </a>
                     </div>
                 </div>
             </div>

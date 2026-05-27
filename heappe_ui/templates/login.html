@@ -1,43 +1,48 @@
 {% extends "base.html" %}
 {% load static %}
 
-
-
 {% block content %}
-
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-md-4">
-                <div class="card shadow-lg rounded-4">
-                    <div class="card-body p-4">
-                        <div class="text-center mb-4">
-                            <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" style="height:50px;" class="mb-2">
-                            <h5 class="fw-bold">HEAppE Admin Login</h5>
-                        </div>
-
-                        {% if error %}
-                            <div class="alert alert-danger py-2">{{ error }}</div>
-                        {% endif %}
-
-                        <form method="post">
-                            {% csrf_token %}
-                            <div class="mb-3">
-                                <label for="username" class="form-label">Username</label>
-                                <input type="text" class="form-control" id="username" name="username" required autofocus>
-                            </div>
-                            <div class="mb-3">
-                                <label for="password" class="form-label">Password</label>
-                                <input type="password" class="form-control" id="password" name="password" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">Log In</button>
-                        </form>
+<div class="container animate-fade-in" style="margin-top: 5vh; margin-bottom: 5vh;">
+    <div class="row justify-content-center">
+        <div class="col-md-5 col-lg-4">
+            <div class="card p-4 shadow-lg">
+                <div class="card-body p-2">
+                    <div class="text-center mb-4">
+                        <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" style="height:60px; filter: drop-shadow(0 0 10px rgba(6, 182, 212, 0.3));" class="mb-3 animate-fade-in">
+                        <h4 class="fw-bold mb-1">HEAppE Admin Panel</h4>
+                        <p class="text-secondary small">Access control center</p>
                     </div>
+
+                    {% if error %}
+                        <div class="alert alert-danger py-2 mb-3 text-center small">
+                            <i class="bi bi-exclamation-octagon me-2"></i>{{ error }}
+                        </div>
+                    {% endif %}
+
+                    <form method="post" autocomplete="off">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="username" class="form-label text-secondary small fw-semibold">Username</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-transparent border-end-0" style="border-color: var(--border-color); color: var(--text-muted);"><i class="bi bi-person"></i></span>
+                                <input type="text" class="form-control border-start-0" id="username" name="username" required autofocus placeholder="Enter username" style="border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important;">
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label for="password" class="form-label text-secondary small fw-semibold">Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-transparent border-end-0" style="border-color: var(--border-color); color: var(--text-muted);"><i class="bi bi-lock"></i></span>
+                                <input type="password" class="form-control border-start-0" id="password" name="password" required placeholder="Enter password" style="border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important;">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold text-uppercase tracking-wider">Log In</button>
+                    </form>
                 </div>
-                <p class="text-center text-muted mt-3" style="font-size: 0.9rem;">
-                    &copy; {{ year|default:2025 }} HEAppE Admin
-                </p>
             </div>
+            <p class="text-center mt-4 small" style="color: var(--text-muted);">
+                &copy; {{ year|default:2026 }} HEAppE Admin | Secure Portal
+            </p>
         </div>
     </div>
-
+</div>
 {% endblock %}

@@ -3,240 +3,249 @@
 {% block title %}Logs Dashboard{% endblock %}
 
 {% block content %}
-<div class="w-full min-h-screen p-4 bg-gray-50">
-    <div class="flex justify-between items-center mb-4">
-        <h1 class="text-3xl font-bold text-gray-900 text-center">
+<div class="w-full min-h-screen p-4 animate-fade-in">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 fw-bold mb-0">
             System Logs Dashboard
         </h1>
         <div class="form-check form-switch">
             <input class="form-check-input" type="checkbox" id="viewToggle">
-            <label class="form-check-label" for="viewToggle">Show Database Config</label>
+            <label class="form-check-label text-secondary small fw-semibold" for="viewToggle">Show Database Config</label>
         </div>
     </div>
 
     <!-- Display Database Connection Error -->
     {% if error %}
-    <div class="bg-red-100 text-red-800 p-4 rounded-md mb-4">
-        <strong>Error:</strong> {{ error }}<br>
-        Please update the database configuration to resolve the issue.
+    <div class="alert alert-danger mb-4 shadow-sm">
+        <i class="bi bi-exclamation-octagon me-2"></i><strong>Database Connection Error:</strong> {{ error }}<br>
+        <small class="text-danger-emphasis">Please verify the database configurations to restore connection.</small>
     </div>
     {% endif %}
 
     <!-- Logs Dashboard -->
     <div id="logsDashboard" class="view-content" {% if error %}style="display: none;"{% endif %}>
         <!-- Filters Panel -->
-        <div class="bg-white rounded-lg p-4 mb-6 shadow-md hover:shadow-lg transition-all duration-300 w-full">
-            <form method="get" id="logsFilterForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end w-full">
-                <div>
-                    <label for="date_from" class="block text-sm font-medium text-gray-700">From</label>
-<input type="datetime-local" name="date_from" id="date_from" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50"
-       value="{{ request.GET.date_from|default:default_date_from }}">
+        <div class="card p-4 mb-4">
+            <form method="get" id="logsFilterForm" class="row g-3 align-items-end">
+                <div class="col-md-2.5 col-sm-6">
+                    <label for="date_from" class="form-label text-secondary small fw-semibold">From</label>
+                    <input type="datetime-local" name="date_from" id="date_from" class="form-control"
+                           value="{{ request.GET.date_from|default:default_date_from }}">
                 </div>
-                <div>
-                    <label for="date_to" class="block text-sm font-medium text-gray-700">To</label>
-                    <input type="datetime-local" name="date_to" id="date_to" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ request.GET.date_to }}">
+                <div class="col-md-2.5 col-sm-6">
+                    <label for="date_to" class="form-label text-secondary small fw-semibold">To</label>
+                    <input type="datetime-local" name="date_to" id="date_to" class="form-control" value="{{ request.GET.date_to }}">
                 </div>
-                <div>
-                    <label for="level" class="block text-sm font-medium text-gray-700">Level</label>
-                    <select name="level" id="level" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50">
+                <div class="col-md-2 col-sm-6">
+                    <label for="level" class="form-label text-secondary small fw-semibold">Level</label>
+                    <select name="level" id="level" class="form-select">
                         <option value="">All Levels</option>
                         {% for lvl in levels %}
                         <option value="{{ lvl.Id }}" {% if request.GET.level == lvl.Id|stringformat:"s" %}selected{% endif %}>{{ lvl.Name }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label for="search" class="block text-sm font-medium text-gray-700">Search</label>
-                    <input type="text" name="search" id="search" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" placeholder="Message / Class" value="{{ request.GET.search }}">
+                <div class="col-md-3 col-sm-6">
+                    <label for="search" class="form-label text-secondary small fw-semibold">Search</label>
+                    <input type="text" name="search" id="search" class="form-control" placeholder="Message / Class" value="{{ request.GET.search }}">
                 </div>
-                <div class="flex space-x-2">
-                    <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium">Filter</button>
-                    <a href="{% url 'logs' %}" class="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors text-sm font-medium">Reset</a>
+                <div class="col-md-2 col-sm-12 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
+                    <a href="{% url 'logs' %}" class="btn btn-secondary"><i class="bi bi-arrow-counterclockwise"></i></a>
                 </div>
             </form>
         </div>
 
         <!-- Summary Cards + Circular Countdown -->
-        <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6 w-full items-center">
+        <div class="row g-4 mb-4 align-items-center">
             <!-- Summary Cards -->
-            <div class="col-span-4">
-                <div class="grid grid-cols-1 sm:grid-cols-5 gap-4">
-                    <div class="bg-gray-200 rounded-lg shadow p-6 text-center">
-                        <h6 class="text-sm font-semibold text-gray-800">Debug</h6>
-                        <p class="text-3xl font-bold text-gray-700" id="debugCount">{{ debug_count }}</p>
+            <div class="col-md-10">
+                <div class="row g-3">
+                    <div class="col">
+                        <div class="card p-3 text-center" style="border-left: 3px solid #6b7280 !important; background: rgba(107, 114, 128, 0.05) !important;">
+                            <h6 class="text-secondary small fw-bold mb-1">Debug</h6>
+                            <p class="h3 fw-bold text-dark mb-0" id="debugCount">{{ debug_count }}</p>
+                        </div>
                     </div>
-                    <div class="bg-blue-100 rounded-lg shadow p-6 text-center">
-                        <h6 class="text-sm font-semibold text-blue-800">Info</h6>
-                        <p class="text-3xl font-bold text-blue-900" id="infoCount">{{ info_count }}</p>
+                    <div class="col">
+                        <div class="card p-3 text-center" style="border-left: 3px solid #3b82f6 !important; background: rgba(59, 130, 246, 0.05) !important;">
+                            <h6 class="text-info small fw-bold mb-1">Info</h6>
+                            <p class="h3 fw-bold text-primary mb-0" id="infoCount">{{ info_count }}</p>
+                        </div>
                     </div>
-                    <div class="bg-yellow-100 rounded-lg shadow p-6 text-center">
-                        <h6 class="text-sm font-semibold text-yellow-800">Warning</h6>
-                        <p class="text-3xl font-bold text-yellow-900" id="warningCount">{{ warning_count }}</p>
+                    <div class="col">
+                        <div class="card p-3 text-center" style="border-left: 3px solid #f59e0b !important; background: rgba(245, 158, 11, 0.05) !important;">
+                            <h6 class="text-warning small fw-bold mb-1" style="color: var(--accent-amber) !important;">Warning</h6>
+                            <p class="h3 fw-bold mb-0" id="warningCount" style="color: var(--accent-amber) !important;">{{ warning_count }}</p>
+                        </div>
                     </div>
-                    <div class="bg-red-100 rounded-lg shadow p-6 text-center">
-                        <h6 class="text-sm font-semibold text-red-800">Error</h6>
-                        <p class="text-3xl font-bold text-red-900" id="errorCount">{{ error_count }}</p>
+                    <div class="col">
+                        <div class="card p-3 text-center" style="border-left: 3px solid #f43f5e !important; background: rgba(244, 63, 94, 0.05) !important;">
+                            <h6 class="text-danger small fw-bold mb-1">Error</h6>
+                            <p class="h3 fw-bold text-danger mb-0" id="errorCount">{{ error_count }}</p>
+                        </div>
                     </div>
-                    <div class="bg-gray-800 rounded-lg shadow p-6 text-center">
-                        <h6 class="text-sm font-semibold text-white">Critical</h6>
-                        <p class="text-3xl font-bold text-white" id="criticalCount">{{ critical_count }}</p>
+                    <div class="col">
+                        <div class="card p-3 text-center" style="border-left: 3px solid #c084fc !important; background: rgba(192, 132, 252, 0.05) !important;">
+                            <h6 class="text-secondary small fw-bold mb-1">Critical</h6>
+                            <p class="h3 fw-bold text-dark mb-0" id="criticalCount">{{ critical_count }}</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Circular Countdown -->
-            <div class="d-flex flex-column align-items-center col-span-1">
-                <svg class="w-20 h-20 mb-3" viewBox="0 0 36 36">
-                    <circle cx="18" cy="18" r="16" stroke="#E5E7EB" stroke-width="4" fill="none" />
-                    <circle id="progressCircle" cx="18" cy="18" r="16" stroke="#0d6efd" stroke-width="4" fill="none"
+            <div class="col-md-2 d-flex flex-column align-items-center text-center">
+                <svg class="mb-2" style="width: 70px; height: 70px;" viewBox="0 0 36 36">
+                    <circle cx="18" cy="18" r="16" stroke="rgba(0,0,0,0.05)" stroke-width="4" fill="none" />
+                    <circle id="progressCircle" cx="18" cy="18" r="16" stroke="var(--accent-cyan)" stroke-width="4" fill="none"
                             stroke-dasharray="100" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 18 18)" />
-                    <text id="countdownNumber" x="18" y="22" text-anchor="middle" font-size="10" fill="#1F2937" font-weight="bold">15</text>
+                    <text id="countdownNumber" x="18" y="22" text-anchor="middle" font-size="10" fill="var(--text-main)" font-weight="bold" font-family="Outfit">15</text>
                 </svg>
-                <div class="form-check form-switch">
+                <div class="form-check form-switch small">
                     <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
-                    <label class="form-check-label" for="autoRefresh">Auto Refresh</label>
+                    <label class="form-check-label text-secondary" for="autoRefresh">Auto Refresh</label>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white rounded-lg shadow-md p-4 lg:col-span-4 h-64">
-            <h6 class="text-lg font-semibold text-gray-800 mb-2">Log Trends</h6>
-            <canvas id="logsChart" class="h-full w-full"></canvas>
+        <div class="card p-4 mb-4">
+            <h6 class="card-title text-secondary mb-3"><i class="bi bi-graph-up me-2 text-info"></i>Log Trends</h6>
+            <div style="position: relative; height: 260px;">
+                <canvas id="logsChart" class="h-full w-full"></canvas>
+            </div>
         </div>
-        </br>
 
         <!-- Logs Table -->
-        <div class="bg-white rounded-lg shadow-md p-4 w-full overflow-x-auto">
-            <h6 class="text-lg font-semibold text-gray-800 mb-4">System Logs</h6>
-            <table class="min-w-full divide-y divide-gray-200" id="logsTable">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Exception</th>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Instance</th>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Class</th>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">IP</th>
-                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {% for log in logs %}
-                    <tr class="hover:bg-gray-50 transition-colors cursor-pointer" onclick="showLogContext(this)" data-date="{{ log.Date|date:'Y-m-d H:i:s.u' }}" data-instance="{{ log.InstanceName }}">
-                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.Date|date:"d.m.Y H:i:s" }}</td>
-                        <td class="px-4 py-2 text-sm">
-                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                                {% if log.LevelName == 'Debug' %}bg-gray-200 text-gray-800
-                                {% elif log.LevelName == 'Information' %}bg-blue-100 text-blue-800
-                                {% elif log.LevelName == 'Warning' %}bg-yellow-100 text-yellow-800
-                                {% elif log.LevelName == 'Error' %}bg-red-100 text-red-800
-                                {% elif log.LevelName == 'Critical' %}bg-gray-800 text-white
-                                {% else %}bg-gray-100 text-gray-800{% endif %}">
-                                {{ log.LevelName }}
-                            </span>
-                        </td>
-                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.Message }}</td>
-                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.Exception|default:"-" }}</td>
-                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.InstanceName }} ({{ log.InstanceVersion }})</td>
-                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.Class }}</td>
-                        <td class="px-4 py-2 text-sm text-gray-900">{{ log.IP }}</td>
-                        <td class="px-4 py-2 text-sm">
-                            {% if log.LevelName == 'Error' or log.LevelName == 'Critical' %}
-                                <button type="button" class="px-2.5 py-1 bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 border border-red-200 rounded-md text-xs font-semibold inline-flex items-center gap-1 transition-all duration-150 shadow-sm" onclick="event.stopPropagation(); showLogContext(this.closest('tr'))">
-                                    <i class="bi bi-exclamation-circle-fill text-red-500"></i> Trace Context
-                                </button>
-                            {% elif log.LevelName == 'Warning' %}
-                                <button type="button" class="px-2.5 py-1 bg-yellow-50 text-yellow-800 hover:bg-yellow-100 hover:text-yellow-900 border border-yellow-200 rounded-md text-xs font-medium inline-flex items-center gap-1 transition-all duration-150 shadow-sm" onclick="event.stopPropagation(); showLogContext(this.closest('tr'))">
-                                    <i class="bi bi-exclamation-triangle-fill text-yellow-500"></i> View Context
-                                </button>
-                            {% else %}
-                                <button type="button" class="px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 border border-indigo-200 rounded-md text-xs font-medium inline-flex items-center gap-1 transition-all duration-150" onclick="event.stopPropagation(); showLogContext(this.closest('tr'))">
-                                    <i class="bi bi-clock-history"></i> Context
-                                </button>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="8" class="px-4 py-2 text-sm text-gray-500 text-center">No logs found</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-
-            <!-- Bootstrap 5 Pagination -->
-            {% if logs.has_other_pages %}
-            <div class="mt-4 flex justify-center">
-                <nav aria-label="Logs pagination">
-                    <ul class="pagination">
-                        <!-- Previous Button -->
-                        <li class="page-item {% if not logs.has_previous %}disabled{% endif %}">
-                            <a class="page-link" href="{% if logs.has_previous %}?page={{ logs.previous_page_number }}{% else %}#{% endif %}" aria-label="Previous">
-                                <span aria-hidden="true">&laquo;</span>
-                            </a>
-                        </li>
-                        <!-- Page Numbers -->
-                        {% for num in logs.paginator.page_range %}
-                            {% if num|add:"-2" <= logs.number and num|add:"2" >= logs.number or num == 1 or num == logs.paginator.num_pages %}
-                                <li class="page-item {% if logs.number == num %}active{% endif %}">
-                                    <a class="page-link" href="?page={{ num }}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}{% if request.GET.level %}&level={{ request.GET.level }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">{{ num }}</a>
-                                </li>
-                            {% elif num|add:"-3" == logs.number or num|add:"3" == logs.number %}
-                                <li class="page-item disabled">
-                                    <span class="page-link">...</span>
-                                </li>
-                            {% endif %}
+        <div class="card p-4 overflow-hidden">
+            <h6 class="card-title text-secondary mb-3"><i class="bi bi-card-list me-2 text-info"></i>System Logs</h6>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="logsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 140px;">Date</th>
+                            <th style="width: 110px;">Level</th>
+                            <th>Message</th>
+                            <th>Exception</th>
+                            <th style="width: 180px;">Instance</th>
+                            <th style="width: 180px;">Class</th>
+                            <th style="width: 120px;">IP</th>
+                            <th class="text-end" style="width: 140px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr class="cursor-pointer" onclick="showLogContext(this)" data-date="{{ log.Date|date:'Y-m-d H:i:s.u' }}" data-instance="{{ log.InstanceName }}">
+                            <td class="small text-muted">{{ log.Date|date:"d.m.Y H:i:s" }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if log.LevelName == 'Debug' %}bg-secondary
+                                    {% elif log.LevelName == 'Information' %}bg-info
+                                    {% elif log.LevelName == 'Warning' %}bg-warning
+                                    {% elif log.LevelName == 'Error' %}bg-danger
+                                    {% elif log.LevelName == 'Critical' %}bg-dark
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ log.LevelName }}
+                                </span>
+                            </td>
+                            <td class="small text-wrap text-break" style="max-width: 300px;">{{ log.Message }}</td>
+                            <td class="small text-danger text-wrap text-break" style="max-width: 200px;">{{ log.Exception|default:"-" }}</td>
+                            <td class="small text-secondary">{{ log.InstanceName }} <small class="d-block text-muted">{{ log.InstanceVersion }}</small></td>
+                            <td class="small text-info text-truncate" style="max-width: 150px;" title="{{ log.Class }}">{{ log.Class }}</td>
+                            <td class="small text-muted">{{ log.IP }}</td>
+                            <td class="text-end" onclick="event.stopPropagation();">
+                                {% if log.LevelName == 'Error' or log.LevelName == 'Critical' %}
+                                    <button type="button" class="btn btn-sm btn-danger px-2 py-1" onclick="showLogContext(this.closest('tr'))">
+                                        Trace Context
+                                    </button>
+                                {% elif log.LevelName == 'Warning' %}
+                                    <button type="button" class="btn btn-sm btn-outline-warning px-2 py-1" onclick="showLogContext(this.closest('tr'))">
+                                        View Context
+                                    </button>
+                                {% else %}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary px-2 py-1" onclick="showLogContext(this.closest('tr'))">
+                                        Context
+                                    </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-secondary">
+                                <i class="bi bi-info-circle me-1"></i>No logs found in this query
+                            </td>
+                        </tr>
                         {% endfor %}
-                        <!-- Next Button -->
-                        <li class="page-item {% if not logs.has_next %}disabled{% endif %}">
-                            <a class="page-link" href="{% if logs.has_next %}?page={{ logs.next_page_number }}{% else %}#{% endif %}" aria-label="Next">
-                                <span aria-hidden="true">&raquo;</span>
-                            </a>
-                        </li>
-                    </ul>
-                </nav>
+                    </tbody>
+                </table>
             </div>
+
+            <!-- Pagination -->
+            {% if logs.has_other_pages %}
+            <nav aria-label="Logs pagination" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item {% if not logs.has_previous %}disabled{% endif %}">
+                        <a class="page-link" href="{% if logs.has_previous %}?page={{ logs.previous_page_number }}{% else %}#{% endif %}" aria-label="Previous">
+                            <span aria-hidden="true">&laquo;</span>
+                        </a>
+                    </li>
+                    {% for num in logs.paginator.page_range %}
+                        {% if num|add:"-2" <= logs.number and num|add:"2" >= logs.number or num == 1 or num == logs.paginator.num_pages %}
+                            <li class="page-item {% if logs.number == num %}active{% endif %}">
+                                <a class="page-link" href="?page={{ num }}{% if request.GET.date_from %}&date_from={{ request.GET.date_from }}{% endif %}{% if request.GET.date_to %}&date_to={{ request.GET.date_to }}{% endif %}{% if request.GET.level %}&level={{ request.GET.level }}{% endif %}{% if request.GET.search %}&search={{ request.GET.search }}{% endif %}">{{ num }}</a>
+                            </li>
+                        {% elif num|add:"-3" == logs.number or num|add:"3" == logs.number %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+                    <li class="page-item {% if not logs.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{% if logs.has_next %}?page={{ logs.next_page_number }}{% else %}#{% endif %}" aria-label="Next">
+                            <span aria-hidden="true">&raquo;</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
             {% endif %}
         </div>
     </div>
 
     <!-- Database Configuration Form -->
-    <div id="dbConfig" class="view-content hidden">
-        <div class="bg-white rounded-lg p-6 mb-6 shadow-md hover:shadow-lg transition-all duration-300 w-full max-w-lg mx-auto">
-            <h2 class="text-lg font-semibold text-gray-800 mb-4">Database Configuration</h2>
-            <form method="post" action="{% url 'logs' %}" class="grid grid-cols-1 gap-4">
+    <div id="dbConfig" class="view-content d-none animate-fade-in">
+        <div class="card p-4 mx-auto" style="max-width: 500px;">
+            <h5 class="card-title text-secondary mb-4"><i class="bi bi-database-fill-gear me-2 text-info"></i>Database Configuration</h5>
+            <form method="post" action="{% url 'logs' %}" class="d-flex flex-column gap-3">
                 {% csrf_token %}
                 <input type="hidden" name="config_submit" value="1">
                 <div>
-                    <label for="server" class="block text-sm font-medium text-gray-700">Server</label>
-                    <input type="text" name="server" id="server" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_server|default:'localhost' }}" required>
+                    <label for="server" class="form-label text-secondary small fw-semibold">Server</label>
+                    <input type="text" name="server" id="server" class="form-control" value="{{ db_server|default:'localhost' }}" required>
                 </div>
                 <div>
-                    <label for="port" class="block text-sm font-medium text-gray-700">Port</label>
-                    <input type="number" name="port" id="port" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_port|default:'6000' }}" required>
+                    <label for="port" class="form-label text-secondary small fw-semibold">Port</label>
+                    <input type="number" name="port" id="port" class="form-control" value="{{ db_port|default:'6000' }}" required>
                 </div>
                 <div>
-                    <label for="user" class="block text-sm font-medium text-gray-700">User</label>
-                    <input type="text" name="user" id="user" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_user|default:'heappe-monitoring' }}" required>
+                    <label for="user" class="form-label text-secondary small fw-semibold">User</label>
+                    <input type="text" name="user" id="user" class="form-control" value="{{ db_user|default:'heappe-monitoring' }}" required>
                 </div>
                 <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
-                    <input type="password" name="password" id="password" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_password }}">
+                    <label for="password" class="form-label text-secondary small fw-semibold">Password</label>
+                    <input type="password" name="password" id="password" class="form-control" value="{{ db_password }}">
                 </div>
                 <div>
-                    <label for="database" class="block text-sm font-medium text-gray-700">Database</label>
-                    <input type="text" name="database" id="database" class="mt-1 block w-full rounded-md border-gray-300 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm bg-gray-50" value="{{ db_database|default:'heappe-monitoring' }}" required>
+                    <label for="database" class="form-label text-secondary small fw-semibold">Database</label>
+                    <input type="text" name="database" id="database" class="form-control" value="{{ db_database|default:'heappe-monitoring' }}" required>
                 </div>
-                <div class="flex space-x-2">
-                    <button type="submit" class="w-full sm:w-auto px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium">Save</button>
-                    <button type="button" id="cancelConfig" class="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors text-sm font-medium">Cancel</button>
+                <div class="d-flex gap-2 mt-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">Save Configuration</button>
+                    <button type="button" id="cancelConfig" class="btn btn-secondary">Cancel</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 
@@ -249,29 +258,38 @@
             data: {
                 labels: {{ chart_dates|safe }},
                 datasets: [
-                    { label: 'Errors', data: {{ chart_errors|safe }}, borderColor: '#EF4444', backgroundColor: 'rgba(239,68,68,0.2)', tension: 0.3, fill: true },
-                    { label: 'Warnings', data: {{ chart_warnings|safe }}, borderColor: '#F59E0B', backgroundColor: 'rgba(245,158,11,0.2)', tension: 0.3, fill: true },
-                    { label: 'Info', data: {{ chart_info|safe }}, borderColor: '#3B82F6', backgroundColor: 'rgba(59,130,246,0.2)', tension: 0.3, fill: true },
-                    { label: 'Debug', data: {{ chart_debug|safe }}, borderColor: '#6B7280', backgroundColor: 'rgba(107,114,128,0.2)', tension: 0.3, fill: true },
-                    { label: 'Critical', data: {{ chart_critical|safe }}, borderColor: '#9B7283', backgroundColor: 'rgba(107,114,128,0.2)', tension: 0.3, fill: true }
+                    { label: 'Errors', data: {{ chart_errors|safe }}, borderColor: '#f43f5e', backgroundColor: 'rgba(244, 63, 94, 0.05)', tension: 0.3, fill: true },
+                    { label: 'Warnings', data: {{ chart_warnings|safe }}, borderColor: '#f59e0b', backgroundColor: 'rgba(245, 158, 11, 0.05)', tension: 0.3, fill: true },
+                    { label: 'Info', data: {{ chart_info|safe }}, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.05)', tension: 0.3, fill: true },
+                    { label: 'Debug', data: {{ chart_debug|safe }}, borderColor: '#94a3b8', backgroundColor: 'rgba(148, 163, 184, 0.05)', tension: 0.3, fill: true },
+                    { label: 'Critical', data: {{ chart_critical|safe }}, borderColor: '#c084fc', backgroundColor: 'rgba(192, 132, 252, 0.05)', tension: 0.3, fill: true }
                 ]
             },
             options: {
-                responsive: true, maintainAspectRatio: false,
+                responsive: true, 
+                maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'top', labels: { boxWidth: 20, padding: 15, font: { size: 12 } } },
-                    tooltip: { mode: 'index', intersect: false, backgroundColor: 'rgba(0,0,0,0.8)', padding: 10 }
+                    legend: { 
+                        position: 'top', 
+                        labels: { boxWidth: 15, color: '#334155', font: { family: 'Outfit', size: 11 } } 
+                    },
+                    tooltip: { mode: 'index', intersect: false, backgroundColor: '#ffffff', borderColor: '#e2e8f0', titleColor: '#0f172a', bodyColor: '#334155', borderWidth: 1, padding: 10 }
                 },
                 scales: {
-                    x: { title: { display: true, text: 'Date', font: { size: 12 } }, grid: { display: false } },
-                    y: { title: { display: true, text: 'Count', font: { size: 12 } }, beginAtZero: true, grid: { color: '#E5E7EB' } }
-                },
-                interaction: { mode: 'index', intersect: false }
+                    x: { 
+                        grid: { color: 'rgba(0,0,0,0.05)' },
+                        ticks: { color: '#64748b', font: { family: 'Outfit', size: 10 } }
+                    },
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: 'rgba(0,0,0,0.05)' },
+                        ticks: { precision: 0, color: '#64748b', font: { family: 'Outfit', size: 10 } }
+                    }
+                }
             }
         });
     }
 
-    // Initialize chart only if logs dashboard is visible and no error
     if (!document.getElementById('viewToggle').checked && !{{ error|yesno:"true,false" }}) {
         initChart();
     }
@@ -288,7 +306,6 @@
         autoRefresh = autoRefreshCheckbox.checked;
     });
 
-    // Update countdown circle
     function updateCircle() {
         if (!autoRefresh || document.getElementById('viewToggle').checked || {{ error|yesno:"true,false" }}) return;
         countdown -= 100;
@@ -298,7 +315,6 @@
         number.textContent = Math.ceil(countdown / 1000);
     }
 
-    // Reload logs
     function reloadLogs() {
         if (!autoRefresh || document.getElementById('viewToggle').checked || {{ error|yesno:"true,false" }}) return;
         $.get("{% url 'logs' %}", $("#logsFilterForm").serialize(), function(data) {
@@ -322,11 +338,9 @@
         });
     }
 
-    // Interval pro countdown a reload
     setInterval(updateCircle, 100);
     setInterval(reloadLogs, reloadInterval);
 
-    // Toggle between logs dashboard and db config
     const viewToggle = document.getElementById('viewToggle');
     const logsDashboard = document.getElementById('logsDashboard');
     const dbConfig = document.getElementById('dbConfig');
@@ -334,24 +348,24 @@
 
     viewToggle.addEventListener('change', () => {
         if (viewToggle.checked) {
-            logsDashboard.classList.add('hidden');
-            dbConfig.classList.remove('hidden');
+            logsDashboard.classList.add('d-none');
+            dbConfig.classList.remove('d-none');
             if (logsChart) {
-                logsChart.destroy(); // Destroy chart to prevent memory leaks
+                logsChart.destroy();
             }
         } else {
-            dbConfig.classList.add('hidden');
-            logsDashboard.classList.remove('hidden');
+            dbConfig.classList.add('d-none');
+            logsDashboard.classList.remove('d-none');
             if (!{{ error|yesno:"true,false" }}) {
-                initChart(); // Re-initialize chart only if no error
+                initChart();
             }
         }
     });
 
     cancelConfig.addEventListener('click', () => {
         viewToggle.checked = false;
-        dbConfig.classList.add('hidden');
-        logsDashboard.classList.remove('hidden');
+        dbConfig.classList.add('d-none');
+        logsDashboard.classList.remove('d-none');
         if (!{{ error|yesno:"true,false" }}) {
             initChart();
         }
@@ -361,34 +375,34 @@
     <!-- Log Context Modal -->
     <div class="modal fade" id="logContextModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered">
-            <div class="modal-content shadow-2xl border-0 bg-white text-dark">
-                <div class="modal-header border-bottom bg-gray-50 py-3 px-4 flex justify-between items-center">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header border-bottom border-light-subtle p-3 flex justify-between items-center">
                     <div>
-                        <h5 class="modal-title fw-bold text-gray-900" id="contextModalLabel">Preceding Log Events</h5>
-                        <p class="text-xs text-gray-500 mb-0">Showing 15 preceding log entries leading up to the selected event.</p>
+                        <h5 class="modal-title fw-bold text-main" id="contextModalLabel"><i class="bi bi-clock-history text-info me-2"></i>Preceding Log Events</h5>
+                        <p class="text-xs text-secondary mb-0">Showing 15 preceding log entries leading up to the selected event.</p>
                     </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body p-0">
                     <!-- Filters/Toggles inside modal -->
-                    <div class="bg-gray-100 py-2 px-4 border-bottom flex justify-between items-center">
+                    <div class="py-2 px-4 border-bottom flex justify-between items-center" style="background: rgba(255,255,255,0.02); border-bottom-color: var(--border-color) !important;">
                         <div class="flex items-center gap-2">
-                            <label class="form-check-label text-xs fw-bold text-gray-600 mb-0 me-2" for="contextFilterInstance">Filter by same instance only</label>
+                            <label class="form-check-label text-xs fw-bold text-secondary mb-0 me-2" for="contextFilterInstance">Filter by same instance only</label>
                             <div class="form-check form-switch mb-0">
                                 <input class="form-check-input" type="checkbox" id="contextFilterInstance" checked>
                             </div>
                         </div>
-                        <span class="text-xs text-gray-500 italic" id="contextTargetTime"></span>
+                        <span class="text-xs text-info italic" id="contextTargetTime"></span>
                     </div>
                     <!-- Log content area -->
-                    <div class="overflow-y-auto max-h-96 p-0" id="contextLogsContainer" style="font-family: monospace;">
-                        <div class="flex justify-center items-center py-5">
-                            <div class="spinner-border text-primary" role="status"></div>
+                    <div class="overflow-y-auto max-h-96 p-0 terminal-container" id="contextLogsContainer">
+                        <div class="d-flex justify-content-center align-items-center py-5">
+                            <div class="spinner-border text-info" role="status"></div>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer bg-gray-50 border-top py-2 px-4 flex justify-between">
-                    <span class="text-xs text-gray-500">Selected event is highlighted in yellow.</span>
+                <div class="modal-footer border-top border-light-subtle py-2 px-4 d-flex justify-content-between align-items-center">
+                    <span class="text-xs text-secondary"><span class="badge bg-warning text-dark me-1">Highlighted</span> Selected event is marked with a gold border.</span>
                     <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
@@ -398,9 +412,6 @@
     <style>
         .text-xxs {
             font-size: 0.72rem;
-        }
-        .border-bottom {
-            border-bottom: 1px solid #e5e7eb;
         }
     </style>
 
@@ -413,22 +424,18 @@
         const instanceName = row.dataset.instance;
         const sameInstance = document.getElementById('contextFilterInstance').checked;
 
-        // Set date in header
         document.getElementById('contextTargetTime').innerText = `Target Time: ${logDate}`;
 
-        // Show spinner
         document.getElementById('contextLogsContainer').innerHTML = `
-            <div class="flex justify-center items-center py-5 my-4">
-                <div class="spinner-border text-primary" role="status"></div>
+            <div class="d-flex justify-content-center align-items-center py-5 my-4">
+                <div class="spinner-border text-info" role="status"></div>
             </div>
         `;
 
-        // Open modal
         const modalEl = document.getElementById('logContextModal');
         const myModal = bootstrap.Modal.getOrCreateInstance(modalEl);
         myModal.show();
 
-        // Fetch preceding logs
         fetchPrecedingLogs(logDate, instanceName, sameInstance);
     }
 
@@ -440,25 +447,25 @@
             .then(data => {
                 if (data.status === 'success') {
                     if (data.logs.length === 0) {
-                        document.getElementById('contextLogsContainer').innerHTML = '<div class="text-center py-5 text-gray-500">No preceding logs found.</div>';
+                        document.getElementById('contextLogsContainer').innerHTML = '<div class="text-center py-5 text-secondary">No preceding logs found.</div>';
                         return;
                     }
 
                     let logsHtml = '';
                     data.logs.forEach((log, index) => {
-                        const isTarget = (index === data.logs.length - 1); // Clicked log is the last one in chronological order
-                        const rowBg = isTarget ? 'bg-warning bg-opacity-25 border-l-4 border-warning font-semibold' : 'hover:bg-gray-50 border-l-4 border-transparent';
+                        const isTarget = (index === data.logs.length - 1);
+                        const rowBg = isTarget ? 'bg-warning bg-opacity-20 border-start border-4 border-warning font-semibold' : 'hover:bg-slate-100 border-start border-4 border-transparent';
                         
                         let levelBadge = '';
-                        if (log.LevelName === 'Debug') levelBadge = 'bg-gray-200 text-gray-800';
-                        else if (log.LevelName === 'Information') levelBadge = 'bg-blue-100 text-blue-800';
-                        else if (log.LevelName === 'Warning') levelBadge = 'bg-yellow-100 text-yellow-800';
-                        else if (log.LevelName === 'Error') levelBadge = 'bg-red-100 text-red-800';
-                        else if (log.LevelName === 'Critical') levelBadge = 'bg-dark text-white';
+                        if (log.LevelName === 'Debug') levelBadge = 'bg-secondary';
+                        else if (log.LevelName === 'Information') levelBadge = 'bg-info';
+                        else if (log.LevelName === 'Warning') levelBadge = 'bg-warning text-dark';
+                        else if (log.LevelName === 'Error') levelBadge = 'bg-danger';
+                        else if (log.LevelName === 'Critical') levelBadge = 'bg-dark';
                         
                         let msgHtml = log.Message;
                         if (log.Exception && log.Exception !== '-' && log.Exception !== '') {
-                            msgHtml += `<pre class="mt-1 p-2 bg-red-50 text-red-700 text-xxs rounded overflow-x-auto" style="white-space: pre-wrap; word-break: break-all;">${log.Exception}</pre>`;
+                            msgHtml += `<pre class="mt-2 p-2 bg-red-50 text-red-700 text-xxs rounded overflow-x-auto border border-danger-subtle" style="white-space: pre-wrap; word-break: break-all;">${log.Exception}</pre>`;
                         }
 
                         let timePart = log.Date;
@@ -467,15 +474,15 @@
                         }
 
                         logsHtml += `
-                            <div class="py-2 px-3 border-bottom ${rowBg} flex flex-col md:flex-row md:items-start gap-2 text-dark">
-                                <div class="text-gray-500 whitespace-nowrap text-xs md:w-32">${timePart}</div>
-                                <div class="md:w-24">
-                                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xxs font-semibold ${levelBadge}">
+                            <div class="py-2 px-3 border-bottom ${rowBg} d-flex flex-column flex-md-row align-items-md-start gap-2" style="border-bottom-color: var(--border-color) !important;">
+                                <div class="text-secondary whitespace-nowrap text-xs md-w-32" style="width: 120px; flex-shrink: 0;">${timePart}</div>
+                                <div style="width: 90px; flex-shrink: 0;">
+                                    <span class="badge ${levelBadge} text-xxs">
                                         ${log.LevelName}
                                     </span>
                                 </div>
-                                <div class="text-gray-600 text-xs md:w-40 truncate" title="${log.Class}">${log.Class}</div>
-                                <div class="flex-grow text-gray-900 break-words text-xs">${msgHtml}</div>
+                                <div class="text-primary text-xs text-truncate" style="width: 150px; flex-shrink: 0;" title="${log.Class}">${log.Class}</div>
+                                <div class="flex-grow-1 text-main break-words text-xs">${msgHtml}</div>
                             </div>
                         `;
                     });
@@ -489,7 +496,6 @@
             });
     }
 
-    // Handle toggle change inside modal
     document.getElementById('contextFilterInstance').addEventListener('change', function() {
         if (currentContextRow) {
             const logDate = currentContextRow.dataset.date;
