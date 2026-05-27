@@ -89,7 +89,9 @@ def generate_appsettings_v6_0_0(
                 },
                 "ClustersConnectionPoolSettings": {
                     "ConnectionPoolCleaningInterval": 60,
-                    "ConnectionPoolMaxUnusedInterval": 1800
+                    "ConnectionPoolMaxUnusedInterval": 60,
+                    "MaxConnectionsPerUser": 10,
+                    "MaxSessionsPerConnection": 8
                 },
                 "SshClientSettings": {
                     "ConnectionRetryAttempts": 3,
@@ -273,7 +275,9 @@ def generate_appsettings_v6_1_0(
                 },
                 "ClustersConnectionPoolSettings": {
                     "ConnectionPoolCleaningInterval": 60,
-                    "ConnectionPoolMaxUnusedInterval": 1800
+                    "ConnectionPoolMaxUnusedInterval": 60,
+                    "MaxConnectionsPerUser": 10,
+                    "MaxSessionsPerConnection": 8
                 },
                 "SshClientSettings": {
                     "ConnectionRetryAttempts": 3,
