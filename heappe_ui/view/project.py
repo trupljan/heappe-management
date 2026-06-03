@@ -562,46 +562,69 @@ from django.contrib import messages
 
 @login_required
 def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
+    import json as _json
     project_id = request.POST.get("ProjectId")
     username = request.POST.get("username")
 
-    print(f"DEBUG: View start. ProjectId: {project_id}, Username: {username}")
+    def _parse_clusters(data):
+        """Turn a list of cluster dicts/objects into (name, is_accessible) pairs."""
+        results = []
+        for item in data:
+            if isinstance(item, dict):
+                # API returns PascalCase keys in raw JSON
+                name = item.get('ClusterName') or item.get('cluster_name') or 'Unknown'
+                accessible = item.get('IsClusterAccessible') if 'IsClusterAccessible' in item else item.get('is_cluster_accessible', False)
+            else:
+                name = getattr(item, 'cluster_name', 'Unknown')
+                accessible = getattr(item, 'is_cluster_accessible', False)
+            results.append((name, bool(accessible)))
+        return results
 
     try:
         controller = hp.ManagementApi(request.api_instance)
-
-        # Call the helper — not silent so API-level errors are caught below
-        response_data = _handle_api_call(
-            request,
-            lambda: controller.heappe_management_test_cluster_access_for_account_get(
+        try:
+            # Use _preload_content=False so we get the raw response and can
+            # parse the body ourselves — HEAppE sometimes returns 400 even
+            # when the body contains a valid cluster-access result.
+            raw = controller.heappe_management_test_cluster_access_for_account_get(
                 ProjectId=int(project_id) if project_id else 0,
                 Username=username,
-                SessionCode=request.session_code
-            ),
-            success_message="",
-            error_message="Access test failed",
-            silent=False
-        )
+                SessionCode=request.session_code,
+                _preload_content=False,
+            )
+            body = _json.loads(raw.data.decode('utf-8'))
+            clusters = _parse_clusters(body if isinstance(body, list) else [])
+        except Exception as api_exc:
+            # HEAppE may return 4xx with a JSON body that still contains the result.
+            # Try to extract the body from the exception before giving up.
+            clusters = None
+            exc_str = str(api_exc)
+            # Look for the JSON body embedded in the exception message
+            body_marker = "HTTP response body: b'"
+            if body_marker in exc_str:
+                try:
+                    start = exc_str.index(body_marker) + len(body_marker)
+                    end = exc_str.rindex("'")
+                    raw_body = exc_str[start:end]
+                    parsed = _json.loads(raw_body)
+                    if isinstance(parsed, list):
+                        clusters = _parse_clusters(parsed)
+                except Exception:
+                    pass
+            if clusters is None:
+                # Truly failed — no parseable body found
+                messages.error(request, f"Access test for '{username}' failed. Could not reach the HEAppE service.")
+                reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
+                return redirect(reload_url)
 
-        if isinstance(response_data, list) and len(response_data) > 0:
-            for cluster in response_data:
-                # Check if it's a dict or an object with attributes
-                if isinstance(cluster, dict):
-                    name = cluster.get('cluster_name', 'Unknown')
-                    is_accessible = cluster.get('is_cluster_accessible', False)
+        if clusters:
+            for name, accessible in clusters:
+                if accessible:
+                    messages.success(request, f"✓ {name}: Access verified for '{username}'.")
                 else:
-                    name = getattr(cluster, 'cluster_name', 'Unknown')
-                    is_accessible = getattr(cluster, 'is_cluster_accessible', False)
-
-                if is_accessible:
-                    messages.success(request, f"Cluster {name}: Access verified.")
-                else:
-                    messages.error(request, f"Cluster {name}: Access denied.")
-        elif not isinstance(response_data, list) or len(response_data) == 0:
-            # API returned empty or unexpected response and _handle_api_call
-            # didn't already add an error message (e.g. silent path)
-            if not response_data:
-                messages.error(request, f"Access test for '{username}' failed: no response from the HEAppE service.")
+                    messages.warning(request, f"✗ {name}: Access denied for '{username}'.")
+        else:
+            messages.warning(request, f"Access test returned no cluster data for '{username}'.")
 
     except Exception as e:
         messages.error(request, f"Internal error during access test: {str(e)}")
@@ -611,6 +634,7 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
 
 @login_required
 def initialize_hpc_account(request: HttpRequest):
+    import json as _json
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
     username = request.POST.get("Username")
@@ -620,12 +644,56 @@ def initialize_hpc_account(request: HttpRequest):
         "Username": username
     }
     payload = _create_payload(request.session_code, payload_data)
-    result = _handle_api_call(
-        request,
-        lambda: controller.heappe_management_initialize_cluster_script_directory_post(**payload),
-        "Cluster authentication credential has been initialized.",
-        "Cluster authentication credential initialization failed."
-    )
+
+    def _parse_init_result(data):
+        """Return list of (cluster_name, is_initialized) from a parsed JSON list."""
+        results = []
+        for item in data if isinstance(data, list) else []:
+            if isinstance(item, dict):
+                name = item.get('ClusterName') or item.get('cluster_name') or 'Unknown'
+                initialized = item.get('IsClusterInitialized') if 'IsClusterInitialized' in item else item.get('is_cluster_initialized', False)
+            else:
+                name = getattr(item, 'cluster_name', 'Unknown')
+                initialized = getattr(item, 'is_cluster_initialized', False)
+            results.append((name, bool(initialized)))
+        return results
+
+    try:
+        try:
+            raw = controller.heappe_management_initialize_cluster_script_directory_post(
+                **{**payload, '_preload_content': False}
+            )
+            body = _json.loads(raw.data.decode('utf-8'))
+            clusters = _parse_init_result(body)
+        except Exception as api_exc:
+            clusters = None
+            exc_str = str(api_exc)
+            body_marker = "HTTP response body: b'"
+            if body_marker in exc_str:
+                try:
+                    start = exc_str.index(body_marker) + len(body_marker)
+                    end = exc_str.rindex("'")
+                    parsed = _json.loads(exc_str[start:end])
+                    clusters = _parse_init_result(parsed)
+                except Exception:
+                    pass
+            if clusters is None:
+                messages.error(request, f"Initialization of '{username}' failed. Could not reach the HEAppE service.")
+                reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
+                return redirect(reload_url)
+
+        if clusters:
+            for name, initialized in clusters:
+                if initialized:
+                    messages.success(request, f"✓ {name}: '{username}' initialized successfully.")
+                else:
+                    messages.warning(request, f"✗ {name}: Initialization of '{username}' did not complete.")
+        else:
+            messages.success(request, f"Initialization request sent for '{username}'.")
+
+    except Exception as e:
+        messages.error(request, f"Internal error during initialization: {str(e)}")
+
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
 
