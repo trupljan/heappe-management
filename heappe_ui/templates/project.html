@@ -700,7 +700,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const placeholders = document.querySelectorAll('.hpc-status-placeholder');
     placeholders.forEach(function (el) {
         const username = el.getAttribute('data-username');
-        const checkUrl = "{% url 'project_detail' project.id %}";
+        const checkUrl = "{% if project %}{% url 'project_detail' project.id %}{% endif %}";
         if (username && checkUrl) {
             fetch(`${checkUrl}?action=check_hpc_status&username=${encodeURIComponent(username)}`)
                 .then(response => response.json())
