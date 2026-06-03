@@ -378,7 +378,17 @@ def project_create(request: HttpRequest) -> HttpResponse:
             "Failed to create Project"
         )
         if result:
-            return redirect("project_detail", project_id=result['Id'])
+            # Safely extract the integer project ID from the API response.
+            # The response dict may use 'Id' or 'id' depending on content parsing,
+            # and the value may be an empty string if the API returned an unexpected format.
+            project_id = result.get('Id') or result.get('id')
+            try:
+                project_id = int(project_id)
+            except (TypeError, ValueError):
+                project_id = None
+            if project_id:
+                return redirect("project_detail", project_id=project_id)
+        return redirect("project_list")
 
 
 @login_required
