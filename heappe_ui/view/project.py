@@ -570,7 +570,7 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
     try:
         controller = hp.ManagementApi(request.api_instance)
 
-        # Call the helper
+        # Call the helper — not silent so API-level errors are caught below
         response_data = _handle_api_call(
             request,
             lambda: controller.heappe_management_test_cluster_access_for_account_get(
@@ -580,21 +580,16 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
             ),
             success_message="",
             error_message="Access test failed",
-            silent=True
+            silent=False
         )
 
-        print(f"DEBUG: response_data received: {response_data}")
-
-        if isinstance(response_data, list):
+        if isinstance(response_data, list) and len(response_data) > 0:
             for cluster in response_data:
-                print(f"DEBUG: Processing cluster item: {cluster}")
-
                 # Check if it's a dict or an object with attributes
                 if isinstance(cluster, dict):
                     name = cluster.get('cluster_name', 'Unknown')
                     is_accessible = cluster.get('is_cluster_accessible', False)
                 else:
-                    # Fallback if the SDK returns objects instead of dicts
                     name = getattr(cluster, 'cluster_name', 'Unknown')
                     is_accessible = getattr(cluster, 'is_cluster_accessible', False)
 
@@ -602,15 +597,16 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
                     messages.success(request, f"Cluster {name}: Access verified.")
                 else:
                     messages.error(request, f"Cluster {name}: Access denied.")
-        else:
-            print(f"DEBUG: response_data was not a list, it was: {type(response_data)}")
+        elif not isinstance(response_data, list) or len(response_data) == 0:
+            # API returned empty or unexpected response and _handle_api_call
+            # didn't already add an error message (e.g. silent path)
+            if not response_data:
+                messages.error(request, f"Access test for '{username}' failed: no response from the HEAppE service.")
 
     except Exception as e:
-        print(f"DEBUG: CRITICAL EXCEPTION in view: {str(e)}")
-        messages.error(request, f"Internal error: {str(e)}")
+        messages.error(request, f"Internal error during access test: {str(e)}")
 
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
-    print(f"DEBUG: Redirecting to {reload_url}")
     return redirect(reload_url)
 
 @login_required
