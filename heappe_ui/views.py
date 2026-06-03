@@ -271,9 +271,41 @@ def dashboard_view(request):
             time_to = datetime.now()
             time_from = datetime.now() - timedelta(days=1)
 
+        # Enforce maximum scope of 90 days back and maximum range of 90 days
+        now = datetime.now()
+        min_allowed_date = now - timedelta(days=90)
+        adjusted = False
+
+        if time_to < min_allowed_date:
+            time_to = now
+            adjusted = True
+        elif time_to > now + timedelta(hours=1):
+            time_to = now
+            adjusted = True
+
+        if time_from < min_allowed_date:
+            time_from = min_allowed_date
+            adjusted = True
+        elif time_from > time_to:
+            time_from = time_to - timedelta(days=1)
+            adjusted = True
+
+        if (time_to - time_from) > timedelta(days=90):
+            time_from = time_to - timedelta(days=90)
+            adjusted = True
+
+        if adjusted:
+            from django.contrib import messages
+            messages.warning(
+                request,
+                "The requested reporting time range was adjusted. The maximum allowed query range and scope is 90 days."
+            )
+
         # Store for template
         context["time_to"] = time_to.strftime('%Y-%m-%dT%H:%M')
         context["time_from"] = time_from.strftime('%Y-%m-%dT%H:%M')
+        context["min_date"] = min_allowed_date.strftime('%Y-%m-%dT%H:%M')
+        context["max_date"] = now.strftime('%Y-%m-%dT%H:%M')
 
         # Get job details from API with date filters
         job_details_raw = jr_controller.heappe_job_reporting_jobs_detailed_report_get(

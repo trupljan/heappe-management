@@ -223,14 +223,14 @@
                 </h5>
                 <div class="card-body p-0">
                     <div class="mb-3">
-                        <form method="get" class="row g-3 align-items-end">
+                        <form method="get" class="row g-3 align-items-end" id="reporting-filter-form">
                             <div class="col-md-4">
                                 <label for="time_from" class="form-label">From</label>
-                                <input type="datetime-local" class="form-control form-control-sm" id="time_from" name="time_from" value="{{ time_from }}">
+                                <input type="datetime-local" class="form-control form-control-sm" id="time_from" name="time_from" value="{{ time_from }}" min="{{ min_date }}" max="{{ max_date }}">
                             </div>
                             <div class="col-md-4">
                                 <label for="time_to" class="form-label">To</label>
-                                <input type="datetime-local" class="form-control form-control-sm" id="time_to" name="time_to" value="{{ time_to }}">
+                                <input type="datetime-local" class="form-control form-control-sm" id="time_to" name="time_to" value="{{ time_to }}" min="{{ min_date }}" max="{{ max_date }}">
                             </div>
                             <div class="col-md-2 d-flex align-items-end">
                                 <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filter</button>
@@ -513,6 +513,27 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const filterForm = document.getElementById('reporting-filter-form');
+    if (filterForm) {
+        filterForm.addEventListener('submit', function(e) {
+            const timeFromInput = document.getElementById('time_from');
+            const timeToInput = document.getElementById('time_to');
+            if (timeFromInput && timeToInput) {
+                const fromDate = new Date(timeFromInput.value);
+                const toDate = new Date(timeToInput.value);
+                if (!isNaN(fromDate) && !isNaN(toDate)) {
+                    const diffTime = Math.abs(toDate - fromDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays > 90) {
+                        e.preventDefault();
+                        alert('The maximum reporting range is 90 days.');
+                        return false;
+                    }
+                }
+            }
+        });
+    }
+
     const liveJobModal = new bootstrap.Modal(document.getElementById('liveJobDetailsModal'));
     const liveJobModalContent = document.getElementById('liveJobDetailsModalContent');
     const liveJobIdInput = document.getElementById('live_job_id');

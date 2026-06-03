@@ -165,3 +165,72 @@ class HeappeExceptionMiddlewareTests(TestCase):
         except Exception:
             templates_ok = False
         self.assertTrue(templates_ok, "Templates 404.html and 500.html must be discoverable by loader")
+
+
+from unittest import mock
+from datetime import datetime, timedelta
+
+class DashboardReportingTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    @mock.patch("py4heappe.heappe_v6.core.JobReportingApi")
+    @mock.patch("py4heappe.heappe_v6.core.HealthApi")
+    def test_dashboard_view_date_bounds(self, mock_health_api, mock_job_reporting_api, mock_management_api):
+        # Setup mocks
+        mock_health_instance = mock.MagicMock()
+        mock_health_api.return_value = mock_health_instance
+        
+        mock_management_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_management_instance
+        
+        mock_jr_instance = mock.MagicMock()
+        mock_jr_instance.heappe_job_reporting_jobs_detailed_report_get.return_value = []
+        mock_jr_instance.heappe_job_reporting_jobs_state_agregation_report_get.return_value = []
+        mock_job_reporting_api.return_value = mock_jr_instance
+
+        # Create user
+        user = User.objects.create_user(username="testuser", password="password")
+
+        # Case 1: normal request (default timedelta 1 day)
+        request = self.factory.get("/dashboard/")
+        request.user = user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from heappe_ui.views import dashboard_view
+        response = dashboard_view(request)
+        self.assertEqual(response.status_code, 200)
+        
+        # Case 2: request with date > 90 days ago
+        time_from = (datetime.now() - timedelta(days=100)).isoformat()
+        time_to = datetime.now().isoformat()
+        request = self.factory.get(f"/dashboard/?time_from={time_from}&time_to={time_to}")
+        request.user = user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+        
+        # We need to support django messages since we show warning
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        response = dashboard_view(request)
+        self.assertEqual(response.status_code, 200)
+        
+        # Check that TimeFrom passed to heappe_job_reporting_jobs_detailed_report_get is limited to 90 days
+        args, kwargs = mock_jr_instance.heappe_job_reporting_jobs_detailed_report_get.call_args
+        called_time_from = kwargs.get("TimeFrom")
+        now = datetime.now()
+        min_allowed_date = now - timedelta(days=90)
+        # It should be very close to min_allowed_date (within a few seconds)
+        self.assertAlmostEqual(called_time_from.timestamp(), min_allowed_date.timestamp(), delta=10)
+
