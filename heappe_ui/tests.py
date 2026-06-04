@@ -154,19 +154,27 @@ class HeappeExceptionMiddlewareTests(TestCase):
             "traceback": "Traceback info here"
         }
         request.method = "POST"
-        request.POST = {"screenshot": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="}
-        
+        request.POST = {
+            "screenshot": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==",
+            "contact_email": "tester@example.com",
+            "summary": "Test issue summary",
+            "description": "Detailed test description of the problem.",
+            "category": "heappe_error",
+            "affected_url": "/dashboard/",
+        }
+
         response = report_error_view(request)
         self.assertEqual(response.status_code, 200)
-        
+
         self.assertEqual(len(mail.outbox), 1)
         sent_email = mail.outbox[0]
-        self.assertEqual(sent_email.subject, "[HEAppE UI Error Report] HEAppE Instance Error - test_instance")
-        self.assertIn("support.heappe@it4i.cz", sent_email.to)
+        self.assertIn("[HEAppE Support]", sent_email.subject)
+        self.assertIn("jakub.konvicka@vsb.cz", sent_email.to)
         self.assertEqual(len(sent_email.attachments), 1)
         self.assertEqual(sent_email.attachments[0][0], "screenshot.png")
-        
+
         self.assertNotIn("last_error_report", request.session)
+
 
     def test_generate_session_code_missing_credentials(self):
         request = self._create_request()

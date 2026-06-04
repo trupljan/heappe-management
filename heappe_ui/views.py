@@ -1608,65 +1608,105 @@ def logs_context_api(request):
 
 
 def report_error_view(request):
-    """API endpoint to receive error reports (including screenshots) and email them to support."""
+    """Standalone form + API endpoint for sending problem reports to HEAppE support."""
     import base64
+    import datetime
     from django.core.mail import EmailMessage
     from django.http import JsonResponse
+    from django.shortcuts import render
 
+    last_error = request.session.get('last_error_report', {})
+
+    # ── GET ── render standalone form page ───────────────────────────────────
+    if request.method == 'GET':
+        sent = request.GET.get('sent') == '1'
+        return render(request, 'report_error_form.html', {
+            'current_path': request.path,
+            'last_error': last_error if last_error else None,
+            'success': sent,
+        })
+
+    # ── POST ── validate, compose and send the email ─────────────────────────
     if request.method == 'POST':
-        error_data = request.session.get('last_error_report', {})
-        if not error_data:
-            return JsonResponse({'status': 'error', 'message': 'No recent error report found in session.'}, status=400)
-
         screenshot_data = request.POST.get('screenshot', '')
+        summary         = request.POST.get('summary', '').strip()
+        description     = request.POST.get('description', '').strip()
+        category        = request.POST.get('category', 'other')
+        affected_url    = request.POST.get('affected_url', '').strip()
+        contact_email   = request.POST.get('contact_email', '').strip()
 
-        subject = f"[HEAppE UI Error Report] {error_data.get('error_title', 'HEAppE Instance Error')} - {error_data.get('instance_name', 'N/A')}"
+        if not contact_email:
+            return JsonResponse({'status': 'error', 'message': 'Contact email is required.'}, status=400)
+        if not summary or not description:
+            return JsonResponse({'status': 'error', 'message': 'Summary and description are required.'}, status=400)
 
-        body = f"""HEAppE UI Error Report
-=====================
+        category_labels = {
+            'ui_error':       'UI / Interface Error',
+            'heappe_error':   'HEAppE Instance Error',
+            'deployment':     'Deployment Issue',
+            'data_incorrect': 'Incorrect Data',
+            'other':          'Other',
+        }
+        category_label = category_labels.get(category, category)
+        username = request.user.username if hasattr(request, 'user') and request.user.is_authenticated else 'Anonymous'
+        timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 
-Instance Name:      {error_data.get('instance_name')}
-Host URL:           {error_data.get('host_url')}
-Requested Path:     {error_data.get('current_path')}
-User:               {error_data.get('username', 'Anonymous')}
-Timestamp (UTC):    {error_data.get('timestamp')}
+        subject = f"[HEAppE Support] {category_label}: {summary[:80]}"
 
-Error Title:        {error_data.get('error_title')}
-Error Description:  {error_data.get('error_desc')}
-Error Type:         {error_data.get('error_type')}
-Error Status Code:  {error_data.get('error_status')}
+        body = f"""HEAppE Management — Problem Report
+====================================
 
-Exception Message:
-------------------
-{error_data.get('error_message')}
+Reporter:       {username} <{contact_email}>
+Category:       {category_label}
+Affected URL:   {affected_url or 'N/A'}
+Timestamp(UTC): {timestamp}
+
+Summary
+-------
+{summary}
+
+Description
+-----------
+{description}
+"""
+        # Append session HEAppE error details if available
+        if last_error:
+            body += f"""
+Attached HEAppE Error Details
+------------------------------
+Instance Name:  {last_error.get('instance_name')}
+Host URL:       {last_error.get('host_url')}
+Error Type:     {last_error.get('error_type')}
+Error Status:   {last_error.get('error_status')}
+Error Message:
+{last_error.get('error_message')}
 
 Traceback:
-----------
-{error_data.get('traceback')}
+{last_error.get('traceback')}
 """
+
         email = EmailMessage(
             subject=subject,
             body=body,
             from_email='noreply.heappe@it4i.cz',
-            to=['support.heappe@it4i.cz'],
+            to=['jakub.konvicka@vsb.cz'],
+            reply_to=[contact_email],
         )
 
         if screenshot_data and ',' in screenshot_data:
             try:
-                header, base64_data = screenshot_data.split(',', 1)
+                _, base64_data = screenshot_data.split(',', 1)
                 img_data = base64.b64decode(base64_data)
                 email.attach('screenshot.png', img_data, 'image/png')
             except Exception as e:
-                print(f"[report_error_view] Failed to decode and attach screenshot: {e}")
-                body += f"\n\n(Failed to attach screenshot due to decoding error: {e})"
-                email.body = body
+                print(f"[report_error_view] Failed to attach screenshot: {e}")
 
         try:
             email.send(fail_silently=False)
             request.session.pop('last_error_report', None)
-            return JsonResponse({'status': 'success', 'message': 'Error report sent to support successfully.'})
+            return JsonResponse({'status': 'success', 'message': 'Report sent successfully.'})
         except Exception as e:
-            print(f"[report_error_view] Failed to send error report email: {e}")
+            print(f"[report_error_view] Failed to send email: {e}")
             return JsonResponse({'status': 'error', 'message': f'Failed to send email: {e}'}, status=500)
 
-    return JsonResponse({'status': 'error', 'message': 'Only POST method is supported.'}, status=405)
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed.'}, status=405)

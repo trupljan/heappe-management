@@ -170,6 +170,11 @@
                             <i class="bi bi-arrow-up-circle fs-5"></i><span>Update Admin Panel</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'report-error' in request.path %}bg-danger bg-opacity-10 text-danger fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'report_error_view' %}">
+                            <i class="bi bi-bug fs-5"></i><span>Report a Problem</span>
+                        </a>
+                    </li>
                 </ul>
             {% else %}
                 <div class="text-center py-5">
