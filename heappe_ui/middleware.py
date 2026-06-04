@@ -62,9 +62,32 @@ class HeappeSessionMiddleware:
         except Exception as e:
             print(f"[middleware] Error in HeappeSessionMiddleware: {e}")
 
-        # Check if this is a mutating request or a manual cache refresh that should invalidate the metadata cache globally
+        # Check if this is a manual cache refresh that should invalidate the session cache
         force_refresh = request.GET.get("refresh") == "1"
-        if request.method in ["POST", "PUT", "DELETE"] or force_refresh:
+        if force_refresh:
+            cache_keys = [
+                "clusters_cache",
+                "node_types_cache",
+                "all_adaptor_users_cache",
+                "accountings_cache",
+                "queue_groups_cache",
+                "mappings_cache",
+                "projects_list_cache"
+            ]
+            for key in cache_keys:
+                request.session.pop(key, None)
+                request.session.pop(f"{key}_time", None)
+            
+            from django.http import HttpResponseRedirect
+            query_params = request.GET.copy()
+            query_params.pop('refresh', None)
+            redirect_path = request.path
+            if query_params:
+                redirect_path += '?' + query_params.urlencode()
+            return HttpResponseRedirect(redirect_path)
+
+        # Check if this is a mutating request that should invalidate the metadata cache globally
+        if request.method in ["POST", "PUT", "DELETE"]:
             path = request.path
             if any(p in path for p in ["/clusters/", "/queues/", "/projects/", "/command-templates/", "/queue-groups/", "/accounting/"]):
                 import os
