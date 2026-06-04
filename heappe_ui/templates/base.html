@@ -195,10 +195,9 @@
         <!-- HEAppE Middleware Update Banner -->
         {% if middleware_update_available and request.session.chosen_instance %}
             {% with snooze_key="middleware_update_snoozed__"|add:request.session.chosen_instance|add:"__"|add:middleware_latest_version %}
-            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between p-3 mb-3"
+            <div class="alert alert-warning border-warning shadow-sm d-none align-items-center justify-content-between p-3 mb-3"
                  id="middleware-update-banner"
-                 data-snooze-key="{{ snooze_key }}"
-                 style="display: none;">
+                 data-snooze-key="{{ snooze_key }}">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-exclamation-triangle-fill text-warning fs-4 me-2"></i>
                     <div>
@@ -215,7 +214,7 @@
                         <i class="bi bi-arrow-repeat me-1"></i>Update HEAppE
                     </a>
                     <button type="button" class="btn btn-outline-secondary btn-sm"
-                        onclick="var b=document.getElementById('middleware-update-banner'); localStorage.setItem(b.dataset.snoozeKey, Date.now()+86400000); b.style.display='none';"
+                        onclick="var b=document.getElementById('middleware-update-banner'); localStorage.setItem(b.dataset.snoozeKey, Date.now()+86400000); b.classList.remove('d-flex'); b.classList.add('d-none');"
                         title="Remind me tomorrow">
                         <i class="bi bi-bell-slash me-1"></i>Later (24h)
                     </button>
@@ -227,7 +226,8 @@
                     if (banner) {
                         var snoozedUntil = parseInt(localStorage.getItem(banner.dataset.snoozeKey) || '0');
                         if (Date.now() >= snoozedUntil) {
-                            banner.style.display = 'flex';
+                            banner.classList.remove('d-none');
+                            banner.classList.add('d-flex');
                         }
                     }
                 });
@@ -236,9 +236,8 @@
         {% endif %}
 
         <!-- Admin Panel Update Banner -->
-        <div class="alert alert-info border-info shadow-sm d-flex align-items-center justify-content-between p-3 mb-3"
-             id="adminpanel-update-banner"
-             style="display: none;">
+        <div class="alert alert-info border-info shadow-sm d-none align-items-center justify-content-between p-3 mb-3"
+             id="adminpanel-update-banner">
             <div class="d-flex align-items-center gap-2">
                 <i class="bi bi-info-circle-fill text-info fs-4 me-2"></i>
                 <div>
@@ -308,12 +307,16 @@
                                 } else if (versionText && data.latest_version) {
                                     versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Latest: <code>v${data.latest_version}</code>`;
                                 }
-                                banner.style.display = 'flex';
+                                banner.classList.remove('d-none');
+                                banner.classList.add('d-flex');
                             }
                         }
                     } else {
                         // System is up to date
-                        if (banner) banner.style.display = 'none';
+                        if (banner) {
+                            banner.classList.remove('d-flex');
+                            banner.classList.add('d-none');
+                        }
                         if (changesHeader) changesHeader.textContent = 'Status:';
                         if (container) {
                             const verInfo = data.current_version ? ` (v${data.current_version})` : '';
@@ -363,9 +366,15 @@
                         if (noticeAlert) noticeAlert.classList.remove('d-none');
                         if (startUpdateBtn) startUpdateBtn.classList.remove('d-none');
                         if (recheckBtn) recheckBtn.classList.add('d-none');
-                        if (banner) banner.style.display = 'flex';
+                        if (banner) {
+                            banner.classList.remove('d-none');
+                            banner.classList.add('d-flex');
+                        }
                     } else {
-                        if (banner) banner.style.display = 'none';
+                        if (banner) {
+                            banner.classList.remove('d-flex');
+                            banner.classList.add('d-none');
+                        }
                         if (changesHeader) changesHeader.textContent = 'Status:';
                         if (container) {
                             const verInfo = data.current_version ? ` (v${data.current_version})` : '';
@@ -437,7 +446,8 @@
             localStorage.setItem('admin_update_snoozed', Date.now() + hours * 3600 * 1000);
             const banner = document.getElementById('adminpanel-update-banner');
             if (banner) {
-                banner.style.display = 'none';
+                banner.classList.remove('d-flex');
+                banner.classList.add('d-none');
             }
         }
 
