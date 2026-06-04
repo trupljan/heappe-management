@@ -633,7 +633,7 @@ def get_remote_tags(repo_url: str) -> list[str]:
 
         return tags
 
-    except subprocess.CalledProcessError:
+    except Exception:
         return []
 
 

@@ -47,78 +47,85 @@ def middleware_update_renderer(request):
     import time
     now = time.time()
     last_check = request.session.get("last_middleware_check_time", 0)
+    last_checked_instance = request.session.get("last_middleware_checked_instance", "")
 
+    # Retrieve cached values from session
+    update_available = request.session.get("middleware_update_available", False)
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    latest_version = request.session.get("middleware_latest_version", "")
 
-
-    deployed_version = ""
-    latest_version = ""
-    update_available = False
-
-    try:
-        from heappe_ui.models import InstanceCredentials
-        instance_service = InstanceCredentials.objects.filter(instance_name=instance_name).first()
-        
-        # 1. Try to query the Healthcheck endpoint
-        import py4heappe.heappe_v6.core as hp
-        if instance_service:
-            try:
-                host = instance_service.heappe_host
-                port = instance_service.heappe_port
-                host_url = f"{host}:{port}"
-                if not host_url.startswith('http'):
-                    host_url = 'http://' + host_url
-                
-                config = hp.Configuration()
-                config.host = host_url
-                config.verify_ssl = True
-                
-                api_client = hp.ApiClient(config)
-                controller = hp.HealthApi(api_client)
-                health_info = controller.heappe_health_get()
-                if health_info and health_info.version:
-                    deployed_version = health_info.version.lstrip("vV")
-            except Exception as e:
-                print(f"Healthcheck failed for context processor: {e}")
-
-        # 2. Fallback to appsettings.json
-        if not deployed_version:
-            base_path = "/opt/heappe-deployment/"
-            import os
-            appsettings_path = os.path.join(base_path, instance_name, "app", "confs", "appsettings.json")
-            if os.path.exists(appsettings_path):
+    # Run check at most once per hour (3600 seconds), or if instance has changed, or if cache is empty
+    if (now - last_check > 3600) or (instance_name != last_checked_instance) or not deployed_version or not latest_version:
+        try:
+            from heappe_ui.models import InstanceCredentials
+            instance_service = InstanceCredentials.objects.filter(instance_name=instance_name).first()
+            
+            # 1. Try to query the Healthcheck endpoint
+            import py4heappe.heappe_v6.core as hp
+            if instance_service:
                 try:
-                    import json
-                    with open(appsettings_path, "r", encoding="utf-8") as f:
-                        appsettings_data = json.load(f)
-                    deployed_version = appsettings_data.get("ApplicationAPISettings", {}).get("DeploymentSettings", {}).get("Version", "").lstrip("vV")
+                    host = instance_service.heappe_host
+                    port = instance_service.heappe_port
+                    host_url = f"{host}:{port}"
+                    if not host_url.startswith('http'):
+                        host_url = 'http://' + host_url
+                    
+                    config = hp.Configuration()
+                    config.host = host_url
+                    config.verify_ssl = True
+                    
+                    api_client = hp.ApiClient(config)
+                    controller = hp.HealthApi(api_client)
+                    health_info = controller.heappe_health_get()
+                    if health_info and health_info.version:
+                        deployed_version = health_info.version.lstrip("vV")
+                except Exception as e:
+                    print(f"Healthcheck failed for context processor: {e}")
+
+            # 2. Fallback to appsettings.json
+            if not deployed_version:
+                base_path = "/opt/heappe-deployment/"
+                import os
+                appsettings_path = os.path.join(base_path, instance_name, "app", "confs", "appsettings.json")
+                if os.path.exists(appsettings_path):
+                    try:
+                        import json
+                        with open(appsettings_path, "r", encoding="utf-8") as f:
+                            appsettings_data = json.load(f)
+                        deployed_version = appsettings_data.get("ApplicationAPISettings", {}).get("DeploymentSettings", {}).get("Version", "").lstrip("vV")
+                    except Exception:
+                        pass
+
+            # 3. Fetch latest tags from git
+            from heappe_ui.view.deploy import get_remote_tags
+            repo_url = "https://github.com/It4innovations/HEAppE"
+            branches = get_remote_tags(repo_url)
+            if branches:
+                latest_version = branches[0].lstrip("vV")
+                
+                def clean_ver(v):
+                    res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
+                    return res if res else [0]
+                
+                try:
+                    if clean_ver(latest_version) > clean_ver(deployed_version):
+                        update_available = True
+                    else:
+                        update_available = False
                 except Exception:
-                    pass
+                    if latest_version.lower().lstrip('v') != deployed_version.lower().lstrip('v'):
+                        update_available = True
+                    else:
+                        update_available = False
 
-        # 3. Fetch latest tags from git
-        from heappe_ui.view.deploy import get_remote_tags
-        repo_url = "https://github.com/It4innovations/HEAppE"
-        branches = get_remote_tags(repo_url)
-        if branches:
-            latest_version = branches[0].lstrip("vV")
-            
-            def clean_ver(v):
-                res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
-                return res if res else [0]
-            
-            try:
-                if clean_ver(latest_version) > clean_ver(deployed_version):
-                    update_available = True
-            except Exception:
-                if latest_version.lower().lstrip('v') != deployed_version.lower().lstrip('v'):
-                    update_available = True
+        except Exception as e:
+            print(f"Error checking middleware update: {e}")
 
-    except Exception as e:
-        print(f"Error checking middleware update: {e}")
-
-    request.session["last_middleware_check_time"] = now
-    request.session["middleware_update_available"] = update_available
-    request.session["middleware_deployed_version"] = deployed_version
-    request.session["middleware_latest_version"] = latest_version
+        request.session["last_middleware_check_time"] = now
+        request.session["last_middleware_checked_instance"] = instance_name
+        request.session["middleware_update_available"] = update_available
+        request.session["middleware_deployed_version"] = deployed_version
+        request.session["middleware_latest_version"] = latest_version
 
     # Cache status check
     from django.conf import settings
@@ -144,8 +151,13 @@ def middleware_update_renderer(request):
     cache_status = {}
     for key, label in cache_keys.items():
         cache_time = request.session.get(f"{key}_time")
-        if cache_time and cache_time >= last_global_mod:
-            age = int(now - cache_time)
+        try:
+            cache_time_float = float(cache_time) if cache_time is not None else None
+        except (TypeError, ValueError):
+            cache_time_float = None
+
+        if cache_time_float is not None and cache_time_float >= last_global_mod:
+            age = int(now - cache_time_float)
             if age < 60:
                 age_str = f"{age}s"
             else:
