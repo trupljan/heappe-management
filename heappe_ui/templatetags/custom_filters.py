@@ -9,7 +9,9 @@ def get_item(dictionary, key):
 
 @register.simple_tag(takes_context=True)
 def heappe_version_ok(context, min_version):
-    request = context['request']
+    request = context.get('request')
+    if not request or not hasattr(request, 'api_instance'):
+        return False
     try:
         controller = hp.HealthApi(request.api_instance)
         health_info = controller.heappe_health_get()
