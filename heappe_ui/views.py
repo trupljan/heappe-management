@@ -681,7 +681,23 @@ def check_for_updates(request):
     last_check = request.session.get("last_update_check_time", 0)
     force = request.GET.get('force') == '1'
 
+    # Cache status in session for 6 hours (21600 seconds) to avoid slow page loads
+    cached_available = request.session.get("update_available")
+    cached_current = request.session.get("update_current_version")
+    cached_latest = request.session.get("update_latest_version")
+    cached_changes = request.session.get("update_changes")
 
+    if not force and last_check and (now - last_check < 21600) and cached_current and cached_latest:
+        response = JsonResponse({
+            'update_available': cached_available,
+            'current_version': cached_current,
+            'latest_version': cached_latest,
+            'changes': cached_changes or []
+        })
+        response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response["Pragma"] = "no-cache"
+        response["Expires"] = "0"
+        return response
 
     repo_path = settings.BASE_DIR
     update_available = False
