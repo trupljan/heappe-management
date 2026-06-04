@@ -1013,20 +1013,24 @@ def parse_log_line(line):
 
 
 def render_log_row(entry):
-    border_class = "border-info"
-    text_class = "text-info"
+    border_class = "level-info"
+    text_class = "badge-info"
     if entry['level'] == "ERROR":
-        border_class = "border-danger";
-        text_class = "text-danger"
+        border_class = "level-error"
+        text_class = "badge-danger"
     elif entry['level'] == "WARN":
-        border_class = "border-warning";
-        text_class = "text-warning"
+        border_class = "level-warning"
+        text_class = "badge-warning"
+    elif entry['level'] == "DEBUG":
+        border_class = "level-debug"
+        text_class = "badge-secondary"
 
     formatted_content = escape(entry['content'])
 
+    # Highlight time
     formatted_content = re.sub(
         r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
-        r'<span class="time-badge" style="background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:4px;color:#64748b;margin-right:8px;font-size:0.85em">\1</span>',
+        r'<span class="time-badge">\1</span>',
         formatted_content
     )
 
@@ -1035,19 +1039,19 @@ def render_log_row(entry):
             raw_json = match.group(0).replace('&quot;', '"').replace('&#x27;', "'")
             parsed = json.loads(raw_json)
             pretty = json.dumps(parsed, indent=2)
-            return f'<div class="json-block" style="background:#f8fafc;border-left:3px solid #0dcaf0;padding:8px;margin:8px 0;white-space:pre;font-size:0.85em;color:#1e293b;border-radius:0 4px 4px 0;">{escape(pretty)}</div>'
+            return f'<pre class="json-block">{escape(pretty)}</pre>'
         except:
             return match.group(0)
 
     formatted_content = re.sub(r'(\{.*?\})', json_repl, formatted_content, flags=re.DOTALL)
 
     return f"""
-    <tr class="log-row {border_class}" style="border-left: 4px solid;">
-        <td style="width: 100px; vertical-align: top;" class="ps-3 py-2">
-            <span class="badge {text_class} bg-light border fw-bold">{entry['level']}</span>
+    <tr class="log-row {border_class}">
+        <td class="log-level-cell">
+            <span class="log-level-badge {text_class}">{entry['level']}</span>
         </td>
-        <td class="py-2 pe-3">
-            <div class="log-content" style="font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;">{formatted_content}</div>
+        <td class="log-content-cell">
+            <div class="log-content-text">{formatted_content}</div>
         </td>
     </tr>
     """
@@ -1124,45 +1128,47 @@ def log_viewer_view(request):
     })
 
 def render_log_row(entry):
-    border_class = "border-info"
-    text_class = "text-info"
+    border_class = "level-info"
+    text_class = "badge-info"
     if entry['level'] == "ERROR":
-        border_class = "border-danger";
-        text_class = "text-danger"
+        border_class = "level-error"
+        text_class = "badge-danger"
     elif entry['level'] == "WARN":
-        border_class = "border-warning";
-        text_class = "text-warning"
+        border_class = "level-warning"
+        text_class = "badge-warning"
     elif entry['level'] == "DEBUG":
-        border_class = "border-secondary";
-        text_class = "text-muted"
+        border_class = "level-debug"
+        text_class = "badge-secondary"
 
     formatted_content = escape(entry['content'])
 
     # Highlight time
-    formatted_content = re.sub(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
-                               r'<span class="time-badge" style="background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:4px;color:#64748b;margin-right:8px;font-size:0.85em">\1</span>',
-                               formatted_content)
+    formatted_content = re.sub(
+        r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
+        r'<span class="time-badge">\1</span>',
+        formatted_content
+    )
 
     # Format JSON if present
     if "{" in formatted_content and "}" in formatted_content:
         def json_repl(match):
             try:
-                raw_json = match.group(0).replace('&quot;', '"')
+                raw_json = match.group(0).replace('&quot;', '"').replace('&#x27;', "'")
                 parsed = json.loads(raw_json)
                 pretty = json.dumps(parsed, indent=2)
-                return f'<div class="json-block" style="background:#f8fafc;border-left:3px solid #cbd5e1;padding:5px;margin:5px 0;white-space:pre;font-size:0.8em;color:#334155">{escape(pretty)}</div>'
+                return f'<pre class="json-block">{escape(pretty)}</pre>'
             except:
                 return match.group(0)
 
-        formatted_content = re.sub(r'(\{.*?\})', json_repl, formatted_content)
+        formatted_content = re.sub(r'(\{.*?\})', json_repl, formatted_content, flags=re.DOTALL)
 
     return f"""
-    <tr class="log-row {border_class}" style="border-left: 4px solid;">
-        <td style="width: 100px; vertical-align: top;" class="ps-3 py-2">
-            <span class="badge {text_class} bg-light border fw-bold">{entry['level']}</span>
+    <tr class="log-row {border_class}">
+        <td class="log-level-cell">
+            <span class="log-level-badge {text_class}">{entry['level']}</span>
         </td>
-        <td class="py-2 pe-3">
-            <div class="log-content" style="font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;">{formatted_content}</div>
+        <td class="log-content-cell">
+            <div class="log-content-text">{formatted_content}</div>
         </td>
     </tr>
     """

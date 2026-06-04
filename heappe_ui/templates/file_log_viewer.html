@@ -8,7 +8,241 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-2">
+<style>
+    /* JetBrains Mono and Inter loading */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+    .log-viewer-container {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* Premium Metric Card and Sidebars */
+    .filter-card {
+        border: none !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .filter-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #6c757d;
+        margin-bottom: 0.35rem;
+        display: block;
+    }
+
+    .form-control-custom {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.5rem 0.75rem;
+        font-size: 0.85rem;
+        transition: all 0.2s ease;
+    }
+    .form-control-custom:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        outline: none;
+    }
+
+    .btn-apply-filters {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+        border: none;
+        color: white;
+        font-weight: 600;
+        font-size: 0.85rem;
+        border-radius: 8px;
+        padding: 0.6rem;
+        transition: all 0.2s ease;
+    }
+    .btn-apply-filters:hover {
+        background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
+    }
+    .btn-apply-filters:active {
+        transform: translateY(0);
+    }
+
+    /* Terminal Console Card styles */
+    .terminal-card {
+        border: none !important;
+        border-radius: 12px !important;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08) !important;
+        overflow: hidden;
+        background-color: #121214 !important;
+    }
+
+    .terminal-header {
+        background-color: #18181b !important;
+        border-bottom: 1px solid #27272a !important;
+        padding: 0.75rem 1.25rem !important;
+    }
+
+    .terminal-window-dot {
+        width: 11px;
+        height: 11px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .terminal-console-body {
+        background-color: #121214 !important;
+        overflow-y: auto;
+        height: calc(100% - 48px);
+        padding: 0 !important;
+    }
+
+    /* Custom scrollbar for dark console */
+    .terminal-console-body::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    .terminal-console-body::-webkit-scrollbar-track {
+        background: #121214;
+    }
+    .terminal-console-body::-webkit-scrollbar-thumb {
+        background: #27272a;
+        border-radius: 4px;
+    }
+    .terminal-console-body::-webkit-scrollbar-thumb:hover {
+        background: #3f3f46;
+    }
+
+    /* Table & Log Rows styling */
+    .terminal-table {
+        margin-bottom: 0;
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+    .log-row {
+        border-bottom: 1px solid #1c1c1f !important;
+        transition: background-color 0.15s ease;
+        background-color: transparent !important;
+    }
+    .log-row:hover {
+        background-color: rgba(255, 255, 255, 0.02) !important;
+    }
+
+    /* Log severity borders */
+    .log-row.level-error { border-left: 4px solid #ef4444 !important; }
+    .log-row.level-warning { border-left: 4px solid #f59e0b !important; }
+    .log-row.level-info { border-left: 4px solid #3b82f6 !important; }
+    .log-row.level-debug { border-left: 4px solid #71717a !important; }
+
+    .log-level-cell {
+        width: 90px;
+        min-width: 90px;
+        vertical-align: top;
+        padding: 8px 8px 8px 16px !important;
+        border: none !important;
+    }
+
+    .log-content-cell {
+        vertical-align: top;
+        padding: 8px 16px 8px 8px !important;
+        border: none !important;
+    }
+
+    .log-content-text {
+        font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+        font-size: 0.8rem;
+        line-height: 1.6;
+        color: #e4e4e7;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+
+    /* Badges */
+    .log-level-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        font-size: 0.65rem;
+        font-weight: 700;
+        border-radius: 4px;
+        text-align: center;
+        width: 100%;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+    }
+
+    .badge-danger {
+        background-color: rgba(239, 68, 68, 0.15);
+        color: #fca5a5;
+        border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .badge-warning {
+        background-color: rgba(245, 158, 11, 0.15);
+        color: #fde047;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .badge-info {
+        background-color: rgba(59, 130, 246, 0.15);
+        color: #93c5fd;
+        border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    .badge-secondary {
+        background-color: rgba(113, 113, 122, 0.15);
+        color: #d4d4d8;
+        border: 1px solid rgba(113, 113, 122, 0.3);
+    }
+
+    /* Timestamps */
+    .time-badge {
+        background-color: #1e1e24;
+        border: 1px solid #2d2d35;
+        color: #a1a1aa;
+        padding: 1px 5px;
+        border-radius: 4px;
+        margin-right: 8px;
+        font-size: 0.85em;
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 500;
+        display: inline-block;
+    }
+
+    /* Prettified JSON block inside dark terminal */
+    .json-block {
+        background-color: #09090b;
+        border-left: 3px solid #3f3f46;
+        border-top: 1px solid #1c1c1f;
+        border-bottom: 1px solid #1c1c1f;
+        border-right: 1px solid #1c1c1f;
+        padding: 12px;
+        margin: 10px 0;
+        white-space: pre;
+        font-size: 0.76rem;
+        color: #38bdf8; /* Modern sky blue for syntax highlights */
+        border-radius: 6px;
+        font-family: 'JetBrains Mono', monospace;
+        overflow-x: auto;
+    }
+
+    /* Glowing Live Indicator animation */
+    @keyframes pulse {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+    }
+    .pulse-dot {
+        width: 8px;
+        height: 8px;
+        background-color: #22c55e;
+        border-radius: 50%;
+        display: inline-block;
+        animation: pulse 1.8s infinite;
+    }
+
+    .live-status-active {
+        color: #22c55e !important;
+        font-weight: 600;
+    }
+</style>
+
+<div class="container-fluid py-2 log-viewer-container">
     <!-- Header Block -->
     <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2.5">
@@ -19,8 +253,8 @@
             </div>
         </div>
         <div>
-            <span class="badge bg-light text-dark border shadow-sm px-3 py-2">
-                Entries: <span id="entryCount">{{ logs|length }}</span>
+            <span class="badge bg-white text-secondary border shadow-sm px-3 py-2 fw-semibold" style="border-radius: 8px;">
+                Entries: <span id="entryCount" class="text-primary font-monospace fw-bold">{{ logs|length }}</span>
             </span>
         </div>
     </div>
@@ -28,54 +262,75 @@
     <div class="row g-4">
         <!-- Sidebar filters -->
         <div class="col-lg-3 col-xl-2">
-            <div class="card border-0 shadow-sm p-3 bg-white rounded-3">
+            <div class="card filter-card p-3 bg-white">
                 <form method="GET">
-                    <h6 class="text-uppercase text-secondary fw-bold small mb-3" style="font-size: 0.72rem; letter-spacing: 0.05em;">Filter Logs</h6>
-                    <div class="mb-2">
-                        <label class="small fw-bold text-secondary text-uppercase mb-1" style="font-size: 0.68rem;">Date</label>
-                        <input type="date" name="date" class="form-control form-control-sm border-secondary-subtle" value="{{ selected_date }}">
-                    </div>
-                    <div class="row g-1 mb-3">
-                        <div class="col-6">
-                            <input type="time" name="time_from" class="form-control form-control-sm border-secondary-subtle" value="{{ time_from }}">
-                        </div>
-                        <div class="col-6">
-                            <input type="time" name="time_to" class="form-control form-control-sm border-secondary-subtle" value="{{ time_to }}">
-                        </div>
-                    </div>
+                    <h6 class="text-uppercase text-secondary fw-extrabold small mb-3" style="font-size: 0.72rem; letter-spacing: 0.06em;">Filter Logs</h6>
+                    
                     <div class="mb-3">
-                        <label class="small fw-bold text-secondary text-uppercase mb-1" style="font-size: 0.68rem;">Search Text</label>
-                        <input type="text" name="search" class="form-control form-control-sm border-secondary-subtle" placeholder="Filter..." value="{{ search_query }}">
+                        <label class="filter-label">Date</label>
+                        <input type="date" name="date" class="form-control form-control-custom" value="{{ selected_date }}">
                     </div>
-                    <button type="submit" class="btn btn-primary w-100 btn-sm fw-bold rounded-3 shadow-sm py-2 mb-2">
-                        <i class="bi bi-funnel me-1"></i>Apply Filters
+                    
+                    <div class="mb-3">
+                        <label class="filter-label">Time Window</label>
+                        <div class="row g-1">
+                            <div class="col-6">
+                                <input type="time" name="time_from" class="form-control form-control-custom" value="{{ time_from }}">
+                            </div>
+                            <div class="col-6">
+                                <input type="time" name="time_to" class="form-control form-control-custom" value="{{ time_to }}">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="filter-label">Search Text</label>
+                        <input type="text" name="search" class="form-control form-control-custom" placeholder="Filter..." value="{{ search_query }}">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-apply-filters w-100 mb-2">
+                        <i class="bi bi-funnel me-1.5"></i>Apply Filters
                     </button>
                 </form>
-                <hr class="my-3">
+                
+                <hr class="my-3 text-secondary" style="opacity: 0.15;">
+                
                 <div class="d-flex align-items-center justify-content-between">
-                    <span class="small fw-bold text-danger text-uppercase" style="font-size: 0.72rem;">Live Tail Stream</span>
+                    <span class="small fw-bold text-danger text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.05em;">Live Tail Stream</span>
                     <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="liveStreamToggle">
+                        <input class="form-check-input" type="checkbox" id="liveStreamToggle" style="cursor: pointer;">
                     </div>
                 </div>
-                <div id="liveStatus" class="small text-muted mt-2 fst-italic">Disconnected</div>
+                <div id="liveStatus" class="small text-muted mt-2.5 d-flex align-items-center gap-2 fst-italic">
+                    <span class="rounded-circle bg-secondary" style="width: 8px; height: 8px; display: inline-block;"></span>
+                    Disconnected
+                </div>
             </div>
         </div>
 
         <!-- Log window pane -->
         <div class="col-lg-9 col-xl-10">
-            <div class="card border-0 shadow-sm rounded-3 overflow-hidden bg-white" style="height: 80vh;">
-                <div class="card-header bg-white py-2.5 border-bottom d-flex justify-content-between align-items-center">
-                    <span class="fw-bold small text-uppercase text-secondary" style="font-size: 0.72rem;">Console Output</span>
-                    <button class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5" onclick="scrollToBottom()">Scroll to Bottom</button>
+            <div class="card terminal-card" style="height: 80vh;">
+                <!-- Dark Terminal Header -->
+                <div class="card-header terminal-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <div class="d-flex align-items-center gap-1.5 me-3">
+                            <span class="terminal-window-dot bg-danger"></span>
+                            <span class="terminal-window-dot bg-warning"></span>
+                            <span class="terminal-window-dot bg-success"></span>
+                        </div>
+                        <span class="fw-bold small text-uppercase text-light-emphasis font-monospace" style="font-size: 0.72rem; letter-spacing: 0.05em; color: #a1a1aa !important;">Console Output</span>
+                    </div>
+                    <button class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace text-light-emphasis border-secondary" style="font-size: 0.7rem; border-color: #3f3f46 !important;" onclick="scrollToBottom()">Scroll to Bottom</button>
                 </div>
-                <div class="card-body p-0" id="logWindow" style="overflow-y: auto; height: calc(100% - 47px); background: #ffffff;">
-                    <table class="table table-sm table-hover mb-0">
-                        <tbody id="logTableBody" class="font-monospace" style="font-size: 0.82rem;">
+                <!-- Dark Console Body -->
+                <div class="card-body terminal-console-body" id="logWindow">
+                    <table class="terminal-table">
+                        <tbody id="logTableBody">
                             {% for row_html in logs %}
                                 {{ row_html|safe }}
                             {% empty %}
-                            <tr><td colspan="2" class="text-center py-5 text-muted">No matching logs found.</td></tr>
+                            <tr><td colspan="2" class="text-center py-5 text-muted font-monospace" style="font-size: 0.85rem;">No matching logs found.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -117,14 +372,14 @@
             const baseUrl = "{% url 'fetch_new_logs' %}";
             fetch(`${baseUrl}?offset=-1`).then(r => r.json()).then(data => {
                 logOffset = data.offset;
-                liveStatus.innerHTML = '<span class="spinner-grow spinner-grow-sm text-success me-1.5" role="status"></span>Polling live...';
-                liveStatus.className = "small text-success fw-bold mt-2";
+                liveStatus.innerHTML = '<span class="pulse-dot"></span>Polling live...';
+                liveStatus.className = "small mt-2.5 d-flex align-items-center gap-2 live-status-active";
                 liveInterval = setInterval(pullLogs, 2000);
             });
         } else {
             if (liveInterval) clearInterval(liveInterval);
-            liveStatus.textContent = "Disconnected";
-            liveStatus.className = "small text-muted mt-2 fst-italic";
+            liveStatus.innerHTML = '<span class="rounded-circle bg-secondary" style="width: 8px; height: 8px; display: inline-block;"></span>Disconnected';
+            liveStatus.className = "small text-muted mt-2.5 d-flex align-items-center gap-2 fst-italic";
         }
     });
 </script>
