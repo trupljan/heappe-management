@@ -303,14 +303,52 @@ def handle_global_action(compose_dir, instance_name, action):
         'success' if result.returncode == 0 else 'danger'
     )
 
+def _set_updating_status(instance_name: str, status: bool):
+    try:
+        from ..models import InstanceCredentials
+        instance_service = InstanceCredentials.objects.filter(instance_name=instance_name).first()
+        if instance_service:
+            instance_service.is_updating = status
+            instance_service.save()
+    except Exception as e:
+        print(f"Error setting updating status for {instance_name}: {e}")
+
+
 def handle_update_action(config, instance_name):
     """Handle the update process and return the result."""
+    from datetime import datetime
     service = HEAppEDeployService(config)
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
+    log_dir = os.path.join(config.base_path, instance_name, "app", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, "update.log")
+
+    def log_message(msg):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted = f"[{timestamp}] {msg}\n"
+        print(msg)
+        try:
+            with open(log_file_path, "a", encoding="utf-8") as f:
+                f.write(formatted)
+        except Exception as e:
+            print(f"Error writing to update log: {e}")
 
     try:
+        # Clear previous log
+        try:
+            with open(log_file_path, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            pass
+
+        log_message("Starting HEAppE update process...")
+        log_message(f"Repository branch/tag: {config.repo_branch}")
+        _set_updating_status(instance_name, True)
+        log_message("Database status set to updating.")
+
         # git pull
         git_command = ["git", "pull", "origin", config.repo_branch]
+        log_message(f"Running command: {' '.join(git_command)}")
         git_result = subprocess.run(
             git_command,
             cwd=compose_dir,
@@ -318,13 +356,20 @@ def handle_update_action(config, instance_name):
             text=True,
             check=False
         )
-        print(f"Git pull done: {git_result.returncode} {git_result.stdout} {git_result.stderr}")
+        log_message(f"Git pull finished with return code {git_result.returncode}")
+        if git_result.stdout:
+            log_message(f"Git stdout:\n{git_result.stdout}")
+        if git_result.stderr:
+            log_message(f"Git stderr:\n{git_result.stderr}")
+
         if git_result.returncode != 0:
+            log_message("ERROR: Failed to pull latest code. Aborting update.")
+            _set_updating_status(instance_name, False)
             return git_result, f"Failed to pull latest code: {git_result.stderr}", 'danger'
 
-        print("Git pull successful, proceeding with update, building containers with new code...")
-        # update appsettings and .env
+        log_message("Updating configuration files (.env and appsettings)...")
         service.update_init(instance_name=instance_name, version=config.repo_branch)
+        log_message("Configuration update completed.")
 
         # rebuild and restart containers
         build_command = [
@@ -339,12 +384,20 @@ def handle_update_action(config, instance_name):
             "-p", instance_name,
             "build"
         ]
-
+        log_message("Rebuilding Docker containers. This might take a few minutes...")
         build_result = execute_docker_compose(build_command, compose_dir)
-        print(f"Docker Compose build result done: {build_result.returncode} {build_result.stdout} {build_result.stderr}")
+        log_message(f"Docker Compose build finished with return code {build_result.returncode}")
+        if build_result.stdout:
+            log_message(f"Docker Compose build stdout:\n{build_result.stdout}")
+        if build_result.stderr:
+            log_message(f"Docker Compose build stderr:\n{build_result.stderr}")
 
-        print("Build completed, restarting containers with new code...")
+        if build_result.returncode != 0:
+            log_message("ERROR: Docker Compose build failed. Aborting update.")
+            _set_updating_status(instance_name, False)
+            return build_result, f"Failed to rebuild containers: {build_result.stderr}", 'danger'
 
+        log_message("Restarting containers with the new build...")
         restart_command = [
             "docker", "compose",
             "--profile", "db",
@@ -358,16 +411,23 @@ def handle_update_action(config, instance_name):
             "up", "-d"
         ]
         restart_result = execute_docker_compose(restart_command, compose_dir)
-        print(f"Docker Compose Up done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
-
-
+        log_message(f"Docker Compose up finished with return code {restart_result.returncode}")
+        if restart_result.stdout:
+            log_message(f"Docker Compose up stdout:\n{restart_result.stdout}")
+        if restart_result.stderr:
+            log_message(f"Docker Compose up stderr:\n{restart_result.stderr}")
 
         if restart_result.returncode != 0:
+            log_message("ERROR: Failed to restart containers. Update failed.")
+            _set_updating_status(instance_name, False)
             return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
 
+        log_message("SUCCESS: Update completed successfully.")
+        _set_updating_status(instance_name, False)
         return restart_result, "Update completed successfully.", 'success'
     except Exception as e:
-        print(f"Update error: {str(e)}")
+        log_message(f"EXCEPTION: Update error: {str(e)}")
+        _set_updating_status(instance_name, False)
         return None, f"Update error: {str(e)}", 'danger'
 
 
@@ -784,6 +844,7 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
         "branches": branches,
         "instance_service": instance_service,
         "is_deployed": instance_service.is_deployed if instance_service else False,
+        "is_updating": instance_service.is_updating if instance_service else False,
         "deployed_version": deployed_version,
         "latest_version": latest_version,
         "update_available": update_available,
@@ -804,6 +865,37 @@ def fetch_repo_branches(request):
         return JsonResponse({'branches': branches})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+def update_status_view(request, instance_name):
+    """Get the current update status and logs for the instance."""
+    try:
+        from ..models import InstanceCredentials
+        instance = InstanceCredentials.objects.filter(instance_name=instance_name).first()
+        if not instance:
+            return JsonResponse({'status': 'error', 'message': 'Instance not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+    base_path = "/opt/heappe-deployment/"
+    log_file_path = os.path.join(base_path, instance_name, "app", "logs", "update.log")
+
+    logs = ""
+    if os.path.exists(log_file_path):
+        try:
+            with open(log_file_path, "r", encoding="utf-8") as f:
+                logs = f.read()
+        except Exception as e:
+            logs = f"Error reading logs: {e}"
+
+    is_updating = getattr(instance, 'is_updating', False)
+
+    return JsonResponse({
+        'status': 'success',
+        'is_updating': is_updating,
+        'logs': logs
+    })
 
 import base64
 import json

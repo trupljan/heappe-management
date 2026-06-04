@@ -50,45 +50,6 @@
 
 
 <div class="container" xmlns="http://www.w3.org/1999/xhtml">
-    {% if middleware_update_available %}
-        {% with snooze_key="middleware_update_snoozed__"|add:request.session.chosen_instance|add:"__"|add:middleware_latest_version %}
-        <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between p-3 mb-4 animate-fade-in"
-             id="middleware-update-banner"
-             data-snooze-key="{{ snooze_key }}">
-            <div class="d-flex align-items-center gap-2">
-                <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true"></span>
-                <div>
-                    <strong class="text-warning-emphasis">Update Available:</strong>
-                    A new version of HEAppE Middleware is available for instance <strong>{{ request.session.chosen_instance }}</strong>
-                    (deployed: <code>{{ middleware_deployed_version }}</code>, latest: <code>{{ middleware_latest_version }}</code>).
-                    <div class="small text-muted mt-1">
-                        <i class="bi bi-clock-history me-1"></i>Update causes a short downtime &mdash; plan a <strong>maintenance window</strong> before proceeding.
-                    </div>
-                </div>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                <a href="{% url 'deploy_view' request.session.chosen_instance %}" class="btn btn-warning btn-sm fw-bold shadow-sm">
-                    <i class="bi bi-arrow-repeat me-1"></i>Go to Update Page
-                </a>
-                <button type="button" class="btn btn-outline-secondary btn-sm"
-                    onclick="var b=document.getElementById('middleware-update-banner'); localStorage.setItem(b.dataset.snoozeKey, Date.now()+86400000); b.style.display='none';"
-                    title="Remind me tomorrow">
-                    <i class="bi bi-bell-slash me-1"></i>Later (24h)
-                </button>
-            </div>
-        </div>
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                var banner = document.getElementById('middleware-update-banner');
-                if (!banner) return;
-                var snoozedUntil = parseInt(localStorage.getItem(banner.dataset.snoozeKey) || '0');
-                if (Date.now() < snoozedUntil) {
-                    banner.style.display = 'none';
-                }
-            });
-        </script>
-        {% endwith %}
-    {% endif %}
 
     <div class="row g-4 mb-4">
         {# HEAppE Info Card #}
@@ -189,13 +150,13 @@
         <div class="col-md-2">
             <div class="card shadow-sm p-3 text-center">
                 <h5 class="card-title"><i class="bi bi-server me-2"></i>Total Clusters</h5>
-                <p class="display-4 fw-bold mb-3">{{ clusters|length }}</p>
+                <p class="fs-2 fw-bold mb-3 text-nowrap">{{ clusters|length }}</p>
                 <a href="{% url 'cluster_list' %}" class="btn btn-secondary btn-sm">Manage</a>
             </div>
             <br>
             <div class="card shadow-sm p-3 text-center">
                 <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Projects</h5>
-                <p class="display-4 fw-bold mb-3">{{ projects|length|default:"0" }}</p>
+                <p class="fs-2 fw-bold mb-3 text-nowrap">{{ projects|length|default:"0" }}</p>
                 <a href="{% url 'project_list' %}" class="btn btn-secondary btn-sm">Manage</a>
             </div>
         </div>
@@ -204,13 +165,13 @@
         <div class="col-md-2">
             <div class="card shadow-sm p-3 text-center">
                 <h5 class="card-title"><i class="bi bi-people me-2"></i>Total Queues</h5>
-                <p class="display-4 fw-bold mb-3">{{ queues|length|default:"0" }}</p>
+                <p class="fs-2 fw-bold mb-3 text-nowrap">{{ queues|length|default:"0" }}</p>
                 <a href="{% url 'queues_view' %}" class="btn btn-secondary btn-sm">Manage</a>
             </div>
             <br>
             <div class="card shadow-sm p-3 text-center">
                 <h5 class="card-title"><i class="bi bi-journal-text me-2"></i>Total Jobs</h5>
-                <p class="display-4 fw-bold mb-3">{{ total_jobs|default:"0" }}</p>
+                <p class="fs-2 fw-bold mb-3 text-nowrap">{{ total_jobs|default:"0" }}</p>
                 <button class="btn btn-secondary btn-sm" disabled>Manage</button>
             </div>
         </div>

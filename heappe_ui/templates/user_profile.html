@@ -16,23 +16,20 @@
                         <p><strong>HEAppE Host:</strong> {{ request.session.heappe_host }}</p>
                         <p>
                             <strong>Session Code:</strong>
-                            {% if request.session.heappe_session_code %}
-                                <span id="session-code" style="display:none;">{{ request.session.heappe_session_code }}</span>
-                                <button id="toggle-session" class="btn btn-sm btn-outline-secondary ms-1">
-                                    🔒 Show
-                                </button>
-                            {% else %}
-                                <span id="session-code-container">
-                                    <span class="text-muted small">None (API Key auth)</span>
-                                    <button id="btn-generate-session" class="btn btn-sm btn-warning ms-2 fw-semibold text-dark">
-                                        🔑 Get Session Code
-                                    </button>
-                                </span>
-                                <span id="session-code" style="display:none;"></span>
-                                <button id="toggle-session" class="btn btn-sm btn-outline-secondary ms-1" style="display:none;">
-                                    🔒 Show
-                                </button>
-                            {% endif %}
+                            <span id="session-code-container" {% if request.session.heappe_session_code %}style="display:none;"{% endif %}>
+                                <span class="text-muted small">None (API Key auth)</span>
+                            </span>
+                            <span id="session-code" style="display:none;">{{ request.session.heappe_session_code|default:"" }}</span>
+                            <button id="toggle-session" class="btn btn-sm btn-outline-secondary ms-1" {% if not request.session.heappe_session_code %}style="display:none;"{% endif %}>
+                                🔒 Show
+                            </button>
+                            <button id="btn-generate-session" class="btn btn-sm btn-warning ms-2 fw-semibold text-dark">
+                                {% if request.session.heappe_session_code %}
+                                    🔄 Get New Session Code
+                                {% else %}
+                                    🔑 Get Session Code
+                                {% endif %}
+                            </button>
                         </p>
                         <p><strong>Last Auth:</strong>
                             {% if last_auth %}
@@ -111,16 +108,20 @@ document.addEventListener("DOMContentLoaded", function() {
                     if (container) container.style.display = "none";
                     toggleButton.textContent = "🔓 Hide";
                     toggleButton.style.display = "inline";
+                    btnGenerate.disabled = false;
+                    btnGenerate.innerHTML = "🔄 Get New Session Code";
                 } else {
                     alert("Error: " + data.message);
                     btnGenerate.disabled = false;
-                    btnGenerate.innerHTML = "🔑 Get Session Code";
+                    const hasCode = sessionCodeSpan.textContent && sessionCodeSpan.textContent.trim() !== "";
+                    btnGenerate.innerHTML = hasCode ? "🔄 Get New Session Code" : "🔑 Get Session Code";
                 }
             })
             .catch(error => {
                 alert("Request failed: " + error);
                 btnGenerate.disabled = false;
-                btnGenerate.innerHTML = "🔑 Get Session Code";
+                const hasCode = sessionCodeSpan.textContent && sessionCodeSpan.textContent.trim() !== "";
+                btnGenerate.innerHTML = hasCode ? "🔄 Get New Session Code" : "🔑 Get Session Code";
             });
         });
     }

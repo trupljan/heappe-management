@@ -128,6 +128,41 @@
         </div>
     </div>
 
+    <!-- Update Progress Modal -->
+    <div class="modal fade" id="updateProgressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="updateProgressModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-dark text-white border-0 py-3">
+                    <h5 class="modal-title fw-bold" id="updateProgressModalLabel">
+                        <i class="bi bi-arrow-repeat spin-icon me-2 text-primary"></i>HEAppE Middleware Update
+                    </h5>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <div class="text-center mb-4">
+                        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1" id="update-status-title">Updating Instance...</h5>
+                        <p class="text-muted small mb-0">Please do not close this window or navigate away. The process might take up to 5 minutes.</p>
+                    </div>
+
+                    <label class="form-label fw-bold text-secondary mb-2 small"><i class="bi bi-journal-text me-1"></i>Journal (Update Logs):</label>
+                    <div class="position-relative">
+                        <pre id="update-logs" class="p-3 mb-0 rounded text-light bg-dark font-monospace" style="height: 300px; overflow-y: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap; border: 1px solid #343a40;"></pre>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" id="update-close-btn" class="btn btn-primary w-100 fw-bold py-2 shadow-sm" style="display:none;" onclick="location.reload();">
+                        <i class="bi bi-check-lg me-1"></i>Reload Page & Continue
+                    </button>
+                    <div id="update-in-progress-footer" class="w-100 text-center text-muted small py-2">
+                        <i class="bi bi-info-circle me-1"></i>Performing background operations...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% if is_deployed %}
     <div class="card mb-4 border-0 shadow-sm bg-light">
         <div class="card-body">
@@ -282,6 +317,77 @@ let currentContainerId = null;
 let currentPath = '/opt/heappe/confs/';
 let selectedFilePath = null;
 let isPolling = false;
+let updatePollInterval = null;
+
+function startUpdatePolling() {
+    // Show update progress modal (non-dismissible)
+    const updateModalEl = document.getElementById('updateProgressModal');
+    if (!updateModalEl) return;
+    
+    let updateModal = bootstrap.Modal.getInstance(updateModalEl);
+    if (!updateModal) {
+        updateModal = new bootstrap.Modal(updateModalEl, {
+            backdrop: 'static',
+            keyboard: false
+        });
+    }
+    updateModal.show();
+    
+    // Hide standard loading overlay just in case
+    if (typeof hideLoading === 'function') hideLoading();
+
+    const instanceName = "{{ instance_name }}";
+    const updateStatusUrl = `${basePath}/deploy/${instanceName}/update-status/`;
+
+    if (updatePollInterval) clearInterval(updatePollInterval);
+
+    function poll() {
+        $.ajax({
+            url: updateStatusUrl,
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Display logs
+                    const logElement = $('#update-logs');
+                    logElement.text(response.logs || 'Initializing log stream...');
+                    logElement.scrollTop(logElement[0].scrollHeight);
+
+                    if (!response.is_updating) {
+                        // Update has finished!
+                        clearInterval(updatePollInterval);
+                        updatePollInterval = null;
+                        
+                        // Check if log contains success or error
+                        const logText = response.logs || '';
+                        const isSuccess = logText.includes('SUCCESS:') || logText.includes('Update completed successfully.');
+                        
+                        // Adjust UI
+                        const $spinner = $('.modal-body .spinner-border');
+                        $spinner.removeClass('text-primary spinner-border').addClass(isSuccess ? 'bi bi-check-circle-fill text-success fs-1 mb-3' : 'bi bi-exclamation-octagon-fill text-danger fs-1 mb-3');
+                        $spinner.css('animation', 'none');
+                        
+                        if (isSuccess) {
+                            $('#update-status-title').text('Update Succeeded!').removeClass('text-dark').addClass('text-success');
+                            $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Instance updated successfully.</span>');
+                        } else {
+                            $('#update-status-title').text('Update Failed').removeClass('text-dark').addClass('text-danger');
+                            $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during update. See logs above.</span>');
+                        }
+                        
+                        $('#update-close-btn').show();
+                    }
+                }
+            },
+            error: function() {
+                console.log("Failed to fetch update status.");
+            }
+        });
+    }
+
+    // Start polling immediately, then every 2 seconds
+    poll();
+    updatePollInterval = setInterval(poll, 2000);
+}
 
 $(document).ready(function() {
     // --- UI HELPERS ---
@@ -290,13 +396,18 @@ $(document).ready(function() {
         $('#loading-subtext').text(subtext);
         $('#loading-overlay').css('display','flex');
     }
-    function hideLoading() { $('#loading-overlay').css('display','none'); }
+    window.hideLoading = function() { $('#loading-overlay').css('display','none'); }
 
     // --- AUTOMATIC LOADING STATE FOR REDIRECTED USERS ---
     // If we have an instance name but it's not deployed yet, show the loader automatically
-    {% if instance_name and not is_deployed %}
+    {% if instance_name and not is_deployed and not is_updating %}
         showLoading("Deployment in progress...", "Your instance is being created. Please wait.");
         startStatusPolling();
+    {% endif %}
+
+    // --- AUTOMATIC UPDATE STATE ON PAGE LOAD ---
+    {% if instance_name and is_updating %}
+        startUpdatePolling();
     {% endif %}
 
     // --- DEPLOY / UPDATE LOGIC ---
@@ -308,28 +419,63 @@ $(document).ready(function() {
         const modal = bootstrap.Modal.getInstance(document.getElementById('deployUpdateModal'));
         if (modal) modal.hide();
 
-        const title = action === 'deploy' ? "Initiating Deployment..." : "Initiating Update...";
-        showLoading(title, "Please wait for the server response.");
+        if (action === 'update') {
+            // Reset spinner & status text
+            const $spinner = $('.modal-body .spinner-border');
+            $spinner.removeClass('bi bi-check-circle-fill bi-exclamation-octagon-fill text-success text-danger fs-1 mb-3').addClass('spinner-border text-primary mb-3');
+            $spinner.css('animation', '');
+            
+            $('#update-status-title').text('Starting Update...').removeClass('text-success text-danger').addClass('text-dark');
+            $('#update-logs').text('Requesting update from server...');
+            $('#update-close-btn').hide();
+            $('#update-in-progress-footer').html('<i class="bi bi-info-circle me-1"></i>Performing background operations...');
 
-        $.ajax({
-            url: window.location.href, // This posts to the current URL (usually generic /deploy/)
-            type: 'POST',
-            data: form.serialize(),
-            success: function(response) {
-                // If this was a deploy action, the server should send a redirect URL
-                if (action === 'deploy' && response.redirect_url) {
-                    // Redirect immediately to the specific instance page
-                    window.location.href = response.redirect_url;
-                } else {
-                    // For updates or if no redirect provided, start polling on current page
-                    startStatusPolling();
-                }
-            },
-            error: function(xhr) {
-                hideLoading();
-                alert('Action failed: ' + (xhr.responseJSON?.message || 'Server Error'));
+            // Open updateProgressModal
+            const updateModalEl = document.getElementById('updateProgressModal');
+            let updateModal = bootstrap.Modal.getInstance(updateModalEl);
+            if (!updateModal) {
+                updateModal = new bootstrap.Modal(updateModalEl, {
+                    backdrop: 'static',
+                    keyboard: false
+                });
             }
-        });
+            updateModal.show();
+
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: form.serialize(),
+                success: function(response) {
+                    startUpdatePolling();
+                },
+                error: function(xhr) {
+                    const errMsg = xhr.responseJSON?.message || 'Server Error';
+                    $('#update-logs').text('FAILED to request update:\n' + errMsg);
+                    $('#update-status-title').text('Update Request Failed').removeClass('text-dark').addClass('text-danger');
+                    $spinner.removeClass('text-primary spinner-border').addClass('bi bi-exclamation-octagon-fill text-danger fs-1 mb-3');
+                    $('#update-close-btn').show();
+                }
+            });
+        } else {
+            // Deployment action
+            showLoading("Initiating Deployment...", "Please wait for the server response.");
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: form.serialize(),
+                success: function(response) {
+                    if (response.redirect_url) {
+                        window.location.href = response.redirect_url;
+                    } else {
+                        startStatusPolling();
+                    }
+                },
+                error: function(xhr) {
+                    hideLoading();
+                    alert('Action failed: ' + (xhr.responseJSON?.message || 'Server Error'));
+                }
+            });
+        }
     });
 
     function startStatusPolling() {
@@ -342,8 +488,6 @@ $(document).ready(function() {
                 type: 'GET',
                 success: function(data) {
                     const html = $(data);
-                    // We check if the 'update' button exists in the response.
-                    // This implies the instance state is now 'deployed' in the view.
                     const deployedDetected = html.find('button[data-action="update"]').length > 0;
 
                     if (deployedDetected) {
@@ -355,7 +499,7 @@ $(document).ready(function() {
                     console.log("Status check failed, retrying...");
                 }
             });
-        }, 5000); // Poll every 5 seconds
+        }, 5000);
     }
 
     // --- CONTAINER & GLOBAL ACTIONS ---
@@ -521,6 +665,21 @@ $(document).ready(function() {
 </script>
 
 <style>
+    .spin-icon {
+        display: inline-block;
+        animation: spin-anim 2s linear infinite;
+    }
+    @keyframes spin-anim {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    #update-logs {
+        font-family: 'Courier New', Courier, monospace;
+        background-color: #121212 !important;
+        color: #a8ffb2 !important; /* Soft terminal green */
+        border: 1px solid #222 !important;
+        box-shadow: inset 0 0 12px rgba(0,0,0,0.9);
+    }
     .cursor-pointer { cursor: pointer; }
     .file-item {
         transition: background-color 0.2s ease, padding-left 0.2s ease;

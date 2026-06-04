@@ -14,6 +14,7 @@ urlpatterns = [
 
     path("deploy/", views.deploy_view, name="deploy_view"),
     path("deploy/<str:instance_name>/", views.deploy_view, name="deploy_view"),
+    path("deploy/<str:instance_name>/update-status/", views.update_status_view, name="update_status"),
     path('chose-instance/', views.chose_instance_view, name='chose_instance_view'),
     path('reconnect/', views.reconnect_view, name='reconnect_view'),
     path('container/<str:container_id>/file/<str:action>/', views.handle_file_action, name='container_file_action'),

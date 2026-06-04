@@ -151,7 +151,7 @@
                     <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="recheck-btn" onclick="recheckUpdates()">
                         <i class="bi bi-arrow-clockwise me-1"></i>Recheck
                     </button>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="snoozeUpdate(24)" data-bs-dismiss="modal">Remind me tomorrow</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="snoozeAdminUpdate(24)" data-bs-dismiss="modal">Remind me tomorrow</button>
                     <button type="button" id="start-update-btn" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
                         Start Update Now
                     </button>
@@ -170,6 +170,76 @@
     </div>
     {% endif %}
 
+    <!-- Unified Update Banners Container -->
+    {% if user.is_authenticated %}
+    <div class="container mt-3">
+        <!-- HEAppE Middleware Update Banner -->
+        {% if middleware_update_available and request.session.chosen_instance %}
+            {% with snooze_key="middleware_update_snoozed__"|add:request.session.chosen_instance|add:"__"|add:middleware_latest_version %}
+            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between p-3 mb-3 animate-fade-in"
+                 id="middleware-update-banner"
+                 data-snooze-key="{{ snooze_key }}"
+                 style="display: none;">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="spinner-grow spinner-grow-sm text-warning me-2" role="status" aria-hidden="true"></span>
+                    <div>
+                        <strong class="text-warning-emphasis">HEAppE Middleware Update Available:</strong>
+                        A new version of HEAppE Middleware is available for instance <strong>{{ request.session.chosen_instance }}</strong>
+                        (deployed: <code>{{ middleware_deployed_version }}</code>, latest: <code>{{ middleware_latest_version }}</code>).
+                        <div class="small text-muted mt-1">
+                            <i class="bi bi-clock-history me-1"></i>Update causes a short downtime &mdash; plan a <strong>maintenance window</strong> before proceeding.
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{% url 'deploy_view' request.session.chosen_instance %}" class="btn btn-warning btn-sm fw-bold shadow-sm">
+                        <i class="bi bi-arrow-repeat me-1"></i>Update HEAppE
+                    </a>
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                        onclick="var b=document.getElementById('middleware-update-banner'); localStorage.setItem(b.dataset.snoozeKey, Date.now()+86400000); b.style.display='none';"
+                        title="Remind me tomorrow">
+                        <i class="bi bi-bell-slash me-1"></i>Later (24h)
+                    </button>
+                </div>
+            </div>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    var banner = document.getElementById('middleware-update-banner');
+                    if (banner) {
+                        var snoozedUntil = parseInt(localStorage.getItem(banner.dataset.snoozeKey) || '0');
+                        if (Date.now() >= snoozedUntil) {
+                            banner.style.display = 'flex';
+                        }
+                    }
+                });
+            </script>
+            {% endwith %}
+        {% endif %}
+
+        <!-- Admin Panel Update Banner -->
+        <div class="alert alert-info border-info shadow-sm d-flex align-items-center justify-content-between p-3 mb-3 animate-fade-in"
+             id="adminpanel-update-banner"
+             style="display: none;">
+            <div class="d-flex align-items-center gap-2">
+                <span class="spinner-grow spinner-grow-sm text-info me-2" role="status" aria-hidden="true"></span>
+                <div>
+                    <strong class="text-info-emphasis">Admin Panel Update Available:</strong>
+                    A new version of the HEAppE Admin Panel is available.
+                    <div class="small text-muted mt-1" id="adminpanel-update-version-text"></div>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-info btn-sm fw-bold shadow-sm text-white" data-bs-toggle="modal" data-bs-target="#updateModal">
+                    <i class="bi bi-arrow-up-circle me-1"></i>Update Admin Panel
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="snoozeAdminUpdate(24)" title="Remind me tomorrow">
+                    <i class="bi bi-bell-slash me-1"></i>Later (24h)
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <main class="container-fluid mt-4">{% block content %}{% endblock %}</main>
 
     <footer class="bg-light mt-5 py-4 border-top">
@@ -181,6 +251,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            {% if user.is_authenticated %}
             fetch('{% url "check_updates" %}')
                 .then(r => r.json())
                 .then(data => {
@@ -207,13 +278,18 @@
                             }
                         }
 
-                        // Show Bootstrap Toast — only if NOT snoozed
-                        const snoozedUntil = parseInt(localStorage.getItem('update_toast_snoozed') || '0');
-                        if (Date.now() > snoozedUntil) {
-                            const toastEl = document.getElementById('updateToast');
-                            if (toastEl) {
-                                const toast = new bootstrap.Toast(toastEl, { autohide: false });
-                                toast.show();
+                        // Show Admin Panel Update Banner at the top — only if NOT snoozed
+                        const snoozedUntil = parseInt(localStorage.getItem('admin_update_snoozed') || '0');
+                        if (Date.now() >= snoozedUntil) {
+                            const banner = document.getElementById('adminpanel-update-banner');
+                            const versionText = document.getElementById('adminpanel-update-version-text');
+                            if (banner) {
+                                if (versionText && data.current_version && data.latest_version) {
+                                    versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Current: <code>v${data.current_version}</code> &mdash; Latest: <code>v${data.latest_version}</code>`;
+                                } else if (versionText && data.latest_version) {
+                                    versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Latest: <code>v${data.latest_version}</code>`;
+                                }
+                                banner.style.display = 'flex';
                             }
                         }
                     } else {
@@ -233,6 +309,7 @@
                 .catch(err => {
                     console.warn('Update check failed:', err);
                 });
+            {% endif %}
         });
 
         function recheckUpdates() {
@@ -333,38 +410,14 @@
             url.searchParams.set('refresh', '1');
             window.location.href = url.toString();
         }
-        function snoozeUpdate(hours = 24) {
-            localStorage.setItem('update_toast_snoozed', Date.now() + hours * 3600 * 1000);
-            // Close toast if open
-            const toastEl = document.getElementById('updateToast');
-            if (toastEl) {
-                const t = bootstrap.Toast.getInstance(toastEl);
-                if (t) t.hide();
+        function snoozeAdminUpdate(hours = 24) {
+            localStorage.setItem('admin_update_snoozed', Date.now() + hours * 3600 * 1000);
+            const banner = document.getElementById('adminpanel-update-banner');
+            if (banner) {
+                banner.style.display = 'none';
             }
         }
 
     </script>
-
-    <!-- Toast Container for Notifications -->
-    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1055;">
-        <div id="updateToast" class="toast align-items-center text-white bg-dark border-0 shadow-lg" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="d-flex">
-                <div class="toast-body">
-                    <div class="d-flex align-items-center gap-2">
-                        <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true"></span>
-                        <strong class="text-warning">Update Available!</strong>
-                    </div>
-                        <div class="mt-2 small text-light" id="updateToastVersion">
-                            A new version of the HEAppE Admin Panel is available.
-                            <div class="mt-2">
-                                <button type="button" class="btn btn-warning btn-sm fw-bold me-1" data-bs-toggle="modal" data-bs-target="#updateModal" data-bs-dismiss="toast">Update Now</button>
-                                <button type="button" class="btn btn-outline-light btn-sm text-white" onclick="snoozeUpdate(24)" data-bs-dismiss="toast">Later (24h)</button>
-                            </div>
-                        </div>
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" onclick="snoozeUpdate(4)" data-bs-dismiss="toast" aria-label="Close"></button>
-            </div>
-        </div>
-    </div>
 </body>
 </html>
