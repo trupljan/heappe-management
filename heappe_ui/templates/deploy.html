@@ -26,9 +26,6 @@
         </div>
         <div class="col-md-4 text-md-end mt-3 mt-md-0">
             {% if not instance_name %}
-                <button type="button" class="btn btn-primary btn-lg shadow-sm w-100 w-md-auto open-maintenance-tab-btn" data-action="deploy">
-                    <i class="bi bi-rocket-takeoff me-2"></i>Deploy Instance
-                </button>
             {% elif is_deployed %}
                 <button type="button" class="btn btn-outline-primary shadow-sm w-100 w-md-auto open-maintenance-tab-btn" data-action="update">
                     <i class="bi bi-arrow-repeat me-2"></i>Update Instance
