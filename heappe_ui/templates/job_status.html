@@ -1,184 +1,243 @@
 {% extends "base.html" %}
 
+{% block title %}Job Status - {{ job.name }}{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    {% if project %}
+        <li class="breadcrumb-item"><a href="{% url 'project_detail' project.id %}" class="text-decoration-none text-secondary">{{ project.name }}</a></li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">Job #{{ job.id }} Status</li>
+{% endblock %}
+
 {% block content %}
+<div class="container-fluid py-2">
 
-<div class="container my-5" style="max-width: 1400px;">
-  <!-- Job Details -->
-  <div class="card shadow rounded-4 mb-5 border-0">
-    <div class="card-header bg-primary text-bg-primary d-flex align-items-center rounded-top-4 p-4">
-      <h3 class="mb-0"><i class="bi bi-briefcase me-2"></i> Job Details</h3>
-      <button class="btn btn-outline-light btn-sm ms-auto">
-        <i class="bi bi-arrow-clockwise" onclick="location.reload();"></i> Reload
-      </button>
-    </div>
-    <div class="card-body p-4">
-      <div class="row g-4">
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Job ID</h6>
-            <p class="fs-6 mb-0 text-dark">{{ job.id }}</p>
-          </div>
+    <!-- Header and Mode Switcher -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2.5">
+            <i class="bi bi-briefcase-fill text-primary fs-3"></i>
+            <div>
+                <h4 class="mb-0 fw-bold text-dark">Job Details: {{ job.name }}</h4>
+                <span class="text-muted small">ID: <strong class="font-monospace text-secondary">{{ job.id }}</strong></span>
+            </div>
         </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Job Name</h6>
-            <p class="fs-6 mb-0 text-dark">{{ job.name }}</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">State</h6>
-            {% if job.state == 1 %}
-              <span class="badge text-bg-secondary">Configuring</span>
-            {% elif job.state == 2 %}
-              <span class="badge text-bg-info">Submitted</span>
-            {% elif job.state == 4 %}
-              <span class="badge text-bg-warning">Queued</span>
-            {% elif job.state == 8 %}
-              <span class="badge text-bg-primary">Running</span>
-            {% elif job.state == 16 %}
-              <span class="badge text-bg-success">Finished</span>
-            {% elif job.state == 32 %}
-              <span class="badge text-bg-danger">Failed</span>
-            {% elif job.state == 64 %}
-              <span class="badge text-bg-dark">Canceled</span>
-            {% elif job.state == 128 %}
-              <span class="badge text-bg-warning">Waiting</span>
-            {% elif job.state == 256 %}
-              <span class="badge text-bg-secondary">Deleted</span>
-            {% else %}
-              <span class="badge bg-light text-dark border">Unknown</span>
+        <div class="d-flex align-items-center gap-2">
+            <button class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3" onclick="location.reload();">
+                <i class="bi bi-arrow-clockwise me-1.5"></i>Reload Status
+            </button>
+            {% if project %}
+            <a href="{% url 'project_detail' project.id %}" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3">
+                <i class="bi bi-arrow-left me-1.5"></i>Back
+            </a>
             {% endif %}
-          </div>
         </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Creation Time</h6>
-            <p class="fs-6 mb-0 text-dark">{{ job.creation_time }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="row g-4 mt-2">
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Submit Time</h6>
-            <p class="mb-0 text-dark">{{ job.submit_time|default:"Not yet submitted" }}</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Start Time</h6>
-            <p class="mb-0 text-dark">{{ job.start_time|default:"Not started" }}</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">End Time</h6>
-            <p class="mb-0 text-dark">{{ job.end_time|default:"Not finished" }}</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Allocated Time</h6>
-            <p class="mb-0 text-dark">{{ job.total_allocated_time|default:"N/A" }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="row g-4 mt-2">
-        <div class="col-md-12">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Sub Project</h6>
-            <p class="mb-0 text-dark">{{ job.sub_project|default:"None" }}</p>
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
 
-  <!-- Task Information -->
-  <h4 class="text-primary mb-4"><i class="bi bi-list-task me-2"></i> Tasks</h4>
-  <div class="row g-4">
-    {% for task in job.tasks %}
-      <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 rounded-3 h-100">
-          <div class="card-header bg-light d-flex justify-content-between align-items-center p-3">
-            <span class="fw-bold text-dark">Task #{{ task.id }}</span>
-            {% if task.state == 1 %}
-              <span class="badge text-bg-secondary">Configuring</span>
-            {% elif task.state == 2 %}
-              <span class="badge text-bg-info">Submitted</span>
-            {% elif task.state == 4 %}
-              <span class="badge text-bg-warning">Queued</span>
-            {% elif task.state == 8 %}
-              <span class="badge text-bg-primary">Running</span>
-            {% elif task.state == 16 %}
-              <span class="badge text-bg-success">Finished</span>
-            {% elif task.state == 32 %}
-              <span class="badge text-bg-danger">Failed</span>
-            {% elif task.state == 64 %}
-              <span class="badge text-bg-dark">Canceled</span>
-            {% elif task.state == 128 %}
-              <span class="badge text-bg-warning">Waiting</span>
-            {% elif task.state == 256 %}
-              <span class="badge text-bg-secondary">Deleted</span>
-            {% else %}
-              <span class="badge bg-light text-dark border">Unknown</span>
-            {% endif %}
-          </div>
-          <div class="card-body p-4">
-            <p class="mb-2"><strong>Name:</strong> {{ task.name }}</p>
-            <p class="mb-2"><strong>Priority:</strong> {{ task.priority }}</p>
-            <p class="mb-2"><strong>Allocated Time:</strong> {{ task.allocated_time|default:"N/A" }}</p>
-            <p class="mb-2"><strong>Cores:</strong> {{ task.allocated_core_ids|join:", "|default:"None" }}</p>
-            <p class="mb-2"><strong>Start:</strong> {{ task.start_time|default:"Not started" }}</p>
-            <p class="mb-2"><strong>End:</strong> {{ task.end_time|default:"Not finished" }}</p>
-
-            <hr class="my-3">
-            <h6 class="fw-bold text-dark mb-2">Node Type</h6>
-            <p class="mb-1 text-dark">{{ task.node_type.name }} (ID: {{ task.node_type.id }})</p>
-            <p class="small text-muted">{{ task.node_type.description }}</p>
-
-            <h6 class="fw-bold text-dark mt-3 mb-2">Project</h6>
-            <p class="mb-1 text-dark">{{ task.node_type.project.name }} (ID: {{ task.node_type.project.id }})</p>
-            <p class="small text-muted">{{ task.node_type.project.description }}</p>
-            <p class="mb-2"><strong>Accounting string:</strong> {{ task.node_type.project.accounting_string }}</p>
-
-            <hr class="my-3">
-            <p class="mb-2"><strong>Error:</strong> {{ task.error_message|default:"None" }}</p>
-            <p class="mb-2"><strong>CPU HT:</strong> {{ task.cpu_hyper_threading|default:"N/A" }}</p>
-            <p class="mb-2"><strong>Reason:</strong> {{ task.reason|default:"None" }}</p>
-          </div>
+    <!-- Job Info Card -->
+    <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+            <i class="bi bi-info-circle-fill text-primary"></i>
+            <h5 class="h6 mb-0 fw-bold text-dark">Execution State</h5>
         </div>
-      </div>
-    {% endfor %}
-  </div>
+        <div class="card-body p-4">
+            <div class="row g-3">
+                <div class="col-6 col-sm-6 col-md-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Job ID</div>
+                        <div class="font-monospace text-dark fw-bold mt-1.5" style="font-size: 0.95rem;">#{{ job.id }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-6 col-md-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Job Name</div>
+                        <div class="text-dark fw-bold mt-1.5" style="font-size: 0.95rem;">{{ job.name }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-6 col-md-3">
+                    <div class="p-3 bg-light rounded-3 border h-100 d-flex flex-column justify-content-between">
+                        <div class="text-uppercase text-secondary fw-bold small mb-2" style="font-size: 0.7rem;">Job State</div>
+                        <div>
+                            {% if job.state == 1 %}
+                              <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Configuring</span>
+                            {% elif job.state == 2 %}
+                              <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Submitted</span>
+                            {% elif job.state == 4 %}
+                              <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Queued</span>
+                            {% elif job.state == 8 %}
+                              <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Running</span>
+                            {% elif job.state == 16 %}
+                              <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Finished</span>
+                            {% elif job.state == 32 %}
+                              <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Failed</span>
+                            {% elif job.state == 64 %}
+                              <span class="badge bg-dark text-white px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Canceled</span>
+                            {% elif job.state == 128 %}
+                              <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Waiting</span>
+                            {% elif job.state == 256 %}
+                              <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Deleted</span>
+                            {% else %}
+                              <span class="badge bg-light text-secondary border px-2.5 py-1.5 rounded-pill fw-bold text-uppercase" style="font-size: 0.7rem;">Unknown</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-6 col-md-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Creation Time</div>
+                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.creation_time|date:"d.m.Y H:i:s"|default:job.creation_time }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-3 mt-1">
+                <div class="col-6 col-sm-6 col-md-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Submission Time</div>
+                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.submit_time|date:"d.m.Y H:i:s"|default:job.submit_time|default:"Not yet submitted" }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-6 col-md-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Start Time</div>
+                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.start_time|date:"d.m.Y H:i:s"|default:job.start_time|default:"Not started" }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-6 col-md-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">End Time</div>
+                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.end_time|date:"d.m.Y H:i:s"|default:job.end_time|default:"Not finished" }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-6 col-md-3">
+                    <div class="p-3 bg-light rounded-3 border h-100">
+                        <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Allocated Node/Core Hours</div>
+                        <div class="text-dark fw-bold mt-1.5" style="font-size: 0.95rem;">{{ job.total_allocated_time|default:"N/A" }}</div>
+                    </div>
+                </div>
+            </div>
+
+            {% if job.sub_project %}
+            <div class="row g-3 mt-1">
+                <div class="col-12">
+                    <div class="p-3 bg-light rounded-3 border">
+                        <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Sub-Project Bindings</div>
+                        <div class="text-dark fw-semibold mt-1" style="font-size: 0.9rem;">{{ job.sub_project }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Tasks Title -->
+    <div class="d-flex align-items-center gap-2 mb-3 mt-4">
+        <i class="bi bi-list-task text-secondary fs-5"></i>
+        <h5 class="h6 mb-0 fw-bold text-secondary text-uppercase" style="letter-spacing: 0.05em;">Associated Tasks ({{ job.tasks|length }})</h5>
+    </div>
+
+    <!-- Tasks Grid -->
+    <div class="row g-4 mb-5">
+        {% for task in job.tasks %}
+        <div class="col-xl-6 col-12">
+            <div class="card border-0 shadow-sm rounded-3 bg-white overflow-hidden h-100">
+                <!-- Task Header -->
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-dark font-monospace" style="font-size: 0.95rem;">Task #{{ task.id }}</span>
+                    {% if task.state == 1 %}
+                      <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Configuring</span>
+                    {% elif task.state == 2 %}
+                      <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2.5 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Submitted</span>
+                    {% elif task.state == 4 %}
+                      <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Queued</span>
+                    {% elif task.state == 8 %}
+                      <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Running</span>
+                    {% elif task.state == 16 %}
+                      <span class="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Finished</span>
+                    {% elif task.state == 32 %}
+                      <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-2.5 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Failed</span>
+                    {% elif task.state == 64 %}
+                      <span class="badge bg-dark text-white px-2.5 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Canceled</span>
+                    {% elif task.state == 128 %}
+                      <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Waiting</span>
+                    {% elif task.state == 256 %}
+                      <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Deleted</span>
+                    {% else %}
+                      <span class="badge bg-light text-secondary border px-2.5 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Unknown</span>
+                    {% endif %}
+                </div>
+
+                <div class="card-body p-4">
+                    <div class="row g-3 small mb-3">
+                        <div class="col-sm-6">
+                            <span class="text-secondary small fw-semibold">Task Name:</span>
+                            <div class="fw-bold text-dark mt-0.5">{{ task.name }}</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-secondary small fw-semibold">Priority:</span>
+                            <div class="fw-bold text-dark mt-0.5">{{ task.priority }}</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-secondary small fw-semibold">Allocated Nodes/Cores:</span>
+                            <div class="fw-bold text-dark mt-0.5">{{ task.allocated_time|default:"N/A" }}</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-secondary small fw-semibold">Core Bindings IDs:</span>
+                            <div class="font-monospace text-dark mt-0.5">{{ task.allocated_core_ids|join:", "|default:"None" }}</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-secondary small fw-semibold">Start Timestamp:</span>
+                            <div class="font-monospace text-dark mt-0.5">{{ task.start_time|default:"Not started" }}</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <span class="text-secondary small fw-semibold">End Timestamp:</span>
+                            <div class="font-monospace text-dark mt-0.5">{{ task.end_time|default:"Not finished" }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Cluster Node Type info -->
+                    <div class="border-top pt-3 mt-3">
+                        <h6 class="fw-bold text-dark small mb-2"><i class="bi bi-server me-1.5 text-secondary"></i>Cluster Node Type</h6>
+                        <div class="p-3 bg-light rounded-3 border">
+                            <div class="fw-bold text-dark" style="font-size: 0.88rem;">{{ task.node_type.name }} <span class="text-muted font-monospace" style="font-size: 0.75rem;">(ID: {{ task.node_type.id }})</span></div>
+                            <div class="text-secondary small mt-1">{{ task.node_type.description }}</div>
+                        </div>
+                    </div>
+
+                    <!-- Assigned Project metadata -->
+                    <div class="border-top pt-3 mt-3">
+                        <h6 class="fw-bold text-dark small mb-2"><i class="bi bi-folder-fill me-1.5 text-secondary"></i>Associated Project Binding</h6>
+                        <div class="p-3 bg-light rounded-3 border">
+                            <div class="fw-bold text-dark" style="font-size: 0.88rem;">{{ task.node_type.project.name }} <span class="text-muted font-monospace" style="font-size: 0.75rem;">(ID: {{ task.node_type.project.id }})</span></div>
+                            <div class="text-secondary small mt-1">{{ task.node_type.project.description }}</div>
+                            <div class="small mt-2 font-monospace text-secondary" style="font-size: 0.78rem;">Accounting String: <span class="text-dark fw-bold">{{ task.node_type.project.accounting_string }}</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Errors and notes -->
+                    {% if task.error_message or task.reason %}
+                    <div class="border-top pt-3 mt-3">
+                        <h6 class="fw-bold text-danger small mb-2"><i class="bi bi-bug-fill me-1.5"></i>Diagnostics & Failure Reason</h6>
+                        {% if task.error_message %}
+                        <div class="p-2.5 bg-danger-subtle text-danger-emphasis border border-danger-subtle rounded-3 font-monospace small mb-2">{{ task.error_message }}</div>
+                        {% endif %}
+                        {% if task.reason %}
+                        <div class="small text-secondary">Reason: <strong class="text-dark">{{ task.reason }}</strong></div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5 bg-white rounded-3 shadow-sm text-muted">
+                <i class="bi bi-list-task fs-1 mb-2 d-block text-secondary"></i>
+                <p class="mb-0">No active tasks are registered for this job context.</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
 </div>
-
-<style>
-/* Minimal custom CSS for modern enhancements */
-.card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-}
-
-.btn-outline-light {
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.btn-outline-light:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-
-.badge {
-  padding: 0.5em 1em;
-  border-radius: 0.5rem;
-}
-</style>
-
 {% endblock %}

@@ -1,91 +1,139 @@
 {% extends "base.html" %}
 
-{% block content %}
-<div class="container py-4">
-    <h2 class="mb-4 text-center">Queue groups for {{ project.name }} project</h2>
+{% block title %}Accounting & Queue Groups - {{ project.name }}{% endblock %}
 
-    <div class="mb-4">
-    <form method="POST" id="add-queue-group-form" class="row g-2 align-items-end justify-content-end">
-        {% csrf_token %}
-        <div class="col-md-2">
-            <label for="queueGroupSelect" class="form-label">Queue Group</label>
-            <select class="form-select" id="queueGroupSelect" name="ClusterNodeTypeAggregationId" required>
-                <option value="">Select a queue group</option>
-                {% for group in queue_groups %}
-                    <option value="{{ group.id }}">{{ group.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label">Allocation Amount</label>
-            <div class="input-group">
-                <input type="number" class="form-control" name="AllocationAmount" placeholder="Amount" required>
-                <span class="input-group-text  bg-light text-dark">
-                    {% if project.usage_type == 1 %} NodeHours
-                    {% elif project.usage_type == 2 %} CoreHours
-                    {% endif %}
-                </span>
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'projects_view' %}" class="text-decoration-none text-secondary">Projects</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'project_detail' project.id %}" class="text-decoration-none text-secondary">{{ project.name }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Accounting / Queue Groups</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+
+    <!-- Header Block -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2.5">
+            <i class="bi bi-calculator text-primary fs-3"></i>
+            <div>
+                <h4 class="mb-0 fw-bold text-dark">Queue Groups for {{ project.name }}</h4>
+                <span class="text-muted small">Manage node and core hour resource allocations for this project</span>
             </div>
         </div>
+        <a href="{% url 'project_detail' project.id %}?tab=accounting" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
+            <i class="bi bi-arrow-left me-1.5"></i>Back to Project
+        </a>
+    </div>
 
-
-        <input type="hidden" name="ProjectId" value="{{ project_id }}">
-        <input type="hidden" name="action" value="assign-queue-group-to-project">
-        <div class="col-md-1">
-            <button type="submit" class="btn btn-primary w-100">Assign</button>
+    <!-- Assign Queue Group Form Card -->
+    <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+            <i class="bi bi-plus-lg text-success"></i>
+            <h5 class="h6 mb-0 fw-bold text-dark">Assign Queue Group to Project</h5>
         </div>
-    </form>
-</div>
+        <div class="card-body p-4">
+            <form method="POST" id="add-queue-group-form" class="row g-3 align-items-end">
+                {% csrf_token %}
+                <input type="hidden" name="ProjectId" value="{{ project_id }}">
+                <input type="hidden" name="action" value="assign-queue-group-to-project">
+                
+                <div class="col-md-6 col-lg-5">
+                    <label for="queueGroupSelect" class="form-label small fw-bold text-secondary text-uppercase">Queue Group</label>
+                    <select class="form-select border-secondary-subtle py-2 rounded-3" id="queueGroupSelect" name="ClusterNodeTypeAggregationId" required>
+                        <option value="" disabled selected>Select a queue group...</option>
+                        {% for group in queue_groups %}
+                            <option value="{{ group.id }}">{{ group.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6 col-lg-5">
+                    <label class="form-label small fw-bold text-secondary text-uppercase">Allocation Amount</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control border-secondary-subtle py-2 rounded-start-3" name="AllocationAmount" placeholder="e.g. 5000" min="1" required>
+                        <span class="input-group-text bg-light text-secondary border-secondary-subtle font-monospace px-3 rounded-end-3" style="font-size: 0.85rem;">
+                            {% if project.usage_type == 1 %} NodeHours
+                            {% elif project.usage_type == 2 %} CoreHours
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+                <div class="col-md-12 col-lg-2">
+                    <button type="submit" class="btn btn-primary fw-bold w-100 py-2 rounded-3 shadow-sm">
+                        <i class="bi bi-plus-lg me-1"></i>Assign Group
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-
-    <div class="row">
+    <!-- Active Allocations Cards -->
+    <h5 class="h6 fw-bold text-secondary text-uppercase mb-3 mt-4">Active Queue Group Mappings</h5>
+    
+    <div class="row g-4">
         {% for p_agg in project_aggregations %}
-        <div class="col-md-6">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <strong>{{ p_agg.group.name }}</strong>
-                    <span class="badge bg-secondary">{{ p_agg.project.name }}</span>
-                    <span class="badge bg-dark">{{ p_agg.allocation_amount }} {% if p_agg.project.usage_type == 1 %} NodeHours {% elif p_agg.project.usage_type == 2 %} CoreHours {% endif %}</span>
-                    <form method="POST" id="" class="row g-2 align-items-end justify-content-end">
-                        {% csrf_token %}
-                         <input type="hidden" name="MappingId" value="{{ p_agg.cluster_node_type_aggregation_id }}">
+        <div class="col-xl-6 col-12">
+            <div class="card border-0 shadow-sm rounded-3 bg-white overflow-hidden h-100">
+                <!-- Card Header -->
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-folder-symlink text-primary fs-5"></i>
+                        <h5 class="h6 mb-0 fw-bold text-dark">{{ p_agg.group.name }}</h5>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-light text-dark border px-2.5 py-1.5 font-monospace" style="font-size: 0.75rem;">
+                            <i class="bi bi-clock me-1 text-secondary"></i>
+                            <strong>{{ p_agg.allocation_amount }}</strong> 
+                            {% if p_agg.project.usage_type == 1 %}NodeHours{% elif p_agg.project.usage_type == 2 %}CoreHours{% endif %}
+                        </span>
+                        <form method="POST" class="m-0 p-0">
+                            {% csrf_token %}
+                            <input type="hidden" name="MappingId" value="{{ p_agg.cluster_node_type_aggregation_id }}">
                             <input type="hidden" name="action" value="unassign_queue_group_from_project">
                             <input type="hidden" name="ProjectId" value="{{ project_id }}">
-                            <button type="submit" class="btn btn-danger btn-sm">Unassign</button>
-                    </form>
-                </div>
-                <div class="card-body p-0">
-                    <div class="card-header  align-items-center">
-                      {% for queue in  p_agg.queues %}
-                          <span class="badge rounded-pill bg-primary mr-1">{{ queue.name }}</span>
-
-                      {% endfor %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger px-2.5 rounded-3" onclick="return confirm('Are you sure you want to unassign queue group {{ p_agg.group.name }}?');">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
                     </div>
                 </div>
 
+                <!-- Queues Sub-Header -->
+                <div class="bg-light py-2 px-3 border-bottom">
+                    <div class="d-flex flex-wrap gap-1.5 align-items-center">
+                        <span class="text-secondary small fw-bold me-1">Queues:</span>
+                        {% for queue in p_agg.queues %}
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.72rem; padding: 0.25rem 0.6rem;">{{ queue.name }}</span>
+                        {% empty %}
+                            <span class="text-muted small italic">No queues in this group</span>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Accountings Table -->
                 <div class="card-body p-0">
                     {% if p_agg.group.accountings %}
                     <div class="table-responsive">
-                        <table class="table table-sm table-striped mb-0">
-                            <thead class="table-light">
+                        <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                            <thead class="table-light text-secondary small text-uppercase">
                                 <tr>
-                                    <th>Formula</th>
-                                    <th>Validity From</th>
-                                    <th>Validity To</th>
-                                    <th>Status</th>
+                                    <th class="ps-3" style="width: 45%;">Formula</th>
+                                    <th style="width: 20%;">Valid From</th>
+                                    <th style="width: 20%;">Valid To</th>
+                                    <th class="text-end pe-3" style="width: 15%;">Status</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for accounting in p_agg.group.accountings %}
                                 <tr>
-                                    <td>{{ accounting.formula }}</td>
-                                    <td>{% if accounting.validity_from %}{{ accounting.validity_from }}{% else %}—{% endif %}</td>
-                                    <td>{% if accounting.validity_to %}{{ accounting.validity_to }}{% else %}—{% endif %}</td>
-                                    <td>
+                                    <td class="ps-3 font-monospace text-dark">{{ accounting.formula }}</td>
+                                    <td class="text-secondary font-monospace">{% if accounting.validity_from %}{{ accounting.validity_from|date:"d.m.Y H:i" }}{% else %}—{% endif %}</td>
+                                    <td class="text-secondary font-monospace">{% if accounting.validity_to %}{{ accounting.validity_to|date:"d.m.Y H:i" }}{% else %}—{% endif %}</td>
+                                    <td class="text-end pe-3">
                                         {% if accounting.is_active %}
-                                            <span class="badge bg-success">Active</span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Active</span>
                                         {% else %}
-                                            <span class="badge bg-secondary">Inactive</span>
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Inactive</span>
                                         {% endif %}
                                     </td>
                                 </tr>
@@ -94,14 +142,24 @@
                         </table>
                     </div>
                     {% else %}
-                        <p class="p-3 text-center mb-0">No accountings</p>
+                        <div class="text-center py-4 text-muted">
+                            <i class="bi bi-journal-code d-block mb-1 fs-4 text-secondary"></i>
+                            <span class="small">No active accounting rules for this queue group.</span>
+                        </div>
                     {% endif %}
                 </div>
             </div>
         </div>
         {% empty %}
-            <p class="text-center">No project aggregations available.</p>
+        <div class="col-12">
+            <div class="text-center py-5 bg-white rounded-3 shadow-sm text-muted">
+                <i class="bi bi-calculator fs-1 mb-2 d-block text-secondary"></i>
+                <p class="mb-0">No active queue group assignments for this project.</p>
+                <p class="small text-secondary mt-1">Use the form above to assign a queue group allocation.</p>
+            </div>
+        </div>
         {% endfor %}
     </div>
+
 </div>
 {% endblock %}

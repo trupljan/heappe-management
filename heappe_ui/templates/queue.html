@@ -1,378 +1,172 @@
 {% extends "base.html" %}
 
-{% block title %}{{ node_type.name }}{% endblock %}
+{% block title %}{{ node_type.name|default:"Create Queue" }}{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'cluster_list' %}" class="text-decoration-none text-secondary">Clusters</a></li>
+    {% if cluster %}
+    <li class="breadcrumb-item"><a href="{% url 'cluster_detail' cluster.id %}" class="text-decoration-none text-secondary">{{ cluster.name }}</a></li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">{{ node_type.name|default:"Create Queue" }}</li>
+{% endblock %}
 
 {% block content %}
-<h1 class="mb-4 text-center">{{ node_type.name }}</h1>
-
-<div class="card mb-4 w-75 mx-auto shadow-sm">
-    <div class="card-header d-flex align-items-center">
-        <strong>Queue Information</strong>
-        <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
-    </div>
-
-    <div class="card-body">
-
-    {% if not filetransfer_methods %}
-    <div class="d-flex justify-content-center">
-                  <div class="alert alert-warning text-center w-75" role="alert">
-                    You need to add FileTransfer Method in the cluster detail management screen before managing queue.
-                  </div>
-                </div>
-    {% endif %}
-
-        {% if filetransfer_methods %}
-
-
-        <form method="post">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="update_queue">
-            <div class="row g-3">
-
-                <div class="col-md-2">
-                    <label class="form-label">Id</label>
-                    <input type="number" class="form-control" name="Id" value="{{ node_type.id }}" readonly disabled>
-                </div>
-
-                <div class="col-md-3">
-                    <label class="form-label">Name</label>
-                    <input type="text" class="form-control" name="Name" value="{{ node_type.name }}">
-                </div>
-
-                <div class="col-md-7">
-                    <label class="form-label">Description</label>
-                    <input type="text" class="form-control" name="Description" value="{{ node_type.description }}">
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label">Number Of Nodes</label>
-                    <input type="number" class="form-control" name="NumberOfNodes" value="{{ node_type.number_of_nodes }}">
-                </div>
-
-                <div class="col-md-2">
-                    <label class="form-label">Cores Per Node/GPU Count in one node</label>
-                    <input type="number" class="form-control" name="CoresPerNode" value="{{ node_type.cores_per_node }}">
-                </div>
-
-                <div class="col-md-3">
-                    <label class="form-label">Max Walltime</label>
-                    <input type="number" class="form-control" name="MaxWalltime" value="{{ node_type.max_walltime }}">
-                </div>
-
-                {% if cluster %}
-                <div class="col-md-5">
-                    <label class="form-label">Cluster</label>
-                    <input type="hidden" class="form-control" name="ClusterId" value="{{ cluster.id }}" readonly disabled>
-                    <input type="text" class="form-control" name="Cluster" value="{{ cluster.name }}" readonly disabled>
-                </div>
-                {% endif %}
-
-                <div class="col-md-4">
-                    <label class="form-label">Queue</label>
-                    <input type="text" class="form-control" name="Queue" value="{{ node_type.queue }}">
-                </div>
-
-                 {% if True %}
-                <div class="col-md-4">
-                    <label class="form-label">Quality Of Service</label>
-                    <input type="text" class="form-control" name="QualityOfService" value="{{ node_type.quality_of_service }}">
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label">Cluster Allocation Name</label>
-                    <input type="text" class="form-control" name="ClusterAllocationName" value="{{ node_type.cluster_allocation_name }}">
-                </div>
-                {% endif %}
-
-                <!-- filetransfer_methods select -->
-                <div class="col-md-4">
-                    <label for="fileTransferSelect" class="form-label">File Transfer Method</label>
-                    <select id="fileTransferSelect" name="FileTransferMethodId" class="form-select">
-                        <option value="" disabled>Select File Transfer Method</option>
-                        {% for ft in filetransfer_methods %}
-                            <option value="{{ ft.id }}" {% if node_type.file_transfer_method_id == ft.id %}selected{% endif %}>{{ ft.server_hostname }}{% if ft.port %}:{{ ft.port }}{% endif %} ({{ ft.protocol_name }})</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-
-
-                {% if True %}
-               <div class="col-md-4">
-                    <label class="form-label">Queue Group</label>
-                    <select id="groupId" name="ClusterNodeTypeAggregationId" class="form-select">
-                        <option value="" {% if not node_type.cluster_node_type_aggregation.id %}selected{% endif %} disabled>
-                            Select Queue Group
-                        </option>
-
-                        {% for group in queue_groups %}
-                            <option value="{{ group.id }}"
-                                {% if node_type.cluster_node_type_aggregation.id == group.id %}selected{% endif %}>
-                                {{ group.name }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endif %}
-
-            <div class="mt-4 d-flex justify-content-between">
-                <input type="hidden" name="action" value="{% if node_type %}update_queue{% else %}create_queue{% endif %}">
-
-                {% if node_type != None %}
-                    <button type="submit" class="btn btn-primary">Update Queue</button>
-                {% else %}
-                    <button type="submit" class="btn btn-success">Create Queue</button>
-                {% endif %}
-                    {% endif %}
-                <button type="button" class="btn btn-secondary" onclick="history.back()">Back</button>
+<div class="container py-2">
+    <div class="card border-0 shadow-sm bg-white mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-list-columns-reverse text-primary fs-5"></i>
+                <h5 class="h6 mb-0 fw-bold text-dark">Queue Information</h5>
             </div>
-        </form>
+            <button class="btn btn-xs btn-outline-secondary" onclick="location.reload();" title="Reload settings">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+
+        <div class="card-body p-4">
+            {% if not filetransfer_methods %}
+                <div class="alert alert-warning border-warning shadow-sm py-2.5 small d-flex align-items-center gap-2 mb-4" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+                    <div>You need to add a File Transfer Method in the cluster configuration before managing queues.</div>
+                </div>
+            {% endif %}
+
+            {% if filetransfer_methods %}
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_queue">
+                <div class="row g-3">
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted fw-semibold">Queue ID</label>
+                        <input type="number" class="form-control form-control-sm bg-light font-monospace" name="Id" value="{{ node_type.id }}" readonly disabled>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted fw-semibold">Name</label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Name" value="{{ node_type.name }}" required>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold">Description</label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Description" value="{{ node_type.description }}">
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold">Number of Nodes</label>
+                        <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="NumberOfNodes" value="{{ node_type.number_of_nodes }}" required>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold">Cores per Node</label>
+                        <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="CoresPerNode" value="{{ node_type.cores_per_node }}" required>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold">Max Walltime (s)</label>
+                        <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="MaxWalltime" value="{{ node_type.max_walltime }}" required>
+                    </div>
+
+                    {% if cluster %}
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold">Cluster</label>
+                        <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+                        <input type="text" class="form-control form-control-sm bg-light font-monospace" value="{{ cluster.name }}" readonly disabled>
+                    </div>
+                    {% endif %}
+
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted fw-semibold">Queue Scheduler Name</label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Queue" value="{{ node_type.queue }}" required>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted fw-semibold">Quality of Service</label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="QualityOfService" value="{{ node_type.quality_of_service }}">
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted fw-semibold">Cluster Allocation Name</label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ClusterAllocationName" value="{{ node_type.cluster_allocation_name }}">
+                    </div>
+
+                    <!-- File Transfer Selection -->
+                    <div class="col-md-6">
+                        <label for="fileTransferSelect" class="form-label small text-muted fw-semibold">File Transfer Method</label>
+                        <select id="fileTransferSelect" name="FileTransferMethodId" class="form-select form-select-sm border-light-subtle bg-white" required>
+                            <option value="" disabled>Select File Transfer Method</option>
+                            {% for ft in filetransfer_methods %}
+                                <option value="{{ ft.id }}" {% if node_type.file_transfer_method_id == ft.id %}selected{% endif %}>{{ ft.server_hostname }}{% if ft.port %}:{{ ft.port }}{% endif %} ({{ ft.protocol_name }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Queue Group Selection -->
+                    <div class="col-md-6">
+                        <label for="groupId" class="form-label small text-muted fw-semibold">Queue Group</label>
+                        <select id="groupId" name="ClusterNodeTypeAggregationId" class="form-select form-select-sm border-light-subtle bg-white" required>
+                            <option value="" {% if not node_type.cluster_node_type_aggregation.id %}selected{% endif %} disabled>Select Queue Group</option>
+                            {% for group in queue_groups %}
+                                <option value="{{ group.id }}" {% if node_type.cluster_node_type_aggregation.id == group.id %}selected{% endif %}>{{ group.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-3 border-top d-flex justify-content-between">
+                    <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold px-3" onclick="history.back()">
+                        <i class="bi bi-arrow-left me-1"></i>Back
+                    </button>
+                    <div>
+                        <input type="hidden" name="action" value="{% if node_type %}update_queue{% else %}create_queue{% endif %}">
+                        {% if node_type != None %}
+                            <button type="submit" class="btn btn-sm btn-primary fw-bold px-4 shadow-sm"><i class="bi bi-check-lg me-1"></i>Update Queue</button>
+                        {% else %}
+                            <button type="submit" class="btn btn-sm btn-success fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i>Create Queue</button>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+            {% endif %}
+        </div>
     </div>
 </div>
 
 <!-- Modal for Creating File Transfer Method -->
-<div class="modal fade" id="createFileTransferModal" tabindex="-1" aria-labelledby="createFileTransferModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
+<div class="modal fade" id="createFileTransferModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="create_file_transfer">
-        <div class="modal-header">
-          <h5 class="modal-title" id="createFileTransferModalLabel">Create New File Transfer Method</h5>
+        <div class="modal-header bg-light py-3">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-plus-lg me-1 text-primary"></i>Create File Transfer Method</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body p-4">
           <div class="mb-3">
-            <label for="ServerHostname" class="form-label">Server Hostname</label>
-            <input type="text" class="form-control" id="ServerHostname" name="ServerHostname" required>
+            <label for="ServerHostname" class="form-label small text-muted fw-semibold">Server Hostname</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="ServerHostname" name="ServerHostname" required placeholder="e.g. data.it4i.cz">
           </div>
           <div class="mb-3">
-            <label for="Protocol" class="form-label">Protocol</label>
-            <select class="form-select" id="Protocol" name="Protocol">
+            <label for="Protocol" class="form-label small text-muted fw-semibold">Protocol</label>
+            <select class="form-select form-select-sm border-light-subtle bg-white" id="Protocol" name="Protocol">
               <option value="SSH" selected>SSH</option>
               <option value="SFTP">SFTP</option>
               <option value="SCP">SCP</option>
             </select>
           </div>
-          <div class="mb-3">
-            <label for="Port" class="form-label">Port</label>
-            <input type="number" class="form-control" id="Port" name="Port" value="22">
+          <div class="mb-2">
+            <label for="Port" class="form-label small text-muted fw-semibold">Port</label>
+            <input type="number" class="form-control form-control-sm border-light-subtle bg-white" id="Port" name="Port" value="22">
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-success">Create</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<!-- Modal for Updating File Transfer Method -->
-<div class="modal fade" id="updateFileTransferModal" tabindex="-1" aria-labelledby="updateFileTransferModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="update_file_transfer">
-        <input type="hidden" name="FileTransferMethodId" value="{{ filetransfer_method.id }}">
-        <div class="modal-header">
-          <h5 class="modal-title" id="updateFileTransferModalLabel">Update File Transfer Method</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label for="updateServerHostname" class="form-label">Server Hostname</label>
-            <input type="text" class="form-control" id="updateServerHostname" name="ServerHostname" value="{{ filetransfer_method.server_hostname }}">
-          </div>
-          <div class="mb-3">
-            <label for="updateProtocol" class="form-label">Protocol</label>
-            <select class="form-select" id="updateProtocol" name="Protocol">
-              <option value="SSH" {% if filetransfer_method.protocol == "SSH" %}selected{% endif %}>SSH</option>
-              <option value="SFTP" {% if filetransfer_method.protocol == "SFTP" %}selected{% endif %}>SFTP</option>
-              <option value="SCP" {% if filetransfer_method.protocol == "SCP" %}selected{% endif %}>SCP</option>
-            </select>
-          </div>
-          <div class="mb-3">
-            <label for="updatePort" class="form-label">Port</label>
-            <input type="number" class="form-control" id="updatePort" name="Port" value="{{ filetransfer_method.port }}">
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Update</button>
+        <div class="modal-footer bg-light border-top">
+          <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-success fw-bold px-3">Create Method</button>
         </div>
       </form>
     </div>
   </div>
 </div>
-
-<!-- Modal for Creating Aggregation -->
-<div class="modal fade" id="createAggregationModal" tabindex="-1" aria-labelledby="createAggregationModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="create_aggregation">
-        <div class="modal-header">
-          <h5 class="modal-title" id="createAggregationModalLabel">Create New Cluster Node Type Aggregation</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label for="AggregationName" class="form-label">Name</label>
-            <input type="text" class="form-control" id="AggregationName" name="AggregationName" required>
-          </div>
-          <div class="mb-3">
-            <label for="AggregationDescription" class="form-label">Description</label>
-            <textarea class="form-control" id="AggregationDescription" name="AggregationDescription" rows="3"></textarea>
-          </div>
-          <div class="mb-3">
-            <label for="AllocationType" class="form-label">Allocation Type</label>
-            <select class="form-select" id="AllocationType" name="AllocationType">
-              <option value="NodeHour" selected>NodeHour</option>
-              <option value="CoreHour">CoreHour</option>
-              <option value="GPU">GPU</option>
-            </select>
-          </div>
-          <div class="row">
-            <div class="col-md-6">
-              <label for="ValidityFrom" class="form-label">Validity From</label>
-              <input type="datetime-local" class="form-control" id="ValidityFrom" name="ValidityFrom">
-            </div>
-            <div class="col-md-6">
-              <label for="ValidityTo" class="form-label">Validity To</label>
-              <input type="datetime-local" class="form-control" id="ValidityTo" name="ValidityTo">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-success">Create</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<!-- Modal for Updating Aggregation -->
-<div class="modal fade" id="updateAggregationModal" tabindex="-1" aria-labelledby="updateAggregationModalLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="update_aggregation">
-        <input type="hidden" name="ClusterNodeTypeAggregationId" value="{{ clusternodetypeaggregation.id }}">
-        <div class="modal-header">
-          <h5 class="modal-title" id="updateAggregationModalLabel">Update Cluster Node Type Aggregation</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label for="updateAggregationName" class="form-label">Name</label>
-            <input type="text" class="form-control" id="updateAggregationName" name="AggregationName" value="{{ clusternodetypeaggregation.name }}">
-          </div>
-          <div class="mb-3">
-            <label for="updateAggregationDescription" class="form-label">Description</label>
-            <textarea class="form-control" id="updateAggregationDescription" name="AggregationDescription" rows="3">{{ clusternodetypeaggregation.description }}</textarea>
-          </div>
-          <div class="mb-3">
-            <label for="updateAllocationType" class="form-label">Allocation Type</label>
-            <select class="form-select" id="updateAllocationType" name="AllocationType">
-              <option value="NodeHour" {% if clusternodetypeaggregation.allocation_type == "NodeHour" %}selected{% endif %}>NodeHour</option>
-              <option value="CoreHour" {% if clusternodetypeaggregation.allocation_type == "CoreHour" %}selected{% endif %}>CoreHour</option>
-              <option value="GPU" {% if clusternodetypeaggregation.allocation_type == "GPU" %}selected{% endif %}>GPU</option>
-            </select>
-          </div>
-          <div class="row">
-            <div class="col-md-6">
-              <label for="updateValidityFrom" class="form-label">Validity From</label>
-              <input type="datetime-local" class="form-control" id="updateValidityFrom" name="ValidityFrom" value="{{ clusternodetypeaggregation.validity_from }}">
-            </div>
-            <div class="col-md-6">
-              <label for="updateValidityTo" class="form-label">Validity To</label>
-              <input type="datetime-local" class="form-control" id="updateValidityTo" name="ValidityTo" value="{{ clusternodetypeaggregation.validity_to }}">
-            </div>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Update</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<script>
-function confirmDeleteFileTransfer() {
-    if (confirm('Are you sure you want to delete this File Transfer Method?')) {
-        var form = document.createElement('form');
-        form.method = 'post';
-        form.innerHTML = `
-            {% csrf_token %}
-            <input type="hidden" name="action" value="delete_file_transfer">
-            <input type="hidden" name="FileTransferMethodId" value="{{ filetransfer_method.id }}">
-        `;
-        document.body.appendChild(form);
-        form.submit();
-    }
-}
-
-function confirmDeleteAggregation() {
-    if (confirm('Are you sure you want to delete this Cluster Node Type Aggregation?')) {
-        var form = document.createElement('form');
-        form.method = 'post';
-        form.innerHTML = `
-            {% csrf_token %}
-            <input type="hidden" name="action" value="delete_aggregation">
-            <input type="hidden" name="ClusterNodeTypeAggregationId" value="{{ clusternodetypeaggregation.id }}">
-        `;
-        document.body.appendChild(form);
-        form.submit();
-    }
-}
-
- document.addEventListener('DOMContentLoaded', function() {
-    const aggregationsData = {
-      {% for agg in all_aggregations %}
-      "{{ agg.id }}": {
-        "id": "{{ agg.id }}",
-        "name": "{{ agg.name|escapejs }}",
-        "description": "{{ agg.description|default:''|escapejs }}",
-        "allocation_type": "{{ agg.allocation_type|default:''|escapejs }}",
-        "validity_from": "{{ agg.validity_from|default:'' }}",
-        "validity_to": "{{ agg.validity_to|default:'' }}"
-      },
-      {% endfor %}
-    };
-
-    const select = document.getElementById('aggregationSelect');
-
-    if (select){
-        select.addEventListener('change', function() {
-            const selectedId = this.value;
-            const detailsDiv = document.getElementById('aggregationDetails');
-
-            if (selectedId && aggregationsData[selectedId]) {
-                const agg = aggregationsData[selectedId];
-                console.log(agg);
-                //get aggregation_id_span
-                document.getElementById('aggregation_id_span').textContent = agg.id;
-                document.getElementById('aggregation_name_span').textContent = agg.name;
-                document.getElementById('aggregation_description_span').textContent = agg.description;
-                document.getElementById('aggregation_allocation_type_span').textContent = agg.allocation_type;
-                document.getElementById('aggregation_validity_from_span').textContent = agg.validity_from;
-                document.getElementById('aggregation_validity_to_span').textContent = agg.validity_to;
-                document.getElementById('aggregation_ClusterNodeTypeAggregationId').value = agg.id;
-                
-            } else {
-
-            }
-        });
-    }});
-
-
-</script>
-
 {% endblock %}

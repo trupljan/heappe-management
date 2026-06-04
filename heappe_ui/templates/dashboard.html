@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active" aria-current="page">Dashboard</li>
+{% endblock %}
+
 {% block content %}
 {% load static %}
 {% load custom_filters %}

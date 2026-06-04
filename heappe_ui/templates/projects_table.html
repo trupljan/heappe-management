@@ -1,95 +1,124 @@
-<div class="card mb-4 w-75 mx-auto shadow-sm">
-      <div class="card-header d-flex align-items-center">
-          <strong>Projects</strong>
-            <!-- reference project (projct assignment to cluster) modal -->
-             <div class="ms-auto">
-                {% if cluster.id %}
-                <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#assignProjectToCluster">Assign Project to Cluster</button>
-                 {% endif %}
-                {% if queue_group %}
-                <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#assignProjectToGroup">Assign Project to Group</button>
-                 {% endif %}
-                <!-- new project button -->
-                <a href="{% url 'project_create' %}" class="btn btn-sm btn-success me-2">New Project</a>
-                <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
-             </div>
-      </div>
-
-      <div class="card-body">
-       {% if projects %}
-        <div class="table-responsive">
-            <table class="table table-striped mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th scope="col">ID</th>
-                        <th scope="col">Name</th>
-                        <th scope="col">PI Email</th>
-                        <th scope="col">Description</th>
-                        <th scope="col">Accounting String</th>
-                        <th scope="col">Start Date</th>
-                        <th scope="col">End Date</th>
-                        <th scope="col">Actions</th>
-                    </tr>
-                    {% for project in projects %}
-                    <!-- table row for each project -->
-                    <tr>
-                        <td>{{ project.id }}</td>
-                        <td>{{ project.name }}</td>
-                        <td>{{ project.PIEmail }}</td>
-                        <td>{{ project.description }}</td>
-                        <td>{{ project.accounting_string }}</td>
-                        <td>{{ project.start_date }}</td>
-                        <td>{{ project.end_date }}</td>
-                        <td>
-                            <a href="{% url 'project_detail' project.id %}" class="btn btn-sm btn-primary">Detail</a>
-                            <a href="{% url 'accounting' project.id %}" class="btn btn-sm btn-secondary me-1">Accounting</a>
-                            {% if cluster.id %}
-                            <form action="{% url 'delete_assignment' project.id %}" method="post" style="display:inline;">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="delete_assignment">
-                                <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
-                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to unassign this project from the cluster?');">Unassign</button>
-                            </form>
-                            {% endif %}
-                        {% if queue_group %}
-                            <form method="post" style="display:inline;">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="unassign_project_to_group">
-                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure you want to unassign this project from the cluster?');">Unassign</button>
-                            </form>
-                            {% endif %}
-                        </td>
-                    </tr>
-                {% endfor %}
-                </thead>
-            </table>
-      </div>
-        {% else %}
-            <p class="mb-0">No projects available.</p>
-        {% endif %}
+<div class="card border-0 shadow-sm bg-white mb-4">
+    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-people text-primary fs-5"></i>
+            <h5 class="h6 mb-0 fw-bold text-dark">Assigned Projects</h5>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            {% if cluster.id %}
+            <button class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#assignProjectToCluster">
+                <i class="bi bi-link-45deg me-1"></i>Assign to Cluster
+            </button>
+            {% endif %}
+            {% if queue_group %}
+            <button class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#assignProjectToGroup">
+                <i class="bi bi-link-45deg me-1"></i>Assign to Group
+            </button>
+            {% endif %}
+            <a href="{% url 'project_create' %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
+                <i class="bi bi-plus-lg me-1"></i>New Project
+            </a>
+            <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
     </div>
 
+    <div class="card-body p-0">
+        {% if projects %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-4" style="width: 8%;">ID</th>
+                        <th style="width: 25%;">Project Details</th>
+                        <th style="width: 25%;">PI & Accounting</th>
+                        <th style="width: 27%;">Project Duration</th>
+                        <th class="text-end pe-4" style="width: 15%;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for project in projects %}
+                    <tr>
+                        <td class="ps-4 font-monospace text-secondary fw-semibold">#{{ project.id }}</td>
+                        <td>
+                            <div class="fw-bold text-dark" style="font-size: 0.9rem;">{{ project.name }}</div>
+                            <div class="text-muted small mt-0.5" style="font-size: 0.78rem;">{{ project.description|default:"No description" }}</div>
+                        </td>
+                        <td>
+                            <div class="small text-dark fw-semibold d-flex align-items-center gap-1.5">
+                                <i class="bi bi-envelope text-muted"></i>{{ project.PIEmail }}
+                            </div>
+                            <div class="text-muted small mt-1 d-flex align-items-center gap-1.5" style="font-size: 0.75rem;">
+                                <i class="bi bi-receipt text-muted"></i>Acct: <code>{{ project.accounting_string|default:"-" }}</code>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="small text-muted d-flex flex-column gap-0.5" style="font-size: 0.78rem;">
+                                <span><i class="bi bi-calendar-play text-muted me-1"></i>Start: <strong>{{ project.start_date }}</strong></span>
+                                <span><i class="bi bi-calendar-stop text-muted me-1"></i>End: <strong>{{ project.end_date }}</strong></span>
+                            </div>
+                        </td>
+                        <td class="text-end pe-4">
+                            <div class="d-flex gap-2 justify-content-end">
+                                <a href="{% url 'project_detail' project.id %}" class="btn btn-sm btn-outline-primary fw-semibold px-2.5">
+                                    <i class="bi bi-pencil me-1"></i>Edit
+                                </a>
+                                <a href="{% url 'accounting' project.id %}" class="btn btn-sm btn-outline-secondary fw-semibold px-2.5" title="Accounting data">
+                                    <i class="bi bi-calculator"></i>
+                                </a>
+                                {% if cluster.id %}
+                                <form action="{% url 'delete_assignment' project.id %}" method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delete_assignment">
+                                    <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger px-2.5" onclick="return confirm('Are you sure you want to unassign this project from the cluster?');" title="Unassign project">
+                                        <i class="bi bi-link-45deg-slash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% if queue_group %}
+                                <form method="post" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="unassign_project_to_group">
+                                    <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger px-2.5" onclick="return confirm('Are you sure you want to unassign this project from the group?');" title="Unassign project">
+                                        <i class="bi bi-link-45deg-slash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-people fs-1 mb-2 d-block text-secondary"></i>
+            <p class="small mb-0">No projects currently assigned.</p>
+        </div>
+        {% endif %}
+    </div>
 </div>
 
-
-
 <!-- Assign Project To Cluster Modal -->
-<div class="modal fade" id="assignProjectToCluster" tabindex="-1" aria-labelledby="assignProjectToClusterLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="assignProjectToClusterLabel">Assign Project to Cluster</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-       <form method="post" action="{% url 'project_assign_to_cluster' %}">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="assign_cluster">
-          <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+<div class="modal fade" id="assignProjectToCluster" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form method="post" action="{% url 'project_assign_to_cluster' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="assign_cluster">
+        <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+        <div class="modal-header bg-light py-3">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-link-45deg me-1 text-primary"></i>Assign Project to Cluster</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-4">
           <div class="mb-3">
-            <label for="projectSelect" class="form-label">Select Project</label>
-            <select class="form-select" id="projectSelect" name="ProjectId" required>
+            <label for="projectSelect" class="form-label small text-muted fw-semibold">Select Project</label>
+            <select class="form-select form-select-sm border-light-subtle bg-white" id="projectSelect" name="ProjectId" required>
               <option value="" disabled selected>Select a project</option>
               {% for project in projectsForCurrentUser %}
                 <option value="{{ project.id }}">{{ project.name }}</option>
@@ -97,86 +126,85 @@
             </select>
           </div>
           <div class="mb-3">
-            <label for="ScratchStoragePath" class="form-label">Scratch Storage Path</label>
-            <input type="text" class="form-control" id="ScratchStoragePath" name="ScratchStoragePath" placeholder="Enter Scratch Storage Path">
+            <label for="ScratchStoragePath" class="form-label small text-muted fw-semibold">Scratch Storage Path</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="ScratchStoragePath" name="ScratchStoragePath" placeholder="/mnt/scratch/project...">
           </div>
-         <div class="mb-3">
-            <label for="ProjectStoragePath" class="form-label">Project Storage Path</label>
-            <input type="text" class="form-control" id="ProjectStoragePath" name="ProjectStoragePath" placeholder="Enter Project Storage Path">
+          <div class="mb-2">
+            <label for="ProjectStoragePath" class="form-label small text-muted fw-semibold">Project Storage Path</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="ProjectStoragePath" name="ProjectStoragePath" placeholder="/mnt/project/project...">
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="submit" class="btn btn-primary">Assign Project</button>
-          </div>
-        </form>
-      </div>
+        </div>
+        <div class="modal-footer bg-light border-top">
+          <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Assign Project</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
 
-
-
 <!-- Assign Project To Group Modal -->
-<div class="modal fade" id="assignProjectToGroup" tabindex="-1" aria-labelledby="assignProjectToGroupLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="assignProjectToGroupLabel">Assign Project to Queue Group</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <form method="post">
-          {% csrf_token %}
-          <input type="hidden" name="action" value="assign_project_to_group">
-          <input type="hidden" name="GroupId" value="{{ queue_group.id }}">
+<div class="modal fade" id="assignProjectToGroup" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="assign_project_to_group">
+        <input type="hidden" name="GroupId" value="{{ queue_group.id }}">
+        <div class="modal-header bg-light py-3">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-link-45deg me-1 text-primary"></i>Assign Project to Queue Group</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-4">
           <div class="mb-3">
-            <label for="projectSelectGroup" class="form-label">Select Project</label>
-            <select class="form-select" id="projectSelectGroup" name="ProjectId" required>
+            <label for="projectSelectGroup" class="form-label small text-muted fw-semibold">Select Project</label>
+            <select class="form-select form-select-sm border-light-subtle bg-white" id="projectSelectGroup" name="ProjectId" required>
               <option value="" disabled selected>Select a project</option>
               {% for project in not_assigned_projects %}
                 <option value="{{ project.id }}" data-usage-type="{{ project.usage_type }}">{{ project.name }}</option>
               {% endfor %}
             </select>
           </div>
-          <div class="mb-3">
-            <label for="AllocationAmount" class="form-label">Allocation Amount</label>
-            <div class="input-group">
-              <input type="text" class="form-control" id="AllocationAmount" name="AllocationAmount" placeholder="Enter allocation amount">
-              <span class="input-group-text bg-light text-dark" id="usageTypeLabel">Select a project</span>
+          <div class="mb-2">
+            <label for="AllocationAmount" class="form-label small text-muted fw-semibold">Allocation Amount</label>
+            <div class="input-group input-group-sm">
+              <input type="text" class="form-control border-light-subtle bg-white" id="AllocationAmount" name="AllocationAmount" placeholder="Enter allocation amount" required>
+              <span class="input-group-text bg-light text-muted border-light-subtle" id="usageTypeLabel">Select a project</span>
             </div>
           </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            <button type="submit" class="btn btn-primary">Assign Project</button>
-          </div>
-        </form>
-      </div>
+        </div>
+        <div class="modal-footer bg-light border-top">
+          <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Assign Project</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
 
 <script>
-  document.getElementById('projectSelectGroup').addEventListener('change', function() {
-    const selectedOption = this.options[this.selectedIndex];
-    const usageType = selectedOption.getAttribute('data-usage-type');
-    const usageTypeLabel = document.getElementById('usageTypeLabel');
-    const allocationInput = document.getElementById('AllocationAmount');
+  document.addEventListener('DOMContentLoaded', function() {
+    const select = document.getElementById('projectSelectGroup');
+    if (select) {
+        select.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const usageType = selectedOption.getAttribute('data-usage-type');
+            const usageTypeLabel = document.getElementById('usageTypeLabel');
+            const allocationInput = document.getElementById('AllocationAmount');
 
-    if (usageType === '1') {
-      usageTypeLabel.textContent = 'NodeHours';
-      allocationInput.placeholder = 'Enter allocation in NodeHours';
-    } else if (usageType === '2') {
-      usageTypeLabel.textContent = 'CoreHours';
-      allocationInput.placeholder = 'Enter allocation in CoreHours';
-    } else {
-      usageTypeLabel.textContent = 'Select a project';
-      allocationInput.placeholder = 'Enter allocation amount';
+            if (usageType === '1') {
+              usageTypeLabel.textContent = 'NodeHours';
+              allocationInput.placeholder = 'Enter allocation in NodeHours';
+            } else if (usageType === '2') {
+              usageTypeLabel.textContent = 'CoreHours';
+              allocationInput.placeholder = 'Enter allocation in CoreHours';
+            } else {
+              usageTypeLabel.textContent = 'Select a project';
+              allocationInput.placeholder = 'Enter allocation amount';
+            }
+
+            allocationInput.value = '';
+        });
     }
-
-    allocationInput.value = ''; // Reset the input field
   });
 </script>
-      </div>
-    </div>
-  </div>
-</div>

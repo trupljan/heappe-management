@@ -10,16 +10,42 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}HEAppE Admin Panel{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        .navbar-brand { font-size: 1.4rem; }
-        .nav-link { font-weight: 500; }
-        .nav-white { color: #ffffff !important; }
-        .nav-link:hover { color: #ffc107 !important; }
-        .dropdown-menu { border: none; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15); }
-
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .nav-link {
+            transition: all 0.2s ease;
+            font-weight: 500;
+        }
+        .nav-link:hover {
+            color: #0d6efd !important;
+            background-color: #f8f9fa;
+        }
+        .hover-bg-light:hover {
+            background-color: #f8f9fa;
+        }
+        .transition-hover {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .transition-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08) !important;
+        }
+        .changelog-box {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 12px;
+            font-size: 0.85rem;
+            border: 1px solid #e9ecef;
+        }
         .animate-pulse {
             animation: pulse-yellow 2s infinite;
         }
@@ -28,519 +54,657 @@
             70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
             100% { box-shadow: 0 0 0 0px rgba(255, 193, 7, 0); }
         }
-
-        .changelog-box {
-            max-height: 200px;
-            overflow-y: auto;
-            background: #f8f9fa;
-            border-radius: 4px;
-            padding: 10px;
-            font-size: 0.85rem;
-            border: 1px solid #dee2e6;
+        /* Custom scrollbar for sidebar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
         }
-        body {
-            padding-bottom: 45px;
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #dee2e6;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ced4da;
         }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-xl navbar-dark bg-primary shadow py-2">
-        <div class="container-fluid">
-            <a class="navbar-brand fw-bold d-flex align-items-center me-4" href="{% url 'dashboard_view' %}">
-                <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" class="me-2" style="height: 30px;">
-                <span>HEAppE Admin Panel</span>
-            </a>
 
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarContent">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <div class="collapse navbar-collapse" id="navbarContent">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0 align-items-center">
-                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center text-nowrap" href="{% url 'dashboard_view' %}"><i class="bi bi-house me-1"></i> Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center text-nowrap" href="{% url 'manage_project_adaptor_users_base' %}"><i class="bi bi-person me-1"></i> User Management</a></li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center text-nowrap" href="#" id="infraDrop" data-bs-toggle="dropdown"><i class="bi bi-hdd-stack me-1"></i> Infrastructure</a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{% url 'cluster_list' %}">Clusters</a></li>
-                            <li><a class="dropdown-item" href="{% url 'queues_view' %}">Queues</a></li>
-                            <li><a class="dropdown-item" href="{% url 'queue_groups' %}">Queue Groups</a></li>
-                        </ul>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center position-relative text-nowrap" href="#" id="sysDrop" data-bs-toggle="dropdown">
-                            <i class="bi bi-graph-up me-1"></i> System Management
-                            {% if middleware_update_available %}
-                                <span class="position-absolute top-0 start-100 translate-middle p-1 bg-warning border border-light rounded-circle animate-pulse" style="margin-top: 5px; margin-left: -10px;" title="Middleware update available!"></span>
-                            {% endif %}
+<div class="d-flex min-vh-100 flex-column flex-lg-row">
+    {% block sidebar %}
+    <!-- Desktop Left Sidebar -->
+    <aside id="desktopSidebar" class="bg-white border-end d-none d-lg-flex flex-column" style="width: 260px; min-width: 260px; position: sticky; top: 0; height: 100vh; z-index: 1020;">
+        <div class="p-3.5 border-bottom d-flex align-items-center gap-2 py-3 px-4">
+            <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" style="height: 28px;">
+            <span class="fw-bold text-dark fs-5 tracking-tight">HEAppE Admin</span>
+        </div>
+        
+        <!-- Navigation Menu -->
+        <div class="flex-grow-1 overflow-y-auto p-3">
+            {% if user.is_authenticated %}
+                <ul class="nav flex-column gap-1">
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if request.resolver_match.url_name == 'dashboard_view' %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'dashboard_view' %}">
+                            <i class="bi bi-house fs-5"></i><span>Dashboard</span>
                         </a>
-                        <ul class="dropdown-menu">
-                            {% if request.session.chosen_instance %}
-                             <li><a class="dropdown-item text-nowrap" href="{% url 'deploy_view' request.session.chosen_instance %}">Application Control</a></li>
-                             <li>
-                                 <a class="dropdown-item d-flex justify-content-between align-items-center text-nowrap" href="{% url 'deploy_view' request.session.chosen_instance %}">
-                                     <span><i class="bi bi-arrow-repeat me-1"></i> Update Middleware</span>
-                                     {% if middleware_update_available %}
-                                         <span class="badge bg-warning text-dark ms-2 animate-pulse" title="Update Available: {{ middleware_latest_version }}"><i class="bi bi-exclamation-triangle-fill"></i></span>
-                                     {% endif %}
-                                 </a>
-                             </li>
-                            {% endif %}
-                            <li><a class="dropdown-item text-nowrap" href="{% url 'logs' %}">Logs</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-nowrap" href="#" data-bs-toggle="modal" data-bs-target="#updateModal"><i class="bi bi-arrow-up-circle me-1"></i> System Update</a></li>
-                        </ul>
                     </li>
-                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center text-nowrap" href="{% url 'deploy_view' %}"><i class="bi bi-cloud-arrow-up me-1"></i> Deploy</a></li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'user' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'manage_project_adaptor_users_base' %}">
+                            <i class="bi bi-people fs-5"></i><span>User Management</span>
+                        </a>
+                    </li>
+                    
+                    <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem; letter-spacing: 0.05em;">Infrastructure</li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'cluster' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'cluster_list' %}">
+                            <i class="bi bi-server fs-5"></i><span>Clusters</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'queue' in request.path and 'group' not in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'queues_view' %}">
+                            <i class="bi bi-list-columns-reverse fs-5"></i><span>Queues</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'queue_group' in request.path or 'queue-groups' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'queue_groups' %}">
+                            <i class="bi bi-tags fs-5"></i><span>Queue Groups</span>
+                        </a>
+                    </li>
+
+                    <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem; letter-spacing: 0.05em;">System</li>
+                    {% if request.session.chosen_instance %}
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and request.session.chosen_instance in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'deploy_view' request.session.chosen_instance %}">
+                            <i class="bi bi-play-circle fs-5"></i><span>App Control</span>
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'logs' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'logs' %}">
+                            <i class="bi bi-file-earmark-text fs-5"></i><span>Logs</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded text-secondary hover-bg-light" href="#" data-bs-toggle="modal" data-bs-target="#updateModal">
+                            <i class="bi bi-arrow-up-circle fs-5"></i><span>System Update</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and request.session.chosen_instance not in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'deploy_view' %}">
+                            <i class="bi bi-cloud-arrow-up fs-5"></i><span>Deploy Tool</span>
+                        </a>
+                    </li>
                 </ul>
+            {% else %}
+                <div class="text-center py-5">
+                    <p class="text-muted small">Log in to manage HEAppE</p>
+                </div>
+            {% endif %}
+        </div>
+        
+        <!-- Sidebar Bottom Status -->
+        {% if user.is_authenticated and request.session.chosen_instance %}
+        <div class="p-3 border-top bg-light">
+            <div class="d-flex flex-column gap-2 small">
+                <div class="d-flex align-items-center justify-content-between">
+                    <span class="text-secondary fw-semibold">Instance:</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 fw-bold">{{ request.session.chosen_instance }}</span>
+                </div>
+                <div class="text-truncate d-flex align-items-center justify-content-between">
+                    <span class="text-secondary fw-semibold">Host:</span>
+                    <code class="small font-monospace text-dark bg-white border px-1.5 py-0.5 rounded text-truncate" style="max-width: 140px;">{{ request.session.heappe_host }}</code>
+                </div>
+                {% if middleware_deployed_version %}
+                <div class="d-flex align-items-center justify-content-between">
+                    <span class="text-secondary fw-semibold">Middleware:</span>
+                    <span class="badge bg-light text-secondary border font-monospace px-2">v{{ middleware_deployed_version }}</span>
+                </div>
+                {% endif %}
+                {% if middleware_update_available %}
+                <div class="alert alert-warning py-1 px-2 border-warning mb-0 animate-pulse mt-1" style="font-size: 0.7rem;">
+                    <i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>Update to <code>v{{ middleware_latest_version }}</code>
+                </div>
+                {% endif %}
+                <a href="{% url 'instance_credentials_list' %}" class="btn btn-xs btn-outline-primary w-100 mt-2 py-1 fw-bold" style="font-size: 0.75rem;">
+                    <i class="bi bi-arrow-left-right me-1"></i>Switch Instance
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </aside>
 
-                <div class="d-flex align-items-center gap-2">
-                    {% if user.is_authenticated %}
-                        {% if request.session.chosen_instance %}
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-warning dropdown-toggle px-3 text-nowrap d-flex align-items-center gap-1" type="button" id="cacheDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="bi bi-arrow-clockwise"></i> Sync Cache
-                                    <span class="badge bg-warning text-dark d-none" id="main-cache-timer" style="font-size: 0.75rem;"></span>
-                                </button>
-                                <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="cacheDropdown" style="min-width: 260px;">
-                                    <li class="px-3 py-2 border-bottom bg-light d-flex justify-content-between align-items-center">
-                                        <span class="fw-bold small text-muted"><i class="bi bi-database-fill-check me-1"></i>Cache Status</span>
-                                        <button class="btn btn-sm btn-outline-warning py-0 px-2 fw-semibold text-nowrap" style="font-size: 0.75rem;" onclick="refreshCache()">Sync Now</button>
-                                    </li>
-                                    {% if cache_status %}
-                                        {% for label, status in cache_status.items %}
-                                            <li class="px-3 py-1.5 d-flex justify-content-between align-items-center small">
-                                                <span class="text-secondary text-nowrap">{{ label }}</span>
-                                                {% if status.is_live %}
-                                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 text-nowrap">Live</span>
-                                                {% else %}
-                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 text-nowrap cache-timer-badge" data-remaining="{{ status.remaining }}">
-                                                        {{ status.age_str }}
-                                                    </span>
-                                                {% endif %}
-                                            </li>
-                                        {% endfor %}
-                                    {% else %}
-                                        <li class="px-3 py-2 text-muted small text-center text-nowrap">No active caches</li>
-                                    {% endif %}
-                                </ul>
-                            </div>
-                            <a class="btn btn-sm btn-outline-light px-3 text-nowrap" href="{% url 'reconnect_view' %}">Reconnect {{ request.session.chosen_instance }}</a>
-                        {% endif %}
-
-                        <div class="dropdown ms-2">
-                            <a class="nav-link nav-white dropdown-toggle d-flex align-items-center px-2 text-nowrap" href="#" id="userDrop" data-bs-toggle="dropdown">
-                                <i class="bi bi-person-circle fs-5 me-1"></i><span>{{ user.username }}</span>
+    <!-- Offcanvas Mobile Drawer -->
+    <div class="offcanvas offcanvas-start bg-white d-lg-none" tabindex="-1" id="mobileSidebar" style="width: 260px;">
+        <div class="offcanvas-header border-bottom py-3 px-4">
+            <div class="d-flex align-items-center gap-2">
+                <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" style="height: 28px;">
+                <span class="fw-bold text-dark fs-5">HEAppE Admin</span>
+            </div>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body p-3 d-flex flex-column justify-content-between">
+            <div class="flex-grow-1 overflow-y-auto">
+                {% if user.is_authenticated %}
+                    <ul class="nav flex-column gap-1">
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if request.resolver_match.url_name == 'dashboard_view' %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'dashboard_view' %}">
+                                <i class="bi bi-house fs-5"></i><span>Dashboard</span>
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end shadow">
-                                <li><a class="dropdown-item" href="{% url 'profile_view' %}">Profile</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li class="px-3 py-1">
-                                    <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="btn btn-sm btn-outline-danger w-100">Logout</button></form>
+                        </li>
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'user' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'manage_project_adaptor_users_base' %}">
+                                <i class="bi bi-people fs-5"></i><span>User Management</span>
+                            </a>
+                        </li>
+                        
+                        <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem;">Infrastructure</li>
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'cluster' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'cluster_list' %}">
+                                <i class="bi bi-server fs-5"></i><span>Clusters</span>
+                            </a>
+                        </li>
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'queue' in request.path and 'group' not in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'queues_view' %}">
+                                <i class="bi bi-list-columns-reverse fs-5"></i><span>Queues</span>
+                            </a>
+                        </li>
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'queue_group' in request.path or 'queue-groups' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'queue_groups' %}">
+                                <i class="bi bi-tags fs-5"></i><span>Queue Groups</span>
+                            </a>
+                        </li>
+
+                        <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem;">System</li>
+                        {% if request.session.chosen_instance %}
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and request.session.chosen_instance in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'deploy_view' request.session.chosen_instance %}">
+                                <i class="bi bi-play-circle fs-5"></i><span>App Control</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'logs' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'logs' %}">
+                                <i class="bi bi-file-earmark-text fs-5"></i><span>Logs</span>
+                            </a>
+                        </li>
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded text-secondary hover-bg-light" href="#" data-bs-toggle="modal" data-bs-target="#updateModal">
+                                <i class="bi bi-arrow-up-circle fs-5"></i><span>System Update</span>
+                            </a>
+                        </li>
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and request.session.chosen_instance not in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'deploy_view' %}">
+                                <i class="bi bi-cloud-arrow-up fs-5"></i><span>Deploy Tool</span>
+                            </a>
+                        </li>
+                    </ul>
+                {% endif %}
+            </div>
+            
+            {% if user.is_authenticated and request.session.chosen_instance %}
+            <div class="p-3 bg-light rounded mt-3">
+                <div class="d-flex flex-column gap-2 small">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="text-secondary fw-semibold">Instance:</span>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 fw-bold">{{ request.session.chosen_instance }}</span>
+                    </div>
+                    <div class="text-truncate d-flex align-items-center justify-content-between">
+                        <span class="text-secondary fw-semibold">Host:</span>
+                        <code class="small font-monospace text-dark bg-white border px-1.5 py-0.5 rounded text-truncate" style="max-width: 140px;">{{ request.session.heappe_host }}</code>
+                    </div>
+                    <a href="{% url 'instance_credentials_list' %}" class="btn btn-xs btn-outline-primary w-100 mt-2 py-1 fw-bold" style="font-size: 0.75rem;" data-bs-dismiss="offcanvas">
+                        <i class="bi bi-arrow-left-right me-1"></i>Switch Instance
+                    </a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endblock %}
+
+    <!-- Main Workspace Area -->
+    <div class="flex-grow-1 d-flex flex-column min-width-0">
+        <!-- Top Workspace Header -->
+        {% block header %}
+        <header class="navbar navbar-expand bg-white border-bottom py-2.5 px-4 sticky-top shadow-sm" style="z-index: 1010; min-height: 56px;">
+            <!-- Mobile Toggle Hamburger -->
+            <button class="btn btn-sm btn-outline-secondary d-lg-none me-3" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileSidebar">
+                <i class="bi bi-list fs-5"></i>
+            </button>
+            
+            <!-- Breadcrumbs Nav (Desktop only) -->
+            <nav aria-label="breadcrumb" class="d-none d-md-block me-auto">
+                <ol class="breadcrumb mb-0 align-items-center" style="font-size: 0.85rem;">
+                    {% block breadcrumbs %}
+                        <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary fw-semibold">Dashboard</a></li>
+                    {% endblock %}
+                </ol>
+            </nav>
+            
+            <!-- Right Actions Bar -->
+            <div class="d-flex align-items-center gap-3 ms-auto">
+                {% if user.is_authenticated %}
+                    {% if request.session.chosen_instance %}
+                        <!-- Cache Dropdown -->
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle px-3 text-nowrap d-flex align-items-center gap-1.5" type="button" id="cacheDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                <span class="d-none d-sm-inline">Sync Cache</span>
+                                <span class="badge bg-warning text-dark d-none" id="main-cache-timer" style="font-size: 0.75rem;"></span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2" aria-labelledby="cacheDropdown" style="min-width: 260px; z-index: 1050;">
+                                <li class="px-3 py-2 border-bottom bg-light d-flex justify-content-between align-items-center">
+                                    <span class="fw-bold small text-muted"><i class="bi bi-database-fill-check me-1"></i>Cache Status</span>
+                                    <button class="btn btn-xs btn-outline-warning py-0.5 px-2 fw-semibold text-nowrap" style="font-size: 0.7rem;" onclick="refreshCache()">Sync Now</button>
                                 </li>
+                                {% if cache_status %}
+                                    {% for label, status in cache_status.items %}
+                                        <li class="px-3 py-1.5 d-flex justify-content-between align-items-center small border-bottom border-light-subtle">
+                                            <span class="text-secondary text-nowrap">{{ label }}</span>
+                                            {% if status.is_live %}
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 text-nowrap">Live</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-0.5 text-nowrap cache-timer-badge" data-remaining="{{ status.remaining }}">
+                                                    {{ status.age_str }}
+                                                </span>
+                                            {% endif %}
+                                        </li>
+                                    {% endfor %}
+                                {% else %}
+                                    <li class="px-3 py-3 text-muted small text-center text-nowrap">No active caches</li>
+                                {% endif %}
                             </ul>
                         </div>
-                    {% else %}
-                        <a class="btn btn-outline-light btn-sm px-4" href="{% url 'login' %}">Login</a>
+                        <a class="btn btn-sm btn-outline-secondary px-3 text-nowrap d-none d-md-inline-block" href="{% url 'reconnect_view' %}">
+                            <i class="bi bi-link-45deg me-1"></i>Reconnect
+                        </a>
                     {% endif %}
-                </div>
-            </div>
-        </div>
-    </nav>
 
-    {% if user.is_authenticated and request.session.chosen_instance %}
-    <div class="fixed-bottom bg-dark text-white-50 py-1.5 px-4 border-top border-secondary shadow-lg" style="font-size: 0.85rem; z-index: 1030;">
-        <div class="d-flex align-items-center justify-content-center flex-wrap gap-3">
-            <span class="d-flex align-items-center gap-1">
-                <i class="bi bi-hdd-network-fill text-warning"></i>
-                <span class="text-white-50">Managing Instance:</span>
-                <strong class="text-white fw-bold">{{ request.session.chosen_instance }}</strong>
-            </span>
-            <span class="text-secondary d-none d-sm-inline">|</span>
-            <span class="d-flex align-items-center gap-1">
-                <i class="bi bi-link-45deg text-info"></i>
-                <span class="text-white-50">Host:</span>
-                <code class="text-info bg-secondary bg-opacity-25 px-2 py-0.5 rounded font-monospace" style="font-size: 0.8rem;">{{ request.session.heappe_host }}</code>
-            </span>
-            {% if middleware_deployed_version %}
-            <span class="text-secondary d-none d-md-inline">|</span>
-            <span class="d-flex align-items-center gap-1">
-                <i class="bi bi-cpu-fill text-success"></i>
-                <span class="text-white-50">Middleware:</span>
-                <span class="badge bg-success text-white">v{{ middleware_deployed_version }}</span>
-            </span>
-            {% endif %}
-            <span class="text-secondary d-none d-sm-inline">|</span>
-            <a href="{% url 'instance_credentials_list' %}" class="btn btn-outline-warning btn-sm py-0.5 px-2 text-decoration-none text-nowrap fw-semibold" style="font-size: 0.75rem;">
-                <i class="bi bi-arrow-left-right me-1"></i>Switch Instance
-            </a>
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="modal fade" id="updateModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content shadow-lg border-0">
-                <div class="modal-header bg-light">
-                    <h5 class="modal-title fw-bold">Admin Panel Update</h5>
-                    <div id="modal-version-badge" class="d-none ms-3"></div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" id="modalCloseX"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="update-init-view">
-                        <p class="mb-1 fw-bold small text-primary" id="update-changes-header">New changes detected:</p>
-                        <div id="commit-messages" class="changelog-box mb-3"></div>
-
-                        <div class="alert alert-danger py-2 small mb-0">
-                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                            <strong>Downtime Notice:</strong> The Admin Panel will <strong>restart</strong> during this update.
-                            The management UI will be <strong>unavailable for ~30–60 seconds</strong>.
-                            Make sure no critical operations are running before proceeding.
-                        </div>
+                    <!-- User Profile Dropdown -->
+                    <div class="dropdown">
+                        <a class="nav-link dropdown-toggle d-flex align-items-center px-2 text-nowrap text-dark" href="#" id="userDrop" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle fs-5 me-1.5 text-secondary"></i><span class="fw-semibold">{{ user.username }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2">
+                            <li><a class="dropdown-item py-2" href="{% url 'profile_view' %}"><i class="bi bi-person me-2"></i>Profile</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="px-3 py-1">
+                                <form method="post" action="{% url 'logout' %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger w-100 py-1.5"><i class="bi bi-box-arrow-right me-1"></i>Logout</button>
+                                </form>
+                            </li>
+                        </ul>
                     </div>
-
-                    <div id="update-running-view" class="d-none text-center py-4">
-                        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
-                        <h5 class="fw-bold">Update in progress...</h5>
-                        <p class="text-muted small">Executing deployment script and restarting server.<br>You will be redirected in <span id="countdown">15</span> seconds.</p>
-                    </div>
-                </div>
-                <div class="modal-footer bg-light" id="modalFooter">
-                    <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="recheck-btn" onclick="recheckUpdates()">
-                        <i class="bi bi-arrow-clockwise me-1"></i>Recheck
-                    </button>
-                    <button type="button" class="btn btn-sm btn-secondary" onclick="snoozeAdminUpdate(24)" data-bs-dismiss="modal">Remind me tomorrow</button>
-                    <button type="button" id="start-update-btn" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
-                        Start Update Now
-                    </button>
-                </div>
+                {% else %}
+                    <a class="btn btn-primary btn-sm px-4 fw-semibold" href="{% url 'login' %}">Login</a>
+                {% endif %}
             </div>
+        </header>
+        {% endblock %}
+
+        <!-- Message Alerts Container -->
+        {% if messages %}
+        <div class="container-fluid px-4 mt-3">
+            {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show shadow-sm border-0 mb-2" role="alert">
+                    {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
         </div>
-    </div>
-
-    {% if messages %}
-    <div class="container mt-3">
-        {% for message in messages %}
-            <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show shadow-sm border-0" role="alert">
-                {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    <!-- Unified Update Banners Container -->
-    {% if user.is_authenticated %}
-    <div class="container mt-3">
-        <!-- HEAppE Middleware Update Banner -->
-        {% if middleware_update_available and request.session.chosen_instance %}
-            {% with snooze_key="middleware_update_snoozed__"|add:request.session.chosen_instance|add:"__"|add:middleware_latest_version %}
-            <div class="alert alert-warning border-warning shadow-sm d-none align-items-center justify-content-between p-3 mb-3"
-                 id="middleware-update-banner"
-                 data-snooze-key="{{ snooze_key }}">
-                <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-exclamation-triangle-fill text-warning fs-4 me-2"></i>
-                    <div>
-                        <strong class="text-warning-emphasis">HEAppE Middleware Update Available:</strong>
-                        A new version of HEAppE Middleware is available for instance <strong>{{ request.session.chosen_instance }}</strong>
-                        (deployed: <code>{{ middleware_deployed_version }}</code>, latest: <code>{{ middleware_latest_version }}</code>).
-                        <div class="small text-muted mt-1">
-                            <i class="bi bi-clock-history me-1"></i>Update causes a short downtime &mdash; plan a <strong>maintenance window</strong> before proceeding.
-                        </div>
-                    </div>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <a href="{% url 'deploy_view' request.session.chosen_instance %}" class="btn btn-warning btn-sm fw-bold shadow-sm">
-                        <i class="bi bi-arrow-repeat me-1"></i>Update HEAppE
-                    </a>
-                    <button type="button" class="btn btn-outline-secondary btn-sm"
-                        onclick="var b=document.getElementById('middleware-update-banner'); localStorage.setItem(b.dataset.snoozeKey, Date.now()+86400000); b.classList.remove('d-flex'); b.classList.add('d-none');"
-                        title="Remind me tomorrow">
-                        <i class="bi bi-bell-slash me-1"></i>Later (24h)
-                    </button>
-                </div>
-            </div>
-            <script>
-                document.addEventListener('DOMContentLoaded', function() {
-                    var banner = document.getElementById('middleware-update-banner');
-                    if (banner) {
-                        var snoozedUntil = parseInt(localStorage.getItem(banner.dataset.snoozeKey) || '0');
-                        if (Date.now() >= snoozedUntil) {
-                            banner.classList.remove('d-none');
-                            banner.classList.add('d-flex');
-                        }
-                    }
-                });
-            </script>
-            {% endwith %}
         {% endif %}
 
-        <!-- Admin Panel Update Banner -->
-        <div class="alert alert-info border-info shadow-sm d-none align-items-center justify-content-between p-3 mb-3"
-             id="adminpanel-update-banner">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-info-circle-fill text-info fs-4 me-2"></i>
-                <div>
-                    <strong class="text-info-emphasis">Admin Panel Update Available:</strong>
-                    A new version of the HEAppE Admin Panel is available.
-                    <div class="small text-muted mt-1" id="adminpanel-update-version-text"></div>
+        <!-- Update Banners Area -->
+        {% if user.is_authenticated %}
+        <div class="container-fluid px-4 mt-3">
+            <!-- HEAppE Middleware Update Banner -->
+            {% if middleware_update_available and request.session.chosen_instance %}
+                {% with snooze_key="middleware_update_snoozed__"|add:request.session.chosen_instance|add:"__"|add:middleware_latest_version %}
+                <div class="alert alert-warning border border-warning shadow-sm d-none align-items-center justify-content-between p-3 mb-3"
+                     id="middleware-update-banner"
+                     data-snooze-key="{{ snooze_key }}">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-exclamation-triangle-fill text-warning fs-4 me-2"></i>
+                        <div>
+                            <strong class="text-warning-emphasis">HEAppE Middleware Update Available:</strong>
+                            A new version is available for instance <strong>{{ request.session.chosen_instance }}</strong>
+                            (deployed: <code>{{ middleware_deployed_version }}</code>, latest: <code>{{ middleware_latest_version }}</code>).
+                            <div class="small text-muted mt-1">
+                                <i class="bi bi-clock-history me-1"></i>Requires a maintenance window &mdash; plan for a short downtime.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{% url 'deploy_view' request.session.chosen_instance %}" class="btn btn-warning btn-sm fw-bold shadow-sm">
+                            <i class="bi bi-arrow-repeat me-1"></i>Update Now
+                        </a>
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                            onclick="var b=document.getElementById('middleware-update-banner'); localStorage.setItem(b.dataset.snoozeKey, Date.now()+86400000); b.classList.remove('d-flex'); b.classList.add('d-none');"
+                            title="Remind me tomorrow">
+                            Later (24h)
+                        </button>
+                    </div>
                 </div>
-            </div>
-            <div class="d-flex align-items-center gap-2">
-                <button type="button" class="btn btn-info btn-sm fw-bold shadow-sm text-white" data-bs-toggle="modal" data-bs-target="#updateModal">
-                    <i class="bi bi-arrow-up-circle me-1"></i>Update Admin Panel
-                </button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="snoozeAdminUpdate(24)" title="Remind me tomorrow">
-                    <i class="bi bi-bell-slash me-1"></i>Later (24h)
-                </button>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <main class="container-fluid mt-4">{% block content %}{% endblock %}</main>
-
-    <footer class="bg-light mt-5 py-4 border-top">
-        <div class="container text-center text-muted">
-            <small>HEAppE Admin Panel &copy; {% now "Y" %} | Version {{ GIT_VERSION }} | {{ GIT_BRANCH }}</small>
-        </div>
-    </footer>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            {% if user.is_authenticated %}
-            fetch('{% url "check_updates" %}?t=' + Date.now())
-                .then(r => r.json())
-                .then(data => {
-                    const container = document.getElementById('commit-messages');
-                    const noticeAlert = document.querySelector('#update-init-view .alert');
-                    const startUpdateBtn = document.getElementById('start-update-btn');
-                    const changesHeader = document.getElementById('update-changes-header');
-                    const versionBadge = document.getElementById('modal-version-badge');
-                    const banner = document.getElementById('adminpanel-update-banner');
-
-                    if (data.update_available) {
-
-                        // Show version badge in modal header
-                        if (versionBadge && data.current_version && data.latest_version) {
-                            versionBadge.classList.remove('d-none');
-                            versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
-                        }
-
-                        // Fill changelog
-                        if (container) {
-                            if (data.changes && data.changes.length > 0) {
-                                container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
-                            } else {
-                                container.innerHTML = `<div class="text-muted small">New version <strong>v${data.latest_version}</strong> is available.</div>`;
-                            }
-                        }
-
-                        // Show Admin Panel Update Banner at the top — only if NOT snoozed
-                        const snoozedUntil = parseInt(localStorage.getItem('admin_update_snoozed') || '0');
-                        if (Date.now() >= snoozedUntil) {
-                            const versionText = document.getElementById('adminpanel-update-version-text');
-                            if (banner) {
-                                if (versionText && data.current_version && data.latest_version) {
-                                    versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Current: <code>v${data.current_version}</code> &mdash; Latest: <code>v${data.latest_version}</code>`;
-                                } else if (versionText && data.latest_version) {
-                                    versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Latest: <code>v${data.latest_version}</code>`;
-                                }
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        var banner = document.getElementById('middleware-update-banner');
+                        if (banner) {
+                            var snoozedUntil = parseInt(localStorage.getItem(banner.dataset.snoozeKey) || '0');
+                            if (Date.now() >= snoozedUntil) {
                                 banner.classList.remove('d-none');
                                 banner.classList.add('d-flex');
                             }
                         }
-                    } else {
-                        // System is up to date
-                        if (banner) {
-                            banner.classList.remove('d-flex');
-                            banner.classList.add('d-none');
-                        }
-                        if (changesHeader) changesHeader.textContent = 'Status:';
-                        if (container) {
-                            const verInfo = data.current_version ? ` (v${data.current_version})` : '';
-                            container.innerHTML = `<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date${verInfo}.</div>`;
-                        }
-                        if (noticeAlert) noticeAlert.classList.add('d-none');
-                        if (startUpdateBtn) startUpdateBtn.classList.add('d-none');
-                        // Show Recheck button
-                        const recheckBtn = document.getElementById('recheck-btn');
-                        if (recheckBtn) recheckBtn.classList.remove('d-none');
-                    }
-                })
-                .catch(err => {
-                    console.warn('Update check failed:', err);
-                });
+                    });
+                </script>
+                {% endwith %}
             {% endif %}
-        });
 
-        function recheckUpdates() {
-            const container = document.getElementById('commit-messages');
-            const recheckBtn = document.getElementById('recheck-btn');
-            if (container) container.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Checking for updates...</div>';
-            if (recheckBtn) recheckBtn.disabled = true;
+            <!-- Admin Panel Update Banner -->
+            <div class="alert alert-info border border-info shadow-sm d-none align-items-center justify-content-between p-3 mb-3"
+                 id="adminpanel-update-banner">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-info-circle-fill text-info fs-4 me-2"></i>
+                    <div>
+                        <strong class="text-info-emphasis">Admin Panel Update Available:</strong>
+                        A new version of the HEAppE Admin Panel is available.
+                        <div class="small text-muted mt-1" id="adminpanel-update-version-text"></div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-info btn-sm fw-bold shadow-sm text-white" data-bs-toggle="modal" data-bs-target="#updateModal">
+                        <i class="bi bi-arrow-up-circle me-1"></i>Update Admin Panel
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="snoozeAdminUpdate(24)" title="Remind me tomorrow">
+                        Later (24h)
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
-            fetch('{% url "check_updates" %}?force=1&t=' + Date.now())
-                .then(r => r.json())
-                .then(data => {
-                    const noticeAlert = document.querySelector('#update-init-view .alert');
-                    const startUpdateBtn = document.getElementById('start-update-btn');
-                    const changesHeader = document.getElementById('update-changes-header');
-                    const versionBadge = document.getElementById('modal-version-badge');
-                    const banner = document.getElementById('adminpanel-update-banner');
+        <!-- Content Body Block -->
+        <main class="container-fluid px-4 py-4 flex-grow-1">
+            {% block content %}{% endblock %}
+        </main>
 
-                    if (data.update_available) {
-                        if (versionBadge && data.current_version && data.latest_version) {
-                            versionBadge.classList.remove('d-none');
-                            versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
+        <!-- Footer -->
+        <footer class="bg-white py-3 border-top mt-auto">
+            <div class="container-fluid px-4 text-center text-muted">
+                <small>HEAppE Admin Panel &copy; {% now "Y" %} | Version {{ GIT_VERSION }} | Branch: <code>{{ GIT_BRANCH }}</code></small>
+            </div>
+        </footer>
+    </div>
+</div>
+
+<!-- System Update Modal -->
+<div class="modal fade" id="updateModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold text-dark">Admin Panel Update</h5>
+                <div id="modal-version-badge" class="d-none ms-3"></div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" id="modalCloseX"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="update-init-view">
+                    <p class="mb-1 fw-bold small text-primary" id="update-changes-header">New changes detected:</p>
+                    <div id="commit-messages" class="changelog-box mb-3"></div>
+
+                    <div class="alert alert-danger py-2.5 small mb-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>Downtime Notice:</strong> The Admin Panel will **restart** during this update.
+                        The management UI will be **unavailable for ~30–60 seconds**.
+                    </div>
+                </div>
+
+                <div id="update-running-view" class="d-none text-center py-4">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <h5 class="fw-bold">Update in progress...</h5>
+                    <p class="text-muted small">Executing deployment script and restarting server.<br>You will be redirected in <span id="countdown">15</span> seconds.</p>
+                </div>
+            </div>
+            <div class="modal-footer bg-light" id="modalFooter">
+                <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="recheck-btn" onclick="recheckUpdates()">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Recheck
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" onclick="snoozeAdminUpdate(24)" data-bs-dismiss="modal">Remind me tomorrow</button>
+                <button type="button" id="start-update-btn" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
+                    Start Update Now
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        {% if user.is_authenticated %}
+        fetch('{% url "check_updates" %}?t=' + Date.now())
+            .then(r => r.json())
+            .then(data => {
+                const container = document.getElementById('commit-messages');
+                const noticeAlert = document.querySelector('#update-init-view .alert');
+                const startUpdateBtn = document.getElementById('start-update-btn');
+                const changesHeader = document.getElementById('update-changes-header');
+                const versionBadge = document.getElementById('modal-version-badge');
+                const banner = document.getElementById('adminpanel-update-banner');
+
+                if (data.update_available) {
+                    if (versionBadge && data.current_version && data.latest_version) {
+                        versionBadge.classList.remove('d-none');
+                        versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
+                    }
+
+                    if (container) {
+                        if (data.changes && data.changes.length > 0) {
+                            container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
+                        } else {
+                            container.innerHTML = `<div class="text-muted small">New version <strong>v${data.latest_version}</strong> is available.</div>`;
                         }
-                        if (changesHeader) changesHeader.textContent = 'New changes detected:';
-                        if (container) {
-                            if (data.changes && data.changes.length > 0) {
-                                container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
-                            } else {
-                                container.innerHTML = `<div class="text-muted small">New version <strong>v${data.latest_version}</strong> is available.</div>`;
-                            }
-                        }
-                        if (noticeAlert) noticeAlert.classList.remove('d-none');
-                        if (startUpdateBtn) startUpdateBtn.classList.remove('d-none');
-                        if (recheckBtn) recheckBtn.classList.add('d-none');
+                    }
+
+                    const snoozedUntil = parseInt(localStorage.getItem('admin_update_snoozed') || '0');
+                    if (Date.now() >= snoozedUntil) {
+                        const versionText = document.getElementById('adminpanel-update-version-text');
                         if (banner) {
+                            if (versionText && data.current_version && data.latest_version) {
+                                versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Current: <code>v${data.current_version}</code> &mdash; Latest: <code>v${data.latest_version}</code>`;
+                            } else if (versionText && data.latest_version) {
+                                versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Latest: <code>v${data.latest_version}</code>`;
+                            }
                             banner.classList.remove('d-none');
                             banner.classList.add('d-flex');
                         }
-                    } else {
-                        if (banner) {
-                            banner.classList.remove('d-flex');
-                            banner.classList.add('d-none');
-                        }
-                        if (changesHeader) changesHeader.textContent = 'Status:';
-                        if (container) {
-                            const verInfo = data.current_version ? ` (v${data.current_version})` : '';
-                            container.innerHTML = `<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date${verInfo}.</div>`;
-                        }
-                        if (recheckBtn) recheckBtn.disabled = false;
                     }
-                })
-                .catch(err => {
-                    if (container) container.innerHTML = '<div class="text-danger small">Check failed. Please try again.</div>';
-                    if (recheckBtn) recheckBtn.disabled = false;
-                });
-        }
-
-        function confirmAndDeploy() {
-            if (!confirm("Are you sure you want to start the update process now?")) return;
-
-            // UI Switch to Loading state
-            document.getElementById('update-init-view').classList.add('d-none');
-            document.getElementById('modalFooter').classList.add('d-none');
-            document.getElementById('modalCloseX').classList.add('d-none');
-            document.getElementById('update-running-view').classList.remove('d-none');
-
-            // Trigger the existing backend logic
-            fetch('{% url "trigger_deployment_direct" %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify({
-                    git_url: 'origin',
-                    git_tag: 'HEAD'
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                let seconds = 15;
-                const countdownEl = document.getElementById('countdown');
-                const timer = setInterval(() => {
-                    seconds--;
-                    countdownEl.innerText = seconds;
-                    if (seconds <= 0) {
-                        clearInterval(timer);
-                        window.location.href = "{% url 'dashboard_view' %}";
-                    }
-                }, 1000);
-            })
-            .catch(error => {
-                alert("Critical error: Deployment failed to launch. " + error);
-                location.reload();
-            });
-        }
-
-        function copyApiKey(btn) {
-            const span = btn.previousElementSibling;
-            const key = span.dataset.key;
-            navigator.clipboard.writeText(key).then(() => {
-                btn.textContent = "Copied";
-            });
-        }
-
-        function refreshCache() {
-            const url = new URL(window.location.href);
-            url.searchParams.set('refresh', '1');
-            window.location.href = url.toString();
-        }
-        function snoozeAdminUpdate(hours = 24) {
-            localStorage.setItem('admin_update_snoozed', Date.now() + hours * 3600 * 1000);
-            const banner = document.getElementById('adminpanel-update-banner');
-            if (banner) {
-                banner.classList.remove('d-flex');
-                banner.classList.add('d-none');
-            }
-        }
-
-        // Live Cache Countdown Timers
-        document.addEventListener('DOMContentLoaded', function() {
-            const timerBadges = document.querySelectorAll('.cache-timer-badge');
-            const mainTimer = document.getElementById('main-cache-timer');
-
-            function updateTimers() {
-                let minRemaining = Infinity;
-                let activeCount = 0;
-
-                timerBadges.forEach(function(badge) {
-                    let remaining = parseInt(badge.getAttribute('data-remaining') || '0');
-                    if (remaining > 0) {
-                        remaining--;
-                        badge.setAttribute('data-remaining', remaining);
-                        activeCount++;
-
-                        if (remaining < minRemaining) {
-                            minRemaining = remaining;
-                        }
-
-                        // Format badge text
-                        let mins = Math.floor(remaining / 60);
-                        let secs = remaining % 60;
-                        badge.textContent = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-                    } else {
-                        badge.textContent = 'Live';
-                        badge.className = 'badge bg-success-subtle text-success border border-success-subtle px-2 py-1 text-nowrap';
-                    }
-                });
-
-                // Update main button badge with shortest remaining time
-                if (activeCount > 0 && minRemaining !== Infinity && minRemaining > 0) {
-                    let mins = Math.floor(minRemaining / 60);
-                    let secs = minRemaining % 60;
-                    mainTimer.textContent = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-                    mainTimer.classList.remove('d-none');
                 } else {
-                    mainTimer.classList.add('d-none');
+                    if (banner) {
+                        banner.classList.remove('d-flex');
+                        banner.classList.add('d-none');
+                    }
+                    if (changesHeader) changesHeader.textContent = 'Status:';
+                    if (container) {
+                        const verInfo = data.current_version ? ` (v${data.current_version})` : '';
+                        container.innerHTML = `<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date${verInfo}.</div>`;
+                    }
+                    if (noticeAlert) noticeAlert.classList.add('d-none');
+                    if (startUpdateBtn) startUpdateBtn.classList.add('d-none');
+                    const recheckBtn = document.getElementById('recheck-btn');
+                    if (recheckBtn) recheckBtn.classList.remove('d-none');
                 }
+            })
+            .catch(err => {
+                console.warn('Update check failed:', err);
+            });
+        {% endif %}
+    });
 
-                if (activeCount === 0) {
-                    clearInterval(timerInterval);
+    function recheckUpdates() {
+        const container = document.getElementById('commit-messages');
+        const recheckBtn = document.getElementById('recheck-btn');
+        if (container) container.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Checking for updates...</div>';
+        if (recheckBtn) recheckBtn.disabled = true;
+
+        fetch('{% url "check_updates" %}?force=1&t=' + Date.now())
+            .then(r => r.json())
+            .then(data => {
+                const noticeAlert = document.querySelector('#update-init-view .alert');
+                const startUpdateBtn = document.getElementById('start-update-btn');
+                const changesHeader = document.getElementById('update-changes-header');
+                const versionBadge = document.getElementById('modal-version-badge');
+                const banner = document.getElementById('adminpanel-update-banner');
+
+                if (data.update_available) {
+                    if (versionBadge && data.current_version && data.latest_version) {
+                        versionBadge.classList.remove('d-none');
+                        versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
+                    }
+                    if (changesHeader) changesHeader.textContent = 'New changes detected:';
+                    if (container) {
+                        if (data.changes && data.changes.length > 0) {
+                            container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
+                        } else {
+                            container.innerHTML = `<div class="text-muted small">New version <strong>v${data.latest_version}</strong> is available.</div>`;
+                        }
+                    }
+                    if (noticeAlert) noticeAlert.classList.remove('d-none');
+                    if (startUpdateBtn) startUpdateBtn.classList.remove('d-none');
+                    if (recheckBtn) recheckBtn.classList.add('d-none');
+                    if (banner) {
+                        banner.classList.remove('d-none');
+                        banner.classList.add('d-flex');
+                    }
+                } else {
+                    if (banner) {
+                        banner.classList.remove('d-flex');
+                        banner.classList.add('d-none');
+                    }
+                    if (changesHeader) changesHeader.textContent = 'Status:';
+                    if (container) {
+                        const verInfo = data.current_version ? ` (v${data.current_version})` : '';
+                        container.innerHTML = `<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date${verInfo}.</div>`;
+                    }
+                    if (recheckBtn) recheckBtn.disabled = false;
                 }
-            }
+            })
+            .catch(err => {
+                if (container) container.innerHTML = '<div class="text-danger small">Check failed. Please try again.</div>';
+                if (recheckBtn) recheckBtn.disabled = false;
+            });
+    }
 
-            if (timerBadges.length > 0) {
-                updateTimers();
-                const timerInterval = setInterval(updateTimers, 1000);
-            }
+    function confirmAndDeploy() {
+        if (!confirm("Are you sure you want to start the update process now?")) return;
+
+        document.getElementById('update-init-view').classList.add('d-none');
+        document.getElementById('modalFooter').classList.add('d-none');
+        document.getElementById('modalCloseX').classList.add('d-none');
+        document.getElementById('update-running-view').classList.remove('d-none');
+
+        fetch('{% url "trigger_deployment_direct" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                git_url: 'origin',
+                git_tag: 'HEAD'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            let seconds = 15;
+            const countdownEl = document.getElementById('countdown');
+            const timer = setInterval(() => {
+                seconds--;
+                countdownEl.innerText = seconds;
+                if (seconds <= 0) {
+                    clearInterval(timer);
+                    window.location.href = "{% url 'dashboard_view' %}";
+                }
+            }, 1000);
+        })
+        .catch(error => {
+            alert("Critical error: Deployment failed to launch. " + error);
+            location.reload();
         });
+    }
 
-    </script>
+    function copyApiKey(btn) {
+        const span = btn.previousElementSibling;
+        const key = span.dataset.key;
+        navigator.clipboard.writeText(key).then(() => {
+            btn.textContent = "Copied";
+        });
+    }
+
+    function refreshCache() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('refresh', '1');
+        window.location.href = url.toString();
+    }
+
+    function snoozeAdminUpdate(hours = 24) {
+        localStorage.setItem('admin_update_snoozed', Date.now() + hours * 3600 * 1000);
+        const banner = document.getElementById('adminpanel-update-banner');
+        if (banner) {
+            banner.classList.remove('d-flex');
+            banner.classList.add('d-none');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const timerBadges = document.querySelectorAll('.cache-timer-badge');
+        const mainTimer = document.getElementById('main-cache-timer');
+
+        function updateTimers() {
+            let minRemaining = Infinity;
+            let activeCount = 0;
+
+            timerBadges.forEach(function(badge) {
+                let remaining = parseInt(badge.getAttribute('data-remaining') || '0');
+                if (remaining > 0) {
+                    remaining--;
+                    badge.setAttribute('data-remaining', remaining);
+                    activeCount++;
+
+                    if (remaining < minRemaining) {
+                        minRemaining = remaining;
+                    }
+
+                    let mins = Math.floor(remaining / 60);
+                    let secs = remaining % 60;
+                    badge.textContent = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+                } else {
+                    badge.textContent = 'Live';
+                    badge.className = 'badge bg-success-subtle text-success border border-success-subtle px-2 py-1 text-nowrap';
+                }
+            });
+
+            if (activeCount > 0 && minRemaining !== Infinity && minRemaining > 0) {
+                let mins = Math.floor(minRemaining / 60);
+                let secs = minRemaining % 60;
+                mainTimer.textContent = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+                mainTimer.classList.remove('d-none');
+            } else {
+                mainTimer.classList.add('d-none');
+            }
+
+            if (activeCount === 0) {
+                clearInterval(timerInterval);
+            }
+        }
+
+        if (timerBadges.length > 0) {
+            updateTimers();
+            const timerInterval = setInterval(updateTimers, 1000);
+        }
+    });
+</script>
 </body>
 </html>

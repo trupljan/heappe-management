@@ -1,60 +1,72 @@
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 
 <style>
-    table.dataTable { width: 100% !important; border-collapse: collapse !important; }
-    .dataTables_wrapper { padding: 1rem 0; }
-    .dataTables_filter input { border: 1px solid #dee2e6; border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; margin-bottom: 10px; }
-    .nav-tabs .nav-link { font-size: 0.85rem; color: #6c757d; border: none; border-bottom: 2px solid transparent; padding: 0.8rem 1.2rem; transition: 0.3s; }
-    .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; background: none; }
-    .card-header-tabs { margin-bottom: -10px; }
-    .role-badge { min-width: 110px; background: white; border-radius: 4px; border: 1px solid #dee2e6; padding: 4px 8px; display: inline-flex; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 4px; }
-    .role-name { font-size: 0.65rem; font-weight: bold; color: #0d6efd; text-transform: uppercase; }
-    .group-name { font-size: 0.75rem; color: #6c757d; }
+    /* DataTables Custom Polish */
+    table.dataTable { border-collapse: collapse !important; width: 100% !important; margin-top: 1rem !important; margin-bottom: 1rem !important; }
+    .dataTables_wrapper { padding: 1.25rem; }
+    .dataTables_filter input { border: 1px solid #dee2e6; border-radius: 6px; padding: 0.375rem 0.75rem; font-size: 0.875rem; margin-left: 0.5rem; transition: border-color 0.15s ease-in-out; }
+    .dataTables_filter input:focus { border-color: #86b7fe; outline: 0; box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); }
+    .dataTables_length select { border: 1px solid #dee2e6; border-radius: 6px; padding: 0.375rem 1.75rem 0.375rem 0.75rem; font-size: 0.875rem; }
+
+    /* Navigation Tabs Polish */
+    .nav-tabs .nav-link { font-size: 0.85rem; color: #6c757d; border: none; border-bottom: 2px solid transparent; padding: 0.8rem 1.2rem; transition: all 0.2s ease; cursor: pointer; font-weight: 600; }
+    .nav-tabs .nav-link:hover { color: #0d6efd; border-bottom-color: #dee2e6; background: none; }
+    .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; background: none; font-weight: 700; }
+
+    /* Role Badges */
+    .role-badge { background: #f8f9fa; border-radius: 20px; border: 1px solid #dee2e6; padding: 5px 12px; display: inline-flex; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,0.03); margin-bottom: 4px; margin-right: 4px; }
+    .role-name { font-size: 0.68rem; font-weight: bold; color: #0d6efd; text-transform: uppercase; letter-spacing: 0.02em; }
+    .group-name { font-size: 0.72rem; color: #6c757d; margin-left: 4px; }
     .table-success-fade { animation: fadeBackground 2s forwards; }
     @keyframes fadeBackground { from { background-color: #d1e7dd; } to { background-color: transparent; } }
 </style>
 
-<div class="card mb-4 shadow-sm border-0">
-    <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 border-bottom">
-        <ul class="nav nav-tabs card-header-tabs border-bottom-0" id="userTabs" role="tablist">
+<div class="card border-0 shadow-sm rounded-3 bg-white overflow-hidden mb-4">
+    <div class="card-header bg-light py-0 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2 pe-3">
+        <ul class="nav nav-tabs border-bottom-0" id="userTabs" role="tablist">
             <li class="nav-item">
-                <button class="nav-link active fw-bold text-uppercase" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button">
-                    In Project (<span id="countIn">{{ adaptor_users|length }}</span>)
+                <button class="nav-link active text-uppercase py-3 px-4" id="in-tab" data-bs-toggle="tab" data-bs-target="#in-project-pane" type="button">
+                    <i class="bi bi-person-check-fill me-1.5"></i>In Project (<span id="countIn">{{ adaptor_users|length }}</span>)
                 </button>
             </li>
             <li class="nav-item">
-                <button class="nav-link fw-bold text-uppercase" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button">
-                    Available Accounts (<span id="countOut">{{ adaptor_users_not_in_project|length }}</span>)
+                <button class="nav-link text-uppercase py-3 px-4" id="out-tab" data-bs-toggle="tab" data-bs-target="#available-pane" type="button">
+                    <i class="bi bi-person-plus-fill me-1.5"></i>Available Accounts (<span id="countOut">{{ adaptor_users_not_in_project|length }}</span>)
                 </button>
             </li>
         </ul>
-        <div class="btn-group">
-            <a href="{% url 'adaptor_user_create' %}" class="btn btn-primary btn-sm px-3"><i class="bi bi-plus-lg"></i> Create New</a>
-            <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();"><i class="bi bi-arrow-clockwise"></i></button>
+        <div class="d-flex align-items-center gap-1.5 my-2">
+            <a href="{% url 'adaptor_user_create' %}" class="btn btn-primary btn-sm fw-bold px-3 py-1.5 rounded-3 shadow-sm d-flex align-items-center gap-1">
+                <i class="bi bi-plus-lg"></i>Create New Account
+            </a>
+            <button class="btn btn-sm btn-outline-secondary py-1.5 rounded-3" onclick="location.reload();">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
         </div>
     </div>
 
     <div class="card-body p-0">
         <div class="tab-content">
-            <div class="tab-pane fade show active px-3 pb-3" id="in-project-pane" role="tabpanel">
+            <!-- In Project Pane -->
+            <div class="tab-pane fade show active" id="in-project-pane" role="tabpanel">
                 <div class="table-responsive">
                     <table id="tableIn" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
-                        <thead class="table-light text-muted small text-uppercase">
+                        <thead class="table-light text-secondary small text-uppercase">
                             <tr>
-                                <th class="ps-4" style="width: 80px;">ID</th>
-                                <th>User</th>
-                                <th>Project Roles & Groups</th>
-                                <th class="text-end pe-4">Action</th>
+                                <th class="ps-4" style="width: 10%;">ID</th>
+                                <th style="width: 25%;">User Identity</th>
+                                <th style="width: 53%;">Project Roles & Groups</th>
+                                <th class="text-end pe-4" style="width: 12%;">Action</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for adaptor_user in adaptor_users %}
                             <tr>
-                                <td class="ps-4 text-muted small">#{{ adaptor_user.id }}</td>
-                                <td class="fw-medium text-dark">{{ adaptor_user.username }}</td>
+                                <td class="ps-4 font-monospace text-secondary small">#{{ adaptor_user.id }}</td>
+                                <td class="fw-bold text-dark font-monospace">{{ adaptor_user.username }}</td>
                                 <td>
-                                    <div class="d-flex align-items-center w-100">
-                                        <div class="d-flex flex-wrap gap-2 role-container-{{ adaptor_user.username }}">
+                                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 w-100">
+                                        <div class="d-flex flex-wrap role-container-{{ adaptor_user.username }}">
                                             {% for group in adaptor_user.adaptor_user_groups|dictsort:"name" %}
                                                 {% if group.project.id == project.id %}
                                                     {% for role in group.roles %}
@@ -63,11 +75,11 @@
                                                             <span class="role-name">{{ role }}</span>
                                                             <span class="group-name text-truncate" style="max-width: 150px;">{{ group.name }}</span>
                                                         </div>
-                                                        <form method="post" action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}" class="ms-2">
+                                                        <form method="post" action="{% url 'adaptor_user_unassign_from_project' adaptor_user.username %}" class="ms-2 d-inline m-0 p-0">
                                                             {% csrf_token %}
                                                             <input type="hidden" name="ProjectId" value="{{ project.id }}">
                                                             <input type="hidden" name="Role" value="{{ role }}">
-                                                            <button type="submit" class="btn-close" style="font-size: 0.5rem;" onclick="return confirm('Remove {{ role }}?');"></button>
+                                                            <button type="submit" class="btn-close ms-1" style="font-size: 0.55rem; padding: 0.1rem;" onclick="return confirm('Remove {{ role }} role from {{ adaptor_user.username }}?');"></button>
                                                         </form>
                                                     </div>
                                                     {% endfor %}
@@ -75,28 +87,28 @@
                                             {% endfor %}
                                         </div>
 
-                                        <form method="post" action="{% url 'adaptor_user_assign_to_project' adaptor_user.username %}" class="ms-auto ps-3 ajax-assign-form" data-table="in">
+                                        <form method="post" action="{% url 'adaptor_user_assign_to_project' adaptor_user.username %}" class="d-flex align-items-center ajax-assign-form border-start ps-3" data-table="in">
                                             {% csrf_token %}
                                             <input type="hidden" name="ProjectId" value="{{ project.id }}">
                                             <input type="hidden" name="role_name_display" class="role-name-display">
                                             <div class="input-group input-group-sm" style="width: 250px;">
                                                 <select name="role" class="form-select border-secondary-subtle" required>
-                                                <option value="" selected disabled>+ Add Role</option>
-                                                <option value="1" title="HEAppE administrator role with access to the entire system.">Administrator</option>
-                                                <option value="2" title="HEAppE maintainer role for getting information about actual HEAppE status.">Maintainer</option>
-                                                <option value="3" title="Standard user, can submit and check his own jobs.">Submitter</option>
-                                                <option value="4" title="Users with this role car report in assigned groups.">GroupReporter</option>
-                                                <option value="5" title="Users with this role can watch other jobs in the same group.">Reporter</option>
-                                                <option value="6" title="User with this role can create new project and use management API.">ManagementAdmin</option>
-                                                <option value="7" title="User with this role can manage command templates, can submit and check his own jobs.">Manager</option>
-                                            </select>
-                                                <button class="btn btn-success" type="submit">Add</button>
+                                                    <option value="" selected disabled>+ Assign Role...</option>
+                                                    <option value="1" title="HEAppE administrator role with access to the entire system.">Administrator</option>
+                                                    <option value="2" title="HEAppE maintainer role for getting information about actual HEAppE status.">Maintainer</option>
+                                                    <option value="3" title="Standard user, can submit and check his own jobs.">Submitter</option>
+                                                    <option value="4" title="Users with this role car report in assigned groups.">GroupReporter</option>
+                                                    <option value="5" title="Users with this role can watch other jobs in the same group.">Reporter</option>
+                                                    <option value="6" title="User with this role can create new project and use management API.">ManagementAdmin</option>
+                                                    <option value="7" title="User with this role can manage command templates, can submit and check his own jobs.">Manager</option>
+                                                </select>
+                                                <button class="btn btn-success fw-semibold px-2.5" type="submit">Add</button>
                                             </div>
                                         </form>
                                     </div>
                                 </td>
                                 <td class="text-end pe-4">
-                                    <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="btn btn-sm btn-outline-secondary py-0 px-2">Detail</a>
+                                    <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="btn btn-sm btn-outline-secondary fw-semibold px-2.5 rounded-3">Profile</a>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -105,29 +117,30 @@
                 </div>
             </div>
 
-            <div class="tab-pane fade px-3 pb-3" id="available-pane" role="tabpanel">
+            <!-- Available Accounts Pane -->
+            <div class="tab-pane fade" id="available-pane" role="tabpanel">
                 <div class="table-responsive">
                     <table id="tableOut" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
-                        <thead class="table-light text-muted small text-uppercase">
+                        <thead class="table-light text-secondary small text-uppercase">
                             <tr>
-                                <th class="ps-4">Username</th>
-                                <th>System ID</th>
-                                <th class="text-end pe-4">Action</th>
+                                <th class="ps-4" style="width: 45%;">Username / Identifier</th>
+                                <th style="width: 15%;">System ID</th>
+                                <th class="text-end pe-4" style="width: 40%;">Assign to Project</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for user in adaptor_users_not_in_project %}
                             <tr>
-                                <td class="ps-4 fw-medium">{{ user.username }}</td>
-                                <td class="text-muted small">#{{ user.id }}</td>
+                                <td class="ps-4 fw-bold text-dark font-monospace">{{ user.username }}</td>
+                                <td class="font-monospace text-secondary small">#{{ user.id }}</td>
                                 <td class="text-end pe-4">
-                                    <form method="post" action="{% url 'adaptor_user_assign_to_project' user.username %}" class="d-inline-block ajax-assign-form" data-table="out">
+                                    <form method="post" action="{% url 'adaptor_user_assign_to_project' user.username %}" class="d-flex align-items-center justify-content-end gap-2 ajax-assign-form" data-table="out">
                                         {% csrf_token %}
                                         <input type="hidden" name="ProjectId" value="{{ project.id }}">
                                         <input type="hidden" name="role_name_display" class="role-name-display">
-                                        <div class="input-group input-group-sm" style="width: 260px;">
+                                        <div class="input-group input-group-sm" style="width: 280px;">
                                             <select name="role" class="form-select border-secondary-subtle" required>
-                                                <option value="" selected disabled>+ Add Role</option>
+                                                <option value="" selected disabled>+ Select Role...</option>
                                                 <option value="1" title="HEAppE administrator role with access to the entire system.">Administrator</option>
                                                 <option value="2" title="HEAppE maintainer role for getting information about actual HEAppE status.">Maintainer</option>
                                                 <option value="3" title="Standard user, can submit and check his own jobs.">Submitter</option>
@@ -136,7 +149,7 @@
                                                 <option value="6" title="User with this role can create new project and use management API.">ManagementAdmin</option>
                                                 <option value="7" title="User with this role can manage command templates, can submit and check his own jobs.">Manager</option>
                                             </select>
-                                            <button type="submit" class="btn btn-primary">Add to Project</button>
+                                            <button type="submit" class="btn btn-primary fw-bold px-3">Add to Project</button>
                                         </div>
                                     </form>
                                 </td>
@@ -156,8 +169,29 @@
 
 <script>
     $(document).ready(function() {
-        const t1 = $('#tableIn').DataTable({ pageLength: 10, language: {search: ""}, autoWidth: false });
-        const t2 = $('#tableOut').DataTable({ pageLength: 10, language: {search: ""}, autoWidth: false });
+        const t1 = $('#tableIn').DataTable({ 
+            pageLength: 10, 
+            dom: "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                 "<'row'<'col-sm-12'tr>>" +
+                 "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+            language: {
+                search: "_INPUT_",
+                searchPlaceholder: "Search users..."
+            },
+            autoWidth: false 
+        });
+        
+        const t2 = $('#tableOut').DataTable({ 
+            pageLength: 10, 
+            dom: "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                 "<'row'<'col-sm-12'tr>>" +
+                 "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+            language: {
+                search: "_INPUT_",
+                searchPlaceholder: "Search users..."
+            },
+            autoWidth: false 
+        });
 
         $(document).on('submit', '.ajax-assign-form', function(e) {
             e.preventDefault();
@@ -171,7 +205,7 @@
             const $row = $form.closest('tr');
             const username = tableType === 'in' ? $row.find('td:eq(1)').text().trim() : $row.find('td:eq(0)').text().trim();
 
-            $btn.prop('disabled', true).prepend('<span class="spinner-border spinner-border-sm me-1"></span>');
+            $btn.prop('disabled', true).prepend('<span class="spinner-border spinner-border-sm me-1.5" role="status" aria-hidden="true"></span>');
 
             fetch($form.attr('action'), {
                 method: 'POST',
@@ -189,9 +223,9 @@
                         t2.row($row).remove().draw();
                         const node = t1.row.add([
                             sysId,
-                            `<span class="fw-medium text-dark">${username}</span>`,
-                            `<div class="d-flex align-items-center w-100"><div class="d-flex flex-wrap gap-2 role-container-${username}"><div class="role-badge"><div class="d-flex flex-column"><span class="role-name">${data.role_name}</span><span class="group-name">Project Group</span></div></div></div></div>`,
-                            `<div class="text-end pe-4"><a href="/adaptor_users/detail/${username}/" class="btn btn-sm btn-outline-secondary py-0 px-2">Detail</a></div>`
+                            `<span class="fw-bold text-dark font-monospace">${username}</span>`,
+                            `<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 w-100"><div class="d-flex flex-wrap role-container-${username}"><div class="role-badge"><div class="d-flex flex-column"><span class="role-name">${data.role_name}</span><span class="group-name">Project Group</span></div></div></div></div>`,
+                            `<div class="text-end pe-4"><a href="/adaptor_users/detail/${username}/" class="btn btn-sm btn-outline-secondary fw-semibold px-2.5 rounded-3">Profile</a></div>`
                         ]).draw().node();
                         $(node).addClass('table-success-fade');
                     } else {
