@@ -4,7 +4,7 @@
 
 {% block breadcrumbs %}
     <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
-    <li class="breadcrumb-item"><a href="{% url 'projects_view' %}" class="text-decoration-none text-secondary">Projects</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'project_list' %}" class="text-decoration-none text-secondary">Projects</a></li>
     <li class="breadcrumb-item"><a href="{% url 'project_detail' project.id %}" class="text-decoration-none text-secondary">{{ project.name }}</a></li>
     <li class="breadcrumb-item active" aria-current="page">Accounting / Queue Groups</li>
 {% endblock %}
