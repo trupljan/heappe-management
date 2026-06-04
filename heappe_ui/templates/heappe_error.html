@@ -18,14 +18,18 @@
                 
                 <!-- Card Body -->
                 <div class="card-body p-4">
+                    <p class="text-secondary small mb-4">The application encountered an issue communicating with the HEAppE service.</p>
+                    
                     <!-- Target Instance Details -->
                     <div class="bg-light rounded p-3 mb-4 border">
-                        <h6 class="text-uppercase text-muted fw-bold mb-3 small" style="letter-spacing: 0.5px;">Active Instance</h6>
+                        <h6 class="text-uppercase text-muted fw-bold mb-3 small" style="letter-spacing: 0.5px;">Active Instance &amp; Request Details</h6>
                         <div class="row g-2">
                             <div class="col-sm-4 text-muted small">Instance Name:</div>
                             <div class="col-sm-8 fw-semibold small text-dark">{{ instance_name }}</div>
                             <div class="col-sm-4 text-muted small">Host URL:</div>
                             <div class="col-sm-8 text-break small font-monospace text-dark">{{ host_url }}</div>
+                            <div class="col-sm-4 text-muted small">Requested Page:</div>
+                            <div class="col-sm-8 text-break small font-monospace text-dark">{{ current_path }}</div>
                         </div>
                     </div>
 
