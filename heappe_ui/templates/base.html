@@ -397,62 +397,10 @@
         </header>
         {% endblock %}
 
-        <!-- Message Alerts Container -->
-        {% if messages %}
-        <div class="container-fluid px-4 mt-3">
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show shadow-sm border-0 mb-2" role="alert">
-                    {{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            {% endfor %}
-        </div>
-        {% endif %}
 
         <!-- Update Banners Area -->
         {% if user.is_authenticated %}
         <div class="container-fluid px-4 mt-3">
-            <!-- HEAppE Middleware Update Banner -->
-            {% if middleware_update_available and request.session.chosen_instance %}
-                {% with snooze_key="middleware_update_snoozed__"|add:request.session.chosen_instance|add:"__"|add:middleware_latest_version %}
-                <div class="alert alert-warning border border-warning shadow-sm d-none align-items-center justify-content-between p-3 mb-3"
-                     id="middleware-update-banner"
-                     data-snooze-key="{{ snooze_key }}">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-exclamation-triangle-fill text-warning fs-4 me-2"></i>
-                        <div>
-                            <strong class="text-warning-emphasis">HEAppE Middleware Update Available:</strong>
-                            A new version is available for instance <strong>{{ request.session.chosen_instance }}</strong>
-                            (deployed: <code>{{ middleware_deployed_version }}</code>, latest: <code>{{ middleware_latest_version }}</code>).
-                            <div class="small text-muted mt-1">
-                                <i class="bi bi-clock-history me-1"></i>Requires a maintenance window &mdash; plan for a short downtime.
-                            </div>
-                        </div>
-                    </div>
-                    <div class="d-flex align-items-center gap-2">
-                        <a href="{% url 'deploy_view' request.session.chosen_instance %}" class="btn btn-warning btn-sm fw-bold shadow-sm">
-                            <i class="bi bi-arrow-repeat me-1"></i>Update Now
-                        </a>
-                        <button type="button" class="btn btn-outline-secondary btn-sm"
-                            onclick="var b=document.getElementById('middleware-update-banner'); localStorage.setItem(b.dataset.snoozeKey, Date.now()+86400000); b.classList.remove('d-flex'); b.classList.add('d-none');"
-                            title="Remind me tomorrow">
-                            Later (24h)
-                        </button>
-                    </div>
-                </div>
-                <script>
-                    document.addEventListener('DOMContentLoaded', function() {
-                        var banner = document.getElementById('middleware-update-banner');
-                        if (banner) {
-                            var snoozedUntil = parseInt(localStorage.getItem(banner.dataset.snoozeKey) || '0');
-                            if (Date.now() >= snoozedUntil) {
-                                banner.classList.remove('d-none');
-                                banner.classList.add('d-flex');
-                            }
-                        }
-                    });
-                </script>
-                {% endwith %}
-            {% endif %}
 
             <!-- Admin Panel Update Banner -->
             <div class="alert alert-info border border-info shadow-sm d-none align-items-center justify-content-between p-3 mb-3"
