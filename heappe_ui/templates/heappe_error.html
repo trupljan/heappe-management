@@ -87,8 +87,47 @@
                         </div>
                     </div>
                 </div>
+                <!-- Status Footer for Support Reporting -->
+                <div class="card-footer bg-light border-top text-center small text-muted py-3" id="report-status" style="border-radius: 0 0 16px 16px;">
+                    <div class="spinner-border spinner-border-sm text-secondary me-2" role="status"></div>
+                    Reporting error to support (support.heappe@it4i.cz)...
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    $(document).ready(function() {
+        setTimeout(function() {
+            html2canvas(document.body).then(function(canvas) {
+                const imgData = canvas.toDataURL('image/png');
+                sendReport(imgData);
+            }).catch(function(err) {
+                console.error("html2canvas error:", err);
+                sendReport('');
+            });
+        }, 1000);
+
+        function sendReport(imgData) {
+            const basePath = window.location.pathname.split('/').includes('management') ? '/management' : '';
+            $.ajax({
+                url: `${basePath}/report-error/`,
+                type: 'POST',
+                data: {
+                    screenshot: imgData,
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                },
+                success: function(response) {
+                    $('#report-status').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Error report sent to support (support.heappe@it4i.cz)</span>');
+                },
+                error: function(xhr) {
+                    $('#report-status').html('<span class="text-muted"><i class="bi bi-exclamation-triangle-fill me-1"></i>Could not send report to support.</span>');
+                }
+            });
+        }
+    });
+</script>
 {% endblock %}

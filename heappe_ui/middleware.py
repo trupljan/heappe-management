@@ -138,6 +138,7 @@ class HeappeExceptionMiddleware:
         # Log the exception for tracing in server logs
         print(f"[HeappeExceptionMiddleware] Caught unhandled exception: {exception}")
         traceback.print_exc()
+        tb_str = traceback.format_exc()
 
         error_type = exception.__class__.__name__
         error_message = str(exception)
@@ -197,6 +198,23 @@ class HeappeExceptionMiddleware:
         # Retrieve active instance info from session
         instance_name = request.session.get("chosen_instance", "N/A")
         host_url = request.session.get("heappe_host_url") or request.session.get("heappe_host", "N/A")
+
+        # Save details to session for error reporting endpoint
+        from datetime import datetime
+        username = request.user.username if hasattr(request, 'user') and request.user.is_authenticated else 'Anonymous'
+        request.session['last_error_report'] = {
+            'instance_name': instance_name,
+            'host_url': host_url,
+            'current_path': request.path,
+            'username': username,
+            'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+            'error_title': error_title,
+            'error_desc': error_desc,
+            'error_type': error_type,
+            'error_status': error_status,
+            'error_message': error_message,
+            'traceback': tb_str
+        }
 
         context = {
             "error_type": error_type,

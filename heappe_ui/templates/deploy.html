@@ -116,7 +116,7 @@
             <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-2"><i class="bi bi-cpu text-primary"></i>API Services</h5>
             <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-4">
                 {% for item in containers %}
-                {% if 'heappe' in item.container.name.lower() or 'datastaging' in item.container.name.lower() %}
+                {% if 'heappe' in item.container.name.lower or 'datastaging' in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
                 <div class="col">
                     <div class="card h-100 shadow-sm border-0">
@@ -176,7 +176,7 @@
             <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-database text-info"></i>Database Services</h5>
             <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-4">
                 {% for item in containers %}
-                {% if 'mssql' in item.container.name.lower() or 'db' in item.container.name.lower() %}
+                {% if 'mssql' in item.container.name.lower or 'db' in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
                 <div class="col">
                     <div class="card h-100 shadow-sm border-0">
@@ -236,9 +236,9 @@
             <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-shield-lock text-info"></i>Infrastructure &amp; Security (Vault)</h5>
             <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-5">
                 {% for item in containers %}
-                {% if 'heappe' not in item.container.name.lower() and 'datastaging' not in item.container.name.lower() and 'mssql' not in item.container.name.lower() and 'db' not in item.container.name.lower() %}
+                {% if 'heappe' not in item.container.name.lower and 'datastaging' not in item.container.name.lower and 'mssql' not in item.container.name.lower and 'db' not in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
-                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower() or 'unseal' in container.name.lower() %}style="opacity: 0.7;"{% endif %}>
+                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
                     <div class="card h-100 shadow-sm border-0">
                         <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
                             <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>

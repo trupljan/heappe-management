@@ -1605,3 +1605,68 @@ def logs_context_api(request):
         })
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+def report_error_view(request):
+    """API endpoint to receive error reports (including screenshots) and email them to support."""
+    import base64
+    from django.core.mail import EmailMessage
+    from django.http import JsonResponse
+
+    if request.method == 'POST':
+        error_data = request.session.get('last_error_report', {})
+        if not error_data:
+            return JsonResponse({'status': 'error', 'message': 'No recent error report found in session.'}, status=400)
+
+        screenshot_data = request.POST.get('screenshot', '')
+
+        subject = f"[HEAppE UI Error Report] {error_data.get('error_title', 'HEAppE Instance Error')} - {error_data.get('instance_name', 'N/A')}"
+
+        body = f"""HEAppE UI Error Report
+=====================
+
+Instance Name:      {error_data.get('instance_name')}
+Host URL:           {error_data.get('host_url')}
+Requested Path:     {error_data.get('current_path')}
+User:               {error_data.get('username', 'Anonymous')}
+Timestamp (UTC):    {error_data.get('timestamp')}
+
+Error Title:        {error_data.get('error_title')}
+Error Description:  {error_data.get('error_desc')}
+Error Type:         {error_data.get('error_type')}
+Error Status Code:  {error_data.get('error_status')}
+
+Exception Message:
+------------------
+{error_data.get('error_message')}
+
+Traceback:
+----------
+{error_data.get('traceback')}
+"""
+        email = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email='noreply.heappe@it4i.cz',
+            to=['support.heappe@it4i.cz'],
+        )
+
+        if screenshot_data and ',' in screenshot_data:
+            try:
+                header, base64_data = screenshot_data.split(',', 1)
+                img_data = base64.b64decode(base64_data)
+                email.attach('screenshot.png', img_data, 'image/png')
+            except Exception as e:
+                print(f"[report_error_view] Failed to decode and attach screenshot: {e}")
+                body += f"\n\n(Failed to attach screenshot due to decoding error: {e})"
+                email.body = body
+
+        try:
+            email.send(fail_silently=False)
+            request.session.pop('last_error_report', None)
+            return JsonResponse({'status': 'success', 'message': 'Error report sent to support successfully.'})
+        except Exception as e:
+            print(f"[report_error_view] Failed to send error report email: {e}")
+            return JsonResponse({'status': 'error', 'message': f'Failed to send email: {e}'}, status=500)
+
+    return JsonResponse({'status': 'error', 'message': 'Only POST method is supported.'}, status=405)

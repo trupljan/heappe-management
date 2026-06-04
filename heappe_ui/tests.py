@@ -116,6 +116,58 @@ class HeappeExceptionMiddlewareTests(TestCase):
         finally:
             settings.DEBUG = old_debug
 
+    def test_process_exception_saves_error_report_to_session(self):
+        request = self._create_request()
+        request.session["chosen_instance"] = "test_instance"
+        request.session["heappe_host"] = "http://heappe.local"
+        
+        old_debug = settings.DEBUG
+        try:
+            settings.DEBUG = False
+            self.middleware.process_exception(request, ValueError("Database Connection Failure"))
+            
+            self.assertIn("last_error_report", request.session)
+            report = request.session["last_error_report"]
+            self.assertEqual(report["instance_name"], "test_instance")
+            self.assertEqual(report["error_type"], "ValueError")
+            self.assertEqual(report["error_message"], "Database Connection Failure")
+            self.assertIn("traceback", report)
+        finally:
+            settings.DEBUG = old_debug
+
+    def test_report_error_view_sends_email(self):
+        from django.core import mail
+        from heappe_ui.views import report_error_view
+        
+        request = self._create_request()
+        request.session["last_error_report"] = {
+            "instance_name": "test_instance",
+            "host_url": "http://heappe.local",
+            "current_path": "/dashboard/",
+            "username": "testuser",
+            "timestamp": "2026-06-04 12:00:00",
+            "error_title": "HEAppE Instance Error",
+            "error_desc": "Desc",
+            "error_type": "ValueError",
+            "error_status": 500,
+            "error_message": "Failure details",
+            "traceback": "Traceback info here"
+        }
+        request.method = "POST"
+        request.POST = {"screenshot": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg=="}
+        
+        response = report_error_view(request)
+        self.assertEqual(response.status_code, 200)
+        
+        self.assertEqual(len(mail.outbox), 1)
+        sent_email = mail.outbox[0]
+        self.assertEqual(sent_email.subject, "[HEAppE UI Error Report] HEAppE Instance Error - test_instance")
+        self.assertIn("support.heappe@it4i.cz", sent_email.to)
+        self.assertEqual(len(sent_email.attachments), 1)
+        self.assertEqual(sent_email.attachments[0][0], "screenshot.png")
+        
+        self.assertNotIn("last_error_report", request.session)
+
     def test_generate_session_code_missing_credentials(self):
         request = self._create_request()
         # No credentials in session
