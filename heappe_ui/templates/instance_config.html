@@ -784,14 +784,19 @@ $(document).ready(function() {
         border-radius: 6px;
         transition: background-color 0.15s ease, color 0.15s ease;
     }
-    #form-tabs-list .nav-link:hover {
+    #form-tabs-list .nav-link:not(.active):hover {
         background-color: #e9ecef;
     }
     #form-tabs-list .nav-link.active {
         background-color: #0d6efd;
         color: #fff;
     }
-    #form-tabs-list .nav-link.active i {
+    #form-tabs-list .nav-link.active:hover {
+        background-color: #0b5ed7;
+        color: #fff;
+    }
+    #form-tabs-list .nav-link.active i,
+    #form-tabs-list .nav-link.active:hover i {
         color: #fff !important;
     }
     .btn-xs {

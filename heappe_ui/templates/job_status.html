@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 
 {% block title %}Job Status - {{ job.name }}{% endblock %}
 
@@ -85,7 +86,7 @@
                 <div class="col-6 col-sm-6 col-md-3">
                     <div class="p-3 bg-light rounded-3 border h-100">
                         <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Creation Time</div>
-                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.creation_time|date:"d.m.Y H:i:s"|default:job.creation_time }}</div>
+                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.creation_time|format_datetime|default:"N/A" }}</div>
                     </div>
                 </div>
             </div>
@@ -94,19 +95,19 @@
                 <div class="col-6 col-sm-6 col-md-3">
                     <div class="p-3 bg-light rounded-3 border h-100">
                         <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Submission Time</div>
-                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.submit_time|date:"d.m.Y H:i:s"|default:job.submit_time|default:"Not yet submitted" }}</div>
+                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.submit_time|format_datetime|default:"Not yet submitted" }}</div>
                     </div>
                 </div>
                 <div class="col-6 col-sm-6 col-md-3">
                     <div class="p-3 bg-light rounded-3 border h-100">
                         <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">Start Time</div>
-                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.start_time|date:"d.m.Y H:i:s"|default:job.start_time|default:"Not started" }}</div>
+                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.start_time|format_datetime|default:"Not started" }}</div>
                     </div>
                 </div>
                 <div class="col-6 col-sm-6 col-md-3">
                     <div class="p-3 bg-light rounded-3 border h-100">
                         <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.7rem;">End Time</div>
-                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.end_time|date:"d.m.Y H:i:s"|default:job.end_time|default:"Not finished" }}</div>
+                        <div class="text-dark font-monospace mt-1.5" style="font-size: 0.82rem;">{{ job.end_time|format_datetime|default:"Not finished" }}</div>
                     </div>
                 </div>
                 <div class="col-6 col-sm-6 col-md-3">
@@ -187,11 +188,11 @@
                         </div>
                         <div class="col-sm-6">
                             <span class="text-secondary small fw-semibold">Start Timestamp:</span>
-                            <div class="font-monospace text-dark mt-0.5">{{ task.start_time|default:"Not started" }}</div>
+                            <div class="font-monospace text-dark mt-0.5">{{ task.start_time|format_datetime|default:"Not started" }}</div>
                         </div>
                         <div class="col-sm-6">
                             <span class="text-secondary small fw-semibold">End Timestamp:</span>
-                            <div class="font-monospace text-dark mt-0.5">{{ task.end_time|default:"Not finished" }}</div>
+                            <div class="font-monospace text-dark mt-0.5">{{ task.end_time|format_datetime|default:"Not finished" }}</div>
                         </div>
                     </div>
 

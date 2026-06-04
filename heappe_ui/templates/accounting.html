@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 
 {% block title %}Accounting & Queue Groups - {{ project.name }}{% endblock %}
 
@@ -163,8 +164,8 @@
                                 {% for accounting in p_agg.group.accountings %}
                                 <tr>
                                     <td class="ps-3 font-monospace text-dark">{{ accounting.formula }}</td>
-                                    <td class="text-secondary font-monospace">{% if accounting.validity_from %}{{ accounting.validity_from|date:"d.m.Y H:i" }}{% else %}—{% endif %}</td>
-                                    <td class="text-secondary font-monospace">{% if accounting.validity_to %}{{ accounting.validity_to|date:"d.m.Y H:i" }}{% else %}—{% endif %}</td>
+                                    <td class="text-secondary font-monospace">{{ accounting.validity_from|format_datetime:"%d.%m.%Y %H:%M"|default:"—" }}</td>
+                                    <td class="text-secondary font-monospace">{{ accounting.validity_to|format_datetime:"%d.%m.%Y %H:%M"|default:"—" }}</td>
                                     <td class="text-end pe-3">
                                         {% if accounting.is_active %}
                                             <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill fw-bold text-uppercase" style="font-size: 0.65rem;">Active</span>

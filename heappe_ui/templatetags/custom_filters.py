@@ -25,11 +25,11 @@ def heappe_version_ok(context, min_version):
 from datetime import datetime
 
 @register.filter
-def format_datetime(value):
+def format_datetime(value, format_str='%d.%m.%Y %H:%M:%S'):
     if not value:
         return ""
     if hasattr(value, 'strftime'):
-        return value.strftime('%d.%m.%Y %H:%M:%S')
+        return value.strftime(format_str)
     
     if isinstance(value, str):
         value_clean = value.replace('T', ' ').replace('Z', '').strip()
@@ -40,14 +40,18 @@ def format_datetime(value):
             for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S'):
                 try:
                     dt = datetime.strptime(value_clean, fmt)
-                    return dt.strftime('%d.%m.%Y %H:%M:%S')
+                    return dt.strftime(format_str)
                 except ValueError:
                     pass
         else:
             for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
                 try:
                     dt = datetime.strptime(value_clean, fmt)
-                    return dt.strftime('%d.%m.%Y %H:%M:%S') if ':' in fmt else dt.strftime('%d.%m.%Y')
+                    if ':' in fmt:
+                        return dt.strftime(format_str)
+                    else:
+                        out_fmt = format_str if format_str != '%d.%m.%Y %H:%M:%S' else '%d.%m.%Y'
+                        return dt.strftime(out_fmt)
                 except ValueError:
                     pass
             
