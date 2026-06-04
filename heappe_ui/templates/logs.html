@@ -8,6 +8,140 @@
 {% endblock %}
 
 {% block content %}
+<style>
+    /* Premium Metric Cards */
+    .metric-card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        border: none !important;
+        border-radius: 10px !important;
+    }
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.06) !important;
+    }
+    .metric-value {
+        font-size: 1.6rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+    }
+
+    /* Terminal Console Style for Log Table */
+    .terminal-table {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .terminal-table th {
+        font-weight: 700;
+        font-size: 0.72rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #6c757d;
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #dee2e6 !important;
+        padding: 10px 14px !important;
+    }
+    .terminal-row td {
+        padding: 10px 14px !important;
+    }
+    .terminal-row td:first-child {
+        border-left: 4px solid transparent;
+        transition: border-color 0.15s ease;
+    }
+    /* Severity indicator borders */
+    .terminal-row.level-debug td:first-child { border-left-color: #6c757d; }
+    .terminal-row.level-information td:first-child { border-left-color: #0dcaf0; }
+    .terminal-row.level-warning td:first-child { border-left-color: #ffc107; }
+    .terminal-row.level-error td:first-child { border-left-color: #dc3545; }
+    .terminal-row.level-critical td:first-child { border-left-color: #212529; }
+
+    .terminal-row:hover {
+        background-color: rgba(248, 249, 250, 0.85) !important;
+    }
+    
+    .log-msg-cell {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 0.82rem;
+        color: #212529;
+        max-width: 400px;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    
+    .log-exception-cell pre {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 0.72rem;
+        max-height: 70px;
+        overflow-y: auto;
+        background-color: #fff5f5;
+        border: 1px solid #fed7d7;
+        padding: 6px 10px;
+        border-radius: 6px;
+        color: #c53030;
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+
+    /* Developer Console Look for Preceding Trace Modal */
+    .trace-console {
+        background-color: #1a1a1a;
+        color: #e0e0e0;
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 0.78rem;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: inset 0 2px 8px rgba(0,0,0,0.5);
+        border: 1px solid #2d2d2d;
+    }
+    .trace-line {
+        display: flex;
+        border-bottom: 1px solid #282828;
+        transition: background-color 0.1s ease;
+    }
+    .trace-line:hover {
+        background-color: #252525;
+    }
+    .trace-line.is-target {
+        background-color: #2e2d24;
+        border-left: 4px solid #ffc107;
+    }
+    .trace-line-col {
+        padding: 8px 12px;
+    }
+    .trace-line-time {
+        color: #9cdcfe;
+        width: 100px;
+        min-width: 100px;
+    }
+    .trace-line-level {
+        width: 90px;
+        min-width: 90px;
+    }
+    .trace-line-class {
+        color: #4ec9b0;
+        width: 200px;
+        min-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .trace-line-message {
+        flex-grow: 1;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+    .trace-line-exception {
+        background-color: #2d1e1e;
+        color: #f14c4c;
+        border: 1px solid #5a1d1d;
+        padding: 8px 12px;
+        margin: 6px 0;
+        border-radius: 4px;
+        font-size: 0.72rem;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+</style>
 <div class="container-fluid py-2">
 
     <!-- Header and Mode Switcher -->
@@ -87,50 +221,73 @@
             <!-- Summary Cards -->
             <div class="col-xl-10 col-lg-9 col-12">
                 <div class="row row-cols-1 row-cols-sm-3 row-cols-md-5 g-3">
+                    <!-- Debug -->
                     <div class="col">
-                        <div class="card border-0 shadow-sm rounded-3 bg-light text-center h-100 py-3 border-start border-4 border-secondary">
-                            <div class="text-uppercase text-secondary fw-bold small" style="font-size: 0.72rem;">Debug</div>
-                            <div class="h3 fw-bold text-dark mt-2 mb-0" id="debugCount">{{ debug_count }}</div>
+                        <div class="card metric-card shadow-sm bg-light h-100 py-3 px-2 text-center border-start border-4 border-secondary">
+                            <div class="d-flex align-items-center justify-content-center gap-1.5 text-secondary">
+                                <i class="bi bi-bug fs-6"></i>
+                                <span class="text-uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.05em;">Debug</span>
+                            </div>
+                            <div class="metric-value text-dark mt-2 mb-0" id="debugCount">{{ debug_count }}</div>
                         </div>
                     </div>
+                    <!-- Info -->
                     <div class="col">
-                        <div class="card border-0 shadow-sm rounded-3 bg-info bg-opacity-10 text-center h-100 py-3 border-start border-4 border-info">
-                            <div class="text-uppercase text-info-emphasis fw-bold small" style="font-size: 0.72rem;">Info</div>
-                            <div class="h3 fw-bold text-info-emphasis mt-2 mb-0" id="infoCount">{{ info_count }}</div>
+                        <div class="card metric-card shadow-sm bg-info bg-opacity-10 h-100 py-3 px-2 text-center border-start border-4 border-info">
+                            <div class="d-flex align-items-center justify-content-center gap-1.5 text-info-emphasis">
+                                <i class="bi bi-info-circle fs-6"></i>
+                                <span class="text-uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.05em;">Info</span>
+                            </div>
+                            <div class="metric-value text-info-emphasis mt-2 mb-0" id="infoCount">{{ info_count }}</div>
                         </div>
                     </div>
+                    <!-- Warning -->
                     <div class="col">
-                        <div class="card border-0 shadow-sm rounded-3 bg-warning bg-opacity-10 text-center h-100 py-3 border-start border-4 border-warning">
-                            <div class="text-uppercase text-warning-emphasis fw-bold small" style="font-size: 0.72rem;">Warning</div>
-                            <div class="h3 fw-bold text-warning-emphasis mt-2 mb-0" id="warningCount">{{ warning_count }}</div>
+                        <div class="card metric-card shadow-sm bg-warning bg-opacity-10 h-100 py-3 px-2 text-center border-start border-4 border-warning">
+                            <div class="d-flex align-items-center justify-content-center gap-1.5 text-warning-emphasis">
+                                <i class="bi bi-exclamation-triangle fs-6"></i>
+                                <span class="text-uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.05em;">Warning</span>
+                            </div>
+                            <div class="metric-value text-warning-emphasis mt-2 mb-0" id="warningCount">{{ warning_count }}</div>
                         </div>
                     </div>
+                    <!-- Error -->
                     <div class="col">
-                        <div class="card border-0 shadow-sm rounded-3 bg-danger bg-opacity-10 text-center h-100 py-3 border-start border-4 border-danger">
-                            <div class="text-uppercase text-danger-emphasis fw-bold small" style="font-size: 0.72rem;">Error</div>
-                            <div class="h3 fw-bold text-danger-emphasis mt-2 mb-0" id="errorCount">{{ error_count }}</div>
+                        <div class="card metric-card shadow-sm bg-danger bg-opacity-10 h-100 py-3 px-2 text-center border-start border-4 border-danger">
+                            <div class="d-flex align-items-center justify-content-center gap-1.5 text-danger-emphasis">
+                                <i class="bi bi-x-circle fs-6"></i>
+                                <span class="text-uppercase fw-bold" style="font-size: 0.7rem; letter-spacing: 0.05em;">Error</span>
+                            </div>
+                            <div class="metric-value text-danger-emphasis mt-2 mb-0" id="errorCount">{{ error_count }}</div>
                         </div>
                     </div>
+                    <!-- Critical -->
                     <div class="col">
-                        <div class="card border-0 shadow-sm rounded-3 bg-dark text-white text-center h-100 py-3">
-                            <div class="text-uppercase text-white-50 fw-bold small" style="font-size: 0.72rem;">Critical</div>
-                            <div class="h3 fw-bold text-white mt-2 mb-0" id="criticalCount">{{ critical_count }}</div>
+                        <div class="card metric-card shadow-sm bg-dark text-white h-100 py-3 px-2 text-center border-start border-4 border-white-50">
+                            <div class="d-flex align-items-center justify-content-center gap-1.5 text-white-50">
+                                <i class="bi bi-fire fs-6 text-danger"></i>
+                                <span class="text-uppercase fw-bold text-white-50" style="font-size: 0.7rem; letter-spacing: 0.05em;">Critical</span>
+                            </div>
+                            <div class="metric-value text-white mt-2 mb-0" id="criticalCount">{{ critical_count }}</div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Circular Countdown -->
-            <div class="col-xl-2 col-lg-3 col-12 d-flex flex-column align-items-center justify-content-center bg-white rounded-3 shadow-sm py-3 px-4 border border-white">
-                <svg class="mb-2" style="width: 70px; height: 70px;" viewBox="0 0 36 36">
-                    <circle cx="18" cy="18" r="16" stroke="#E5E7EB" stroke-width="3" fill="none" />
-                    <circle id="progressCircle" cx="18" cy="18" r="16" stroke="#0d6efd" stroke-width="3" fill="none"
-                            stroke-dasharray="100" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 18 18)" />
-                    <text id="countdownNumber" x="18" y="22" text-anchor="middle" font-size="10" fill="#1F2937" font-weight="bold">15</text>
-                </svg>
-                <div class="form-check form-switch pt-1">
-                    <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
-                    <label class="form-check-label small fw-semibold text-secondary" for="autoRefresh">Auto Refresh</label>
+            <div class="col-xl-2 col-lg-3 col-12">
+                <div class="card border-0 shadow-sm rounded-3 bg-white h-100 d-flex flex-column align-items-center justify-content-center py-3 px-4 transition-hover">
+                    <svg class="mb-2" style="width: 64px; height: 64px;" viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="16" stroke="#E5E7EB" stroke-width="2.5" fill="none" />
+                        <circle id="progressCircle" cx="18" cy="18" r="16" stroke="#0d6efd" stroke-width="2.5" fill="none"
+                                stroke-dasharray="100" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 18 18)"
+                                style="transition: stroke-dashoffset 0.1s linear;" />
+                        <text id="countdownNumber" x="18" y="21.5" text-anchor="middle" font-size="9.5" fill="#212529" font-weight="bold" font-family="'Inter', sans-serif">15</text>
+                    </svg>
+                    <div class="form-check form-switch pt-1">
+                        <input class="form-check-input" type="checkbox" id="autoRefresh" checked>
+                        <label class="form-check-label small fw-bold text-secondary" for="autoRefresh" style="font-size: 0.75rem; letter-spacing: 0.02em; text-transform: uppercase;">Auto Refresh</label>
+                    </div>
                 </div>
             </div>
         </div>
@@ -153,7 +310,7 @@
                 <h5 class="h6 mb-0 fw-bold text-dark">System Logs Table</h5>
             </div>
             <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0" id="logsTable">
+                <table class="table align-middle mb-0 terminal-table" id="logsTable">
                     <thead class="table-light text-secondary small text-uppercase">
                         <tr>
                             <th class="ps-4" style="width: 15%;">Timestamp</th>
@@ -168,7 +325,7 @@
                     </thead>
                     <tbody>
                         {% for log in logs %}
-                        <tr class="hover-bg-light cursor-pointer" onclick="showLogContext(this)" data-date="{{ log.Date|date:'Y-m-d H:i:s.u' }}" data-instance="{{ log.InstanceName }}">
+                        <tr class="terminal-row level-{{ log.LevelName|lower }} cursor-pointer" onclick="showLogContext(this)" data-date="{{ log.Date|date:'Y-m-d H:i:s.u' }}" data-instance="{{ log.InstanceName }}">
                             <td class="ps-4 font-monospace text-secondary" style="font-size: 0.8rem;">{{ log.Date|date:"d.m.Y H:i:s" }}</td>
                             <td>
                                 <span class="badge 
@@ -181,8 +338,14 @@
                                     {{ log.LevelName }}
                                 </span>
                             </td>
-                            <td class="text-dark small" style="word-break: break-all;">{{ log.Message }}</td>
-                            <td class="text-danger font-monospace small" style="word-break: break-all;">{{ log.Exception|default:"-" }}</td>
+                            <td class="log-msg-cell">{{ log.Message }}</td>
+                            <td class="log-exception-cell">
+                                {% if log.Exception and log.Exception != "-" %}
+                                    <pre>{{ log.Exception }}</pre>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
                             <td class="small">{{ log.InstanceName }} <span class="text-muted font-monospace" style="font-size: 0.75rem;">({{ log.InstanceVersion }})</span></td>
                             <td class="text-secondary font-monospace small" title="{{ log.Class }}">{{ log.Class|truncatechars:30 }}</td>
                             <td class="text-secondary font-monospace small">{{ log.IP }}</td>
@@ -437,9 +600,9 @@
                         <span class="text-secondary small font-monospace" style="font-size: 0.8rem;" id="contextTargetTime"></span>
                     </div>
                     <!-- Log content area -->
-                    <div class="overflow-y-auto max-h-96 p-0" id="contextLogsContainer" style="font-family: var(--bs-font-monospace);">
+                    <div class="overflow-y-auto max-h-96 p-0 trace-console" id="contextLogsContainer">
                         <div class="d-flex justify-content-center align-items-center py-5">
-                            <div class="spinner-border text-primary" role="status"></div>
+                            <div class="spinner-border text-light" role="status"></div>
                         </div>
                     </div>
                 </div>
@@ -493,8 +656,7 @@
 
                     let logsHtml = '';
                     data.logs.forEach((log, index) => {
-                        const isTarget = (index === data.logs.length - 1); // Clicked log is the last one in chronological order
-                        const rowBg = isTarget ? 'bg-warning bg-opacity-25 border-start border-4 border-warning fw-semibold' : 'hover-bg-light border-start border-4 border-transparent';
+                        const isTarget = (index === data.logs.length - 1);
                         
                         let levelBadge = '';
                         if (log.LevelName === 'Debug') levelBadge = 'bg-secondary-subtle text-secondary';
@@ -505,7 +667,7 @@
                         
                         let msgHtml = log.Message;
                         if (log.Exception && log.Exception !== '-' && log.Exception !== '') {
-                            msgHtml += `<pre class="mt-2 p-2 bg-danger bg-opacity-10 text-danger rounded font-monospace" style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-all;">${log.Exception}</pre>`;
+                            msgHtml += `<pre class="trace-line-exception">${log.Exception}</pre>`;
                         }
 
                         let timePart = log.Date;
@@ -514,15 +676,15 @@
                         }
 
                         logsHtml += `
-                            <div class="py-2.5 px-3 border-bottom ${rowBg} d-flex flex-column flex-md-row align-items-md-start gap-2 text-dark">
-                                <div class="text-secondary font-monospace text-xs" style="width: 110px; min-width: 110px;">${timePart}</div>
-                                <div style="width: 90px; min-width: 90px;">
+                            <div class="trace-line ${isTarget ? 'is-target' : ''}">
+                                <div class="trace-line-col trace-line-time">${timePart}</div>
+                                <div class="trace-line-col trace-line-level">
                                     <span class="badge ${levelBadge} rounded-pill text-uppercase px-2 py-0.5" style="font-size: 0.65rem; font-weight: bold; letter-spacing: 0.02em;">
                                         ${log.LevelName}
                                     </span>
                                 </div>
-                                <div class="text-secondary font-monospace text-xs text-truncate" style="width: 200px; min-width: 200px;" title="${log.Class}">${log.Class}</div>
-                                <div class="flex-grow-1 text-dark break-words text-xs">${msgHtml}</div>
+                                <div class="trace-line-col trace-line-class" title="${log.Class}">${log.Class}</div>
+                                <div class="trace-line-col trace-line-message">${msgHtml}</div>
                             </div>
                         `;
                     });
