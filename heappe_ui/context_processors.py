@@ -85,7 +85,6 @@ def middleware_update_renderer(request):
             # 2. Fallback to appsettings.json
             if not deployed_version:
                 base_path = "/opt/heappe-deployment/"
-                import os
                 appsettings_path = os.path.join(base_path, instance_name, "app", "confs", "appsettings.json")
                 if os.path.exists(appsettings_path):
                     try:
