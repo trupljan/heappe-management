@@ -265,6 +265,15 @@
                 <input type="text" name="search" class="form-control form-control-custom form-control-sm w-100" placeholder="Filter..." value="{{ search_query }}">
             </div>
             
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm fw-bold px-3 py-1.5 w-100 shadow-sm" style="border-radius: 8px;">
+                    <i class="bi bi-funnel me-1"></i>Apply
+                </button>
+                <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-sm fw-semibold px-3 py-1.5 w-100" style="border-radius: 8px;">
+                    Reset
+                </a>
+            </div>
+
             <div class="col-md-1">
                 <label class="filter-label">Live Tail</label>
                 <div class="d-flex align-items-center gap-1.5 py-1">
@@ -275,15 +284,6 @@
                         Off
                     </span>
                 </div>
-            </div>
-            
-            <div class="col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm fw-bold px-3 py-1.5 w-100 shadow-sm" style="border-radius: 8px;">
-                    <i class="bi bi-funnel me-1"></i>Apply
-                </button>
-                <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-sm fw-semibold px-3 py-1.5 w-100" style="border-radius: 8px;">
-                    Reset
-                </a>
             </div>
         </form>
     </div>
