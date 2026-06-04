@@ -120,8 +120,43 @@ def middleware_update_renderer(request):
     request.session["middleware_deployed_version"] = deployed_version
     request.session["middleware_latest_version"] = latest_version
 
+    # Cache status check
+    from django.conf import settings
+    timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
+    last_global_mod = 0.0
+    if os.path.exists(timestamp_file):
+        try:
+            with open(timestamp_file, "r") as f:
+                last_global_mod = float(f.read().strip())
+        except Exception:
+            pass
+
+    cache_keys = {
+        "clusters_cache": "Clusters",
+        "node_types_cache": "Queues",
+        "all_adaptor_users_cache": "Users",
+        "accountings_cache": "Accountings",
+        "queue_groups_cache": "Queue Groups",
+        "mappings_cache": "Mappings",
+        "projects_list_cache": "Projects"
+    }
+
+    cache_status = {}
+    for key, label in cache_keys.items():
+        cache_time = request.session.get(f"{key}_time")
+        if cache_time and cache_time >= last_global_mod:
+            age = int(now - cache_time)
+            if age < 60:
+                age_str = f"{age}s"
+            else:
+                age_str = f"{age // 60}m {age % 60}s"
+            cache_status[label] = age_str
+        else:
+            cache_status[label] = "Live"
+
     return {
         'middleware_update_available': update_available,
         'middleware_deployed_version': deployed_version,
         'middleware_latest_version': latest_version,
+        'cache_status': cache_status,
     }

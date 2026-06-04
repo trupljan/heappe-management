@@ -41,7 +41,7 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow py-2">
+    <nav class="navbar navbar-expand-xl navbar-dark bg-primary shadow py-2">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold d-flex align-items-center me-4" href="{% url 'dashboard_view' %}">
                 <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" class="me-2" style="height: 30px;">
@@ -54,10 +54,10 @@
 
             <div class="collapse navbar-collapse" id="navbarContent">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0 align-items-center">
-                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center" href="{% url 'dashboard_view' %}"><i class="bi bi-house me-1"></i> Dashboard</a></li>
-                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center" href="{% url 'manage_project_adaptor_users_base' %}"><i class="bi bi-person me-1"></i> User Management</a></li>
+                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center text-nowrap" href="{% url 'dashboard_view' %}"><i class="bi bi-house me-1"></i> Dashboard</a></li>
+                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center text-nowrap" href="{% url 'manage_project_adaptor_users_base' %}"><i class="bi bi-person me-1"></i> User Management</a></li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center" href="#" id="infraDrop" data-bs-toggle="dropdown"><i class="bi bi-hdd-stack me-1"></i> Infrastructure</a>
+                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center text-nowrap" href="#" id="infraDrop" data-bs-toggle="dropdown"><i class="bi bi-hdd-stack me-1"></i> Infrastructure</a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{% url 'cluster_list' %}">Clusters</a></li>
                             <li><a class="dropdown-item" href="{% url 'queues_view' %}">Queues</a></li>
@@ -65,7 +65,7 @@
                         </ul>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center position-relative" href="#" id="sysDrop" data-bs-toggle="dropdown">
+                        <a class="nav-link nav-white dropdown-toggle d-flex align-items-center position-relative text-nowrap" href="#" id="sysDrop" data-bs-toggle="dropdown">
                             <i class="bi bi-graph-up me-1"></i> System Management
                             {% if middleware_update_available %}
                                 <span class="position-absolute top-0 start-100 translate-middle p-1 bg-warning border border-light rounded-circle animate-pulse" style="margin-top: 5px; margin-left: -10px;" title="Middleware update available!"></span>
@@ -73,9 +73,9 @@
                         </a>
                         <ul class="dropdown-menu">
                             {% if request.session.chosen_instance %}
-                             <li><a class="dropdown-item" href="{% url 'deploy_view' request.session.chosen_instance %}">Application Control</a></li>
+                             <li><a class="dropdown-item text-nowrap" href="{% url 'deploy_view' request.session.chosen_instance %}">Application Control</a></li>
                              <li>
-                                 <a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'deploy_view' request.session.chosen_instance %}">
+                                 <a class="dropdown-item d-flex justify-content-between align-items-center text-nowrap" href="{% url 'deploy_view' request.session.chosen_instance %}">
                                      <span><i class="bi bi-arrow-repeat me-1"></i> Update Middleware</span>
                                      {% if middleware_update_available %}
                                          <span class="badge bg-warning text-dark ms-2 animate-pulse" title="Update Available: {{ middleware_latest_version }}"><i class="bi bi-exclamation-triangle-fill"></i></span>
@@ -83,25 +83,44 @@
                                  </a>
                              </li>
                             {% endif %}
-                            <li><a class="dropdown-item" href="{% url 'logs' %}">Logs</a></li>
+                            <li><a class="dropdown-item text-nowrap" href="{% url 'logs' %}">Logs</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#updateModal"><i class="bi bi-arrow-up-circle me-1"></i> System Update</a></li>
+                            <li><a class="dropdown-item text-nowrap" href="#" data-bs-toggle="modal" data-bs-target="#updateModal"><i class="bi bi-arrow-up-circle me-1"></i> System Update</a></li>
                         </ul>
                     </li>
-                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center" href="{% url 'deploy_view' %}"><i class="bi bi-cloud-arrow-up me-1"></i> Deploy</a></li>
+                    <li class="nav-item"><a class="nav-link nav-white d-flex align-items-center text-nowrap" href="{% url 'deploy_view' %}"><i class="bi bi-cloud-arrow-up me-1"></i> Deploy</a></li>
                 </ul>
 
                 <div class="d-flex align-items-center gap-2">
                     {% if user.is_authenticated %}
-
                         {% if request.session.chosen_instance %}
-                            <button class="btn btn-sm btn-outline-warning px-3" onclick="refreshCache()"><i class="bi bi-arrow-clockwise"></i> Sync Cache</button>
-                            <a class="btn btn-sm btn-outline-light px-3" href="{% url 'reconnect_view' %}">Reconnect {{ request.session.chosen_instance }}</a>
-                            <a class="btn btn-sm btn-outline-light px-3" href="{% url 'instance_credentials_list' %}">Switch Instance</a>
+                            <div class="dropdown">
+                                <button class="btn btn-sm btn-outline-warning dropdown-toggle px-3 text-nowrap" type="button" id="cacheDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-arrow-clockwise"></i> Sync Cache
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="cacheDropdown" style="min-width: 260px;">
+                                    <li class="px-3 py-2 border-bottom bg-light d-flex justify-content-between align-items-center">
+                                        <span class="fw-bold small text-muted"><i class="bi bi-database-fill-check me-1"></i>Cache Status</span>
+                                        <button class="btn btn-sm btn-outline-warning py-0 px-2 fw-semibold text-nowrap" style="font-size: 0.75rem;" onclick="refreshCache()">Sync Now</button>
+                                    </li>
+                                    {% if cache_status %}
+                                        {% for label, age in cache_status.items %}
+                                            <li class="px-3 py-1.5 d-flex justify-content-between align-items-center small">
+                                                <span class="text-secondary text-nowrap">{{ label }}</span>
+                                                <span class="badge {% if age == 'Live' %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border border-secondary-subtle{% endif %} px-2 py-1 text-nowrap">{{ age }}</span>
+                                            </li>
+                                        {% endfor %}
+                                    {% else %}
+                                        <li class="px-3 py-2 text-muted small text-center text-nowrap">No active caches</li>
+                                    {% endif %}
+                                </ul>
+                            </div>
+                            <a class="btn btn-sm btn-outline-light px-3 text-nowrap" href="{% url 'reconnect_view' %}">Reconnect {{ request.session.chosen_instance }}</a>
+                            <a class="btn btn-sm btn-outline-light px-3 text-nowrap" href="{% url 'instance_credentials_list' %}">Switch Instance</a>
                         {% endif %}
 
                         <div class="dropdown ms-2">
-                            <a class="nav-link nav-white dropdown-toggle d-flex align-items-center px-2" href="#" id="userDrop" data-bs-toggle="dropdown">
+                            <a class="nav-link nav-white dropdown-toggle d-flex align-items-center px-2 text-nowrap" href="#" id="userDrop" data-bs-toggle="dropdown">
                                 <i class="bi bi-person-circle fs-5 me-1"></i><span>{{ user.username }}</span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end shadow">
@@ -176,12 +195,12 @@
         <!-- HEAppE Middleware Update Banner -->
         {% if middleware_update_available and request.session.chosen_instance %}
             {% with snooze_key="middleware_update_snoozed__"|add:request.session.chosen_instance|add:"__"|add:middleware_latest_version %}
-            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between p-3 mb-3 animate-fade-in"
+            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between p-3 mb-3"
                  id="middleware-update-banner"
                  data-snooze-key="{{ snooze_key }}"
                  style="display: none;">
                 <div class="d-flex align-items-center gap-2">
-                    <span class="spinner-grow spinner-grow-sm text-warning me-2" role="status" aria-hidden="true"></span>
+                    <i class="bi bi-exclamation-triangle-fill text-warning fs-4 me-2"></i>
                     <div>
                         <strong class="text-warning-emphasis">HEAppE Middleware Update Available:</strong>
                         A new version of HEAppE Middleware is available for instance <strong>{{ request.session.chosen_instance }}</strong>
@@ -217,11 +236,11 @@
         {% endif %}
 
         <!-- Admin Panel Update Banner -->
-        <div class="alert alert-info border-info shadow-sm d-flex align-items-center justify-content-between p-3 mb-3 animate-fade-in"
+        <div class="alert alert-info border-info shadow-sm d-flex align-items-center justify-content-between p-3 mb-3"
              id="adminpanel-update-banner"
              style="display: none;">
             <div class="d-flex align-items-center gap-2">
-                <span class="spinner-grow spinner-grow-sm text-info me-2" role="status" aria-hidden="true"></span>
+                <i class="bi bi-info-circle-fill text-info fs-4 me-2"></i>
                 <div>
                     <strong class="text-info-emphasis">Admin Panel Update Available:</strong>
                     A new version of the HEAppE Admin Panel is available.
