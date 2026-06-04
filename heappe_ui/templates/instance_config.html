@@ -27,7 +27,7 @@
     <div class="row mb-4 align-items-center">
         <div class="col-md-8">
             <h2 class="mb-0 fw-bold">Configuration: <span class="text-primary">{{ instance_name }}</span></h2>
-            <p class="text-muted small mb-0">Manage settings for <code>/opt/heappe/confs/appsettings.json</code> inside the core HEAppE middleware container.</p>
+            <p class="text-muted small mb-0">Manage settings for <code>/opt/heappe/confs/{{ selected_file }}</code> inside the container.</p>
         </div>
         <div class="col-md-4 text-md-end mt-3 mt-md-0">
             <a href="{% url 'deploy_view' instance_name %}" class="btn btn-outline-secondary shadow-sm w-100 w-md-auto">
@@ -35,6 +35,20 @@
             </a>
         </div>
     </div>
+
+    <!-- Configuration File Selector -->
+    <ul class="nav nav-pills mb-4 shadow-sm p-1.5 bg-white rounded-3 gap-1 border" style="max-width: fit-content;">
+        <li class="nav-item">
+            <a class="nav-link {% if selected_file == 'appsettings.json' %}active fw-bold{% endif %} py-2 px-3.5 rounded-2 d-flex align-items-center gap-2" href="?file=appsettings.json">
+                <i class="bi bi-file-earmark-code-fill"></i>HEAppE API (appsettings.json)
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if selected_file == 'appsettings-data.json' %}active fw-bold{% endif %} py-2 px-3.5 rounded-2 d-flex align-items-center gap-2" href="?file=appsettings-data.json">
+                <i class="bi bi-file-earmark-code-fill"></i>DataStaging API (appsettings-data.json)
+            </a>
+        </li>
+    </ul>
 
     {% if error_message %}
         <div class="alert alert-danger shadow-sm border-0 d-flex align-items-center p-4 rounded-3 mb-5">

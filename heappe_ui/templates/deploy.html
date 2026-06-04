@@ -293,8 +293,10 @@
         <!-- Configuration Explorer Tab Pane -->
         <div class="tab-pane fade" id="configs-pane" role="tabpanel" aria-labelledby="configs-tab">
             <div class="card border-0 shadow-sm rounded-3 overflow-hidden mb-5" style="height: 75vh; border: 1px solid #dee2e6 !important;">
-                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2.5 px-3 border-bottom">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3 border-bottom flex-wrap gap-2">
                     <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-folder2-open me-2"></i>File Explorer: <span id="fm-container-name" class="text-primary"></span></h6>
+                    <!-- Quick Container Switcher -->
+                    <div class="btn-group btn-group-sm" id="fm-container-switcher"></div>
                 </div>
                 <div class="card-body p-0 d-flex flex-column overflow-hidden h-100" style="min-height: 0;">
                     <div id="fm-feedback"></div>
@@ -1054,6 +1056,42 @@ $(document).ready(function() {
     }
 
     // --- FILE MANAGER TAB SWITCHING AND AUTO-RESOLUTION ---
+    function populateContainerSwitcher() {
+        const switcher = $('#fm-container-switcher');
+        switcher.empty();
+        
+        $('.open-fm-tab-btn').each(function() {
+            const cid = $(this).data('container-id');
+            const name = $(this).data('container-name') || '';
+            const lowerName = name.toLowerCase();
+            
+            if (lowerName.includes('heappe') || lowerName.includes('datastaging')) {
+                const label = lowerName.includes('heappe') ? 'HEAppE API' : 'DataStaging API';
+                const btnClass = cid === currentContainerId ? 'btn-primary' : 'btn-outline-primary';
+                const btn = $(`<button type="button" class="btn btn-sm ${btnClass} fm-switch-container-btn" data-container-id="${cid}" data-container-name="${name}">${label}</button>`);
+                switcher.append(btn);
+            }
+        });
+    }
+
+    $(document).on('click', '.fm-switch-container-btn', function(e) {
+        e.preventDefault();
+        currentContainerId = $(this).data('container-id');
+        $('#fm-container-name').text($(this).data('container-name'));
+        
+        currentPath = '/opt/heappe/confs/';
+        
+        $('#editor-placeholder').show();
+        $('#editor-ui').hide();
+        $('#json-validation-status').hide().empty();
+        $('#json-restart-warning').hide();
+        $('#restart-instance-btn').hide();
+        lastValidationResult = null;
+        
+        populateContainerSwitcher();
+        loadFileList();
+    });
+
     $(document).on('click', '.open-fm-tab-btn', function(e) {
         e.preventDefault();
         currentContainerId = $(this).data('container-id');
@@ -1076,6 +1114,7 @@ $(document).ready(function() {
             new bootstrap.Tab(tabEl).show();
         }
         
+        populateContainerSwitcher();
         loadFileList();
     });
 
@@ -1102,6 +1141,7 @@ $(document).ready(function() {
                 loadFileList();
             }
         }
+        populateContainerSwitcher();
     });
 
     function loadFileList() {

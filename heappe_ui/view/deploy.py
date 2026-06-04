@@ -997,37 +997,58 @@ def handle_file_action(request, container_id, action):
 
 @login_required
 def instance_config_view(request, instance_name):
-    """Graphical tree editor and manager for appsettings.json of the HEAppE instance."""
+    """Graphical tree editor and manager for appsettings.json or appsettings-data.json of the HEAppE instance."""
     from ..models import InstanceCredentials
     try:
         instance_service = InstanceCredentials.objects.get(instance_name=instance_name)
     except InstanceCredentials.DoesNotExist:
         return HttpResponse("Instance not found.", status=404)
 
+    # Determine which configuration file is selected
+    selected_file = request.GET.get('file', 'appsettings.json')
+    if selected_file not in ['appsettings.json', 'appsettings-data.json']:
+        selected_file = 'appsettings.json'
+
     client = docker.from_env()
-    heappe_container = None
+    target_container = None
     try:
+        # 1. Try to find the exact container associated with the selected file type
         for c in client.containers.list(all=True):
             if c.labels.get('com.docker.compose.project') == instance_name:
                 service_name = c.labels.get('com.docker.compose.service', '')
-                if 'heappe' in service_name or 'heappe' in c.name:
-                    heappe_container = c
-                    break
+                if selected_file == 'appsettings-data.json':
+                    if 'datastaging' in service_name or 'datastaging' in c.name:
+                        target_container = c
+                        break
+                else:
+                    if 'heappe' in service_name or 'heappe' in c.name:
+                        target_container = c
+                        break
+        # 2. Fallback to any of the core containers if target is not found (since they mount the same volume)
+        if not target_container:
+            for c in client.containers.list(all=True):
+                if c.labels.get('com.docker.compose.project') == instance_name:
+                    service_name = c.labels.get('com.docker.compose.service', '')
+                    if 'heappe' in service_name or 'heappe' in c.name or 'datastaging' in service_name or 'datastaging' in c.name:
+                        target_container = c
+                        break
     except Exception as e:
         return render(request, "instance_config.html", {
             "instance_name": instance_name,
             "error_message": f"Could not list Docker containers: {e}",
             "instance_service": instance_service,
+            "selected_file": selected_file,
         })
 
-    if not heappe_container:
+    if not target_container:
         return render(request, "instance_config.html", {
             "instance_name": instance_name,
-            "error_message": "HEAppE container not found or not created yet.",
+            "error_message": "Associated container (heappe/datastaging) not found or not created yet.",
             "instance_service": instance_service,
+            "selected_file": selected_file,
         })
 
-    config_path = "/opt/heappe/confs/appsettings.json"
+    config_path = f"/opt/heappe/confs/{selected_file}"
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -1035,7 +1056,7 @@ def instance_config_view(request, instance_name):
         if action == 'save':
             content = request.POST.get('content', '')
             write_script = f"mkdir -p $(dirname '{config_path}') && cat > '{config_path}' <<'EOF'\n{content}\nEOF\n"
-            exec_result = heappe_container.exec_run(['bash', '-c', write_script])
+            exec_result = target_container.exec_run(['bash', '-c', write_script])
             if exec_result.exit_code == 0:
                 return JsonResponse({'status': 'success', 'message': 'Configuration saved successfully.'})
             else:
@@ -1053,7 +1074,7 @@ def instance_config_view(request, instance_name):
 
     # GET request - read config content
     try:
-        exec_result = heappe_container.exec_run(f"cat {config_path}")
+        exec_result = target_container.exec_run(f"cat {config_path}")
         if exec_result.exit_code == 0:
             config_content = exec_result.output.decode('utf-8')
         else:
@@ -1065,6 +1086,7 @@ def instance_config_view(request, instance_name):
         "instance_name": instance_name,
         "config_content": config_content,
         "instance_service": instance_service,
-        "container_id": heappe_container.id,
+        "container_id": target_container.id,
+        "selected_file": selected_file,
     }
     return render(request, "instance_config.html", context)
