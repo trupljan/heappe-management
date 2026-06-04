@@ -196,6 +196,9 @@ def dashboard_view(request):
     if request.session.get("chosen_instance") is None:
         return redirect("instance_credentials_list")
 
+    # ⚠️ TEMPORARY TEST ERROR — remove after testing report-error flow
+    raise ConnectionError("Test error: HEAppE API unreachable (this is intentional for testing)")
+
     # Initialize controller
     controller = hp.ManagementApi(request.api_instance)
     jr_controller = hp.JobReportingApi(request.api_instance)
