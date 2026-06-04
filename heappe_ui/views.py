@@ -202,17 +202,83 @@ def dashboard_view(request):
     health_controller = hp.HealthApi(request.api_instance)
 
     # Get HEAppE Health Info
+    deployed_version = ""
     try:
         health_info = health_controller.heappe_health_get()
         # Převést na dict, pokud má objekt metodu to_dict()
         health = health_info.to_dict() if hasattr(health_info, "to_dict") else health_info
         context["health"] = health
+        if health_info:
+            if hasattr(health_info, "version") and health_info.version:
+                deployed_version = health_info.version.lstrip("vV")
+            elif isinstance(health_info, dict) and health_info.get("version"):
+                deployed_version = health_info["version"].lstrip("vV")
     except Exception as e:
         print(f"Error fetching health info: {e}")
         context["health"] = {
             "IsHealthy": False,
             "Error": str(e)
         }
+
+    # HEAppE Middleware Update Banner Logic for Dashboard
+    instance_name = request.session.get("chosen_instance")
+    if instance_name:
+        import time
+        import os
+        now_time = time.time()
+        last_check = request.session.get("last_middleware_check_time", 0)
+        last_checked_instance = request.session.get("last_middleware_checked_instance", "")
+
+        # Fallback to cached deployed version if still not found
+        if not deployed_version:
+            deployed_version = request.session.get("middleware_deployed_version", "")
+
+        # Fallback to appsettings if still empty
+        if not deployed_version:
+            base_path = "/opt/heappe-deployment/"
+            appsettings_path = os.path.join(base_path, instance_name, "app", "confs", "appsettings.json")
+            if os.path.exists(appsettings_path):
+                try:
+                    import json
+                    with open(appsettings_path, "r", encoding="utf-8") as f:
+                        appsettings_data = json.load(f)
+                    deployed_version = appsettings_data.get("ApplicationAPISettings", {}).get("DeploymentSettings", {}).get("Version", "").lstrip("vV")
+                except Exception:
+                    pass
+
+        latest_version = request.session.get("middleware_latest_version", "")
+
+        # Fetch latest version from git if cache expired or not present
+        if (now_time - last_check > 3600) or (instance_name != last_checked_instance) or not latest_version:
+            from heappe_ui.view.deploy import get_remote_tags
+            repo_url = "https://github.com/It4innovations/HEAppE"
+            branches = get_remote_tags(repo_url)
+            if branches:
+                latest_version = branches[0].lstrip("vV")
+
+        update_available = False
+        if deployed_version and isinstance(deployed_version, str) and latest_version and isinstance(latest_version, str):
+            def clean_ver(v):
+                res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
+                return res if res else [0]
+            try:
+                if clean_ver(latest_version) > clean_ver(deployed_version):
+                    update_available = True
+            except Exception:
+                if latest_version.lower().lstrip('v') != deployed_version.lower().lstrip('v'):
+                    update_available = True
+
+        # Save back to session so other pages are in sync
+        request.session["last_middleware_check_time"] = now_time
+        request.session["last_middleware_checked_instance"] = instance_name
+        request.session["middleware_update_available"] = update_available
+        request.session["middleware_deployed_version"] = deployed_version
+        request.session["middleware_latest_version"] = latest_version
+
+        # Inject into render context
+        context["middleware_update_available"] = update_available
+        context["middleware_deployed_version"] = deployed_version
+        context["middleware_latest_version"] = latest_version
 
     # Get version information
     try:
