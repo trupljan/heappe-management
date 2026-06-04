@@ -10,6 +10,20 @@
 {% load custom_filters %}
 
 <div class="container py-4">
+    {% if middleware_update_available and request.session.chosen_instance %}
+        <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between p-3 mb-4 animate-fade-in">
+            <div class="d-flex align-items-center gap-2">
+                <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true"></span>
+                <div>
+                    <strong class="text-warning-emphasis">Update Available:</strong> A new version of HEAppE Middleware is available (deployed: <code>{{ middleware_deployed_version }}</code>, latest: <code>{{ middleware_latest_version }}</code>).
+                </div>
+            </div>
+            <a href="{% url 'deploy_view' request.session.chosen_instance %}" class="btn btn-warning btn-sm fw-bold shadow-sm">
+                <i class="bi bi-arrow-repeat me-1"></i>Update Now
+            </a>
+        </div>
+    {% endif %}
+
     <!-- Top Row: Metrics (Clickable Navigation Cards) -->
     <div class="row g-3 mb-4">
         <!-- Clusters -->
