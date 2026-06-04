@@ -218,17 +218,24 @@
                             <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                             <input type="hidden" name="container_id" value="{{ container.id }}">
                             <input type="hidden" name="action" value="start">
-                            <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %}><i class="bi bi-play-fill"></i></button>
+                            <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
                         </form>
                         <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
                             {% csrf_token %}
                             <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                             <input type="hidden" name="container_id" value="{{ container.id }}">
                             <input type="hidden" name="action" value="stop">
-                            <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %}><i class="bi bi-stop-fill"></i></button>
+                            <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
                         </form>
-                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}"><i class="bi bi-terminal"></i></button>
-                        <button type="button" class="btn btn-sm btn-outline-dark w-100" data-bs-toggle="modal" data-bs-target="#fileManagerModal" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}"><i class="bi bi-files"></i></button>
+                        <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                            <input type="hidden" name="container_id" value="{{ container.id }}">
+                            <input type="hidden" name="action" value="restart">
+                            <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                        </form>
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-dark w-100" data-bs-toggle="modal" data-bs-target="#fileManagerModal" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
                     </div>
                 </div>
             </div>
@@ -575,7 +582,8 @@ $(document).ready(function() {
 
     // --- MODAL SETUP ---
     $('#deployUpdateModal').on('show.bs.modal', function (e) {
-        const act = $(e.relatedTarget).data('action');
+        let act = e.relatedTarget ? $(e.relatedTarget).data('action') : $(this).data('action');
+        if (!act) act = 'update';
         $(this).find('.modal-title').text(act === 'deploy' ? 'Deploy New Instance' : 'Update Instance');
         $('#deploy-form').toggle(act === 'deploy');
         $('#update-form').toggle(act === 'update');
@@ -1023,6 +1031,17 @@ $(document).ready(function() {
             reader.readAsDataURL(f);
         });
     });
+
+    // --- AUTOMATICALLY OPEN UPDATE MODAL IF REQUESTED ---
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('action') === 'update') {
+        const modalEl = document.getElementById('deployUpdateModal');
+        if (modalEl) {
+            $(modalEl).data('action', 'update');
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        }
+    }
 });
 </script>
 

@@ -197,9 +197,9 @@
                 </div>
                 {% endif %}
                 {% if middleware_update_available %}
-                <div class="alert alert-warning py-1 px-2 border-warning mb-0 animate-pulse mt-1" style="font-size: 0.7rem;">
+                <a href="{% url 'deploy_view' request.session.chosen_instance %}?action=update" class="alert alert-warning py-1.5 px-2 border-warning mb-0 animate-pulse mt-1 d-block text-center text-decoration-none fw-bold" style="font-size: 0.7rem; color: #664d03; background-color: #fff3cd; border-color: #ffecb5; transition: background-color 0.15s ease-in-out;" onmouseover="this.style.backgroundColor='#ffe69c'" onmouseout="this.style.backgroundColor='#fff3cd'">
                     <i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>Update to <code>v{{ middleware_latest_version }}</code>
-                </div>
+                </a>
                 {% endif %}
                 <a href="{% url 'instance_credentials_list' %}" class="btn btn-xs btn-outline-primary w-100 mt-2 py-1 fw-bold" style="font-size: 0.75rem;">
                     <i class="bi bi-arrow-left-right me-1"></i>Switch Instance
@@ -302,6 +302,17 @@
                         <span class="text-secondary fw-semibold">Host:</span>
                         <code class="small font-monospace text-dark bg-white border px-1.5 py-0.5 rounded text-truncate" style="max-width: 140px;">{{ request.session.heappe_host }}</code>
                     </div>
+                    {% if middleware_deployed_version %}
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="text-secondary fw-semibold">Middleware:</span>
+                        <span class="badge bg-light text-secondary border font-monospace px-2">v{{ middleware_deployed_version }}</span>
+                    </div>
+                    {% endif %}
+                    {% if middleware_update_available %}
+                    <a href="{% url 'deploy_view' request.session.chosen_instance %}?action=update" class="alert alert-warning py-1.5 px-2 border-warning mb-0 animate-pulse mt-1 d-block text-center text-decoration-none fw-bold" style="font-size: 0.7rem; color: #664d03; background-color: #fff3cd; border-color: #ffecb5; transition: background-color 0.15s ease-in-out;" onmouseover="this.style.backgroundColor='#ffe69c'" onmouseout="this.style.backgroundColor='#fff3cd'" data-bs-dismiss="offcanvas">
+                        <i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>Update to <code>v{{ middleware_latest_version }}</code>
+                    </a>
+                    {% endif %}
                     <a href="{% url 'instance_credentials_list' %}" class="btn btn-xs btn-outline-primary w-100 mt-2 py-1 fw-bold" style="font-size: 0.75rem;" data-bs-dismiss="offcanvas">
                         <i class="bi bi-arrow-left-right me-1"></i>Switch Instance
                     </a>

@@ -813,6 +813,24 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     get_container_details(c) for c in client.containers.list(all=True)
                     if c.labels.get('com.docker.compose.project') == instance_name
                 ]
+                def get_sort_weight(item):
+                    name = item['name'].lower()
+                    if 'heappe' in name and 'vault' not in name:
+                        return 1
+                    elif 'datastaging' in name:
+                        return 2
+                    elif 'mssql' in name or 'db' in name:
+                        return 3
+                    elif 'vault' in name:
+                        if 'vaultagent' in name:
+                            return 5
+                        elif 'init' in name:
+                            return 6
+                        elif 'unseal' in name:
+                            return 7
+                        return 4
+                    return 100
+                updated_containers.sort(key=get_sort_weight)
                 return JsonResponse({
                     'status': action_status,
                     'message': action_message,
@@ -828,6 +846,24 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 for c in client.containers.list(all=True)
                 if c.labels.get('com.docker.compose.project') == instance_name
             ]
+            def get_sort_weight(item):
+                name = item['container'].name.lower()
+                if 'heappe' in name and 'vault' not in name:
+                    return 1
+                elif 'datastaging' in name:
+                    return 2
+                elif 'mssql' in name or 'db' in name:
+                    return 3
+                elif 'vault' in name:
+                    if 'vaultagent' in name:
+                        return 5
+                    elif 'init' in name:
+                        return 6
+                    elif 'unseal' in name:
+                        return 7
+                    return 4
+                return 100
+            containers.sort(key=get_sort_weight)
 
     except Exception as e:
         print(f"Error in deploy_view: {e}")
