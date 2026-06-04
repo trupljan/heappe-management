@@ -687,7 +687,16 @@ def check_for_updates(request):
     cached_latest = request.session.get("update_latest_version")
     cached_changes = request.session.get("update_changes")
 
-    if not force and last_check and (now - last_check < 21600) and cached_current and cached_latest:
+    actual_version = "unknown"
+    try:
+        actual_version = subprocess.check_output(
+            ['git', 'describe', '--tags', '--always'],
+            cwd=settings.BASE_DIR, stderr=subprocess.DEVNULL, timeout=5
+        ).decode().strip().lstrip('vV')
+    except Exception:
+        pass
+
+    if not force and last_check and (now - last_check < 21600) and cached_current and cached_latest and cached_current == actual_version:
         response = JsonResponse({
             'update_available': cached_available,
             'current_version': cached_current,
