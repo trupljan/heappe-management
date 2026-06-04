@@ -26,11 +26,11 @@
         </div>
         <div class="col-md-4 text-md-end mt-3 mt-md-0">
             {% if not instance_name %}
-                <button type="button" class="btn btn-primary btn-lg shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="deploy">
+                <button type="button" class="btn btn-primary btn-lg shadow-sm w-100 w-md-auto open-maintenance-tab-btn" data-action="deploy">
                     <i class="bi bi-rocket-takeoff me-2"></i>Deploy Instance
                 </button>
             {% elif is_deployed %}
-                <button type="button" class="btn btn-outline-primary shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="update">
+                <button type="button" class="btn btn-outline-primary shadow-sm w-100 w-md-auto open-maintenance-tab-btn" data-action="update">
                     <i class="bi bi-arrow-repeat me-2"></i>Update Instance
                 </button>
             {% endif %}
@@ -46,7 +46,7 @@
                         <strong class="text-warning-emphasis">Update Available:</strong> A new version of HEAppE Middleware is available (deployed: <code>{{ deployed_version }}</code>, latest: <code>{{ latest_version }}</code>).
                     </div>
                 </div>
-                <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="update">
+                <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm open-maintenance-tab-btn" data-action="update">
                     <i class="bi bi-arrow-repeat me-1"></i>Update Now
                 </button>
             </div>
@@ -60,32 +60,434 @@
         {% endif %}
     {% endif %}
 
-    <div class="modal fade" id="deployUpdateModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content shadow-lg border-0">
-                <div class="modal-header bg-light">
-                    <h5 class="modal-title fw-bold" id="deployUpdateModalLabel">Instance Action</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    {% if instance_name %}
+    <!-- Tabbed Navigation -->
+    <ul class="nav nav-pills nav-fill mb-4 shadow-sm p-1.5 bg-white rounded-3 gap-1" id="deployTabs" role="tablist" style="border: 1px solid #dee2e6;">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2" id="containers-tab" data-bs-toggle="tab" data-bs-target="#containers-pane" type="button" role="tab" aria-controls="containers-pane" aria-selected="true">
+                <i class="bi bi-cpu fs-5"></i>Containers &amp; Services
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2" id="configs-tab" data-bs-toggle="tab" data-bs-target="#configs-pane" type="button" role="tab" aria-controls="configs-pane" aria-selected="false">
+                <i class="bi bi-folder2-open fs-5"></i>Configuration &amp; Files
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance-pane" type="button" role="tab" aria-controls="maintenance-pane" aria-selected="false">
+                <i class="bi bi-gear fs-5"></i>Maintenance &amp; Setup
+            </button>
+        </li>
+    </ul>
+
+    <div class="tab-content" id="deployTabsContent">
+        <!-- Containers Tab Pane -->
+        <div class="tab-pane fade show active" id="containers-pane" role="tabpanel" aria-labelledby="containers-tab">
+            {% if is_deployed %}
+            <!-- Global actions -->
+            <div class="card mb-4 border-0 shadow-sm bg-light">
+                <div class="card-body">
+                    <h5 class="card-title mb-3 fw-bold">Global Container Actions</h5>
+                    <div class="d-flex flex-wrap gap-2">
+                        <form id="start-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                            <input type="hidden" name="action" value="start_all">
+                            <button type="submit" class="btn btn-success w-100 px-4"><i class="bi bi-play-fill"></i> Start All</button>
+                        </form>
+                        <form id="restart-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                            <input type="hidden" name="action" value="restart_all">
+                            <button type="submit" class="btn btn-info text-white w-100 px-4"><i class="bi bi-arrow-clockwise"></i> Restart All</button>
+                        </form>
+                        <form id="down-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                            <input type="hidden" name="action" value="stop_all">
+                            <button type="submit" class="btn btn-danger w-100 px-4"><i class="bi bi-stop-fill"></i> Stop All</button>
+                        </form>
+                    </div>
                 </div>
-                <div class="modal-body p-4">
-                    <form id="deploy-form" class="instance-action-form" style="display:none;">
+            </div>
+            {% endif %}
+
+            <!-- API Services -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-2"><i class="bi bi-cpu text-primary"></i>API Services</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-4">
+                {% for item in containers %}
+                {% if 'heappe' in item.container.name.lower() or 'datastaging' in item.container.name.lower() %}
+                {% with container=item.container ports=item.ports %}
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
+                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
+                                {% if container.status == 'running' %}
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% else %}
+                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                                {% endif %}
+                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
+                                <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3">
+                            <div class="btn-group w-100 shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-dark w-100 open-fm-tab-btn" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- Database Services -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-database text-info"></i>Database Services</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-4">
+                {% for item in containers %}
+                {% if 'mssql' in item.container.name.lower() or 'db' in item.container.name.lower() %}
+                {% with container=item.container ports=item.ports %}
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
+                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
+                                {% if container.status == 'running' %}
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% else %}
+                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                                {% endif %}
+                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
+                                <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3">
+                            <div class="btn-group w-100 shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-dark w-100 open-fm-tab-btn" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- Infrastructure & Security (Vault) -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-shield-lock text-info"></i>Infrastructure &amp; Security (Vault)</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-5">
+                {% for item in containers %}
+                {% if 'heappe' not in item.container.name.lower() and 'datastaging' not in item.container.name.lower() and 'mssql' not in item.container.name.lower() and 'db' not in item.container.name.lower() %}
+                {% with container=item.container ports=item.ports %}
+                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower() or 'unseal' in container.name.lower() %}style="opacity: 0.7;"{% endif %}>
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
+                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
+                                {% if container.status == 'running' %}
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% else %}
+                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                                {% endif %}
+                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
+                                <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3">
+                            <div class="btn-group w-100 shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-dark w-100 open-fm-tab-btn" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Configuration Explorer Tab Pane -->
+        <div class="tab-pane fade" id="configs-pane" role="tabpanel" aria-labelledby="configs-tab">
+            <div class="card border-0 shadow-sm rounded-3 overflow-hidden mb-5" style="height: 75vh; border: 1px solid #dee2e6 !important;">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2.5 px-3 border-bottom">
+                    <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-folder2-open me-2"></i>File Explorer: <span id="fm-container-name" class="text-primary"></span></h6>
+                </div>
+                <div class="card-body p-0 d-flex flex-column overflow-hidden h-100" style="min-height: 0;">
+                    <div id="fm-feedback"></div>
+                    <div class="row g-0 flex-grow-1 h-100" style="min-height: 0;">
+                        <div class="col-md-4 border-end bg-light d-flex flex-column h-100" style="min-height: 0;">
+                            <div class="p-3 border-bottom">
+                                <nav aria-label="breadcrumb"><ol class="breadcrumb mb-2" id="breadcrumb-path"></ol></nav>
+                                <div class="input-group input-group-sm mb-2">
+                                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                                    <input type="text" id="search-files" class="form-control" placeholder="Filter...">
+                                </div>
+                                <button id="fm-go-up" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-arrow-up"></i> Go Up</button>
+                            </div>
+                            <ul id="file-list" class="list-group list-group-flush overflow-auto flex-grow-1" style="min-height: 0;"></ul>
+                        </div>
+                        <div class="col-md-8 d-flex flex-column h-100" style="min-height: 0;">
+                            <ul class="nav nav-tabs px-3 pt-2 bg-light border-bottom" role="tablist">
+                                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#editor-pane"><i class="bi bi-pencil"></i> Editor</button></li>
+                                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#upload-pane"><i class="bi bi-upload"></i> Upload</button></li>
+                            </ul>
+                            <div class="tab-content flex-grow-1 overflow-hidden p-3" style="min-height: 0;">
+                                <div class="tab-pane fade show active h-100 d-flex flex-column" id="editor-pane" style="min-height: 0;">
+                                    <div id="editor-ui" style="display:none;" class="h-100 d-flex flex-column">
+                                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom flex-wrap gap-2">
+                                            <h6 class="text-muted small mb-0">Path: <span id="edit-file-name" class="fw-bold text-dark"></span></h6>
+                                            <div id="json-editor-controls" class="d-flex align-items-center gap-2" style="display: none !important;">
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <button type="button" class="btn btn-outline-primary active" id="btn-mode-tree"><i class="bi bi-diagram-3"></i> Tree Editor</button>
+                                                    <button type="button" class="btn btn-outline-primary" id="btn-mode-split"><i class="bi bi-columns-gap"></i> Split View</button>
+                                                    <button type="button" class="btn btn-outline-primary" id="btn-mode-code"><i class="bi bi-code-slash"></i> Raw JSON</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div id="json-validation-status" class="mb-2" style="display: none;"></div>
+                                        <div id="json-restart-warning" class="alert alert-warning py-2 px-3 mb-2 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem; display: none;">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            <strong>Notice</strong>: Changes to config files require restarting the instance to take effect.
+                                        </div>
+                                        <div class="d-flex flex-row flex-grow-1 gap-2 mb-2" style="min-height: 0;">
+                                            <!-- Visual Tree Editor Workspace -->
+                                            <div id="json-tree-wrapper" class="flex-grow-1 h-100" style="display: none; min-width: 0;">
+                                                <div id="json-tree-editor" class="h-100 w-100"></div>
+                                            </div>
+                                            <!-- Code Textarea Editor Workspace -->
+                                            <div id="json-code-wrapper" class="flex-grow-1 h-100" style="min-width: 0;">
+                                                <div class="editor-container h-100">
+                                                    <div id="editor-gutter">1</div>
+                                                    <textarea id="file-content" class="form-control font-monospace h-100" style="resize: none;"></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-2 pb-2">
+                                            <button id="save-file" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save</button>
+                                            <button id="restart-instance-btn" class="btn btn-warning btn-sm text-dark" style="display: none;"><i class="bi bi-arrow-clockwise"></i> Restart Instance</button>
+                                            <button id="download-btn" class="btn btn-info btn-sm text-white"><i class="bi bi-download"></i> Download</button>
+                                            <button id="delete-file" class="btn btn-danger btn-sm ms-auto"><i class="bi bi-trash"></i> Delete</button>
+                                        </div>
+                                    </div>
+                                    <div id="editor-placeholder" class="text-center my-auto text-muted">
+                                        <i class="bi bi-file-earmark-text display-4 d-block mb-2"></i>
+                                        <p class="mb-0">Select a file from the explorer to view/edit</p>
+                                    </div>
+                                </div>
+                                <div class="tab-pane fade h-100 overflow-auto" id="upload-pane">
+                                    <div class="p-4 border rounded bg-light">
+                                        <h6>Upload to current directory</h6>
+                                        <input type="file" id="upload-input" class="form-control mb-3" multiple>
+                                        <button id="upload-action-btn" class="btn btn-success"><i class="bi bi-cloud-arrow-up"></i> Start Upload</button>
+                                        <div class="progress mt-3" style="display:none; height: 10px;">
+                                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Maintenance & Setup Tab Pane -->
+        <div class="tab-pane fade" id="maintenance-pane" role="tabpanel" aria-labelledby="maintenance-tab">
+            <div class="row g-4 mb-5">
+                <!-- Update Middleware Panel -->
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4">
+                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-arrow-repeat me-2 text-warning"></i>Update Middleware</h5>
+                            <p class="text-muted small">Update the HEAppE middleware source code of the active instance, rebuild the Docker services, and restart the containers.</p>
+                            
+                            <form id="update-form" class="instance-action-form">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Instance Name</label>
+                                    <input type="text" name="InstanceName" class="form-control bg-light fw-bold" value="{{ instance_name }}" readonly>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Repository URL</label>
+                                    <div class="input-group">
+                                        <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                        <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags"><i class="bi bi-arrow-clockwise"></i></button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Update to Version (Tag)</label>
+                                    <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
+                                        {% for branch in branches %}
+                                            <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
+                                </div>
+                                <input type="hidden" name="action" value="update">
+                                <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-warning-emphasis p-3 rounded-3 mb-4 small d-flex align-items-start gap-2.5">
+                                    <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+                                    <div>
+                                        <strong>Maintenance Required:</strong> Updating the middleware will pull tags, compile configuration dependencies, rebuild docker containers, and restart services causing a <strong>short downtime</strong>. Please notify active users first.
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-warning w-100 py-2 fw-bold text-dark shadow-sm"><i class="bi bi-arrow-repeat me-1.5"></i>Run Update Now</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deploy New Instance Panel -->
+                <div class="col-lg-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4">
+                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-rocket-takeoff me-2 text-primary"></i>Deploy New Instance</h5>
+                            <p class="text-muted small">Deploy a separate, new HEAppE Middleware server instance. This will register a new configuration and provision fresh database schema.</p>
+                            
+                            <form id="deploy-form" class="instance-action-form">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">New Instance Name</label>
+                                    <input type="text" name="InstanceName" class="form-control" placeholder="e.g. my_test_env" pattern="^[a-z0-9_]+$" required>
+                                    <div class="form-text small">Only lowercase letters, numbers, and underscores are allowed.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Repository URL</label>
+                                    <div class="input-group">
+                                        <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                        <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags"><i class="bi bi-arrow-clockwise"></i></button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Deployment Tag/Branch</label>
+                                    <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
+                                        {% for branch in branches %}
+                                            <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
+                                </div>
+                                <input type="hidden" name="action" value="deploy">
+                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm"><i class="bi bi-rocket-takeoff me-1.5"></i>Start Deployment</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Deploy New Instance Page (Directly) -->
+    <div class="row justify-content-center mb-5">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-body p-4">
+                    <h4 class="fw-bold mb-3"><i class="bi bi-rocket-takeoff text-primary me-2"></i>Deploy New Instance</h4>
+                    <p class="text-muted small mb-4">Deploy a new HEAppE Middleware server instance. This registers configuration keys and configures database tables.</p>
+                    
+                    <form id="deploy-form" class="instance-action-form">
                         {% csrf_token %}
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">Instance Name</label>
-                            <input type="text" name="InstanceName" class="form-control" value="{{ instance_name }}" placeholder="e.g. my_server" pattern="^[a-z0-9_]+$" required>
+                            <label class="form-label fw-semibold text-secondary small">Instance Name</label>
+                            <input type="text" name="InstanceName" class="form-control" placeholder="e.g. dev" pattern="^[a-z0-9_]+$" required>
+                            <div class="form-text small">Only lowercase letters, numbers, and underscores are allowed.</div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">Repository URL</label>
+                            <label class="form-label fw-semibold text-secondary small">Repository URL</label>
                             <div class="input-group">
                                 <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
-                                <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags">
-                                    <i class="bi bi-arrow-clockwise"></i>
-                                </button>
+                                <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags"><i class="bi bi-arrow-clockwise"></i></button>
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label fw-semibold">Version (Tag/Branch)</label>
-                            <select name="RepositoryBranch" class="form-select branch-select" required>
+                            <label class="form-label fw-semibold text-secondary small">Deployment Tag/Branch</label>
+                            <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
                                 {% for branch in branches %}
                                     <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
                                 {% endfor %}
@@ -93,44 +495,15 @@
                             <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
                         </div>
                         <input type="hidden" name="action" value="deploy">
-                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">Start Deployment</button>
-                    </form>
-
-                    <form id="update-form" class="instance-action-form" style="display:none;">
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Instance Name</label>
-                            <input type="text" name="InstanceName" class="form-control bg-light" value="{{ instance_name }}" readonly>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Repository URL</label>
-                            <div class="input-group">
-                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
-                                <button class="btn btn-secondary fetch-branches-btn" type="button"><i class="bi bi-arrow-clockwise"></i></button>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Update to Version</label>
-                            <select name="RepositoryBranch" class="form-select branch-select" required>
-                                {% for branch in branches %}
-                                    <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
-                        </div>
-                        <input type="hidden" name="action" value="update">
-                        <div class="alert alert-danger py-2 small mb-3">
-                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                            <strong>Maintenance Required:</strong> Updating this instance will cause a <strong>short downtime</strong>.
-                            Make sure a maintenance window is planned and users are notified before proceeding.
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">Run Update</button>
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm"><i class="bi bi-rocket-takeoff me-1.5"></i>Start Deployment</button>
                     </form>
                 </div>
             </div>
         </div>
     </div>
+    {% endif %}
 
+    <!-- Global Progress Modals -->
     <!-- Update Progress Modal -->
     <div class="modal fade" id="updateProgressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="updateProgressModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -166,84 +539,7 @@
         </div>
     </div>
 
-    {% if is_deployed %}
-    <div class="card mb-4 border-0 shadow-sm bg-light">
-        <div class="card-body">
-            <h5 class="card-title mb-3 fw-bold">Global Container Actions</h5>
-            <div class="d-flex flex-wrap gap-2">
-                <form id="start-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                    <input type="hidden" name="action" value="start_all">
-                    <button type="submit" class="btn btn-success w-100 px-4"><i class="bi bi-play-fill"></i> Start All</button>
-                </form>
-                <form id="restart-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                    <input type="hidden" name="action" value="restart_all">
-                    <button type="submit" class="btn btn-info text-white w-100 px-4"><i class="bi bi-arrow-clockwise"></i> Restart All</button>
-                </form>
-                <form id="down-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                    <input type="hidden" name="action" value="stop_all">
-                    <button type="submit" class="btn btn-danger w-100 px-4"><i class="bi bi-stop-fill"></i> Stop All</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-5">
-        {% for item in containers %}
-        {% with container=item.container ports=item.ports %}
-        <div class="col">
-            <div class="card h-100 shadow-sm border-0">
-                <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                    <h6 class="mb-0 fw-bold text-truncate" style="max-width: 70%;">{{ container.name }}</h6>
-                    <span class="badge {% if container.status == 'running' %}bg-success{% elif container.status == 'exited' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
-                        {{ container.status|title }}
-                    </span>
-                </div>
-                <div class="card-body py-2">
-                    <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                    <ul class="list-unstyled small mb-0">
-                        <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                        <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                    </ul>
-                </div>
-                <div class="card-footer bg-white border-top-0 pb-3">
-                    <div class="btn-group w-100 shadow-sm">
-                        <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
-                            {% csrf_token %}
-                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                            <input type="hidden" name="container_id" value="{{ container.id }}">
-                            <input type="hidden" name="action" value="start">
-                            <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                        </form>
-                        <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
-                            {% csrf_token %}
-                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                            <input type="hidden" name="container_id" value="{{ container.id }}">
-                            <input type="hidden" name="action" value="stop">
-                            <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                        </form>
-                        <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
-                            {% csrf_token %}
-                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                            <input type="hidden" name="container_id" value="{{ container.id }}">
-                            <input type="hidden" name="action" value="restart">
-                            <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                        </form>
-                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                        <button type="button" class="btn btn-sm btn-outline-dark w-100" data-bs-toggle="modal" data-bs-target="#fileManagerModal" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endwith %}
-        {% endfor %}
-    </div>
-
+    <!-- Logs Modal -->
     <div class="modal fade" id="logsModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-xl">
             <div class="modal-content bg-dark text-light border-0">
@@ -257,94 +553,6 @@
             </div>
         </div>
     </div>
-
-    <div class="modal fade" id="fileManagerModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-xl">
-            <div class="modal-content shadow-lg border-0" style="height: 85vh;">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title"><i class="bi bi-folder2-open me-2"></i>File Manager: <span id="fm-container-name"></span></h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-0 d-flex flex-column overflow-hidden">
-                    <div id="fm-feedback"></div>
-                    <div class="row g-0 flex-grow-1" style="min-height: 0;">
-                        <div class="col-md-4 border-end bg-light d-flex flex-column h-100">
-                            <div class="p-3 border-bottom">
-                                <nav aria-label="breadcrumb"><ol class="breadcrumb mb-2" id="breadcrumb-path"></ol></nav>
-                                <div class="input-group input-group-sm mb-2">
-                                    <span class="input-group-text"><i class="bi bi-search"></i></span>
-                                    <input type="text" id="search-files" class="form-control" placeholder="Filter...">
-                                </div>
-                                <button id="fm-go-up" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-arrow-up"></i> Go Up</button>
-                            </div>
-                            <ul id="file-list" class="list-group list-group-flush overflow-auto flex-grow-1"></ul>
-                        </div>
-                        <div class="col-md-8 d-flex flex-column h-100">
-                            <ul class="nav nav-tabs px-3 pt-2 bg-light border-bottom" role="tablist">
-                                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#editor-pane"><i class="bi bi-pencil"></i> Editor</button></li>
-                                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#upload-pane"><i class="bi bi-upload"></i> Upload</button></li>
-                            </ul>
-                            <div class="tab-content flex-grow-1 overflow-hidden p-3">
-                                <div class="tab-pane fade show active h-100" id="editor-pane">
-                                    <div id="editor-ui" style="display:none;" class="h-100 d-flex flex-column">
-                                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom flex-wrap gap-2">
-                                            <h6 class="text-muted small mb-0">Path: <span id="edit-file-name" class="fw-bold"></span></h6>
-                                            <div id="json-editor-controls" class="d-flex align-items-center gap-2" style="display: none !important;">
-                                                <div class="btn-group btn-group-sm" role="group">
-                                                    <button type="button" class="btn btn-outline-primary active" id="btn-mode-tree"><i class="bi bi-diagram-3"></i> Tree Editor</button>
-                                                    <button type="button" class="btn btn-outline-primary" id="btn-mode-split"><i class="bi bi-columns-gap"></i> Split View</button>
-                                                    <button type="button" class="btn btn-outline-primary" id="btn-mode-code"><i class="bi bi-code-slash"></i> Raw JSON</button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div id="json-validation-status" class="mb-2" style="display: none;"></div>
-                                        <div id="json-restart-warning" class="alert alert-warning py-2 px-3 mb-2 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem; display: none;">
-                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                                            <strong>Notice</strong>: Changes to config files require restarting the instance to take effect.
-                                        </div>
-                                        <div class="d-flex flex-row flex-grow-1 gap-2 mb-2" style="min-height: 0;">
-                                            <!-- Visual Tree Editor Workspace -->
-                                            <div id="json-tree-wrapper" class="flex-grow-1 h-100" style="display: none; min-width: 0;">
-                                                <div id="json-tree-editor" class="h-100 w-100"></div>
-                                            </div>
-                                            <!-- Code Textarea Editor Workspace -->
-                                            <div id="json-code-wrapper" class="flex-grow-1 h-100" style="min-width: 0;">
-                                                <div class="editor-container h-100">
-                                                    <div id="editor-gutter">1</div>
-                                                    <textarea id="file-content" class="form-control font-monospace"></textarea>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="d-flex gap-2">
-                                            <button id="save-file" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save</button>
-                                            <button id="restart-instance-btn" class="btn btn-warning btn-sm text-dark" style="display: none;"><i class="bi bi-arrow-clockwise"></i> Restart Instance</button>
-                                            <button id="download-btn" class="btn btn-info btn-sm text-white"><i class="bi bi-download"></i> Download</button>
-                                            <button id="delete-file" class="btn btn-danger btn-sm ms-auto"><i class="bi bi-trash"></i> Delete</button>
-                                        </div>
-                                    </div>
-                                    <div id="editor-placeholder" class="text-center mt-5 text-muted">
-                                        <i class="bi bi-file-earmark-text display-4"></i>
-                                        <p>Select a file to edit</p>
-                                    </div>
-                                </div>
-                                <div class="tab-pane fade h-100 overflow-auto" id="upload-pane">
-                                    <div class="p-4 border rounded bg-light">
-                                        <h6>Upload to current directory</h6>
-                                        <input type="file" id="upload-input" class="form-control mb-3" multiple>
-                                        <button id="upload-action-btn" class="btn btn-success"><i class="bi bi-cloud-arrow-up"></i> Start Upload</button>
-                                        <div class="progress mt-3" style="display:none; height: 10px;">
-                                            <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"></div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -454,9 +662,6 @@ $(document).ready(function() {
         const form = $(this);
         const action = form.find('input[name="action"]').val();
         e.preventDefault();
-
-        const modal = bootstrap.Modal.getInstance(document.getElementById('deployUpdateModal'));
-        if (modal) modal.hide();
 
         if (action === 'update') {
             // Reset spinner & status text
@@ -580,13 +785,33 @@ $(document).ready(function() {
         });
     });
 
-    // --- MODAL SETUP ---
-    $('#deployUpdateModal').on('show.bs.modal', function (e) {
-        let act = e.relatedTarget ? $(e.relatedTarget).data('action') : $(this).data('action');
-        if (!act) act = 'update';
-        $(this).find('.modal-title').text(act === 'deploy' ? 'Deploy New Instance' : 'Update Instance');
-        $('#deploy-form').toggle(act === 'deploy');
-        $('#update-form').toggle(act === 'update');
+    // --- MAINTENANCE TAB ORCHESTRATION ---
+    $(document).on('click', '.open-maintenance-tab-btn', function(e) {
+        e.preventDefault();
+        const action = $(this).data('action');
+        
+        // Show the Maintenance tab
+        const tabEl = document.getElementById('maintenance-tab');
+        if (tabEl) {
+            new bootstrap.Tab(tabEl).show();
+        }
+        
+        // Scroll/focus form
+        if (action === 'update') {
+            const updateForm = document.getElementById('update-form');
+            if (updateForm) {
+                updateForm.scrollIntoView({ behavior: 'smooth' });
+                const repoInput = $(updateForm).find('input[name="Repository"]');
+                if (repoInput.length) repoInput.focus();
+            }
+        } else if (action === 'deploy') {
+            const deployForm = document.getElementById('deploy-form');
+            if (deployForm) {
+                deployForm.scrollIntoView({ behavior: 'smooth' });
+                const nameInput = $(deployForm).find('input[name="InstanceName"]');
+                if (nameInput.length) nameInput.focus();
+            }
+        }
     });
 
     // --- LOGS LOGIC ---
@@ -831,17 +1056,55 @@ $(document).ready(function() {
         }
     }
 
-    $('#fileManagerModal').on('show.bs.modal', function(e) {
-        currentContainerId = $(e.relatedTarget).data('container-id');
-        $('#fm-container-name').text($(e.relatedTarget).data('container-name'));
-        loadFileList();
-    }).on('hidden.bs.modal', function() {
+    // --- FILE MANAGER TAB SWITCHING AND AUTO-RESOLUTION ---
+    $(document).on('click', '.open-fm-tab-btn', function(e) {
+        e.preventDefault();
+        currentContainerId = $(this).data('container-id');
+        $('#fm-container-name').text($(this).data('container-name'));
+        
+        // Reset currentPath when switching containers
+        currentPath = '/opt/heappe/confs/';
+        
+        // Reset editor placeholder/UI
         $('#editor-placeholder').show();
         $('#editor-ui').hide();
         $('#json-validation-status').hide().empty();
         $('#json-restart-warning').hide();
         $('#restart-instance-btn').hide();
         lastValidationResult = null;
+        
+        // Show the Configs tab
+        const tabEl = document.getElementById('configs-tab');
+        if (tabEl) {
+            new bootstrap.Tab(tabEl).show();
+        }
+        
+        loadFileList();
+    });
+
+    $('#configs-tab').on('shown.bs.tab', function(e) {
+        if (!currentContainerId) {
+            // Find container containing heappe in its name
+            const heappeBtn = $('.open-fm-tab-btn').filter(function() {
+                return ($(this).data('container-name') || '').toLowerCase().includes('heappe');
+            }).first();
+            
+            if (heappeBtn.length) {
+                currentContainerId = heappeBtn.data('container-id');
+                $('#fm-container-name').text(heappeBtn.data('container-name'));
+            } else {
+                // Fallback to the first open-fm-tab-btn
+                const firstBtn = $('.open-fm-tab-btn').first();
+                if (firstBtn.length) {
+                    currentContainerId = firstBtn.data('container-id');
+                    $('#fm-container-name').text(firstBtn.data('container-name'));
+                }
+            }
+            if (currentContainerId) {
+                currentPath = '/opt/heappe/confs/';
+                loadFileList();
+            }
+        }
     });
 
     function loadFileList() {
@@ -1032,14 +1295,20 @@ $(document).ready(function() {
         });
     });
 
-    // --- AUTOMATICALLY OPEN UPDATE MODAL IF REQUESTED ---
+    // --- AUTOMATICALLY SWITCH TO MAINTENANCE TAB IF REQUESTED ---
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('action') === 'update') {
-        const modalEl = document.getElementById('deployUpdateModal');
-        if (modalEl) {
-            $(modalEl).data('action', 'update');
-            const modal = new bootstrap.Modal(modalEl);
-            modal.show();
+        const tabEl = document.getElementById('maintenance-tab');
+        if (tabEl) {
+            new bootstrap.Tab(tabEl).show();
+            setTimeout(() => {
+                const updateForm = document.getElementById('update-form');
+                if (updateForm) {
+                    updateForm.scrollIntoView({ behavior: 'smooth' });
+                    const repoInput = $(updateForm).find('input[name="Repository"]');
+                    if (repoInput.length) repoInput.focus();
+                }
+            }, 300);
         }
     }
 });
