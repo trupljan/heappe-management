@@ -278,6 +278,7 @@
                                 <div class="tab-pane fade show active h-100" id="editor-pane">
                                     <div id="editor-ui" style="display:none;" class="h-100 d-flex flex-column">
                                         <h6 class="text-muted small">Path: <span id="edit-file-name" class="fw-bold"></span></h6>
+                                        <div id="json-validation-status" class="mb-2" style="display: none;"></div>
                                         <textarea id="file-content" class="form-control flex-grow-1 mb-2 font-monospace" style="font-size: 13px;"></textarea>
                                         <div class="d-flex gap-2">
                                             <button id="save-file" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save</button>
@@ -565,10 +566,134 @@ $(document).ready(function() {
     }).on('hidden.bs.modal', () => clearInterval(logsInterval));
 
     // --- FILE MANAGER LOGIC ---
+    let lastValidationResult = null;
+    let validationTimeout = null;
+
+    function validateJsonContent(path, content) {
+        const isJson = path.endsWith('.json');
+        const isNjson = path.endsWith('.njson');
+        if (!isJson && !isNjson) return null;
+
+        if (isJson) {
+            try {
+                JSON.parse(content);
+                return { valid: true, pos: null };
+            } catch (e) {
+                const message = e.message;
+                let pos = null;
+                let displayError = message;
+
+                // Check if error contains position
+                const posMatch = message.match(/position (\d+)/i);
+                if (posMatch) {
+                    pos = parseInt(posMatch[1], 10);
+                    const sub = content.substring(0, pos);
+                    const lines = sub.split('\n');
+                    const line = lines.length;
+                    const column = lines[lines.length - 1].length + 1;
+                    displayError = `${message} (at Line ${line}, Col ${column})`;
+                } else {
+                    const lineColMatch = message.match(/at line (\d+) column (\d+)/i);
+                    if (lineColMatch) {
+                        const line = parseInt(lineColMatch[1], 10);
+                        const col = parseInt(lineColMatch[2], 10);
+                        displayError = message;
+                        // Calculate position index
+                        const lines = content.split('\n');
+                        let currentPos = 0;
+                        for (let i = 0; i < Math.min(line - 1, lines.length); i++) {
+                            currentPos += lines[i].length + 1; // +1 for \n
+                        }
+                        currentPos += Math.min(col - 1, (lines[line - 1] || '').length);
+                        pos = currentPos;
+                    }
+                }
+                return { valid: false, error: displayError, pos: pos };
+            }
+        } else {
+            // NDJSON (.njson)
+            const lines = content.split('\n');
+            let currentPos = 0;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const trimmed = line.trim();
+                if (trimmed) {
+                    try {
+                        JSON.parse(trimmed);
+                    } catch (e) {
+                        const message = e.message;
+                        let linePos = 0;
+                        const posMatch = message.match(/position (\d+)/i);
+                        if (posMatch) {
+                            linePos = parseInt(posMatch[1], 10);
+                        }
+                        const leadingWhitespaceLen = line.length - line.trimStart().length;
+                        const absolutePos = currentPos + leadingWhitespaceLen + linePos;
+                        const displayError = `Line ${i + 1}: ${message}`;
+                        return { valid: false, error: displayError, pos: absolutePos };
+                    }
+                }
+                currentPos += line.length + 1; // +1 for \n
+            }
+            return { valid: true, pos: null };
+        }
+    }
+
+    function validateCurrentFile() {
+        const content = $('#file-content').val();
+        const path = selectedFilePath || '';
+        const isJson = path.endsWith('.json');
+        const isNjson = path.endsWith('.njson');
+
+        if (!isJson && !isNjson) {
+            $('#json-validation-status').hide().empty();
+            lastValidationResult = null;
+            return;
+        }
+
+        const result = validateJsonContent(path, content);
+        lastValidationResult = result;
+
+        const statusDiv = $('#json-validation-status');
+        statusDiv.empty().show();
+
+        if (result.valid) {
+            statusDiv.html(`
+                <div class="alert alert-success d-flex align-items-center py-2 px-3 m-0 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem;">
+                    <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                    <div><strong>Valid ${isJson ? 'JSON' : 'NDJSON'}</strong> - Content format is correct.</div>
+                </div>
+            `);
+        } else {
+            const locateBtn = result.pos !== null ? `
+                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 ms-2 flex-shrink-0" id="go-to-json-error" title="Go to error">
+                    <i class="bi bi-cursor"></i> Go to error
+                </button>
+            ` : '';
+
+            statusDiv.html(`
+                <div class="alert alert-danger d-flex align-items-center justify-content-between py-2 px-3 m-0 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem; width: 100%;">
+                    <div class="d-flex align-items-center flex-grow-1 min-w-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2 fs-5 flex-shrink-0"></i>
+                        <div class="text-truncate">
+                            <strong>Invalid ${isJson ? 'JSON' : 'NDJSON'}</strong>: ${result.error}
+                        </div>
+                    </div>
+                    ${locateBtn}
+                </div>
+            `);
+        }
+    }
+
     $('#fileManagerModal').on('show.bs.modal', function(e) {
         currentContainerId = $(e.relatedTarget).data('container-id');
         $('#fm-container-name').text($(e.relatedTarget).data('container-name'));
         loadFileList();
+    }).on('hidden.bs.modal', function() {
+        $('#editor-placeholder').show();
+        $('#editor-ui').hide();
+        $('#json-validation-status').hide().empty();
+        lastValidationResult = null;
     });
 
     function loadFileList() {
@@ -589,7 +714,7 @@ $(document).ready(function() {
             files.forEach(f => {
                 const icon = f.type === 'directory' ? 'bi-folder-fill text-warning' : 'bi-file-earmark-code text-primary';
                 $('#file-list').append(`<li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center cursor-pointer file-item" data-file="${f.name}" data-type="${f.type}">
-                    <span><i class="bi ${icon} me-2"></i>${f.name}</span>
+                     <span><i class="bi ${icon} me-2"></i>${f.name}</span>
                 </li>`);
             });
             updateBreadcrumb();
@@ -602,6 +727,8 @@ $(document).ready(function() {
         if(type === 'directory') {
             currentPath = selectedFilePath + '/';
             loadFileList();
+            $('#json-validation-status').hide().empty();
+            lastValidationResult = null;
         } else {
             $('#editor-placeholder').hide();
             $('#editor-ui').show();
@@ -609,7 +736,10 @@ $(document).ready(function() {
             $('#edit-file-name').text(selectedFilePath);
             $.post(`${basePath}/container/${currentContainerId}/file/read/`, {
                 path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
-            }, r => $('#file-content').val(r.content || ''));
+            }, r => {
+                $('#file-content').val(r.content || '');
+                validateCurrentFile();
+            });
         }
     });
 
@@ -627,6 +757,8 @@ $(document).ready(function() {
         e.preventDefault();
         currentPath = $(this).data('path') || '/';
         loadFileList();
+        $('#json-validation-status').hide().empty();
+        lastValidationResult = null;
     });
 
     $('#fm-go-up').click(() => {
@@ -634,9 +766,47 @@ $(document).ready(function() {
         p.pop();
         currentPath = '/' + p.join('/') + (p.length ? '/' : '');
         loadFileList();
+        $('#json-validation-status').hide().empty();
+        lastValidationResult = null;
+    });
+
+    $('#file-content').on('input', function() {
+        clearTimeout(validationTimeout);
+        validationTimeout = setTimeout(validateCurrentFile, 250);
+    });
+
+    $(document).on('click', '#go-to-json-error', function() {
+        if (lastValidationResult && lastValidationResult.pos !== null) {
+            const textarea = document.getElementById('file-content');
+            if (textarea) {
+                textarea.focus();
+                textarea.setSelectionRange(lastValidationResult.pos, lastValidationResult.pos + 1);
+                const lineIndex = textarea.value.substring(0, lastValidationResult.pos).split('\n').length - 1;
+                const lineHeight = parseInt($(textarea).css('line-height')) || 18;
+                textarea.scrollTop = Math.max(0, (lineIndex - 5) * lineHeight);
+            }
+        }
     });
 
     $('#save-file').click(() => {
+        if (lastValidationResult && !lastValidationResult.valid) {
+            const confirmSave = confirm(`Warning: The file contains invalid JSON/NDJSON syntax:\n\n${lastValidationResult.error}\n\nAre you sure you want to save anyway?`);
+            if (!confirmSave) {
+                if (lastValidationResult.pos !== null) {
+                    setTimeout(() => {
+                        const textarea = document.getElementById('file-content');
+                        if (textarea) {
+                            textarea.focus();
+                            textarea.setSelectionRange(lastValidationResult.pos, lastValidationResult.pos + 1);
+                            const lineIndex = textarea.value.substring(0, lastValidationResult.pos).split('\n').length - 1;
+                            const lineHeight = parseInt($(textarea).css('line-height')) || 18;
+                            textarea.scrollTop = Math.max(0, (lineIndex - 5) * lineHeight);
+                        }
+                    }, 50);
+                }
+                return;
+            }
+        }
         $.post(`${basePath}/container/${currentContainerId}/file/write/`, {
             path: selectedFilePath, content: $('#file-content').val(), instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
         }, () => alert('Saved successfully'));
