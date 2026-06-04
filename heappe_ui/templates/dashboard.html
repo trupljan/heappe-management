@@ -104,57 +104,75 @@
         <!-- Left Column: Status, Subsystems & Distribution (col-lg-4) -->
         <div class="col-lg-4">
             <!-- Unified System Status Card -->
-            <div class="card border-0 shadow-sm mb-4 bg-white">
+            <div class="card border-0 shadow-sm mb-4 bg-white rounded-3">
                 <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-cpu text-primary fs-5"></i>
                         <h5 class="h6 mb-0 fw-bold text-dark">System Status</h5>
                     </div>
-                    <span class="badge {% if health.is_healthy %}bg-success-subtle text-success border border-success-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} px-2.5 py-1 fw-bold" style="font-size: 0.75rem;">
+                    <span class="badge {% if health.is_healthy %}bg-success bg-opacity-10 text-success border border-success-subtle{% else %}bg-danger bg-opacity-10 text-danger border border-danger-subtle{% endif %} px-2.5 py-1 fw-bold" style="font-size: 0.72rem;">
                         {% if health.is_healthy %}Healthy{% else %}Unhealthy{% endif %}
                     </span>
                 </div>
-                <div class="card-body p-3">
+                <div class="card-body p-3.5">
                     <!-- HEAppE Core Info Grid -->
-                    <div class="row g-2 mb-3 text-center bg-light p-2.5 rounded border border-light-subtle">
-                        <div class="col-6 border-end border-light-subtle">
-                            <span class="text-muted small d-block" style="font-size: 0.7rem;">HEAppE Instance</span>
-                            <strong class="text-dark small">{{ heappe.name|default:"N/A" }}</strong>
+                    <div class="p-3 mb-3 bg-light bg-opacity-50 rounded-3 border border-light-subtle d-flex flex-column gap-2">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span class="text-secondary small fw-semibold">HEAppE Instance:</span>
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle font-monospace px-2.5 py-1 fw-bold">{{ heappe.name|default:"N/A" }}</span>
                         </div>
-                        <div class="col-6">
-                            <span class="text-muted small d-block" style="font-size: 0.7rem;">API Version</span>
-                            <strong class="text-dark small font-monospace">{{ heappe.version|default:"N/A" }}</strong>
+                        <div class="d-flex align-items-center justify-content-between">
+                            <span class="text-secondary small fw-semibold">API Version:</span>
+                            <span class="badge bg-dark bg-opacity-5 text-dark border border-dark-subtle font-monospace px-2.5 py-1 fw-bold">{{ heappe.version|default:"N/A" }}</span>
                         </div>
                     </div>
                     
                     <!-- Subsystems List -->
-                    <div class="list-group list-group-flush small">
-                        <div class="list-group-item d-flex justify-content-between align-items-center px-0 py-2 bg-transparent">
-                            <span class="text-secondary"><i class="bi bi-database me-2 text-muted"></i>Database</span>
-                            <span class="badge {% if health.component.database.is_healthy %}bg-success-subtle text-success border border-success-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} px-2">
-                                {% if health.component.database.is_healthy %}Online{% else %}Offline{% endif %}
+                    <div class="d-flex flex-column gap-1">
+                        <div class="d-flex justify-content-between align-items-center py-2.5 border-bottom border-light-subtle">
+                            <span class="text-secondary small fw-semibold d-flex align-items-center gap-2">
+                                <i class="bi bi-database text-muted fs-5"></i>Database
                             </span>
+                            {% if health.component.database.is_healthy %}
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2.5 py-1 rounded-pill fw-bold d-flex align-items-center gap-1.5" style="font-size: 0.7rem;">
+                                <span class="spinner-grow spinner-grow-sm text-success" role="status" style="width: 6px; height: 6px; animation-duration: 1.5s;"></span>Online
+                            </span>
+                            {% else %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1 rounded-pill fw-bold d-flex align-items-center gap-1.5" style="font-size: 0.7rem;">
+                                <span class="spinner-grow spinner-grow-sm text-danger" role="status" style="width: 6px; height: 6px;"></span>Offline
+                            </span>
+                            {% endif %}
                         </div>
-                        <div class="list-group-item px-0 py-2 bg-transparent border-bottom-0 pb-0">
+                        <div class="py-2.5">
                             <div class="d-flex justify-content-between align-items-center">
-                                <span class="text-secondary"><i class="bi bi-shield-lock me-2 text-muted"></i>HashiCorp Vault</span>
-                                <span class="badge {% if health.component.vault.is_healthy %}bg-success-subtle text-success border border-success-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} px-2">
-                                    {% if health.component.vault.is_healthy %}Online{% else %}Offline{% endif %}
+                                <span class="text-secondary small fw-semibold d-flex align-items-center gap-2">
+                                    <i class="bi bi-shield-lock text-muted fs-5"></i>HashiCorp Vault
                                 </span>
+                                {% if health.component.vault.is_healthy %}
+                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2.5 py-1 rounded-pill fw-bold d-flex align-items-center gap-1.5" style="font-size: 0.7rem;">
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" style="width: 6px; height: 6px; animation-duration: 1.5s;"></span>Online
+                                </span>
+                                {% else %}
+                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1 rounded-pill fw-bold d-flex align-items-center gap-1.5" style="font-size: 0.7rem;">
+                                    <span class="spinner-grow spinner-grow-sm text-danger" role="status" style="width: 6px; height: 6px;"></span>Offline
+                                </span>
+                                {% endif %}
                             </div>
                             
                             <!-- Collapsible Vault Details -->
                             {% if health.component.vault.info %}
-                            <details class="mt-2">
-                                <summary class="text-primary small cursor-pointer" style="font-size: 0.75rem; user-select: none; outline: none;">Vault details</summary>
-                                <div class="mt-2 p-2 bg-light rounded border border-light-subtle row g-1">
+                            <details class="mt-2.5">
+                                <summary class="text-primary small cursor-pointer fw-semibold" style="font-size: 0.75rem; user-select: none; outline: none;">
+                                    <i class="bi bi-chevron-down me-1" style="font-size: 0.65rem;"></i>Vault details
+                                </summary>
+                                <div class="mt-2 p-2 bg-light bg-opacity-50 rounded-3 border border-light-subtle row g-2 m-0">
                                     {% for key, value in health.component.vault.info.items %}
-                                    <div class="col-6 text-center" style="font-size: 0.7rem;">
-                                        <div class="bg-white p-1.5 rounded border border-light-subtle">
-                                            <span class="text-muted text-capitalize d-block" style="font-size: 0.65rem;">{{ key }}</span>
-                                            <strong class="text-{% if key == 'initialized' and value or key != 'initialized' and not value %}success{% else %}danger{% endif %}">
+                                    <div class="col-6">
+                                        <div class="bg-white p-2 rounded border border-light-subtle text-center">
+                                            <span class="text-muted text-capitalize d-block fw-semibold mb-1" style="font-size: 0.62rem; letter-spacing: 0.02em;">{{ key }}</span>
+                                            <span class="badge {% if key == 'initialized' and value or key != 'initialized' and not value %}bg-success-subtle text-success border border-success-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} px-2 py-0.5" style="font-size: 0.68rem;">
                                                 {% if value %}Yes{% else %}No{% endif %}
-                                            </strong>
+                                            </span>
                                         </div>
                                     </div>
                                     {% endfor %}
@@ -167,14 +185,18 @@
             </div>
 
             <!-- Jobs Distribution Card -->
-            <div class="card border-0 shadow-sm bg-white">
+            <div class="card border-0 shadow-sm bg-white rounded-3">
                 <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
                     <i class="bi bi-pie-chart text-primary fs-5"></i>
                     <h5 class="h6 mb-0 fw-bold text-dark">Jobs Distribution</h5>
                 </div>
-                <div class="card-body p-3">
-                    <div style="height: 180px;" class="mb-3 position-relative">
+                <div class="card-body p-3.5">
+                    <div style="height: 180px;" class="mb-4 position-relative d-flex align-items-center justify-content-center">
                         <canvas id="jobsStateChart"></canvas>
+                        <div class="position-absolute text-center" style="pointer-events: none; top: 52%; left: 50%; transform: translate(-50%, -50%);">
+                            <span class="text-muted text-uppercase tracking-wider fw-bold d-block" style="font-size: 0.62rem;">Total Jobs</span>
+                            <h3 class="mb-0 fw-bold text-dark mt-0.5" style="font-size: 1.6rem; letter-spacing: -0.02em;">{{ total_jobs|default:"0" }}</h3>
+                        </div>
                     </div>
                     <!-- Compact horizontal pills for active counts only -->
                     <div class="d-flex flex-wrap gap-1.5 justify-content-center">
@@ -193,7 +215,7 @@
 
         <!-- Right Column: Submitted Jobs History (col-lg-8) -->
         <div class="col-lg-8">
-            <div class="card border-0 shadow-sm bg-white">
+            <div class="card border-0 shadow-sm bg-white rounded-3">
                 <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-list-task text-primary fs-5"></i>
@@ -202,22 +224,30 @@
                 </div>
                 
                 <!-- Integrated Toolbar (Filters & Live Query inline) -->
-                <div class="card-body border-bottom bg-light bg-opacity-50 p-3">
-                    <div class="row g-3 align-items-center justify-content-between">
-                        <div class="col-md-7">
-                            <form method="get" class="d-flex align-items-center gap-2" id="reporting-filter-form">
-                                <span class="text-muted small text-nowrap fw-semibold">Filter:</span>
-                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="time_from" value="{{ time_from }}" min="{{ min_date }}" max="{{ max_date }}" style="width: 175px;">
-                                <span class="text-muted small">&rarr;</span>
-                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="time_to" value="{{ time_to }}" min="{{ min_date }}" max="{{ max_date }}" style="width: 175px;">
-                                <button type="submit" class="btn btn-sm btn-primary fw-semibold px-2.5">Apply</button>
+                <div class="card-body border-bottom bg-light bg-opacity-40 p-3">
+                    <div class="row g-3 align-items-center">
+                        <!-- Date range filter -->
+                        <div class="col-xl-7 col-lg-12">
+                            <form method="get" class="d-flex align-items-center gap-2 flex-wrap" id="reporting-filter-form">
+                                <div class="input-group input-group-sm flex-grow-1" style="max-width: 420px;">
+                                    <span class="input-group-text bg-white border-light-subtle text-muted small"><i class="bi bi-calendar-range me-1.5"></i>Range</span>
+                                    <input type="datetime-local" class="form-control border-light-subtle bg-white text-secondary" name="time_from" value="{{ time_from }}" min="{{ min_date }}" max="{{ max_date }}">
+                                    <span class="input-group-text bg-white border-light-subtle text-muted small">&rarr;</span>
+                                    <input type="datetime-local" class="form-control border-light-subtle bg-white text-secondary" name="time_to" value="{{ time_to }}" min="{{ min_date }}" max="{{ max_date }}">
+                                </div>
+                                <button type="submit" class="btn btn-sm btn-primary fw-semibold px-3 shadow-xs">
+                                    <i class="bi bi-filter me-1"></i>Apply
+                                </button>
                             </form>
                         </div>
-                        <div class="col-md-5">
+                        <!-- Live Job Query -->
+                        <div class="col-xl-5 col-lg-12">
                             <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-end-0 border-light-subtle text-muted"><i class="bi bi-cpu"></i></span>
+                                <span class="input-group-text bg-white border-end-0 border-light-subtle text-muted"><i class="bi bi-hash"></i></span>
                                 <input type="number" class="form-control border-start-0 border-light-subtle bg-white" id="live_job_id" placeholder="Live Job ID Info (CurrentInfoForJob)">
-                                <button class="btn btn-primary fw-semibold" type="button" id="btn_query_live_job">Query</button>
+                                <button class="btn btn-primary fw-semibold shadow-xs" type="button" id="btn_query_live_job">
+                                    <i class="bi bi-cpu me-1"></i>Query
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -228,12 +258,12 @@
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0" id="submittedJobsTable">
                             <thead class="table-light">
-                                <tr>
-                                    <th class="ps-4" style="width: 32%;">Job Name & ID</th>
-                                    <th style="width: 18%;">State</th>
-                                    <th style="width: 25%;">Submitter & Time</th>
-                                    <th style="width: 15%;">Tasks</th>
-                                    <th class="text-end pe-4" style="width: 10%;">Actions</th>
+                                <tr style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                                    <th class="ps-4 text-secondary py-3" style="width: 32%;">Job Name &amp; ID</th>
+                                    <th class="text-secondary py-3" style="width: 18%;">State</th>
+                                    <th class="text-secondary py-3" style="width: 25%;">Submitter &amp; Time</th>
+                                    <th class="text-secondary py-3" style="width: 15%;">Tasks</th>
+                                    <th class="text-end pe-4 text-secondary py-3" style="width: 10%;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -242,56 +272,61 @@
                                     <!-- Job Name & ID Combined -->
                                     <td class="ps-4">
                                         <div class="fw-bold text-dark" style="font-size: 0.9rem;">{{ job_item.name }}</div>
-                                        <div class="text-secondary font-monospace small d-flex align-items-center gap-1" style="font-size: 0.75rem;">
-                                            <i class="bi bi-hash"></i>{{ job_item.id }}
+                                        <div class="text-secondary mt-1.5 font-monospace small d-inline-flex align-items-center gap-1 bg-light border border-light-subtle rounded px-2 py-0.5" style="font-size: 0.72rem;">
+                                            <i class="bi bi-hash text-muted"></i>{{ job_item.id }}
                                         </div>
                                     </td>
                                     
                                     <!-- State Soft badge -->
                                     <td>
                                         {% if job_item.state == 1 %}
-                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle">Configuring</span>
+                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1">Configuring</span>
                                         {% elif job_item.state == 2 %}
-                                            <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle">Submitted</span>
+                                            <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle px-2.5 py-1">Submitted</span>
                                         {% elif job_item.state == 4 %}
-                                            <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle">Queued</span>
+                                            <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1">Queued</span>
                                         {% elif job_item.state == 8 %}
-                                            <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle">Running</span>
+                                            <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1">Running</span>
                                         {% elif job_item.state == 16 %}
-                                            <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle">Finished</span>
+                                            <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-2.5 py-1">Finished</span>
                                         {% elif job_item.state == 32 %}
-                                            <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle">Failed</span>
+                                            <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle px-2.5 py-1">Failed</span>
                                         {% elif job_item.state == 64 %}
-                                            <span class="badge rounded-pill bg-dark-subtle text-dark border border-dark-subtle">Canceled</span>
+                                            <span class="badge rounded-pill bg-dark-subtle text-dark border border-dark-subtle px-2.5 py-1">Canceled</span>
                                         {% elif job_item.state == 128 %}
-                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle">Waiting</span>
+                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1">Waiting</span>
                                         {% elif job_item.state == 256 %}
-                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle">Deleted</span>
+                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1">Deleted</span>
                                         {% endif %}
                                     </td>
                                     
                                     <!-- Submitter & Submit Time Combined -->
                                     <td>
-                                        <div class="text-dark fw-semibold small d-flex align-items-center gap-1">
-                                            <i class="bi bi-person text-muted"></i>{{ job_item.submitter|default:"N/A" }}
+                                        <div class="text-dark fw-semibold small d-flex align-items-center gap-1.5">
+                                            <span class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 20px; height: 20px; font-size: 0.65rem;">
+                                                <i class="bi bi-person"></i>
+                                            </span>
+                                            {{ job_item.submitter|default:"N/A" }}
                                         </div>
-                                        <div class="text-muted mt-0.5" style="font-size: 0.75rem;">
-                                            <i class="bi bi-calendar-event me-1"></i>{{ job_item.submit_time|format_datetime|default:"Not submitted" }}
+                                        <div class="text-muted mt-1.5" style="font-size: 0.72rem;">
+                                            <i class="bi bi-calendar-event me-1.5 text-secondary"></i>{{ job_item.submit_time|format_datetime|default:"Not submitted" }}
                                         </div>
                                     </td>
                                     
                                     <!-- Tasks Count Badge -->
                                     <td>
-                                        <span class="badge bg-light text-secondary border fw-bold px-2.5 py-1.5">{{ job_item.tasks|length }} tasks</span>
+                                        <span class="badge bg-light text-secondary border border-light-subtle rounded-3 px-2.5 py-1.5 fw-semibold" style="font-size: 0.78rem;">
+                                            <i class="bi bi-cpu text-muted me-1"></i>{{ job_item.tasks|length }} tasks
+                                        </span>
                                     </td>
                                     
                                     <!-- Actions -->
                                     <td class="text-end pe-4">
                                         <div class="d-flex gap-1.5 justify-content-end">
-                                            <button type="button" class="btn btn-sm btn-outline-secondary px-2.5 fw-semibold text-nowrap" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}" title="View details">
+                                            <button type="button" class="btn btn-sm btn-light border border-light-subtle text-secondary px-2.5 py-1.5 rounded-3 d-inline-flex align-items-center justify-content-center" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}" title="View details">
                                                 <i class="bi bi-eye"></i>
                                             </button>
-                                            <button type="button" class="btn btn-sm btn-primary px-2.5 fw-semibold btn-trigger-live text-nowrap" data-job-id="{{ job_item.id }}" title="Live scheduler status">
+                                            <button type="button" class="btn btn-sm btn-outline-primary px-2.5 py-1.5 rounded-3 d-inline-flex align-items-center justify-content-center btn-trigger-live" data-job-id="{{ job_item.id }}" title="Live scheduler status">
                                                 <i class="bi bi-cpu"></i>
                                             </button>
                                         </div>
@@ -483,7 +518,7 @@
 <script>
     const jobsStateCtx = document.getElementById('jobsStateChart').getContext('2d');
     const jobsStateChart = new Chart(jobsStateCtx, {
-        type: 'bar',
+        type: 'doughnut',
         data: {
             labels: ['Configuring', 'Submitted', 'Queued', 'Running', 'Finished', 'Failed', 'Canceled', 'Waiting', 'Deleted'],
             datasets: [{
@@ -510,26 +545,17 @@
                     '#adb5bd', // Waiting (Light gray)
                     '#495057'  // Deleted (Dark gray)
                 ],
-                borderRadius: 4,
-                borderSkipped: false
+                borderWidth: 2,
+                borderColor: '#ffffff',
+                hoverOffset: 4
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            cutout: '75%',
             plugins: { 
                 legend: { display: false } 
-            },
-            scales: { 
-                y: { 
-                    beginAtZero: true, 
-                    ticks: { precision: 0, color: '#888', font: { family: 'system-ui', size: 10 } },
-                    grid: { color: '#f1f3f5' }
-                },
-                x: {
-                    ticks: { color: '#888', font: { family: 'system-ui', size: 10 } },
-                    grid: { display: false }
-                }
             }
         }
     });
