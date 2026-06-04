@@ -248,22 +248,32 @@
                     <input type="time" name="time_to" class="form-control form-control-custom form-control-sm w-100" value="{{ time_to }}">
                 </div>
             </div>
+
+            <div class="col-md-2">
+                <label class="filter-label">Log Level</label>
+                <select name="level" class="form-select form-control-custom form-control-sm w-100" style="padding-top: 0.35rem; padding-bottom: 0.35rem; height: 33px; font-size: 0.82rem;">
+                    <option value="" {% if not level_filter %}selected{% endif %}>ALL LEVELS</option>
+                    <option value="DEBUG" {% if level_filter == "DEBUG" %}selected{% endif %}>DEBUG</option>
+                    <option value="INFO" {% if level_filter == "INFO" %}selected{% endif %}>INFO</option>
+                    <option value="WARN" {% if level_filter == "WARN" %}selected{% endif %}>WARN</option>
+                    <option value="ERROR" {% if level_filter == "ERROR" %}selected{% endif %}>ERROR</option>
+                </select>
+            </div>
             
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="filter-label">Search Text</label>
                 <input type="text" name="search" class="form-control form-control-custom form-control-sm w-100" placeholder="Filter..." value="{{ search_query }}">
             </div>
             
-            <div class="col-md-2">
-                <label class="filter-label">Live Tail Stream</label>
-                <div class="d-flex align-items-center gap-2 py-1">
+            <div class="col-md-1">
+                <label class="filter-label">Live Tail</label>
+                <div class="d-flex align-items-center gap-1.5 py-1">
                     <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox" id="liveStreamToggle" style="cursor: pointer;">
                     </div>
-                    <div id="liveStatus" class="small text-muted d-flex align-items-center gap-1.5 fst-italic" style="font-size: 0.78rem;">
-                        <span class="rounded-circle bg-secondary" style="width: 6px; height: 6px; display: inline-block;"></span>
+                    <span id="liveStatus" class="small text-muted d-flex align-items-center gap-1 fst-italic" style="font-size: 0.7rem; white-space: nowrap;">
                         Off
-                    </div>
+                    </span>
                 </div>
             </div>
             
@@ -320,7 +330,8 @@
     async function pullLogs() {
         try {
             const baseUrl = "{% url 'fetch_new_logs' %}";
-            const response = await fetch(`${baseUrl}?offset=${logOffset}`);
+            const levelVal = document.querySelector('select[name="level"]').value;
+            const response = await fetch(`${baseUrl}?offset=${logOffset}&level=${levelVal}`);
             const data = await response.json();
             if (data.html) {
                 tableBody.insertAdjacentHTML('beforeend', data.html);
@@ -335,7 +346,8 @@
     liveToggle.addEventListener('change', function() {
         if (this.checked) {
             const baseUrl = "{% url 'fetch_new_logs' %}";
-            fetch(`${baseUrl}?offset=-1`).then(r => r.json()).then(data => {
+            const levelVal = document.querySelector('select[name="level"]').value;
+            fetch(`${baseUrl}?offset=-1&level=${levelVal}`).then(r => r.json()).then(data => {
                 logOffset = data.offset;
                 liveStatus.innerHTML = '<span class="pulse-dot"></span>Active';
                 liveStatus.className = "small d-flex align-items-center gap-1.5 live-status-active";
@@ -343,7 +355,7 @@
             });
         } else {
             if (liveInterval) clearInterval(liveInterval);
-            liveStatus.innerHTML = '<span class="rounded-circle bg-secondary" style="width: 6px; height: 6px; display: inline-block;"></span>Off';
+            liveStatus.innerHTML = 'Off';
             liveStatus.className = "small text-muted d-flex align-items-center gap-1.5 fst-italic";
         }
     });

@@ -1065,11 +1065,14 @@ from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 
 
-def process_log_entry(buffer, logs, stats, time_from, time_to, search_query):
+def process_log_entry(buffer, logs, stats, time_from, time_to, search_query, level_filter=''):
     combined_line = "".join(buffer)
     parsed = parse_log_line(combined_line)
 
     show_row = True
+    if level_filter and parsed['level'] != level_filter:
+        show_row = False
+
     if parsed['timestamp_str']:
         try:
             time_part = parsed['timestamp_str'].split(' ')[1]
@@ -1095,6 +1098,7 @@ def log_viewer_view(request):
     time_from = request.GET.get('time_from', '')
     time_to = request.GET.get('time_to', '')
     search_query = request.GET.get('search', '').lower()
+    level_filter = request.GET.get('level', '').upper()
 
     log_path = get_log_file_path(instance, selected_date)
     logs = deque(maxlen=3000)
@@ -1107,13 +1111,13 @@ def log_viewer_view(request):
                 for line in f:
                     if re.search(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}', line):
                         if buffer:
-                            process_log_entry(buffer, logs, stats, time_from, time_to, search_query)
+                            process_log_entry(buffer, logs, stats, time_from, time_to, search_query, level_filter)
                         buffer = [line]
                     else:
                         buffer.append(line)
 
                 if buffer:
-                    process_log_entry(buffer, logs, stats, time_from, time_to, search_query)
+                    process_log_entry(buffer, logs, stats, time_from, time_to, search_query, level_filter)
         except Exception as e:
             logs.append(f"<tr><td colspan='2'>Error: {str(e)}</td></tr>")
 
@@ -1124,6 +1128,7 @@ def log_viewer_view(request):
         'time_from': time_from,
         'time_to': time_to,
         'search_query': search_query,
+        'level_filter': level_filter,
         'instance': instance
     })
 
@@ -1251,6 +1256,7 @@ def fetch_new_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
     today = datetime.now().strftime('%Y-%m-%d')
     log_path = get_log_file_path(instance, today)
+    level_filter = request.GET.get('level', '').upper()
 
     try:
         offset = int(request.GET.get('offset', 0))
@@ -1274,6 +1280,8 @@ def fetch_new_logs(request):
         for line in f:
             if line.strip():
                 parsed = parse_log_line(line)
+                if level_filter and parsed['level'] != level_filter:
+                    continue
                 new_rows.append(render_log_row(parsed))
 
         new_offset = f.tell()
