@@ -727,32 +727,51 @@ def check_for_updates(request):
                 remote_hash = ""
 
             if local_hash and remote_hash and local_hash != remote_hash:
-                update_available = True
                 try:
-                    current_version = subprocess.check_output(
-                        ['git', 'describe', '--tags', '--always'],
-                        cwd=repo_path, stderr=subprocess.DEVNULL, timeout=5
-                    ).decode().strip().lstrip('vV')
-                except Exception:
-                    current_version = local_hash[:7]
-
-                try:
-                    latest_version = subprocess.check_output(
-                        ['git', 'describe', f'origin/{current_branch}', '--tags', '--always'],
-                        cwd=repo_path, stderr=subprocess.DEVNULL, timeout=5
-                    ).decode().strip().lstrip('vV')
-                except Exception:
-                    latest_version = remote_hash[:7]
-
-                try:
-                    log_output = subprocess.check_output(
-                        ['git', 'log', f'HEAD..origin/{current_branch}', '--format=%s'],
+                    behind_count = subprocess.check_output(
+                        ['git', 'rev-list', '--count', f'HEAD..origin/{current_branch}'],
                         cwd=repo_path, stderr=subprocess.DEVNULL, timeout=5
                     ).decode().strip()
-                    if log_output:
-                        changes = log_output.split('\n')[:10]
+                    update_available = int(behind_count) > 0
                 except Exception:
-                    pass
+                    update_available = True
+
+                if update_available:
+                    try:
+                        current_version = subprocess.check_output(
+                            ['git', 'describe', '--tags', '--always'],
+                            cwd=repo_path, stderr=subprocess.DEVNULL, timeout=5
+                        ).decode().strip().lstrip('vV')
+                    except Exception:
+                        current_version = local_hash[:7]
+
+                    try:
+                        latest_version = subprocess.check_output(
+                            ['git', 'describe', f'origin/{current_branch}', '--tags', '--always'],
+                            cwd=repo_path, stderr=subprocess.DEVNULL, timeout=5
+                        ).decode().strip().lstrip('vV')
+                    except Exception:
+                        latest_version = remote_hash[:7]
+
+                    try:
+                        log_output = subprocess.check_output(
+                            ['git', 'log', f'HEAD..origin/{current_branch}', '--format=%s'],
+                            cwd=repo_path, stderr=subprocess.DEVNULL, timeout=5
+                        ).decode().strip()
+                        if log_output:
+                            changes = log_output.split('\n')[:10]
+                    except Exception:
+                        pass
+                else:
+                    # Local branch has all remote commits (either up to date or ahead)
+                    try:
+                        current_version = subprocess.check_output(
+                            ['git', 'describe', '--tags', '--always'],
+                            cwd=repo_path, stderr=subprocess.DEVNULL, timeout=5
+                        ).decode().strip().lstrip('vV')
+                    except Exception:
+                        current_version = local_hash[:7] if local_hash else "unknown"
+                    latest_version = current_version
             else:
                 # Up to date on this branch
                 try:
@@ -827,12 +846,16 @@ def check_for_updates(request):
     request.session["update_latest_version"] = latest_version
     request.session["update_changes"] = changes
 
-    return JsonResponse({
+    response = JsonResponse({
         'update_available': update_available,
         'current_version': current_version,
         'latest_version': latest_version,
         'changes': changes
     })
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
 
 
 # ... tvoje existující error handling ...
