@@ -271,7 +271,7 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             {% if user.is_authenticated %}
-            fetch('{% url "check_updates" %}')
+            fetch('{% url "check_updates" %}?t=' + Date.now())
                 .then(r => r.json())
                 .then(data => {
                     const container = document.getElementById('commit-messages');
@@ -279,6 +279,7 @@
                     const startUpdateBtn = document.getElementById('start-update-btn');
                     const changesHeader = document.getElementById('update-changes-header');
                     const versionBadge = document.getElementById('modal-version-badge');
+                    const banner = document.getElementById('adminpanel-update-banner');
 
                     if (data.update_available) {
 
@@ -300,7 +301,6 @@
                         // Show Admin Panel Update Banner at the top — only if NOT snoozed
                         const snoozedUntil = parseInt(localStorage.getItem('admin_update_snoozed') || '0');
                         if (Date.now() >= snoozedUntil) {
-                            const banner = document.getElementById('adminpanel-update-banner');
                             const versionText = document.getElementById('adminpanel-update-version-text');
                             if (banner) {
                                 if (versionText && data.current_version && data.latest_version) {
@@ -313,6 +313,7 @@
                         }
                     } else {
                         // System is up to date
+                        if (banner) banner.style.display = 'none';
                         if (changesHeader) changesHeader.textContent = 'Status:';
                         if (container) {
                             const verInfo = data.current_version ? ` (v${data.current_version})` : '';
@@ -337,13 +338,14 @@
             if (container) container.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Checking for updates...</div>';
             if (recheckBtn) recheckBtn.disabled = true;
 
-            fetch('{% url "check_updates" %}?force=1')
+            fetch('{% url "check_updates" %}?force=1&t=' + Date.now())
                 .then(r => r.json())
                 .then(data => {
                     const noticeAlert = document.querySelector('#update-init-view .alert');
                     const startUpdateBtn = document.getElementById('start-update-btn');
                     const changesHeader = document.getElementById('update-changes-header');
                     const versionBadge = document.getElementById('modal-version-badge');
+                    const banner = document.getElementById('adminpanel-update-banner');
 
                     if (data.update_available) {
                         if (versionBadge && data.current_version && data.latest_version) {
@@ -361,7 +363,9 @@
                         if (noticeAlert) noticeAlert.classList.remove('d-none');
                         if (startUpdateBtn) startUpdateBtn.classList.remove('d-none');
                         if (recheckBtn) recheckBtn.classList.add('d-none');
+                        if (banner) banner.style.display = 'flex';
                     } else {
+                        if (banner) banner.style.display = 'none';
                         if (changesHeader) changesHeader.textContent = 'Status:';
                         if (container) {
                             const verInfo = data.current_version ? ` (v${data.current_version})` : '';
