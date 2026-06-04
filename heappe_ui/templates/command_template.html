@@ -16,6 +16,20 @@
       <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-secondary">Back</a>
     </div>
   {% else %}
+    {% if template_cache_age_str %}
+      <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between py-2 px-3 mb-3 small rounded w-75 mx-auto">
+          <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-clock-history text-warning fs-5"></i>
+              <div>
+                  You are viewing a cached version of this Command Template (loaded <strong>{{ template_cache_age_str }}</strong> ago).
+              </div>
+          </div>
+          <a href="?refresh=1" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold text-decoration-none shadow-sm text-nowrap">
+              <i class="bi bi-arrow-clockwise me-1"></i>Sync Now
+          </a>
+      </div>
+    {% endif %}
+
     <!-- Command Template Form -->
     <div class="card mb-4 w-75 mx-auto shadow-sm">
       <div class="card-header d-flex align-items-center">

@@ -268,6 +268,20 @@
 
     <div class="row justify-content-center">
         <div class="col-12 col-xl-10">
+            {% if templates_cache_age_str %}
+            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between py-2 px-3 mb-3 small rounded">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-clock-history text-warning fs-5"></i>
+                    <div>
+                        You are viewing a cached version of the Command Templates list (loaded <strong>{{ templates_cache_age_str }}</strong> ago).
+                    </div>
+                </div>
+                <a href="?tab=commandtemplates&refresh=1" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold text-decoration-none shadow-sm text-nowrap">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Sync Now
+                </a>
+            </div>
+            {% endif %}
+
             <div class="card shadow-sm mb-4">
                 <div class="card-header bg-white py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
                     <strong class="h5 mb-0">Command Templates</strong>

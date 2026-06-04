@@ -78,6 +78,12 @@ class HeappeSessionMiddleware:
                 request.session.pop(key, None)
                 request.session.pop(f"{key}_time", None)
             
+            # Pop all project-specific command templates caches and individual command template detail caches
+            for key in list(request.session.keys()):
+                if key.startswith("command_templates_cache_") or key.startswith("command_template_detail_cache_"):
+                    request.session.pop(key, None)
+                    request.session.pop(f"{key}_time", None)
+            
             from django.http import HttpResponseRedirect
             query_params = request.GET.copy()
             query_params.pop('refresh', None)

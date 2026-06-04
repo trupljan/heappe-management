@@ -95,8 +95,9 @@
                     {% if user.is_authenticated %}
                         {% if request.session.chosen_instance %}
                             <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-warning dropdown-toggle px-3 text-nowrap" type="button" id="cacheDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <button class="btn btn-sm btn-outline-warning dropdown-toggle px-3 text-nowrap d-flex align-items-center gap-1" type="button" id="cacheDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                                     <i class="bi bi-arrow-clockwise"></i> Sync Cache
+                                    <span class="badge bg-warning text-dark d-none" id="main-cache-timer" style="font-size: 0.75rem;"></span>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end shadow border-0" aria-labelledby="cacheDropdown" style="min-width: 260px;">
                                     <li class="px-3 py-2 border-bottom bg-light d-flex justify-content-between align-items-center">
@@ -104,10 +105,16 @@
                                         <button class="btn btn-sm btn-outline-warning py-0 px-2 fw-semibold text-nowrap" style="font-size: 0.75rem;" onclick="refreshCache()">Sync Now</button>
                                     </li>
                                     {% if cache_status %}
-                                        {% for label, age in cache_status.items %}
+                                        {% for label, status in cache_status.items %}
                                             <li class="px-3 py-1.5 d-flex justify-content-between align-items-center small">
                                                 <span class="text-secondary text-nowrap">{{ label }}</span>
-                                                <span class="badge {% if age == 'Live' %}bg-success-subtle text-success border border-success-subtle{% else %}bg-secondary-subtle text-secondary border border-secondary-subtle{% endif %} px-2 py-1 text-nowrap">{{ age }}</span>
+                                                {% if status.is_live %}
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 text-nowrap">Live</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 text-nowrap cache-timer-badge" data-remaining="{{ status.remaining }}">
+                                                        {{ status.age_str }}
+                                                    </span>
+                                                {% endif %}
                                             </li>
                                         {% endfor %}
                                     {% else %}
@@ -450,6 +457,57 @@
                 banner.classList.add('d-none');
             }
         }
+
+        // Live Cache Countdown Timers
+        document.addEventListener('DOMContentLoaded', function() {
+            const timerBadges = document.querySelectorAll('.cache-timer-badge');
+            const mainTimer = document.getElementById('main-cache-timer');
+
+            function updateTimers() {
+                let minRemaining = Infinity;
+                let activeCount = 0;
+
+                timerBadges.forEach(function(badge) {
+                    let remaining = parseInt(badge.getAttribute('data-remaining') || '0');
+                    if (remaining > 0) {
+                        remaining--;
+                        badge.setAttribute('data-remaining', remaining);
+                        activeCount++;
+
+                        if (remaining < minRemaining) {
+                            minRemaining = remaining;
+                        }
+
+                        // Format badge text
+                        let mins = Math.floor(remaining / 60);
+                        let secs = remaining % 60;
+                        badge.textContent = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+                    } else {
+                        badge.textContent = 'Live';
+                        badge.className = 'badge bg-success-subtle text-success border border-success-subtle px-2 py-1 text-nowrap';
+                    }
+                });
+
+                // Update main button badge with shortest remaining time
+                if (activeCount > 0 && minRemaining !== Infinity && minRemaining > 0) {
+                    let mins = Math.floor(minRemaining / 60);
+                    let secs = minRemaining % 60;
+                    mainTimer.textContent = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+                    mainTimer.classList.remove('d-none');
+                } else {
+                    mainTimer.classList.add('d-none');
+                }
+
+                if (activeCount === 0) {
+                    clearInterval(timerInterval);
+                }
+            }
+
+            if (timerBadges.length > 0) {
+                updateTimers();
+                const timerInterval = setInterval(updateTimers, 1000);
+            }
+        });
 
     </script>
 </body>

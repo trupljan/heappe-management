@@ -157,13 +157,25 @@ def middleware_update_renderer(request):
 
         if cache_time_float is not None and cache_time_float >= last_global_mod:
             age = int(now - cache_time_float)
-            if age < 60:
-                age_str = f"{age}s"
+            remaining = max(0, 300 - age)
+            if remaining > 0:
+                cache_status[label] = {
+                    'is_live': False,
+                    'remaining': remaining,
+                    'age_str': f"{age}s" if age < 60 else f"{age // 60}m {age % 60}s"
+                }
             else:
-                age_str = f"{age // 60}m {age % 60}s"
-            cache_status[label] = age_str
+                cache_status[label] = {
+                    'is_live': True,
+                    'remaining': 0,
+                    'age_str': "Live"
+                }
         else:
-            cache_status[label] = "Live"
+            cache_status[label] = {
+                'is_live': True,
+                'remaining': 0,
+                'age_str': "Live"
+            }
 
     return {
         'middleware_update_available': update_available,

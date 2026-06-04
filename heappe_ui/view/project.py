@@ -133,10 +133,36 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             a['cluster_name'] = cluster_lookup.get(a['cluster_id'], "Unknown")
 
     elif tab == "commandtemplates":
-        all_templates_raw = controller.heappe_management_command_templates_get(
-            SessionCode=session_code, ProjectId=project_id
-        )
-        all_templates = [ct.to_dict() for ct in all_templates_raw]
+        cache_key = f"command_templates_cache_{project_id}"
+        cache_time_key = f"command_templates_cache_{project_id}_time"
+
+        all_templates = request.session.get(cache_key)
+        all_templates_time = request.session.get(cache_time_key, 0)
+
+        is_from_cache = False
+        if not force_refresh and all_templates and (time.time() - all_templates_time <= 300) and (all_templates_time >= last_global_mod):
+            is_from_cache = True
+        else:
+            try:
+                all_templates_raw = controller.heappe_management_command_templates_get(
+                    SessionCode=session_code, ProjectId=project_id
+                )
+                all_templates = [ct.to_dict() for ct in all_templates_raw]
+                request.session[cache_key] = all_templates
+                request.session[cache_time_key] = time.time()
+                all_templates_time = request.session[cache_time_key]
+            except Exception as e:
+                print(f"Error fetching command templates: {e}")
+                all_templates = all_templates or []
+
+        if is_from_cache:
+            age = int(time.time() - all_templates_time)
+            if age < 60:
+                templates_cache_age_str = f"{age}s"
+            else:
+                templates_cache_age_str = f"{age // 60}m {age % 60}s"
+        else:
+            templates_cache_age_str = None
 
         if filter_type == "shared":
             command_templates = [ct for ct in all_templates if ct['project_id'] == 0]
@@ -209,6 +235,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "adaptor_users": adaptor_users,
         "adaptor_users_not_in_project": adaptor_users_not_in_project,
         "ui_features": ui_features,
+        "templates_cache_age_str": templates_cache_age_str if tab == "commandtemplates" else None,
     })
 
 

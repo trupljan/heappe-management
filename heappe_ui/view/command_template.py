@@ -4,13 +4,7 @@ from .utils import _create_payload, _handle_api_call, login_view, login_required
 @login_required
 def command_template_detail(request: HttpRequest, command_template_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
-    command_template = controller.heappe_management_command_template_get(
-        Id=command_template_id, SessionCode=request.session_code
-    ).to_dict()
-    project = controller.heappe_management_project_get(
-        Id=command_template['project_id'], SessionCode=request.session_code
-    ).to_dict()
-
+    session_code = request.session_code
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -35,6 +29,44 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
                 last_global_mod = float(f.read().strip())
         except Exception:
             pass
+
+    force_refresh = request.GET.get("refresh") == "1"
+
+    # Cache command template details
+    cache_key = f"command_template_detail_cache_{command_template_id}"
+    cache_time_key = f"command_template_detail_cache_{command_template_id}_time"
+
+    command_template = request.session.get(cache_key)
+    command_template_time = request.session.get(cache_time_key, 0)
+
+    is_from_cache = False
+    if not force_refresh and command_template and (time.time() - command_template_time <= 300) and (command_template_time >= last_global_mod):
+        is_from_cache = True
+    else:
+        try:
+            command_template = controller.heappe_management_command_template_get(
+                Id=command_template_id, SessionCode=session_code
+            ).to_dict()
+            request.session[cache_key] = command_template
+            request.session[cache_time_key] = time.time()
+            command_template_time = request.session[cache_time_key]
+        except Exception as e:
+            print(f"Error fetching command template detail: {e}")
+            if not command_template:
+                raise e
+
+    if is_from_cache:
+        age = int(time.time() - command_template_time)
+        if age < 60:
+            template_cache_age_str = f"{age}s"
+        else:
+            template_cache_age_str = f"{age // 60}m {age % 60}s"
+    else:
+        template_cache_age_str = None
+
+    project = controller.heappe_management_project_get(
+        Id=command_template['project_id'], SessionCode=session_code
+    ).to_dict()
 
     force_refresh = request.GET.get("refresh") == "1"
 
@@ -76,6 +108,7 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
         "command_template": command_template,
         "node_types": cluster_node_types,
         "project": project,
+        "template_cache_age_str": template_cache_age_str,
     })
 
 @login_required
