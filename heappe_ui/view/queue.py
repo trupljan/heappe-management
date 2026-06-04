@@ -12,6 +12,16 @@ from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_vi
 def queues_view(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     queues = [c.to_dict() for c in controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
+    
+    filetransfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code) or []
+    ftm_dict = {}
+    for ftm in filetransfer_methods:
+        protocol_name = dict(PROTOCOL_CHOICES).get(ftm.protocol, "Unknown")
+        ftm_dict[ftm.id] = f"{ftm.server_hostname} ({protocol_name})"
+        
+    for queue in queues:
+        queue['fileTransferMethodName'] = ftm_dict.get(queue.get('file_transfer_method_id'), 'N/A')
+        
     return render(request, "queues.html", {"queues": queues})
 
 @login_required
@@ -190,7 +200,17 @@ def queue_group_detail(request: HttpRequest, group_id: int) -> HttpResponse:
             queues = []
             for queue in all_queues:
                 if queue.cluster_node_type_aggregation and queue.cluster_node_type_aggregation.id == group_id:
-                    queues.append(queue)
+                    queues.append(queue.to_dict())
+            
+            filetransfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code) or []
+            ftm_dict = {}
+            for ftm in filetransfer_methods:
+                protocol_name = dict(PROTOCOL_CHOICES).get(ftm.protocol, "Unknown")
+                ftm_dict[ftm.id] = f"{ftm.server_hostname} ({protocol_name})"
+                
+            for queue in queues:
+                queue['fileTransferMethodName'] = ftm_dict.get(queue.get('file_transfer_method_id'), 'N/A')
+                
             context['queues'] = queues
         elif tab == "projects":
             all_projects = controller.heappe_management_projects_get(SessionCode=request.session_code) or []
