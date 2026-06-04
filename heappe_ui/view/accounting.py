@@ -150,6 +150,7 @@ def accounting_view(request, project_id:int):
     context['queue_groups'] = available_queue_groups
     context['project_id'] = project_id
     context['project'] = project
+    context['total_allocation'] = sum(a.allocation_amount for a in project_aggregations if a.allocation_amount)
 
     return render(request, "accounting.html", context)
 

@@ -7,6 +7,7 @@
     <li class="breadcrumb-item"><a href="{% url 'cluster_list' %}" class="text-decoration-none text-secondary">Clusters</a></li>
     {% if cluster %}
     <li class="breadcrumb-item"><a href="{% url 'cluster_detail' cluster.id %}" class="text-decoration-none text-secondary">{{ cluster.name }}</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'cluster_detail' cluster.id %}?tab=queues" class="text-decoration-none text-secondary">Queues</a></li>
     {% endif %}
     <li class="breadcrumb-item active" aria-current="page">{{ node_type.name|default:"Create Queue" }}</li>
 {% endblock %}

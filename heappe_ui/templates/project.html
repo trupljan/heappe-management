@@ -4,6 +4,7 @@
 
 {% block breadcrumbs %}
     <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'project_list' %}" class="text-decoration-none text-secondary">Projects</a></li>
     <li class="breadcrumb-item active" aria-current="page">{% if project %}{{ project.name }}{% else %}New Project{% endif %}</li>
 {% endblock %}
 
@@ -77,13 +78,15 @@
 
                             <div class="col-md-6">
                                 <label class="form-label small text-muted fw-semibold">PI Email</label>
-                                <input type="email" class="form-control form-control-sm border-light-subtle bg-white" name="PIEmail" value="{{ project.PIEmail|default:'' }}" {% if project %}readonly disabled{% endif %} required placeholder="pi@institution.cz">
+                                <input type="email" class="form-control form-control-sm border-light-subtle {% if project %}bg-light{% else %}bg-white{% endif %}" name="PIEmail" value="{{ project.PIEmail|default:'' }}" {% if project %}readonly disabled{% endif %} required placeholder="pi@institution.cz">
+                                {% if project %}<div class="form-text text-muted"><i class="bi bi-lock me-1"></i>Cannot be changed after project creation.</div>{% endif %}
                             </div>
 
                             {% if v620_check and project %}
                             <div class="col-md-6">
                                 <label class="form-label small text-muted fw-semibold">KeyScripts Directory Path</label>
                                 <input type="text" class="form-control form-control-sm bg-light font-monospace" readonly disabled value="{{ project.key_scripts_directory_path|default:'' }}">
+                                <div class="form-text text-muted"><i class="bi bi-lock me-1"></i>Read-only system path, managed by HEAppE.</div>
                             </div>
                             {% endif %}
 
@@ -94,7 +97,8 @@
 
                             <div class="col-md-6">
                                 <label class="form-label small text-muted fw-semibold">Accounting String</label>
-                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white font-monospace" name="AccountingString" value="{{ project.accounting_string|default:'' }}" {% if project %}readonly disabled{% endif %}>
+                                <input type="text" class="form-control form-control-sm font-monospace {% if project %}bg-light{% else %}border-light-subtle bg-white{% endif %}" name="AccountingString" value="{{ project.accounting_string|default:'' }}" {% if project %}readonly disabled{% endif %}>
+                                {% if project %}<div class="form-text text-muted"><i class="bi bi-lock me-1"></i>Cannot be changed after project creation.</div>{% endif %}
                             </div>
 
                             <div class="col-md-6">

@@ -18,10 +18,16 @@
             <i class="bi bi-calculator text-primary fs-3"></i>
             <div>
                 <h4 class="mb-0 fw-bold text-dark">Queue Groups for {{ project.name }}</h4>
-                <span class="text-muted small">Manage node and core hour resource allocations for this project</span>
+                <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                    <span class="text-muted small">Manage node and core hour resource allocations for this project</span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace px-2.5 py-1" style="font-size: 0.78rem;">
+                        Total Allocation: <strong>{{ total_allocation|default:"0" }}</strong>
+                        {% if project.usage_type == 1 %}NodeHours{% elif project.usage_type == 2 %}CoreHours{% endif %}
+                    </span>
+                </div>
             </div>
         </div>
-        <a href="{% url 'project_detail' project.id %}?tab=accounting" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
+        <a href="{% url 'project_detail' project.id %}" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
             <i class="bi bi-arrow-left me-1.5"></i>Back to Project
         </a>
     </div>
@@ -86,15 +92,45 @@
                             <strong>{{ p_agg.allocation_amount }}</strong> 
                             {% if p_agg.project.usage_type == 1 %}NodeHours{% elif p_agg.project.usage_type == 2 %}CoreHours{% endif %}
                         </span>
-                        <form method="POST" class="m-0 p-0">
-                            {% csrf_token %}
-                            <input type="hidden" name="MappingId" value="{{ p_agg.cluster_node_type_aggregation_id }}">
-                            <input type="hidden" name="action" value="unassign_queue_group_from_project">
-                            <input type="hidden" name="ProjectId" value="{{ project_id }}">
-                            <button type="submit" class="btn btn-sm btn-outline-danger px-2.5 rounded-3" onclick="return confirm('Are you sure you want to unassign queue group {{ p_agg.group.name }}?');">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </form>
+                        <button type="button" 
+                                class="btn btn-sm btn-outline-danger px-2.5 rounded-3"
+                                title="Unassign queue group"
+                                data-bs-toggle="modal"
+                                data-bs-target="#unassignModal{{ p_agg.cluster_node_type_aggregation_id }}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        
+                        <!-- Unassign Confirmation Modal -->
+                        <div class="modal fade" id="unassignModal{{ p_agg.cluster_node_type_aggregation_id }}" tabindex="-1" aria-labelledby="unassignLabel{{ p_agg.cluster_node_type_aggregation_id }}" aria-hidden="true" data-bs-backdrop="static">
+                            <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content border-0 shadow-lg rounded-3 text-start">
+                                    <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                                        <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="unassignLabel{{ p_agg.cluster_node_type_aggregation_id }}">
+                                            <i class="bi bi-exclamation-triangle-fill"></i>
+                                            <span>Unassign Queue Group</span>
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body p-4 text-center">
+                                        <p class="text-secondary small mb-2">Are you sure you want to unassign queue group:</p>
+                                        <h5 class="fw-bold text-dark my-3 font-monospace">{{ p_agg.group.name }}</h5>
+                                        <p class="text-secondary small mb-0">This will remove resource allocation mappings for this project.</p>
+                                    </div>
+                                    <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                                        <form method="POST" action="" class="m-0 p-0">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="MappingId" value="{{ p_agg.cluster_node_type_aggregation_id }}">
+                                            <input type="hidden" name="action" value="unassign_queue_group_from_project">
+                                            <input type="hidden" name="ProjectId" value="{{ project_id }}">
+                                            <button type="submit" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                                                Unassign Group
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

@@ -242,6 +242,14 @@ def dashboard_view(request):
     except Exception as e:
         print(f"Error fetching queues: {e}")
 
+    # Get queue groups
+    try:
+        queue_groups = controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code)
+        context['queue_groups'] = queue_groups if queue_groups else []
+    except Exception as e:
+        print(f"Error fetching queue groups: {e}")
+        context['queue_groups'] = []
+
     # Get job stats
     try:
         job_stats = jr_controller.heappe_job_reporting_jobs_state_agregation_report_get(SessionCode=request.session_code)

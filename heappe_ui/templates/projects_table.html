@@ -1,10 +1,14 @@
 <div class="card border-0 shadow-sm bg-white mb-4">
     <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2">
-            <i class="bi bi-people text-primary fs-5"></i>
+            <i class="bi bi-folder text-primary fs-5"></i>
             <h5 class="h6 mb-0 fw-bold text-dark">Assigned Projects</h5>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 flex-grow-1 justify-content-end">
+            <div class="input-group input-group-sm" style="max-width: 250px;">
+                <span class="input-group-text bg-white border-light-subtle text-muted"><i class="bi bi-search"></i></span>
+                <input type="text" id="projectSearch" class="form-control border-light-subtle" placeholder="Search projects...">
+            </div>
             {% if cluster.id %}
             <button class="btn btn-sm btn-outline-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#assignProjectToCluster">
                 <i class="bi bi-link-45deg me-1"></i>Assign to Cluster
@@ -18,7 +22,7 @@
             <a href="{% url 'project_create' %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
                 <i class="bi bi-plus-lg me-1"></i>New Project
             </a>
-            <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();">
+            <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();" title="Refresh">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
         </div>
@@ -204,6 +208,43 @@
             }
 
             allocationInput.value = '';
+        });
+    }
+
+    // Live search for projects table
+    const searchInput = document.getElementById('projectSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', function () {
+            const query = this.value.toLowerCase().trim();
+            const tbody = document.querySelector('table tbody');
+            if (!tbody) return;
+
+            const rows = tbody.querySelectorAll('tr:not(.no-results-row)');
+            let matches = 0;
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                if (text.includes(query)) {
+                    row.style.setProperty('display', '', 'important');
+                    matches++;
+                } else {
+                    row.style.setProperty('display', 'none', 'important');
+                }
+            });
+
+            let noResults = document.getElementById('noProjectResults');
+            if (matches === 0 && query !== '') {
+                if (!noResults) {
+                    noResults = document.createElement('tr');
+                    noResults.id = 'noProjectResults';
+                    noResults.className = 'no-results-row';
+                    noResults.innerHTML = `<td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-search fs-4 d-block mb-2 text-secondary"></i>No matching projects found.</td>`;
+                    tbody.appendChild(noResults);
+                }
+            } else {
+                if (noResults) {
+                    noResults.remove();
+                }
+            }
         });
     }
   });

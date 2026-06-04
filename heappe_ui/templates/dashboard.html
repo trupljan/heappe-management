@@ -13,7 +13,7 @@
     <!-- Top Row: Metrics (Clickable Navigation Cards) -->
     <div class="row g-3 mb-4">
         <!-- Clusters -->
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg">
             <a href="{% url 'cluster_list' %}" class="card border-0 shadow-sm text-decoration-none h-100 transition-hover bg-white">
                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-3">
@@ -30,12 +30,12 @@
             </a>
         </div>
         <!-- Projects -->
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg">
             <a href="{% url 'project_list' %}" class="card border-0 shadow-sm text-decoration-none h-100 transition-hover bg-white">
                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-3">
                         <div class="bg-success bg-opacity-10 text-success rounded p-2.5 d-inline-flex">
-                            <i class="bi bi-people fs-5"></i>
+                            <i class="bi bi-folder fs-5"></i>
                         </div>
                         <div>
                             <span class="text-muted small d-block fw-semibold text-uppercase tracking-wider" style="font-size: 0.7rem;">Projects</span>
@@ -47,7 +47,7 @@
             </a>
         </div>
         <!-- Queues -->
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg">
             <a href="{% url 'queues_view' %}" class="card border-0 shadow-sm text-decoration-none h-100 transition-hover bg-white">
                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-3">
@@ -63,8 +63,25 @@
                 </div>
             </a>
         </div>
+        <!-- Queue Groups -->
+        <div class="col-6 col-lg">
+            <a href="{% url 'queue_groups' %}" class="card border-0 shadow-sm text-decoration-none h-100 transition-hover bg-white">
+                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="bg-purple bg-opacity-10 text-purple rounded p-2.5 d-inline-flex" style="background-color: rgba(111,66,193,0.1); color: #6f42c1;">
+                            <i class="bi bi-tags fs-5"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted small d-block fw-semibold text-uppercase tracking-wider" style="font-size: 0.7rem;">Queue Groups</span>
+                            <h4 class="mb-0 fw-bold text-dark mt-0.5">{{ queue_groups|length|default:"0" }}</h4>
+                        </div>
+                    </div>
+                    <i class="bi bi-chevron-right text-muted small"></i>
+                </div>
+            </a>
+        </div>
         <!-- Total Jobs -->
-        <div class="col-sm-6 col-lg-3">
+        <div class="col-6 col-lg">
             <div class="card border-0 shadow-sm h-100 bg-white">
                 <div class="card-body p-3 d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-3">

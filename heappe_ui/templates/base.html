@@ -285,6 +285,10 @@
                 <i class="bi bi-list fs-5"></i>
             </button>
             
+            <!-- Mobile Back Button / Short Breadcrumb -->
+            <div class="d-md-none me-auto" id="mobile-back-container">
+            </div>
+            
             <!-- Breadcrumbs Nav (Desktop only) -->
             <nav aria-label="breadcrumb" class="d-none d-md-block me-auto">
                 <ol class="breadcrumb mb-0 align-items-center" style="font-size: 0.85rem;">
@@ -438,6 +442,29 @@
 
         <!-- Content Body Block -->
         <main class="container-fluid px-4 py-4 flex-grow-1">
+
+            <!-- Global Flash Messages -->
+            {% if messages %}
+            <div id="global-messages" class="mb-3">
+                {% for message in messages %}
+                <div class="alert alert-dismissible fade show border-0 shadow-sm rounded-3 d-flex align-items-center gap-3 py-2.5 px-3
+                    {% if message.tags == 'error' or message.tags == 'danger' %}alert-danger
+                    {% elif message.tags == 'warning' %}alert-warning
+                    {% elif message.tags == 'success' %}alert-success
+                    {% else %}alert-info{% endif %}"
+                    role="alert">
+                    <i class="bi fs-5 flex-shrink-0
+                        {% if message.tags == 'error' or message.tags == 'danger' %}bi-x-circle-fill text-danger
+                        {% elif message.tags == 'warning' %}bi-exclamation-triangle-fill text-warning
+                        {% elif message.tags == 'success' %}bi-check-circle-fill text-success
+                        {% else %}bi-info-circle-fill text-info{% endif %}"></i>
+                    <span class="fw-semibold small">{{ message }}</span>
+                    <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
             {% block content %}{% endblock %}
         </main>
 
@@ -713,6 +740,41 @@
         if (timerBadges.length > 0) {
             updateTimers();
             const timerInterval = setInterval(updateTimers, 1000);
+        }
+    });
+
+    /* ── Global Submit Loading State ── */
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('form:not([data-no-loading])').forEach(function (form) {
+            form.addEventListener('submit', function () {
+                const btn = form.querySelector('button[type="submit"]');
+                if (btn && !btn.classList.contains('no-loading')) {
+                    const originalHtml = btn.innerHTML;
+                    btn.disabled = true;
+                    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${btn.textContent.trim() ? 'Processing...' : ''}`;
+                    // Re-enable after 15s as safety net
+                    setTimeout(function () {
+                        btn.disabled = false;
+                        btn.innerHTML = originalHtml;
+                    }, 15000);
+                }
+            });
+        });
+    });
+
+    /* ── Mobile Back Button Generator ── */
+    document.addEventListener('DOMContentLoaded', function () {
+        const desktopBreadcrumbs = document.querySelectorAll('.breadcrumb .breadcrumb-item a');
+        const mobileBackContainer = document.getElementById('mobile-back-container');
+        if (desktopBreadcrumbs.length > 0 && mobileBackContainer) {
+            const parentLink = desktopBreadcrumbs[desktopBreadcrumbs.length - 1];
+            if (parentLink) {
+                const backBtn = document.createElement('a');
+                backBtn.href = parentLink.href;
+                backBtn.className = 'btn btn-sm btn-link text-decoration-none text-secondary d-flex align-items-center gap-1 ps-0 fw-semibold';
+                backBtn.innerHTML = `<i class="bi bi-chevron-left"></i> ${parentLink.textContent}`;
+                mobileBackContainer.appendChild(backBtn);
+            }
         }
     });
 </script>

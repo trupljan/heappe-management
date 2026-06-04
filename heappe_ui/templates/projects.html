@@ -1,7 +1,14 @@
 {% extends "base.html" %}
 
+{% block title %}Projects{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Projects</li>
+{% endblock %}
+
 {% block content %}
-
-      {% include "projects_table.html" %}
-
+<div class="container-fluid py-2">
+    {% include "projects_table.html" %}
+</div>
 {% endblock %}
