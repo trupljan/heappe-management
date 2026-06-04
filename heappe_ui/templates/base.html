@@ -141,8 +141,13 @@
                     <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem; letter-spacing: 0.05em;">HEAppE Instance</li>
                     {% if request.session.chosen_instance %}
                     <li class="nav-item">
-                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and request.session.chosen_instance in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'deploy_view' request.session.chosen_instance %}">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and 'config' not in request.path and request.session.chosen_instance in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'deploy_view' request.session.chosen_instance %}">
                             <i class="bi bi-play-circle fs-5"></i><span>Containers &amp; Services</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and 'config' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'instance_config_view' request.session.chosen_instance %}">
+                            <i class="bi bi-gear fs-5"></i><span>Instance Configuration</span>
                         </a>
                     </li>
                     {% endif %}
@@ -253,8 +258,13 @@
                         <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem;">HEAppE Instance</li>
                         {% if request.session.chosen_instance %}
                         <li class="nav-item" data-bs-dismiss="offcanvas">
-                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and request.session.chosen_instance in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'deploy_view' request.session.chosen_instance %}">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and 'config' not in request.path and request.session.chosen_instance in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'deploy_view' request.session.chosen_instance %}">
                                 <i class="bi bi-play-circle fs-5"></i><span>Containers &amp; Services</span>
+                            </a>
+                        </li>
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'deploy' in request.path and 'config' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'instance_config_view' request.session.chosen_instance %}">
+                                <i class="bi bi-gear fs-5"></i><span>Instance Configuration</span>
                             </a>
                         </li>
                         {% endif %}

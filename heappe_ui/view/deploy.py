@@ -957,3 +957,78 @@ def handle_file_action(request, container_id, action):
 
     except Exception as e:
         return JsonResponse({'status': 'danger', 'message': str(e)}, status=500)
+
+
+@login_required
+def instance_config_view(request, instance_name):
+    """Graphical tree editor and manager for appsettings.json of the HEAppE instance."""
+    from ..models import InstanceCredentials
+    try:
+        instance_service = InstanceCredentials.objects.get(instance_name=instance_name)
+    except InstanceCredentials.DoesNotExist:
+        return HttpResponse("Instance not found.", status=404)
+
+    client = docker.from_env()
+    heappe_container = None
+    try:
+        for c in client.containers.list(all=True):
+            if c.labels.get('com.docker.compose.project') == instance_name:
+                service_name = c.labels.get('com.docker.compose.service', '')
+                if 'heappe' in service_name or 'heappe' in c.name:
+                    heappe_container = c
+                    break
+    except Exception as e:
+        return render(request, "instance_config.html", {
+            "instance_name": instance_name,
+            "error_message": f"Could not list Docker containers: {e}",
+            "instance_service": instance_service,
+        })
+
+    if not heappe_container:
+        return render(request, "instance_config.html", {
+            "instance_name": instance_name,
+            "error_message": "HEAppE container not found or not created yet.",
+            "instance_service": instance_service,
+        })
+
+    config_path = "/opt/heappe/confs/appsettings.json"
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'save':
+            content = request.POST.get('content', '')
+            write_script = f"mkdir -p $(dirname '{config_path}') && cat > '{config_path}' <<'EOF'\n{content}\nEOF\n"
+            exec_result = heappe_container.exec_run(['bash', '-c', write_script])
+            if exec_result.exit_code == 0:
+                return JsonResponse({'status': 'success', 'message': 'Configuration saved successfully.'})
+            else:
+                return JsonResponse({
+                    'status': 'danger', 
+                    'message': f"Failed to write configuration: {exec_result.output.decode('utf-8', errors='ignore')}"
+                }, status=500)
+                
+        elif action == 'restart':
+            base_path = "/opt/heappe-deployment/"
+            compose_dir = os.path.join(base_path, instance_name, "heappe-core")
+            # Trigger global restart
+            action_message, action_status = handle_global_action(compose_dir, instance_name, 'restart_all')
+            return JsonResponse({'status': action_status, 'message': action_message})
+
+    # GET request - read config content
+    try:
+        exec_result = heappe_container.exec_run(f"cat {config_path}")
+        if exec_result.exit_code == 0:
+            config_content = exec_result.output.decode('utf-8')
+        else:
+            config_content = "{}" # Fallback
+    except Exception as e:
+        config_content = "{}"
+
+    context = {
+        "instance_name": instance_name,
+        "config_content": config_content,
+        "instance_service": instance_service,
+        "container_id": heappe_container.id,
+    }
+    return render(request, "instance_config.html", context)

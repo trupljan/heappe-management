@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+
+{% block title %}Instance Configuration - {{ instance_name }}{% endblock %}
+
+{% block breadcrumbs %}
+<li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'deploy_view' instance_name %}">Containers &amp; Services</a></li>
+<li class="breadcrumb-item active" aria-current="page">Configuration</li>
+{% endblock %}
+
+{% block content %}
+<!-- JSONEditor stylesheet and script -->
+<link href="https://cdn.jsdelivr.net/npm/jsoneditor@9.5.6/dist/jsoneditor.min.css" rel="stylesheet" type="text/css">
+<script src="https://cdn.jsdelivr.net/npm/jsoneditor@9.5.6/dist/jsoneditor.min.js"></script>
+
+<div class="container mt-5">
+    <div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; justify-content:center; align-items:center; color:white;">
+        <div class="spinner-border text-primary mb-3" style="width:4rem; height:4rem;" role="status"></div>
+        <h4 id="loading-title" class="fw-bold">Operation in progress...</h4>
+        <p id="loading-subtext" class="text-muted">This action may take a few minutes. The page will refresh automatically.</p>
+    </div>
+
+    <!-- Hidden Raw Content Container -->
+    <textarea id="raw-config-data" style="display: none;">{{ config_content }}</textarea>
+    {% csrf_token %}
+
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-8">
+            <h2 class="mb-0 fw-bold">Configuration: <span class="text-primary">{{ instance_name }}</span></h2>
+            <p class="text-muted small mb-0">Editing <code>/opt/heappe/confs/appsettings.json</code> inside the core HEAppE middleware container.</p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <a href="{% url 'deploy_view' instance_name %}" class="btn btn-outline-secondary shadow-sm w-100 w-md-auto">
+                <i class="bi bi-arrow-left me-2"></i>Back to Services
+            </a>
+        </div>
+    </div>
+
+    {% if error_message %}
+        <div class="alert alert-danger shadow-sm border-0 d-flex align-items-center p-4 rounded-3 mb-5">
+            <i class="bi bi-exclamation-octagon-fill fs-1 me-3 flex-shrink-0 text-danger"></i>
+            <div>
+                <h5 class="alert-heading fw-bold mb-1">Configuration Unavailable</h5>
+                <p class="mb-0">{{ error_message }}</p>
+            </div>
+        </div>
+    {% else %}
+        <div class="card border-0 shadow-sm mb-5" style="height: 70vh;">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary active" id="btn-mode-tree"><i class="bi bi-diagram-3"></i> Tree Editor</button>
+                        <button type="button" class="btn btn-outline-primary" id="btn-mode-split"><i class="bi bi-columns-gap"></i> Split View</button>
+                        <button type="button" class="btn btn-outline-primary" id="btn-mode-code"><i class="bi bi-code-slash"></i> Raw JSON</button>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2 text-warning small fw-bold">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span>Restart is required to apply settings.</span>
+                </div>
+            </div>
+            
+            <div class="card-body p-3 d-flex flex-column overflow-hidden position-relative">
+                <div id="json-validation-status" class="mb-3" style="display: none;"></div>
+                
+                <!-- Editor Workspaces -->
+                <div class="d-flex flex-row flex-grow-1 gap-3 mb-3" style="min-height: 0;">
+                    <!-- Visual Tree Editor Workspace -->
+                    <div id="json-tree-wrapper" class="flex-grow-1 h-100" style="min-width: 0;">
+                        <div id="json-tree-editor" class="h-100 w-100"></div>
+                    </div>
+                    <!-- Code Textarea Editor Workspace -->
+                    <div id="json-code-wrapper" class="flex-grow-1 h-100" style="display: none; min-width: 0;">
+                        <div class="editor-container h-100">
+                            <div id="editor-gutter">1</div>
+                            <textarea id="file-content" class="form-control font-monospace"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Actions -->
+                <div class="d-flex gap-2.5 pt-2 border-top">
+                    <button id="save-file" class="btn btn-primary px-4 fw-bold shadow-sm"><i class="bi bi-save me-1.5"></i> Save Settings</button>
+                    <button id="restart-instance-btn" class="btn btn-warning px-4 fw-bold text-dark shadow-sm"><i class="bi bi-arrow-clockwise me-1.5"></i> Restart Instance</button>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    let lastValidationResult = null;
+    let validationTimeout = null;
+    let treeEditor = null;
+    let currentEditorMode = 'tree';
+
+    function showLoading(title, subtext) {
+        $('#loading-title').text(title || 'Operation in progress...');
+        $('#loading-subtext').text(subtext || 'Please wait.');
+        $('#loading-overlay').css('display', 'flex');
+    }
+
+    function hideLoading() {
+        $('#loading-overlay').hide();
+    }
+
+    // Initialize JSON Editor
+    const jsonEditorContainer = document.getElementById("json-tree-editor");
+    if (jsonEditorContainer) {
+        const options = {
+            mode: 'tree',
+            modes: ['tree'],
+            onChange: function() {
+                try {
+                    const json = treeEditor.get();
+                    $('#file-content').val(JSON.stringify(json, null, 2));
+                    updateGutter();
+                    validateCurrentFile();
+                } catch (e) {
+                    // Ignore transient parsing errors during active editing
+                }
+            }
+        };
+        treeEditor = new JSONEditor(jsonEditorContainer, options);
+
+        // Load initial data
+        const initialContent = $('#raw-config-data').val();
+        $('#file-content').val(initialContent);
+        updateGutter();
+        validateCurrentFile();
+        syncCodeToTree();
+    }
+
+    function switchEditorMode(mode) {
+        currentEditorMode = mode;
+        $('.btn-group button').removeClass('active');
+        
+        if (mode === 'tree') {
+            $('#btn-mode-tree').addClass('active');
+            if (syncCodeToTree()) {
+                $('#json-tree-wrapper').show();
+                $('#json-code-wrapper').hide();
+            } else {
+                $('#btn-mode-code').addClass('active');
+            }
+        } else if (mode === 'split') {
+            $('#btn-mode-split').addClass('active');
+            if (syncCodeToTree()) {
+                $('#json-tree-wrapper').show();
+                $('#json-code-wrapper').show();
+            } else {
+                $('#btn-mode-code').addClass('active');
+            }
+        } else {
+            $('#btn-mode-code').addClass('active');
+            $('#json-tree-wrapper').hide();
+            $('#json-code-wrapper').show();
+        }
+    }
+
+    function syncCodeToTree() {
+        if (!treeEditor) return true;
+        const codeValue = $('#file-content').val();
+        try {
+            const parsed = JSON.parse(codeValue);
+            treeEditor.set(parsed);
+            return true;
+        } catch (e) {
+            alert(`Cannot switch to Tree View: Invalid JSON syntax. Please correct raw JSON errors first.\n\nError: ${e.message}`);
+            return false;
+        }
+    }
+
+    $(document).on('click', '#btn-mode-tree', function() {
+        switchEditorMode('tree');
+    });
+    $(document).on('click', '#btn-mode-split', function() {
+        switchEditorMode('split');
+    });
+    $(document).on('click', '#btn-mode-code', function() {
+        switchEditorMode('code');
+    });
+
+    function updateGutter() {
+        const textarea = document.getElementById('file-content');
+        const gutter = document.getElementById('editor-gutter');
+        if (!textarea || !gutter) return;
+
+        const linesCount = textarea.value.split('\n').length;
+        let numbers = [];
+        for (let i = 1; i <= linesCount; i++) {
+            numbers.push(i);
+        }
+        gutter.textContent = numbers.join('\n');
+        syncGutterScroll();
+    }
+
+    function syncGutterScroll() {
+        const textarea = document.getElementById('file-content');
+        const gutter = document.getElementById('editor-gutter');
+        if (!textarea || !gutter) return;
+        gutter.scrollTop = textarea.scrollTop;
+    }
+
+    function validateJsonContent(content) {
+        try {
+            JSON.parse(content);
+            return { valid: true, pos: null };
+        } catch (e) {
+            const message = e.message;
+            let pos = null;
+            let displayError = message;
+
+            const posMatch = message.match(/position (\d+)/i);
+            if (posMatch) {
+                pos = parseInt(posMatch[1], 10);
+                const sub = content.substring(0, pos);
+                const lines = sub.split('\n');
+                const line = lines.length;
+                const column = lines[lines.length - 1].length + 1;
+                const cleanMessage = message.replace(/\s*at\s*position\s*\d+/i, '');
+                displayError = `Line ${line}, Col ${column}: ${cleanMessage}`;
+            } else {
+                const lineColMatch = message.match(/at line (\d+) column (\d+)/i);
+                if (lineColMatch) {
+                    const line = parseInt(lineColMatch[1], 10);
+                    const col = parseInt(lineColMatch[2], 10);
+                    const cleanMessage = message.replace(/\s*at\s*line\s*\d+\s*column\s*\d+/i, '');
+                    displayError = `Line ${line}, Col ${col}: ${cleanMessage}`;
+                    
+                    const lines = content.split('\n');
+                    let currentPos = 0;
+                    for (let i = 0; i < Math.min(line - 1, lines.length); i++) {
+                        currentPos += lines[i].length + 1;
+                    }
+                    currentPos += Math.min(col - 1, (lines[line - 1] || '').length);
+                    pos = currentPos;
+                }
+            }
+            return { valid: false, error: displayError, pos: pos };
+        }
+    }
+
+    function validateCurrentFile() {
+        const content = $('#file-content').val();
+        const result = validateJsonContent(content);
+        lastValidationResult = result;
+
+        const statusDiv = $('#json-validation-status');
+        statusDiv.empty().show();
+
+        if (result.valid) {
+            statusDiv.html(`
+                <div class="alert alert-success d-flex align-items-center py-2 px-3 m-0 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem;">
+                    <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                    <div><strong>Valid JSON</strong> - Structure is correct.</div>
+                </div>
+            `);
+        } else {
+            const locateBtn = result.pos !== null ? `
+                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 ms-2 flex-shrink-0" id="go-to-json-error" title="Go to error">
+                    <i class="bi bi-cursor"></i> Go to error
+                </button>
+            ` : '';
+
+            statusDiv.html(`
+                <div class="alert alert-danger d-flex align-items-center justify-content-between py-2 px-3 m-0 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem; width: 100%;">
+                    <div class="d-flex align-items-center flex-grow-1 min-w-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2 fs-5 flex-shrink-0"></i>
+                        <div class="text-truncate">
+                            <strong>Invalid JSON</strong>: ${result.error}
+                        </div>
+                    </div>
+                    ${locateBtn}
+                </div>
+            `);
+        }
+    }
+
+    $('#file-content').on('input', function() {
+        updateGutter();
+        clearTimeout(validationTimeout);
+        validationTimeout = setTimeout(validateCurrentFile, 250);
+    });
+
+    $('#file-content').on('scroll', function() {
+        syncGutterScroll();
+    });
+
+    $(document).on('click', '#go-to-json-error', function() {
+        if (lastValidationResult && lastValidationResult.pos !== null) {
+            const textarea = document.getElementById('file-content');
+            if (textarea) {
+                textarea.focus();
+                textarea.setSelectionRange(lastValidationResult.pos, lastValidationResult.pos + 1);
+                const lineIndex = textarea.value.substring(0, lastValidationResult.pos).split('\n').length - 1;
+                const lineHeight = parseInt($(textarea).css('line-height')) || 18;
+                textarea.scrollTop = Math.max(0, (lineIndex - 5) * lineHeight);
+            }
+        }
+    });
+
+    $('#save-file').click(() => {
+        if (lastValidationResult && !lastValidationResult.valid) {
+            alert(`Cannot save: The configuration contains invalid JSON syntax:\n\n${lastValidationResult.error}`);
+            return;
+        }
+
+        showLoading("Saving settings...", "Writing to configuration file.");
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: {
+                action: 'save',
+                content: $('#file-content').val(),
+                csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: (r) => {
+                hideLoading();
+                if (r.status === 'success') {
+                    alert("Settings saved successfully. Click 'Restart Instance' to apply changes.");
+                } else {
+                    alert("Failed to save: " + r.message);
+                }
+            },
+            error: (xhr) => {
+                hideLoading();
+                alert("Error: " + (xhr.responseJSON?.message || xhr.responseText || 'Server Error'));
+            }
+        });
+    });
+
+    $('#restart-instance-btn').click(function() {
+        const confirmRestart = confirm("Warning: This will restart all services in the HEAppE instance. Are you sure you want to proceed?");
+        if (!confirmRestart) return;
+
+        showLoading("Restarting Instance...", "Recreating containers.");
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: {
+                action: 'restart',
+                csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: () => {
+                hideLoading();
+                alert("Instance restarted successfully.");
+                window.location.reload();
+            },
+            error: (xhr) => { 
+                hideLoading(); 
+                alert('Restart failed: ' + (xhr.responseJSON?.message || xhr.responseText || 'Server Error')); 
+            }
+        });
+    });
+});
+</script>
+
+<style>
+    .editor-container {
+        display: flex;
+        flex-direction: row;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        background-color: #fff;
+        min-height: 0;
+        overflow: hidden;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .editor-container:focus-within {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+    }
+    #editor-gutter {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 0.5rem 0.5rem;
+        text-align: right;
+        background-color: #f8f9fa;
+        border-right: 1px solid #dee2e6;
+        color: #6c757d;
+        user-select: none;
+        pointer-events: none;
+        overflow: hidden;
+        white-space: pre;
+        min-width: 40px;
+    }
+    #file-content {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 0.5rem 0.75rem;
+        resize: none;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background-color: transparent;
+        margin: 0;
+        overflow-y: auto;
+    }
+
+    /* Custom JSONEditor Styles */
+    .jsoneditor {
+        border: 1px solid #ced4da !important;
+        border-radius: 0.375rem !important;
+        background-color: #fff !important;
+    }
+    .jsoneditor-menu {
+        background-color: #0d6efd !important;
+        border-bottom: 1px solid #0b5ed7 !important;
+        padding: 4px 8px !important;
+    }
+    .jsoneditor-menu > button, .jsoneditor-menu > .jsoneditor-modes {
+        background-color: rgba(255, 255, 255, 0.15) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+        margin: 2px !important;
+        color: #fff !important;
+    }
+    .jsoneditor-menu > button:hover, .jsoneditor-menu > .jsoneditor-modes:hover {
+        background-color: rgba(255, 255, 255, 0.25) !important;
+    }
+    .jsoneditor-search input {
+        border-radius: 4px !important;
+        padding: 2px 6px !important;
+        outline: none !important;
+    }
+    .jsoneditor-outer {
+        border-radius: 0 0 0.375rem 0.375rem !important;
+    }
+    .jsoneditor-tree {
+        font-family: var(--bs-font-monospace), monospace !important;
+        font-size: 13px !important;
+        background-color: #fff !important;
+    }
+    a.jsoneditor-poweredby {
+        display: none !important;
+    }
+    .jsoneditor-separator {
+        display: none !important;
+    }
+</style>
+{% endblock content %}

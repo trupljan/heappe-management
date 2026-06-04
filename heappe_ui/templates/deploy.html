@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 
 {% block content %}
+<link href="https://cdn.jsdelivr.net/npm/jsoneditor@9.5.6/dist/jsoneditor.min.css" rel="stylesheet" type="text/css">
+<script src="https://cdn.jsdelivr.net/npm/jsoneditor@9.5.6/dist/jsoneditor.min.js"></script>
+
 <div class="container mt-5">
     <div id="action-feedback"></div>
 
@@ -277,11 +280,37 @@
                             <div class="tab-content flex-grow-1 overflow-hidden p-3">
                                 <div class="tab-pane fade show active h-100" id="editor-pane">
                                     <div id="editor-ui" style="display:none;" class="h-100 d-flex flex-column">
-                                        <h6 class="text-muted small">Path: <span id="edit-file-name" class="fw-bold"></span></h6>
+                                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom flex-wrap gap-2">
+                                            <h6 class="text-muted small mb-0">Path: <span id="edit-file-name" class="fw-bold"></span></h6>
+                                            <div id="json-editor-controls" class="d-flex align-items-center gap-2" style="display: none !important;">
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <button type="button" class="btn btn-outline-primary active" id="btn-mode-tree"><i class="bi bi-diagram-3"></i> Tree Editor</button>
+                                                    <button type="button" class="btn btn-outline-primary" id="btn-mode-split"><i class="bi bi-columns-gap"></i> Split View</button>
+                                                    <button type="button" class="btn btn-outline-primary" id="btn-mode-code"><i class="bi bi-code-slash"></i> Raw JSON</button>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <div id="json-validation-status" class="mb-2" style="display: none;"></div>
-                                        <textarea id="file-content" class="form-control flex-grow-1 mb-2 font-monospace" style="font-size: 13px;"></textarea>
+                                        <div id="json-restart-warning" class="alert alert-warning py-2 px-3 mb-2 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem; display: none;">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            <strong>Notice</strong>: Changes to config files require restarting the instance to take effect.
+                                        </div>
+                                        <div class="d-flex flex-row flex-grow-1 gap-2 mb-2" style="min-height: 0;">
+                                            <!-- Visual Tree Editor Workspace -->
+                                            <div id="json-tree-wrapper" class="flex-grow-1 h-100" style="display: none; min-width: 0;">
+                                                <div id="json-tree-editor" class="h-100 w-100"></div>
+                                            </div>
+                                            <!-- Code Textarea Editor Workspace -->
+                                            <div id="json-code-wrapper" class="flex-grow-1 h-100" style="min-width: 0;">
+                                                <div class="editor-container h-100">
+                                                    <div id="editor-gutter">1</div>
+                                                    <textarea id="file-content" class="form-control font-monospace"></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <div class="d-flex gap-2">
                                             <button id="save-file" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save</button>
+                                            <button id="restart-instance-btn" class="btn btn-warning btn-sm text-dark" style="display: none;"><i class="bi bi-arrow-clockwise"></i> Restart Instance</button>
                                             <button id="download-btn" class="btn btn-info btn-sm text-white"><i class="bi bi-download"></i> Download</button>
                                             <button id="delete-file" class="btn btn-danger btn-sm ms-auto"><i class="bi bi-trash"></i> Delete</button>
                                         </div>
@@ -319,6 +348,8 @@ let currentPath = '/opt/heappe/confs/';
 let selectedFilePath = null;
 let isPolling = false;
 let updatePollInterval = null;
+let treeEditor = null;
+let currentEditorMode = 'tree'; // 'tree', 'code', 'split'
 
 function startUpdatePolling() {
     // Show update progress modal (non-dismissible)
@@ -569,6 +600,110 @@ $(document).ready(function() {
     let lastValidationResult = null;
     let validationTimeout = null;
 
+    // Initialize JSON Editor
+    const jsonEditorContainer = document.getElementById("json-tree-editor");
+    if (jsonEditorContainer) {
+        const options = {
+            mode: 'tree',
+            modes: ['tree'],
+            onChange: function() {
+                try {
+                    const json = treeEditor.get();
+                    const path = selectedFilePath || '';
+                    if (path.endsWith('.njson') && Array.isArray(json)) {
+                        const ndjsonString = json.map(item => JSON.stringify(item)).join('\n');
+                        $('#file-content').val(ndjsonString);
+                    } else {
+                        $('#file-content').val(JSON.stringify(json, null, 2));
+                    }
+                    updateGutter();
+                    validateCurrentFile();
+                } catch (e) {
+                    // Ignore transient parsing errors during active typing/editing
+                }
+            }
+        };
+        treeEditor = new JSONEditor(jsonEditorContainer, options);
+    }
+
+    function switchEditorMode(mode) {
+        currentEditorMode = mode;
+        $('#json-editor-controls button').removeClass('active');
+        
+        if (mode === 'tree') {
+            $('#btn-mode-tree').addClass('active');
+            if (syncCodeToTree()) {
+                $('#json-tree-wrapper').show();
+                $('#json-code-wrapper').hide();
+            } else {
+                $('#btn-mode-code').addClass('active');
+            }
+        } else if (mode === 'split') {
+            $('#btn-mode-split').addClass('active');
+            if (syncCodeToTree()) {
+                $('#json-tree-wrapper').show();
+                $('#json-code-wrapper').show();
+            } else {
+                $('#btn-mode-code').addClass('active');
+            }
+        } else {
+            $('#btn-mode-code').addClass('active');
+            $('#json-tree-wrapper').hide();
+            $('#json-code-wrapper').show();
+        }
+    }
+
+    function syncCodeToTree() {
+        if (!treeEditor) return true;
+        const codeValue = $('#file-content').val();
+        try {
+            const path = selectedFilePath || '';
+            if (path.endsWith('.njson')) {
+                const lines = codeValue.split('\n').filter(l => l.trim() !== '');
+                const jsonArray = lines.map(line => JSON.parse(line));
+                treeEditor.set(jsonArray);
+            } else {
+                const parsed = JSON.parse(codeValue);
+                treeEditor.set(parsed);
+            }
+            return true;
+        } catch (e) {
+            alert(`Cannot switch to Tree View: Invalid JSON syntax. Please correct raw JSON errors first.\n\nError: ${e.message}`);
+            return false;
+        }
+    }
+
+    $(document).on('click', '#btn-mode-tree', function() {
+        switchEditorMode('tree');
+    });
+    $(document).on('click', '#btn-mode-split', function() {
+        switchEditorMode('split');
+    });
+    $(document).on('click', '#btn-mode-code', function() {
+        switchEditorMode('code');
+    });
+
+    function updateGutter() {
+        const textarea = document.getElementById('file-content');
+        const gutter = document.getElementById('editor-gutter');
+        if (!textarea || !gutter) return;
+
+        const linesCount = textarea.value.split('\n').length;
+        let numbers = [];
+        for (let i = 1; i <= linesCount; i++) {
+            numbers.push(i);
+        }
+        gutter.textContent = numbers.join('\n');
+        syncGutterScroll();
+    }
+
+    function syncGutterScroll() {
+        const textarea = document.getElementById('file-content');
+        const gutter = document.getElementById('editor-gutter');
+        if (!textarea || !gutter) return;
+        gutter.scrollTop = textarea.scrollTop;
+    }
+
     function validateJsonContent(path, content) {
         const isJson = path.endsWith('.json');
         const isNjson = path.endsWith('.njson');
@@ -591,13 +726,15 @@ $(document).ready(function() {
                     const lines = sub.split('\n');
                     const line = lines.length;
                     const column = lines[lines.length - 1].length + 1;
-                    displayError = `${message} (at Line ${line}, Col ${column})`;
+                    const cleanMessage = message.replace(/\s*at\s*position\s*\d+/i, '');
+                    displayError = `Line ${line}, Col ${column}: ${cleanMessage}`;
                 } else {
                     const lineColMatch = message.match(/at line (\d+) column (\d+)/i);
                     if (lineColMatch) {
                         const line = parseInt(lineColMatch[1], 10);
                         const col = parseInt(lineColMatch[2], 10);
-                        displayError = message;
+                        const cleanMessage = message.replace(/\s*at\s*line\s*\d+\s*column\s*\d+/i, '');
+                        displayError = `Line ${line}, Col ${col}: ${cleanMessage}`;
                         // Calculate position index
                         const lines = content.split('\n');
                         let currentPos = 0;
@@ -629,7 +766,8 @@ $(document).ready(function() {
                         }
                         const leadingWhitespaceLen = line.length - line.trimStart().length;
                         const absolutePos = currentPos + leadingWhitespaceLen + linePos;
-                        const displayError = `Line ${i + 1}: ${message}`;
+                        const cleanMessage = message.replace(/\s*at\s*position\s*\d+/i, '');
+                        const displayError = `Line ${i + 1}: ${cleanMessage}`;
                         return { valid: false, error: displayError, pos: absolutePos };
                     }
                 }
@@ -693,6 +831,8 @@ $(document).ready(function() {
         $('#editor-placeholder').show();
         $('#editor-ui').hide();
         $('#json-validation-status').hide().empty();
+        $('#json-restart-warning').hide();
+        $('#restart-instance-btn').hide();
         lastValidationResult = null;
     });
 
@@ -728,6 +868,8 @@ $(document).ready(function() {
             currentPath = selectedFilePath + '/';
             loadFileList();
             $('#json-validation-status').hide().empty();
+            $('#json-restart-warning').hide();
+            $('#restart-instance-btn').hide();
             lastValidationResult = null;
         } else {
             $('#editor-placeholder').hide();
@@ -738,7 +880,27 @@ $(document).ready(function() {
                 path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
             }, r => {
                 $('#file-content').val(r.content || '');
+                updateGutter();
                 validateCurrentFile();
+
+                const isJson = selectedFilePath.endsWith('.json') || selectedFilePath.endsWith('.njson');
+                if (isJson) {
+                    $('#json-editor-controls').show();
+                    const isConfig = selectedFilePath.includes('appsettings.json') || selectedFilePath.includes('/confs/');
+                    if (isConfig) {
+                        $('#json-restart-warning').show();
+                        $('#restart-instance-btn').show();
+                    } else {
+                        $('#json-restart-warning').hide();
+                        $('#restart-instance-btn').hide();
+                    }
+                    switchEditorMode('tree');
+                } else {
+                    $('#json-editor-controls').hide();
+                    $('#json-restart-warning').hide();
+                    $('#restart-instance-btn').hide();
+                    switchEditorMode('code');
+                }
             });
         }
     });
@@ -758,6 +920,8 @@ $(document).ready(function() {
         currentPath = $(this).data('path') || '/';
         loadFileList();
         $('#json-validation-status').hide().empty();
+        $('#json-restart-warning').hide();
+        $('#restart-instance-btn').hide();
         lastValidationResult = null;
     });
 
@@ -767,12 +931,19 @@ $(document).ready(function() {
         currentPath = '/' + p.join('/') + (p.length ? '/' : '');
         loadFileList();
         $('#json-validation-status').hide().empty();
+        $('#json-restart-warning').hide();
+        $('#restart-instance-btn').hide();
         lastValidationResult = null;
     });
 
     $('#file-content').on('input', function() {
+        updateGutter();
         clearTimeout(validationTimeout);
         validationTimeout = setTimeout(validateCurrentFile, 250);
+    });
+
+    $('#file-content').on('scroll', function() {
+        syncGutterScroll();
     });
 
     $(document).on('click', '#go-to-json-error', function() {
@@ -786,6 +957,27 @@ $(document).ready(function() {
                 textarea.scrollTop = Math.max(0, (lineIndex - 5) * lineHeight);
             }
         }
+    });
+
+    $('#restart-instance-btn').click(function() {
+        const confirmRestart = confirm("Warning: This will restart all services in the HEAppE instance. Are you sure you want to proceed?");
+        if (!confirmRestart) return;
+
+        showLoading("Restarting Instance...", "Recreating containers.");
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: {
+                action: 'restart_all',
+                InstanceName: '{{ instance_name }}',
+                csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: () => location.reload(),
+            error: (xhr) => { 
+                hideLoading(); 
+                alert('Restart failed: ' + (xhr.responseJSON?.message || xhr.responseText || 'Server Error')); 
+            }
+        });
     });
 
     $('#save-file').click(() => {
@@ -867,16 +1059,89 @@ $(document).ready(function() {
     #file-list {
         scroll-behavior: smooth;
     }
-    #file-content {
-        line-height: 1.5;
-        resize: none;
-        border-color: #dee2e6;
+    .editor-container {
+        display: flex;
+        flex-direction: row;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        background-color: #fff;
+        min-height: 0;
+        overflow: hidden;
         transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    #file-content:focus {
+    .editor-container:focus-within {
         border-color: #0d6efd;
         box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
     }
+    #editor-gutter {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 0.5rem 0.5rem;
+        text-align: right;
+        background-color: #f8f9fa;
+        border-right: 1px solid #dee2e6;
+        color: #6c757d;
+        user-select: none;
+        pointer-events: none;
+        overflow: hidden;
+        white-space: pre;
+        min-width: 40px;
+    }
+    #file-content {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 0.5rem 0.75rem;
+        resize: none;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background-color: transparent;
+        margin: 0;
+        overflow-y: auto;
+    }
     #loading-overlay { display: none; }
+
+    /* Custom JSONEditor Styles */
+    .jsoneditor {
+        border: 1px solid #ced4da !important;
+        border-radius: 0.375rem !important;
+        background-color: #fff !important;
+    }
+    .jsoneditor-menu {
+        background-color: #0d6efd !important;
+        border-bottom: 1px solid #0b5ed7 !important;
+        padding: 4px 8px !important;
+    }
+    .jsoneditor-menu > button, .jsoneditor-menu > .jsoneditor-modes {
+        background-color: rgba(255, 255, 255, 0.15) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+        margin: 2px !important;
+        color: #fff !important;
+    }
+    .jsoneditor-menu > button:hover, .jsoneditor-menu > .jsoneditor-modes:hover {
+        background-color: rgba(255, 255, 255, 0.25) !important;
+    }
+    .jsoneditor-search input {
+        border-radius: 4px !important;
+        padding: 2px 6px !important;
+        outline: none !important;
+    }
+    .jsoneditor-outer {
+        border-radius: 0 0 0.375rem 0.375rem !important;
+    }
+    .jsoneditor-tree {
+        font-family: var(--bs-font-monospace), monospace !important;
+        font-size: 13px !important;
+        background-color: #fff !important;
+    }
+    a.jsoneditor-poweredby {
+        display: none !important;
+    }
+    .jsoneditor-separator {
+        display: none !important;
+    }
 </style>
 {% endblock content %}
