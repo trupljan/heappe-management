@@ -197,7 +197,7 @@
                 </div>
                 {% endif %}
                 {% if middleware_update_available %}
-                <a href="{% url 'deploy_view' request.session.chosen_instance %}?action=update" class="alert alert-warning py-1.5 px-2 border-warning mb-0 animate-pulse mt-1 d-block text-center text-decoration-none fw-bold" style="font-size: 0.7rem; color: #664d03; background-color: #fff3cd; border-color: #ffecb5; transition: background-color 0.15s ease-in-out;" onmouseover="this.style.backgroundColor='#ffe69c'" onmouseout="this.style.backgroundColor='#fff3cd'">
+                <a href="{% url 'deploy_view' request.session.chosen_instance %}?action=update" class="badge bg-warning-subtle text-warning-emphasis border border-warning px-2.5 py-1.5 fw-bold w-100 text-center text-decoration-none d-block mt-1.5" style="font-size: 0.7rem; cursor: pointer; border-color: #ffecb5 !important; background-color: #fff3cd !important; transition: all 0.15s ease-in-out;" onmouseover="this.style.backgroundColor='#ffe69c'" onmouseout="this.style.backgroundColor='#fff3cd'">
                     <i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>Update to <code>v{{ middleware_latest_version }}</code>
                 </a>
                 {% endif %}
@@ -309,7 +309,7 @@
                     </div>
                     {% endif %}
                     {% if middleware_update_available %}
-                    <a href="{% url 'deploy_view' request.session.chosen_instance %}?action=update" class="alert alert-warning py-1.5 px-2 border-warning mb-0 animate-pulse mt-1 d-block text-center text-decoration-none fw-bold" style="font-size: 0.7rem; color: #664d03; background-color: #fff3cd; border-color: #ffecb5; transition: background-color 0.15s ease-in-out;" onmouseover="this.style.backgroundColor='#ffe69c'" onmouseout="this.style.backgroundColor='#fff3cd'" data-bs-dismiss="offcanvas">
+                    <a href="{% url 'deploy_view' request.session.chosen_instance %}?action=update" class="badge bg-warning-subtle text-warning-emphasis border border-warning px-2.5 py-1.5 fw-bold w-100 text-center text-decoration-none d-block mt-1.5" style="font-size: 0.7rem; cursor: pointer; border-color: #ffecb5 !important; background-color: #fff3cd !important; transition: all 0.15s ease-in-out;" onmouseover="this.style.backgroundColor='#ffe69c'" onmouseout="this.style.backgroundColor='#fff3cd'" data-bs-dismiss="offcanvas">
                         <i class="bi bi-exclamation-triangle-fill me-1 text-warning"></i>Update to <code>v{{ middleware_latest_version }}</code>
                     </a>
                     {% endif %}
