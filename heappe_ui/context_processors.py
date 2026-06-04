@@ -147,6 +147,20 @@ def middleware_update_renderer(request):
         "projects_list_cache": "Projects"
     }
 
+    # Add project templates cache dynamically if on a project detail page and it exists in session
+    parts = request.path.strip('/').split('/')
+    if len(parts) >= 2:
+        if parts[0] == 'projects' and parts[1].isdigit():
+            p_id = parts[1]
+            key = f"command_templates_cache_{p_id}"
+            if request.session.get(f"{key}_time") is not None:
+                cache_keys[key] = "Templates"
+        elif parts[0] == 'command-templates' and parts[1].isdigit():
+            t_id = parts[1]
+            key = f"command_template_detail_cache_{t_id}"
+            if request.session.get(f"{key}_time") is not None:
+                cache_keys[key] = "Template Detail"
+
     cache_status = {}
     for key, label in cache_keys.items():
         cache_time = request.session.get(f"{key}_time")
