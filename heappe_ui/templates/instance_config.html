@@ -74,7 +74,7 @@
                                 <!-- Dynamically populated tabs -->
                             </div>
                             <!-- Right Form content -->
-                            <div class="col-md-9 p-4 bg-white overflow-auto h-100 position-relative" id="form-tabs-content" style="max-height: 100%;">
+                            <div class="col-md-9 p-4 bg-white overflow-auto h-100 position-relative tab-content" id="form-tabs-content" style="max-height: 100%;">
                                 <!-- Dynamically populated panels -->
                             </div>
                         </div>
@@ -179,7 +179,7 @@ $(document).ready(function() {
             // Add tab button
             tabList.append(`
                 <button class="nav-link text-start py-2.5 px-3 rounded mb-1.5 border-0 w-100 d-flex align-items-center justify-content-between ${first ? 'active' : ''}" 
-                        id="${navLinkId}" data-bs-toggle="pill" data-bs-target="#${tabId}" type="button" role="tab">
+                        id="${navLinkId}" data-bs-target="#${tabId}" type="button" role="tab">
                     <span class="text-truncate"><i class="bi bi-box-seam me-2 text-primary"></i>${key}</span>
                 </button>
             `);
@@ -504,6 +504,17 @@ $(document).ready(function() {
     });
     $(document).on('click', '#btn-mode-code', function() {
         switchEditorMode('code');
+    });
+
+    // Custom click handler for form tabs to ensure clickability on dynamic elements
+    $(document).on('click', '#form-tabs-list .nav-link', function(e) {
+        e.preventDefault();
+        $('#form-tabs-list .nav-link').removeClass('active');
+        $(this).addClass('active');
+        
+        const targetId = $(this).attr('data-bs-target');
+        $('#form-tabs-content .tab-pane').removeClass('show active');
+        $(targetId).addClass('show active');
     });
 
     function updateGutter() {
