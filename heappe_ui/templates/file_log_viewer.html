@@ -21,7 +21,6 @@
         border: none !important;
         border-radius: 12px !important;
         box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     
     .filter-label {
@@ -37,7 +36,7 @@
     .form-control-custom {
         border: 1px solid #e2e8f0;
         border-radius: 8px;
-        padding: 0.5rem 0.75rem;
+        padding: 0.4rem 0.75rem;
         font-size: 0.85rem;
         transition: all 0.2s ease;
     }
@@ -45,25 +44,6 @@
         border-color: #3b82f6;
         box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         outline: none;
-    }
-
-    .btn-apply-filters {
-        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-        border: none;
-        color: white;
-        font-weight: 600;
-        font-size: 0.85rem;
-        border-radius: 8px;
-        padding: 0.6rem;
-        transition: all 0.2s ease;
-    }
-    .btn-apply-filters:hover {
-        background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
-    }
-    .btn-apply-filters:active {
-        transform: translateY(0);
     }
 
     /* Terminal Console Card styles */
@@ -79,13 +59,6 @@
         background-color: #18181b !important;
         border-bottom: 1px solid #27272a !important;
         padding: 0.75rem 1.25rem !important;
-    }
-
-    .terminal-window-dot {
-        width: 11px;
-        height: 11px;
-        border-radius: 50%;
-        display: inline-block;
     }
 
     .terminal-console-body {
@@ -244,7 +217,7 @@
 
 <div class="container-fluid py-2 log-viewer-container">
     <!-- Header Block -->
-    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div class="d-flex align-items-center gap-2.5">
             <i class="bi bi-terminal-fill text-primary fs-3"></i>
             <div>
@@ -259,82 +232,74 @@
         </div>
     </div>
 
-    <div class="row g-4">
-        <!-- Sidebar filters -->
-        <div class="col-lg-3 col-xl-2">
-            <div class="card filter-card p-3 bg-white">
-                <form method="GET">
-                    <h6 class="text-uppercase text-secondary fw-extrabold small mb-3" style="font-size: 0.72rem; letter-spacing: 0.06em;">Filter Logs</h6>
-                    
-                    <div class="mb-3">
-                        <label class="filter-label">Date</label>
-                        <input type="date" name="date" class="form-control form-control-custom" value="{{ selected_date }}">
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="filter-label">Time Window</label>
-                        <div class="row g-1">
-                            <div class="col-6">
-                                <input type="time" name="time_from" class="form-control form-control-custom" value="{{ time_from }}">
-                            </div>
-                            <div class="col-6">
-                                <input type="time" name="time_to" class="form-control form-control-custom" value="{{ time_to }}">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <label class="filter-label">Search Text</label>
-                        <input type="text" name="search" class="form-control form-control-custom" placeholder="Filter..." value="{{ search_query }}">
-                    </div>
-                    
-                    <button type="submit" class="btn btn-apply-filters w-100 mb-2">
-                        <i class="bi bi-funnel me-1.5"></i>Apply Filters
-                    </button>
-                </form>
-                
-                <hr class="my-3 text-secondary" style="opacity: 0.15;">
-                
-                <div class="d-flex align-items-center justify-content-between">
-                    <span class="small fw-bold text-danger text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.05em;">Live Tail Stream</span>
+    <!-- Top Control Bar -->
+    <div class="card filter-card p-3 bg-white mb-3">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="filter-label">Date</label>
+                <input type="date" name="date" class="form-control form-control-custom form-control-sm w-100" value="{{ selected_date }}">
+            </div>
+            
+            <div class="col-md-3">
+                <label class="filter-label">Time Window</label>
+                <div class="d-flex gap-1.5 align-items-center">
+                    <input type="time" name="time_from" class="form-control form-control-custom form-control-sm w-100" value="{{ time_from }}">
+                    <span class="text-muted small">to</span>
+                    <input type="time" name="time_to" class="form-control form-control-custom form-control-sm w-100" value="{{ time_to }}">
+                </div>
+            </div>
+            
+            <div class="col-md-3">
+                <label class="filter-label">Search Text</label>
+                <input type="text" name="search" class="form-control form-control-custom form-control-sm w-100" placeholder="Filter..." value="{{ search_query }}">
+            </div>
+            
+            <div class="col-md-2">
+                <label class="filter-label">Live Tail Stream</label>
+                <div class="d-flex align-items-center gap-2 py-1">
                     <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox" id="liveStreamToggle" style="cursor: pointer;">
                     </div>
-                </div>
-                <div id="liveStatus" class="small text-muted mt-2.5 d-flex align-items-center gap-2 fst-italic">
-                    <span class="rounded-circle bg-secondary" style="width: 8px; height: 8px; display: inline-block;"></span>
-                    Disconnected
+                    <div id="liveStatus" class="small text-muted d-flex align-items-center gap-1.5 fst-italic" style="font-size: 0.78rem;">
+                        <span class="rounded-circle bg-secondary" style="width: 6px; height: 6px; display: inline-block;"></span>
+                        Off
+                    </div>
                 </div>
             </div>
-        </div>
+            
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm fw-bold px-3 py-1.5 w-100 shadow-sm" style="border-radius: 8px;">
+                    <i class="bi bi-funnel me-1"></i>Apply
+                </button>
+                <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-sm fw-semibold px-3 py-1.5 w-100" style="border-radius: 8px;">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
 
-        <!-- Log window pane -->
-        <div class="col-lg-9 col-xl-10">
-            <div class="card terminal-card" style="height: 80vh;">
-                <!-- Dark Terminal Header -->
-                <div class="card-header terminal-header d-flex justify-content-between align-items-center">
-                    <div class="d-flex align-items-center">
-                        <div class="d-flex align-items-center gap-1.5 me-3">
-                            <span class="terminal-window-dot bg-danger"></span>
-                            <span class="terminal-window-dot bg-warning"></span>
-                            <span class="terminal-window-dot bg-success"></span>
-                        </div>
-                        <span class="fw-bold small text-uppercase text-light-emphasis font-monospace" style="font-size: 0.72rem; letter-spacing: 0.05em; color: #a1a1aa !important;">Console Output</span>
-                    </div>
-                    <button class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace text-light-emphasis border-secondary" style="font-size: 0.7rem; border-color: #3f3f46 !important;" onclick="scrollToBottom()">Scroll to Bottom</button>
+    <!-- Log window pane -->
+    <div class="col-12">
+        <div class="card terminal-card" style="height: 72vh;">
+            <!-- Dark Terminal Header -->
+            <div class="card-header terminal-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-terminal text-secondary fs-6"></i>
+                    <span class="fw-bold small text-uppercase text-light-emphasis font-monospace" style="font-size: 0.72rem; letter-spacing: 0.05em; color: #a1a1aa !important;">Console Output</span>
                 </div>
-                <!-- Dark Console Body -->
-                <div class="card-body terminal-console-body" id="logWindow">
-                    <table class="terminal-table">
-                        <tbody id="logTableBody">
-                            {% for row_html in logs %}
-                                {{ row_html|safe }}
-                            {% empty %}
-                            <tr><td colspan="2" class="text-center py-5 text-muted font-monospace" style="font-size: 0.85rem;">No matching logs found.</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
+                <button class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace text-light-emphasis border-secondary" style="font-size: 0.7rem; border-color: #3f3f46 !important;" onclick="scrollToBottom()">Scroll to Bottom</button>
+            </div>
+            <!-- Dark Console Body -->
+            <div class="card-body terminal-console-body" id="logWindow">
+                <table class="terminal-table">
+                    <tbody id="logTableBody">
+                        {% for row_html in logs %}
+                            {{ row_html|safe }}
+                        {% empty %}
+                        <tr><td colspan="2" class="text-center py-5 text-muted font-monospace" style="font-size: 0.85rem;">No matching logs found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -372,14 +337,14 @@
             const baseUrl = "{% url 'fetch_new_logs' %}";
             fetch(`${baseUrl}?offset=-1`).then(r => r.json()).then(data => {
                 logOffset = data.offset;
-                liveStatus.innerHTML = '<span class="pulse-dot"></span>Polling live...';
-                liveStatus.className = "small mt-2.5 d-flex align-items-center gap-2 live-status-active";
+                liveStatus.innerHTML = '<span class="pulse-dot"></span>Active';
+                liveStatus.className = "small d-flex align-items-center gap-1.5 live-status-active";
                 liveInterval = setInterval(pullLogs, 2000);
             });
         } else {
             if (liveInterval) clearInterval(liveInterval);
-            liveStatus.innerHTML = '<span class="rounded-circle bg-secondary" style="width: 8px; height: 8px; display: inline-block;"></span>Disconnected';
-            liveStatus.className = "small text-muted mt-2.5 d-flex align-items-center gap-2 fst-italic";
+            liveStatus.innerHTML = '<span class="rounded-circle bg-secondary" style="width: 6px; height: 6px; display: inline-block;"></span>Off';
+            liveStatus.className = "small text-muted d-flex align-items-center gap-1.5 fst-italic";
         }
     });
 </script>
