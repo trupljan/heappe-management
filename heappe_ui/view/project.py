@@ -316,6 +316,16 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
     except Exception as ex:
         print(f"Error computing project checklist: {ex}")
 
+    setup_checklist_completed = sum(1 for k in [
+        "clusters_exist",
+        "project_cluster_linked",
+        "queues_exist",
+        "project_group_linked",
+        "formulas_exist_and_mapped",
+        "command_template_exists",
+        "ssh_account_active"
+    ] if setup_checklist.get(k))
+
     return render(request, "project.html", {
         "project": project_data,
         "clusters": clusters,
@@ -332,6 +342,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "ui_features": ui_features,
         "templates_cache_age_str": templates_cache_age_str if tab == "commandtemplates" else None,
         "setup_checklist": setup_checklist,
+        "setup_checklist_completed": setup_checklist_completed,
     })
 
 
