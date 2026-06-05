@@ -65,6 +65,7 @@
                         <div class="mb-3">
                             <label class="form-label fw-semibold small text-secondary text-uppercase" style="letter-spacing:.04em;">Your Contact Email <span class="text-danger">*</span></label>
                             <input type="email" class="form-control form-control-sm" id="report-email" name="contact_email"
+                                   value="{% if request.user.email and request.user.email != 'admin@example.com' %}{{ request.user.email }}{% endif %}"
                                    placeholder="your.name@organization.cz" required>
                             <div class="form-text text-muted" style="font-size:.75rem;">Support will use this address to follow up with you.</div>
                         </div>
@@ -164,6 +165,7 @@
 <script>
 $(document).ready(function () {
     let screenshotDataUrl = '';
+    let gitlabClipboardText = '';
 
     function loadInitialScreenshot() {
         try {
@@ -287,6 +289,7 @@ $(document).ready(function () {
             const subject = errData.subject || `[HEAppE Support] ${$('#report-category option:selected').text()}: ${summary.substring(0, 80)}`;
             
             let body = errData.body;
+            gitlabClipboardText = errData.details_only || description;
             if (!body) {
                 const categoryLabel = $('#report-category option:selected').text();
                 const username = '{{ request.user.username|default:"Anonymous" }}';
@@ -405,15 +408,16 @@ $(document).ready(function () {
         }
     });
 
-    // Handle GitLab button click (auto-copies full body first)
+    // Handle GitLab button click (auto-copies detailed description + traceback first)
     $(document).on('click', '#create-ticket-btn', function () {
-        const targetElement = $('#fallback-body')[0];
-        targetElement.select();
-        targetElement.setSelectionRange(0, 99999);
         try {
-            navigator.clipboard.writeText(targetElement.value);
+            navigator.clipboard.writeText(gitlabClipboardText);
         } catch (err) {
+            const $temp = $('<textarea>');
+            $('body').append($temp);
+            $temp.val(gitlabClipboardText).select();
             document.execCommand('copy');
+            $temp.remove();
         }
     });
 

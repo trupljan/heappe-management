@@ -1702,9 +1702,26 @@ Description
 -----------
 {description}
 """
+        details_only = f"""Description
+-----------
+{description}
+"""
         # Append session HEAppE error details if available
         if last_error:
             body += f"""
+Attached HEAppE Error Details
+------------------------------
+Instance Name:  {last_error.get('instance_name')}
+Host URL:       {last_error.get('host_url')}
+Error Type:     {last_error.get('error_type')}
+Error Status:   {last_error.get('error_status')}
+Error Message:
+{last_error.get('error_message')}
+
+Traceback:
+{last_error.get('traceback')}
+"""
+            details_only += f"""
 Attached HEAppE Error Details
 ------------------------------
 Instance Name:  {last_error.get('instance_name')}
@@ -1729,6 +1746,7 @@ Traceback:
             'to_email': support_email,
             'subject': subject,
             'body': body,
+            'details_only': details_only,
             'admin_version': admin_version,
             'admin_branch': admin_branch,
             'heappe_version': heappe_version,
