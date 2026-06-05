@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{% if command_template %}{{ command_template.name|default:command_template.Name }}{% else %}New Command Template{% endif %}{% endblock %}
+{% block title %}{% if command_template %}{{ command_template.name }}{% else %}New Command Template{% endif %}{% endblock %}
 
 {% block breadcrumbs %}
     <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
@@ -8,7 +8,7 @@
     {% if project and project.id %}
         <li class="breadcrumb-item"><a href="{% url 'project_detail' project.id %}" class="text-decoration-none text-secondary">{{ project.name }}</a></li>
     {% endif %}
-    <li class="breadcrumb-item active" aria-current="page">{% if command_template %}{{ command_template.name|default:command_template.Name }}{% else %}New Command Template{% endif %}</li>
+    <li class="breadcrumb-item active" aria-current="page">{% if command_template %}{{ command_template.name }}{% else %}New Command Template{% endif %}</li>
 {% endblock %}
 
 {% block content %}
@@ -22,7 +22,7 @@
           <i class="bi bi-file-earmark-code text-primary fs-3"></i>
           <div>
             <h4 class="mb-0 fw-bold text-dark">
-              {% if command_template %}{{ command_template.name|default:command_template.Name }}{% else %}New Command Template{% endif %}
+              {% if command_template %}{{ command_template.name }}{% else %}New Command Template{% endif %}
             </h4>
             <span class="text-muted small">Configure command execution parameters and cluster bindings</span>
           </div>
@@ -80,7 +80,7 @@
               <input type="hidden" name="action" value="{% if command_template %}update_command_template{% else %}create_command_template{% endif %}">
               <input type="hidden" name="preset" value="{{ preset_name|default:'' }}">
               {% if command_template %}
-                <input type="hidden" name="Id" value="{{ command_template.Id|default:command_template.id|default:0 }}">
+                <input type="hidden" name="Id" value="{{ command_template.id|default:0 }}">
               {% else %}
                 <input type="hidden" name="Id" value="0">
               {% endif %}
@@ -90,11 +90,11 @@
                 {% if command_template %}
                   <div class="col-md-3">
                     <label class="form-label small fw-bold text-secondary text-uppercase">Template ID</label>
-                    <input type="number" class="form-control border-secondary-subtle py-2 bg-light font-monospace text-secondary" name="Id" value="{{ command_template.id|default:command_template.Id|default:0 }}" readonly disabled>
+                    <input type="number" class="form-control border-secondary-subtle py-2 bg-light font-monospace text-secondary" name="Id" value="{{ command_template.id|default:0 }}" readonly disabled>
                   </div>
                   <div class="col-md-9">
                     <label class="form-label small fw-bold text-secondary text-uppercase">Name</label>
-                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="{{ command_template.name|default:command_template.Name|default:'' }}" required placeholder="e.g. Barbora MPI Run">
+                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="{{ command_template.name|default:'' }}" required placeholder="e.g. Barbora MPI Run">
                   </div>
                 {% else %}
                   <div class="col-md-12">
