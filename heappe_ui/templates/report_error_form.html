@@ -319,7 +319,8 @@ $(document).ready(function () {
             const userAgent = errData.user_agent || navigator.userAgent;
             const chosenInstance = errData.chosen_instance || 'unknown';
 
-            const briefDescription = `### HEAppE Management — Problem Report\n\n` +
+            const briefDescription = `**[IMPORTANT] Please paste (Ctrl+V / Cmd+V) the copied detailed description & traceback from your clipboard below!**\n\n` +
+                `### HEAppE Management — Problem Report\n\n` +
                 `- **Reporter:** ${username} <${contactEmail}>\n` +
                 `- **Category:** ${categoryLabel}\n` +
                 `- **Affected URL:** ${$('#report-url').val()}\n` +
@@ -332,7 +333,7 @@ $(document).ready(function () {
                 `- **Server OS:** ${serverOs}\n` +
                 `- **Browser User Agent:** ${userAgent}\n\n` +
                 `---\n\n` +
-                `**[IMPORTANT] Please paste (Ctrl+V / Cmd+V) the copied detailed description & traceback from your clipboard below:**\n\n`;
+                `**[Paste details / traceback here]**\n\n`;
 
             const mailtoBody = body.length > 1500 ? body.substring(0, 1500) + '\n\n... (detailed traceback truncated due to URL length limit, please copy/paste the full message body from the clipboard)' : body;
             const mailtoUrl = `mailto:support.heappe@it4i.cz?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailtoBody)}`;
@@ -390,10 +391,11 @@ $(document).ready(function () {
                             </a>
                         </div>
                         <div class="text-muted mt-3" style="font-size:0.75rem; border-top: 1px dashed #dee2e6; padding-top: 8px;">
-                            <i class="bi bi-info-circle me-1"></i> <strong>How-to submit screenshot:</strong>
+                            <i class="bi bi-info-circle me-1"></i> <strong>How-to submit report:</strong>
                             <ol class="ps-3 mt-1 mb-0">
                                 <li>Click the <strong>Download Screenshot</strong> button to save the error preview image.</li>
-                                <li>Click <strong>Create Ticket on GitLab</strong> (or <strong>Send via Email</strong>).</li>
+                                <li>Click <strong>Create Ticket on GitLab</strong> (this automatically copies the detailed description & traceback to your clipboard).</li>
+                                <li>In the GitLab issue description field, press <strong>Ctrl+V</strong> (or <strong>Cmd+V</strong>) to paste the copied report details.</li>
                                 <li>Drag-and-drop the downloaded screenshot image file directly into the GitLab description text field to attach it.</li>
                             </ol>
                         </div>
@@ -410,6 +412,11 @@ $(document).ready(function () {
 
     // Handle GitLab button click (auto-copies detailed description + traceback first)
     $(document).on('click', '#create-ticket-btn', function () {
+        const $btn = $(this);
+        const originalHtml = $btn.html();
+        const originalBg = $btn.css('background-color');
+        const originalBorder = $btn.css('border-color');
+
         try {
             navigator.clipboard.writeText(gitlabClipboardText);
         } catch (err) {
@@ -419,6 +426,17 @@ $(document).ready(function () {
             document.execCommand('copy');
             $temp.remove();
         }
+
+        // Show temporary feedback on button that it was copied
+        $btn.html('<i class="bi bi-check-circle-fill"></i> Copied! Use Ctrl+V in GitLab')
+            .css({'background-color': '#198754', 'border-color': '#198754'})
+            .addClass('disabled');
+
+        setTimeout(function() {
+            $btn.html(originalHtml)
+                .css({'background-color': originalBg, 'border-color': originalBorder})
+                .removeClass('disabled');
+        }, 3000);
     });
 
     // Handle clipboard copy
