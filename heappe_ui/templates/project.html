@@ -431,20 +431,13 @@
                                 <option value="own" {% if not request.GET.project_filter or request.GET.project_filter == "own" %}selected{% endif %}>Own Only</option>
                             </select>
                         </form>
-                        <div class="btn-group shadow-sm">
-                            <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-primary fw-bold">
-                                <i class="bi bi-plus-lg me-1"></i>Add New Template
-                            </a>
-                            <button type="button" class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
-                                <span class="visually-hidden">Toggle Dropdown</span>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-success fw-bold shadow-sm d-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#quickTemplateModal">
+                                <i class="bi bi-lightning-charge-fill text-warning"></i> Add Quick Template
                             </button>
-                            <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="font-size: 0.85rem;">
-                                <li>
-                                    <a class="dropdown-item py-2 small d-flex align-items-center gap-2" href="{% url 'command_template_create' project.id %}?preset=test">
-                                        <i class="bi bi-file-earmark-plus text-primary"></i>Add Test Template
-                                    </a>
-                                </li>
-                            </ul>
+                            <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-outline-primary fw-bold shadow-sm">
+                                <i class="bi bi-plus-lg me-1"></i>Add Custom Template
+                            </a>
                         </div>
                         <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();">
                             <i class="bi bi-arrow-clockwise"></i>
@@ -827,6 +820,75 @@
   </div>
 </div>
 
+<!-- Modal for Quick Template Creation -->
+<div class="modal fade" id="quickTemplateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_preset_template">
+        <div class="modal-header bg-success bg-opacity-10 py-3">
+            <h5 class="modal-title fw-bold text-success-emphasis">
+                <i class="bi bi-lightning-charge-fill text-warning me-1.5 animate-pulse"></i>Create Quick Template
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+            <div class="mb-3">
+                <label class="form-label small text-muted fw-semibold">Select Preset Template</label>
+                <select class="form-select border-light-subtle" id="presetSelect" name="preset_name" required>
+                    {% for key, val in preset_templates.items %}
+                        <option value="{{ key }}" data-desc="{{ val.description }}" data-suffix="{{ val.executable_file_suffix }}" data-params="{% for p in val.parameters %}{{ p.Identifier }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+                            {{ val.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small text-muted fw-semibold">Cluster Node Type</label>
+                <select class="form-select border-light-subtle" name="ClusterNodeTypeId" required>
+                    <option value="" disabled selected>Select Cluster Node Type...</option>
+                    {% for nt in all_cluster_node_types %}
+                        <option value="{{ nt.id }}">
+                            {{ nt.cluster_name }} - {{ nt.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+                {% if not all_cluster_node_types %}
+                    <div class="form-text text-danger small mt-1.5">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>No cluster node types available. Please assign this project to a cluster first.
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Details Preview Card -->
+            <div class="card bg-light border-0 rounded p-3 mb-2 small text-muted">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-semibold text-dark">Executable File:</span>
+                    <span id="presetExecutableFile" class="font-monospace text-end text-break text-primary" style="max-width: 65%;"></span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-semibold text-dark">Description:</span>
+                    <span id="presetDesc" class="text-end text-dark-emphasis" style="max-width: 65%;"></span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="fw-semibold text-dark">Parameters to Create:</span>
+                    <span id="presetParams" class="font-monospace text-success-emphasis text-end" style="max-width: 65%;"></span>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer bg-light border-top">
+            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-sm btn-success fw-bold px-3" {% if not all_cluster_node_types %}disabled{% endif %}>
+                Create Template
+            </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script>
 function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
     document.getElementById('editClusterId').value = clusterId;
@@ -841,6 +903,7 @@ function setUsernameInModal(username) {
     document.getElementById('display-username-regen').innerText = username;
 }
 
+// Ensure setRenameAccountUsername exists
 function setRenameAccountUsername(username) {
     document.getElementById('oldUsername').value = username;
     document.getElementById('renameDisplayOld').value = username;
@@ -905,6 +968,33 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
         }
     });
+
+    // Quick template preset selection handling
+    const presetSelect = document.getElementById('presetSelect');
+    if (presetSelect) {
+        const projectKeyScriptsDir = "{{ project.key_scripts_directory_path|default:'' }}";
+        function updatePresetPreview() {
+            const selectedOpt = presetSelect.options[presetSelect.selectedIndex];
+            if (selectedOpt) {
+                const desc = selectedOpt.getAttribute('data-desc') || '';
+                const suffix = selectedOpt.getAttribute('data-suffix') || '';
+                const params = selectedOpt.getAttribute('data-params') || 'None';
+                
+                let fullPath = projectKeyScriptsDir;
+                if (fullPath && !fullPath.endsWith('/')) {
+                    fullPath += '/' + suffix;
+                } else {
+                    fullPath += suffix;
+                }
+                
+                document.getElementById('presetDesc').innerText = desc;
+                document.getElementById('presetExecutableFile').innerText = fullPath;
+                document.getElementById('presetParams').innerText = params;
+            }
+        }
+        presetSelect.addEventListener('change', updatePresetPreview);
+        updatePresetPreview();
+    }
 });
 </script>
 {% endblock %}

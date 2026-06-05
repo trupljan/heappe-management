@@ -304,3 +304,71 @@ class DashboardReportingTests(TestCase):
         # It should be very close to min_allowed_date (within a few seconds)
         self.assertAlmostEqual(called_time_from.timestamp(), min_allowed_date.timestamp(), delta=10)
 
+
+class ProjectPresetTemplateTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser", password="password")
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_create_preset_template_success(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+        
+        # Mock responses
+        mock_project = mock.MagicMock()
+        mock_project.to_dict.return_value = {
+            "id": 1,
+            "name": "Test Project",
+            "key_scripts_directory_path": "/path/to/keyscripts/"
+        }
+        mock_mgmt_instance.heappe_management_project_get.return_value = mock_project
+        mock_mgmt_instance.heappe_management_command_template_post.return_value = {"Id": 42}
+        mock_mgmt_instance.heappe_management_command_template_parameter_post.return_value = {"Id": 100}
+
+        # Build request
+        request = self.factory.post("/projects/1/", {
+            "action": "create_preset_template",
+            "preset_name": "test",
+            "ClusterNodeTypeId": "5"
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123",
+            "command_templates_cache_1": [],
+            "command_templates_cache_1_time": 0
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        # Mock messages framework
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.project import project_detail
+        response = project_detail(request, project_id=1)
+
+        # Check redirections and API calls
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("?tab=commandtemplates"))
+        
+        # Verify cache invalidation
+        self.assertNotIn("command_templates_cache_1", request.session)
+        self.assertNotIn("command_templates_cache_1_time", request.session)
+
+        # Verify command template creation payload
+        mock_mgmt_instance.heappe_management_command_template_post.assert_called_once()
+        call_args = mock_mgmt_instance.heappe_management_command_template_post.call_args[1]
+        self.assertEqual(call_args['body']['ProjectId'], 1)
+        self.assertEqual(call_args['body']['Name'], "TestTemplate")
+        self.assertEqual(call_args['body']['ExecutableFile'], "/path/to/keyscripts/test.sh")
+        self.assertEqual(call_args['body']['ClusterNodeTypeId'], 5)
+
+        # Verify parameter creation payload
+        mock_mgmt_instance.heappe_management_command_template_parameter_post.assert_called_once()
+        param_call_args = mock_mgmt_instance.heappe_management_command_template_parameter_post.call_args[1]
+        self.assertEqual(param_call_args['body']['CommandTemplateId'], 42)
+        self.assertEqual(param_call_args['body']['Identifier'], "inputParam")
+
+

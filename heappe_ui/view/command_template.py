@@ -189,6 +189,8 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
                         controller.heappe_management_command_template_parameter_post(**param_payload)
                     except Exception as e:
                         print(f"Error adding preset parameter {param['Identifier']}: {e}")
+                from django.urls import reverse
+                return redirect(f"{reverse('project_detail', kwargs={'project_id': project_id})}?tab=commandtemplates")
             return redirect("command_template_detail", command_template_id=result['Id'])
 
     controller = hp.ManagementApi(request.api_instance)

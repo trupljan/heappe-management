@@ -3,6 +3,7 @@ import time
 from django.http import JsonResponse
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
+from .command_template import COMMAND_TEMPLATE_PRESETS
 
 
 KEY_TYPE_CHOICES = {
@@ -65,6 +66,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         if action == "regenerate_ssh_key": return regenerate_ssh_key(request)
         if action == "rename_hpc_account": return rename_hpc_account(request)
         if action == "delete_hpc_account": return delete_hpc_account(request)
+        if action == "create_preset_template": return _create_preset_template(request, project_id, controller, session_code)
 
     # Initialize context variables with defaults
     clusters = []
@@ -195,6 +197,19 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
                 dict_ntypes[nt_id] = node_type_map[nt_id]
         node_types = list(dict_ntypes.values())
 
+        # Build all available cluster node types for preset template modal
+        project_assignments_for_presets = controller.heappe_management_project_assignment_to_clusters_get(
+            ProjectId=project_id, SessionCode=session_code
+        )
+        assigned_cluster_ids_for_presets = {a.cluster_id for a in project_assignments_for_presets}
+        all_cluster_node_types = []
+        for c_obj in clusters_cache:
+            if c_obj['id'] in assigned_cluster_ids_for_presets:
+                for nt in c_obj.get('node_types', []):
+                    nt_copy = nt.copy() if isinstance(nt, dict) else nt
+                    nt_copy['cluster_name'] = c_obj['name']
+                    all_cluster_node_types.append(nt_copy)
+
     elif tab == "accounts":
         project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
             ProjectId=project_id, SessionCode=session_code
@@ -310,6 +325,8 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "command_templates": command_templates,
         "project_accounts": project_accounts,
         "node_types": node_types,
+        "all_cluster_node_types": all_cluster_node_types if tab == "commandtemplates" else [],
+        "preset_templates": COMMAND_TEMPLATE_PRESETS if tab == "commandtemplates" else {},
         "adaptor_users": adaptor_users,
         "adaptor_users_not_in_project": adaptor_users_not_in_project,
         "ui_features": ui_features,
@@ -912,6 +929,104 @@ def delete_hpc_account(request: HttpRequest) -> HttpResponse:
     )
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
+
+
+def _create_preset_template(request: HttpRequest, project_id: int, controller: hp.ManagementApi, session_code: str) -> HttpResponse:
+    preset_name = request.POST.get("preset_name")
+    cluster_node_type_id_str = request.POST.get("ClusterNodeTypeId")
+
+    if not preset_name or preset_name not in COMMAND_TEMPLATE_PRESETS:
+        messages.error(request, f"Preset '{preset_name}' is not recognized.")
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    if not cluster_node_type_id_str:
+        messages.error(request, "Cluster Node Type must be selected.")
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    try:
+        cluster_node_type_id = int(cluster_node_type_id_str)
+    except ValueError:
+        messages.error(request, "Invalid Cluster Node Type selected.")
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    try:
+        project_data = controller.heappe_management_project_get(Id=project_id, SessionCode=session_code).to_dict()
+    except Exception as e:
+        messages.error(request, f"Failed to retrieve project info: {e}")
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    preset = COMMAND_TEMPLATE_PRESETS[preset_name]
+    key_scripts_dir = project_data.get('key_scripts_directory_path') or ''
+    suffix = preset['executable_file_suffix']
+    if key_scripts_dir and not key_scripts_dir.endswith('/'):
+        executable_file = f"{key_scripts_dir}/{suffix}"
+    else:
+        executable_file = f"{key_scripts_dir}{suffix}"
+
+    # Step 1: Create template
+    payload_data = {
+        "ProjectId": project_id,
+        "Name": preset["name"],
+        "Description": preset["description"],
+        "ExecutableFile": executable_file,
+        "ClusterNodeTypeId": cluster_node_type_id,
+        "IsEnabled": True,
+    }
+
+    payload = _create_payload(session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_command_template_post(**payload),
+        None,  # Do not display a generic success message
+        "Failed to create Command Template"
+    )
+
+    if not result or not result.get('Id'):
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    # Step 2: Create parameters
+    template_id = result['Id']
+    params_ok = True
+    for param in preset.get("parameters", []):
+        try:
+            param_payload_data = {
+                "CommandTemplateId": template_id,
+                "Identifier": param["Identifier"],
+                "Query": param.get("Query"),
+                "Description": param.get("Description")
+            }
+            param_payload = _create_payload(session_code, param_payload_data)
+            controller.heappe_management_command_template_parameter_post(**param_payload)
+        except Exception as e:
+            params_ok = False
+            messages.warning(request, f"Failed to add template parameter {param['Identifier']}: {e}")
+
+    # Invalidate command templates session cache
+    cache_key = f"command_templates_cache_{project_id}"
+    cache_time_key = f"command_templates_cache_{project_id}_time"
+    if cache_key in request.session:
+        del request.session[cache_key]
+    if cache_time_key in request.session:
+        del request.session[cache_time_key]
+
+    if params_ok:
+        messages.success(request, f"Quick Preset Template '{preset['name']}' created successfully with parameters!")
+    else:
+        messages.success(request, f"Quick Preset Template '{preset['name']}' created, but some parameters failed to add.")
+
+    response = redirect("project_detail", project_id=project_id)
+    response['Location'] += "?tab=commandtemplates"
+    return response
 
 
 @login_required
