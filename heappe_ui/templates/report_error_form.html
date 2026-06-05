@@ -111,7 +111,7 @@
                         <!-- Submit -->
                         <div class="d-flex gap-2">
                             <button type="submit" class="btn btn-danger fw-bold px-4" id="submit-btn">
-                                <i class="bi bi-send-fill me-2"></i>Send Report
+                                <i class="bi bi-file-earmark-text-fill me-2"></i>Generate Report
                             </button>
                             <a href="{% url 'dashboard_view' %}" class="btn btn-outline-secondary">Cancel</a>
                         </div>
@@ -250,7 +250,7 @@ $(document).ready(function () {
             return;
         }
 
-        $('#submit-btn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Sending...');
+        $('#submit-btn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-2"></span>Generating...');
 
         const basePath = window.location.pathname.split('/').includes('management') ? '/management' : '';
 
@@ -271,13 +271,13 @@ $(document).ready(function () {
                     showManualUI(r);
                 } else {
                     alert('Could not generate report: ' + r.message);
-                    $('#submit-btn').prop('disabled', false).html('<i class="bi bi-send-fill me-2"></i>Send Report');
+                    $('#submit-btn').prop('disabled', false).html('<i class="bi bi-file-earmark-text-fill me-2"></i>Generate Report');
                 }
             },
             error: function (xhr) {
                 let errData = xhr.responseJSON || {};
                 alert('Error generating report: ' + (errData.message || xhr.responseText));
-                $('#submit-btn').prop('disabled', false).html('<i class="bi bi-send-fill me-2"></i>Send Report');
+                $('#submit-btn').prop('disabled', false).html('<i class="bi bi-file-earmark-text-fill me-2"></i>Generate Report');
             }
         });
 
