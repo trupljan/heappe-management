@@ -303,12 +303,14 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         if restart_result.returncode != 0:
             raise RuntimeError(f"Docker compose restart failed: {restart_result.stderr}")
 
+        # Write success log first
+        log_message("SUCCESS: Deployment completed successfully.")
+
         # Set the instance as deployed in the database
         instance_settings.is_deployed = True
         instance_settings.is_updating = False
         instance_settings.save()
 
-        log_message("SUCCESS: Deployment completed successfully.")
         return restart_result, "Deployment completed successfully.", 'success'
     except Exception as e:
         log_message(f"EXCEPTION: Deployment error: {str(e)}")

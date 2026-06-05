@@ -56,19 +56,19 @@
                                 </div>
                                 <div class="col-md-9">
                                     <label class="form-label small text-muted fw-semibold">Cluster Name</label>
-                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="Name" value="{{ cluster.name }}" required>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="Name" value="{{ cluster.name }}" required placeholder="e.g. Barbora">
                                 </div>
                                 <div class="col-12">
-                                    <label class="form-label small text-muted fw-semibold">Description</label>
-                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="Description" value="{{ cluster.description }}">
+                                    <label class="form-label small text-muted fw-semibold">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="Description" value="{{ cluster.description }}" placeholder="e.g. Primary compute cluster at IT4I">
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small text-muted fw-semibold">Master Node Name</label>
-                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="MasterNodeName" value="{{ cluster.master_node_name }}">
+                                    <label class="form-label small text-muted fw-semibold">Master Node Name <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="MasterNodeName" value="{{ cluster.master_node_name }}" placeholder="e.g. master.barbora.it4i.cz">
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small text-muted fw-semibold">Domain Name</label>
-                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="DomainName" value="{{ cluster.domain_name }}">
+                                    <label class="form-label small text-muted fw-semibold">Domain Name <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="DomainName" value="{{ cluster.domain_name }}" placeholder="e.g. barbora.it4i.cz">
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small text-muted fw-semibold">Scheduler Type</label>
@@ -88,16 +88,16 @@
                                     </select>
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label small text-muted fw-semibold">Time Zone</label>
-                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="TimeZone" value="{{ cluster.time_zone }}">
+                                    <label class="form-label small text-muted fw-semibold">Time Zone <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="TimeZone" value="{{ cluster.time_zone }}" placeholder="e.g. Central Europe Standard Time">
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label small text-muted fw-semibold">Port</label>
-                                    <input type="number" class="form-control form-control-sm border-light-subtle" name="Port" value="{{ cluster.port }}">
+                                    <label class="form-label small text-muted fw-semibold">Port <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <input type="number" class="form-control form-control-sm border-light-subtle" name="Port" value="{{ cluster.port }}" placeholder="e.g. 22">
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label small text-muted fw-semibold">Proxy Connection ID</label>
-                                    <input type="number" class="form-control form-control-sm border-light-subtle" name="ProxyConnectionId" value="{{ cluster.proxy_connection }}">
+                                    <label class="form-label small text-muted fw-semibold">Proxy Connection ID <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <input type="number" class="form-control form-control-sm border-light-subtle" name="ProxyConnectionId" value="{{ cluster.proxy_connection }}" placeholder="e.g. 1">
                                 </div>
                                 <div class="col-12 py-2">
                                     <div class="form-check">

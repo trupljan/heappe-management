@@ -125,3 +125,103 @@ def login_view(request):
             return render(request, "login.html", {"error": "Invalid credentials"})
 
     return render(request, "login.html")
+
+
+def get_instance_api_links(instance_name):
+    import json
+    import os
+    from heappe_ui.models import InstanceCredentials
+
+    base_path = "/opt/heappe-deployment/"
+    app_settings_path = os.path.join(base_path, instance_name, "app", "confs", "appsettings.json")
+    app_settings_data_path = os.path.join(base_path, instance_name, "app", "confs", "appsettings-data.json")
+
+    # Defaults
+    heappe_host = ""
+    heappe_postfix = ""
+    heappe_swagger_path = "swagger"
+
+    datastaging_host = ""
+    datastaging_postfix = ""
+    datastaging_swagger_path = "swagger"
+
+    # Try reading appsettings.json
+    if os.path.exists(app_settings_path):
+        try:
+            with open(app_settings_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                deployment_settings = data.get("ApplicationAPISettings", {}).get("DeploymentSettings", {})
+                heappe_host = deployment_settings.get("Host", "")
+                heappe_postfix = deployment_settings.get("HostPostfix", "")
+
+                swagger_settings = data.get("ApplicationAPISettings", {}).get("SwaggerDocSettings", {})
+                heappe_swagger_path = swagger_settings.get("PrefixDocPath", "swagger")
+        except Exception as e:
+            print(f"Error reading appsettings.json for links: {e}")
+
+    # Try reading appsettings-data.json
+    if os.path.exists(app_settings_data_path):
+        try:
+            with open(app_settings_data_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                config_settings = data.get("ApplicationAPIConfiguration", {})
+                swagger_settings = config_settings.get("SwaggerConfiguration", {})
+                datastaging_host = swagger_settings.get("Host", "")
+                datastaging_postfix = swagger_settings.get("HostPostfix", "")
+                datastaging_swagger_path = swagger_settings.get("PrefixDocPath", "swagger")
+        except Exception as e:
+            print(f"Error reading appsettings-data.json for links: {e}")
+
+    # Fallbacks from DB if not populated or files not found
+    try:
+        instance = InstanceCredentials.objects.filter(instance_name=instance_name).first()
+    except Exception:
+        instance = None
+
+    if instance:
+        if not heappe_host:
+            host_val = instance.heappe_host
+            port_val = instance.heappe_port
+            if port_val:
+                heappe_host = f"{host_val}:{port_val}"
+            else:
+                heappe_host = host_val
+            heappe_postfix = instance_name if instance_name != "dev" else ""
+
+        if not datastaging_host:
+            host_val = instance.heappe_host
+            port_val = instance.heappe_port
+            if port_val and port_val.isdigit():
+                ds_port = int(port_val) + 1
+                datastaging_host = f"{host_val}:{ds_port}"
+            else:
+                datastaging_host = f"{host_val}:5001"
+            datastaging_postfix = ""
+
+    # Build clean URLs
+    def clean_url(host, postfix=None, path=None):
+        if not host:
+            return ""
+        url = host.strip()
+        if not url.startswith("http://") and not url.startswith("https://"):
+            url = "http://" + url
+        if postfix:
+            postfix_clean = postfix.strip().strip('/')
+            if postfix_clean:
+                url = url.rstrip('/') + '/' + postfix_clean
+        if path:
+            url = url.rstrip('/') + '/' + path.strip().lstrip('/')
+        return url
+
+    heappe_api_url = clean_url(heappe_host, heappe_postfix)
+    heappe_swagger_url = clean_url(heappe_host, heappe_postfix, heappe_swagger_path + "/index.html")
+
+    datastaging_api_url = clean_url(datastaging_host, datastaging_postfix)
+    datastaging_swagger_url = clean_url(datastaging_host, datastaging_postfix, datastaging_swagger_path + "/index.html")
+
+    return {
+        "heappe_api_url": heappe_api_url,
+        "heappe_swagger_url": heappe_swagger_url,
+        "datastaging_api_url": datastaging_api_url,
+        "datastaging_swagger_url": datastaging_swagger_url,
+    }

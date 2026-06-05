@@ -91,13 +91,13 @@
                             {% endif %}
 
                             <div class="col-12">
-                                <label class="form-label small text-muted fw-semibold">Description</label>
-                                <textarea class="form-control form-control-sm border-light-subtle bg-white" name="Description" rows="3">{{ project.description|default:'' }}</textarea>
+                                <label class="form-label small text-muted fw-semibold">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <textarea class="form-control form-control-sm border-light-subtle bg-white" name="Description" rows="3" placeholder="e.g. HPC simulation project for material design">{{ project.description|default:'' }}</textarea>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">Accounting String</label>
-                                <input type="text" class="form-control form-control-sm font-monospace {% if project %}bg-light{% else %}border-light-subtle bg-white{% endif %}" name="AccountingString" value="{{ project.accounting_string|default:'' }}" {% if project %}readonly disabled{% endif %}>
+                                <label class="form-label small text-muted fw-semibold">Accounting String <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="text" class="form-control form-control-sm font-monospace {% if project %}bg-light{% else %}border-light-subtle bg-white{% endif %}" name="AccountingString" value="{{ project.accounting_string|default:'' }}" {% if project %}readonly disabled{% endif %} placeholder="e.g. OPEN-28-5">
                                 {% if project %}<div class="form-text text-muted"><i class="bi bi-lock me-1"></i>Cannot be changed after project creation.</div>{% endif %}
                             </div>
 
@@ -111,12 +111,12 @@
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">Start Date</label>
+                                <label class="form-label small text-muted fw-semibold">Start Date <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
                                 <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="StartDate" value="{{ project.start_date }}">
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">End Date</label>
+                                <label class="form-label small text-muted fw-semibold">End Date <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
                                 <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="EndDate" value="{{ project.end_date }}">
                             </div>
 
@@ -171,12 +171,12 @@
                                 </select>
                             </div>
                             <div class="col-12">
-                                <label class="form-label small text-muted fw-semibold">Scratch Path</label>
-                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ScratchStoragePath" placeholder="/mnt/scratch/project...">
+                                <label class="form-label small text-muted fw-semibold">Scratch Path <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ScratchStoragePath" placeholder="e.g. /mnt/scratch/project_123">
                             </div>
                             <div class="col-12">
-                                <label class="form-label small text-muted fw-semibold">Project Path</label>
-                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ProjectStoragePath" placeholder="/mnt/projects/project...">
+                                <label class="form-label small text-muted fw-semibold">Project Path <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ProjectStoragePath" placeholder="e.g. /mnt/projects/project_123">
                             </div>
                             <div class="col-12 pt-2">
                                 <button type="submit" class="btn btn-sm btn-primary w-100 fw-bold shadow-sm">Assign Cluster</button>
@@ -447,7 +447,7 @@
                                     </td>
                                     <td class="text-end pe-4 py-3">
                                         <div class="dropdown d-inline-block">
-                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle px-3 fw-semibold" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle px-3 fw-semibold" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">
                                                 Manage SSH Account
                                             </button>
                                             <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-1">

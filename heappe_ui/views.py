@@ -415,6 +415,58 @@ def dashboard_view(request):
         page_number = request.GET.get('page', 1)
         page_obj = paginator.get_page(page_number)
 
+        # Project setup checklist guide logic
+        checklist = {
+            "clusters_exist": len(context.get("clusters", [])) > 0,
+            "queue_groups_exist": len(context.get("queue_groups", [])) > 0,
+            "formulas_exist_and_mapped": False,
+            "queues_exist": len(context.get("queues", [])) > 0,
+            "project_cluster_linked": False,
+            "command_template_exists": False,
+            "ssh_account_active": False,
+        }
+        try:
+            mappings = controller.heappe_management_cluster_node_type_aggregation_accountings_get(SessionCode=request.session_code) or []
+            checklist["formulas_exist_and_mapped"] = len(mappings) > 0
+        except Exception as ex:
+            print(f"Checklist error (formulas): {ex}")
+
+        try:
+            assignments = controller.heappe_management_project_assignment_to_clusters_get(SessionCode=request.session_code) or []
+            checklist["project_cluster_linked"] = len(assignments) > 0
+        except Exception as ex:
+            print(f"Checklist error (assignments): {ex}")
+
+        try:
+            all_templates = controller.heappe_management_command_templates_get(SessionCode=request.session_code) or []
+            checklist["command_template_exists"] = len(all_templates) > 0
+        except Exception as ex:
+            print(f"Checklist error (templates): {ex}")
+
+        try:
+            for proj in context.get("projects", []):
+                proj_id = proj.id if hasattr(proj, "id") else proj.get("id")
+                if proj_id:
+                    keys = controller.heappe_management_secure_shell_keys_get(ProjectId=proj_id, SessionCode=request.session_code) or []
+                    for key in keys:
+                        username = key.username if hasattr(key, "username") else key.get("username")
+                        try:
+                            status_results = controller.heappe_management_cluster_account_status_get(
+                                ProjectId=proj_id, Username=username, SessionCode=request.session_code
+                            ) or []
+                            init_ok = sum(1 for s in status_results if s.is_initialized)
+                            if len(status_results) > 0 and init_ok == len(status_results):
+                                checklist["ssh_account_active"] = True
+                                break
+                        except Exception:
+                            pass
+                    if checklist["ssh_account_active"]:
+                        break
+        except Exception as ex:
+            print(f"Checklist error (ssh accounts): {ex}")
+
+        context["setup_checklist"] = checklist
+
         context["job_details"] = page_obj.object_list  # teď obsahuje jen job_itemy, které se zobrazí
         context["page_obj"] = page_obj
     except Exception as e:
@@ -645,6 +697,27 @@ from .forms import InstanceCredentialsForm
 
 @login_required
 def instance_credentials_list(request, pk=None):
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "bulk_delete":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for cid in selected_ids:
+                try:
+                    instance = InstanceCredentials.objects.get(pk=int(cid))
+                    if request.session.get("chosen_instance") == instance.instance_name:
+                        request.session.pop("chosen_instance", None)
+                        request.session.pop("heappe_session_code", None)
+                    instance.delete()
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error deleting credential {cid}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully deleted {success_count} instance credential(s).")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to delete {len(selected_ids) - success_count} instance credential(s).")
+            return redirect("instance_credentials_list")
+
     if pk is not None:
         instance = get_object_or_404(InstanceCredentials, pk=pk)
         if instance:

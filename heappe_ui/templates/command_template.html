@@ -89,22 +89,22 @@
                   </div>
                   <div class="col-md-9">
                     <label class="form-label small fw-bold text-secondary text-uppercase">Name</label>
-                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="{{ command_template.name|default:command_template.Name|default:'' }}" required>
+                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="{{ command_template.name|default:command_template.Name|default:'' }}" required placeholder="e.g. Barbora MPI Run">
                   </div>
                 {% else %}
                   <div class="col-md-12">
                     <label class="form-label small fw-bold text-secondary text-uppercase">Name</label>
-                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="{{ command_template.name|default:command_template.Name|default:'' }}" required>
+                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="{{ command_template.name|default:command_template.Name|default:'' }}" required placeholder="e.g. Barbora MPI Run">
                   </div>
                 {% endif %}
 
                 <div class="col-md-6">
-                  <label class="form-label small fw-bold text-secondary text-uppercase">Description</label>
-                  <input type="text" class="form-control border-secondary-subtle py-2" name="Description" value="{{ command_template.description|default:'' }}">
+                  <label class="form-label small fw-bold text-secondary text-uppercase">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                  <input type="text" class="form-control border-secondary-subtle py-2" name="Description" value="{{ command_template.description|default:'' }}" placeholder="e.g. Executable configuration for Python jobs on Barbora">
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label small fw-bold text-secondary text-uppercase">Extended Allocation Command</label>
-                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExtendedAllocationCommand" value="{{ command_template.extended_allocation_command|default:'' }}">
+                  <label class="form-label small fw-bold text-secondary text-uppercase">Extended Allocation Command <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExtendedAllocationCommand" value="{{ command_template.extended_allocation_command|default:'' }}" placeholder="e.g. --partition=qprod">
                 </div>
 
                 {% if v620_check %}
@@ -117,12 +117,12 @@
                 {% endif %}
 
                 <div class="col-md-6">
-                  <label class="form-label small fw-bold text-secondary text-uppercase">Executable File</label>
-                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExecutableFile" value="{{ command_template.executable_file|default:'' }}">
+                  <label class="form-label small fw-bold text-secondary text-uppercase">Executable File <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExecutableFile" value="{{ command_template.executable_file|default:'' }}" placeholder="e.g. /usr/bin/python3">
                 </div>
                 <div class="col-md-6">
-                  <label class="form-label small fw-bold text-secondary text-uppercase">Preparation Script</label>
-                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="PreparationScript" value="{{ command_template.preparation_script|default:'' }}">
+                  <label class="form-label small fw-bold text-secondary text-uppercase">Preparation Script <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="PreparationScript" value="{{ command_template.preparation_script|default:'' }}" placeholder="e.g. module load Python">
                 </div>
                 <div class="col-md-6">
                   <label class="form-label small fw-bold text-secondary text-uppercase">Cluster Node Type</label>

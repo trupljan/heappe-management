@@ -395,8 +395,18 @@
                         <a class="nav-link dropdown-toggle d-flex align-items-center px-2 text-nowrap text-dark" href="#" id="userDrop" data-bs-toggle="dropdown">
                             <i class="bi bi-person-circle fs-5 me-1.5 text-secondary"></i><span class="fw-semibold">{{ user.username }}</span>
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2">
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2" style="min-width: 200px;">
                             <li><a class="dropdown-item py-2" href="{% url 'profile_view' %}"><i class="bi bi-person me-2"></i>Profile</a></li>
+                            {% if heappe_swagger_url or datastaging_swagger_url %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header small uppercase fw-bold py-1 px-3 text-secondary" style="font-size: 0.65rem; letter-spacing: 0.5px;">API Docs</li>
+                            {% if heappe_swagger_url %}
+                            <li><a class="dropdown-item py-2" href="{{ heappe_swagger_url }}" target="_blank"><i class="bi bi-file-earmark-code me-2 text-info"></i>HEAppE Swagger</a></li>
+                            {% endif %}
+                            {% if datastaging_swagger_url %}
+                            <li><a class="dropdown-item py-2" href="{{ datastaging_swagger_url }}" target="_blank"><i class="bi bi-file-earmark-code me-2 text-info"></i>DataStaging Swagger</a></li>
+                            {% endif %}
+                            {% endif %}
                             <li><hr class="dropdown-divider"></li>
                             <li class="px-3 py-1">
                                 <form method="post" action="{% url 'logout' %}">

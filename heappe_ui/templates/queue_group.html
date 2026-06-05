@@ -61,16 +61,16 @@
 
                             <div class="col-md-9">
                                 <label class="form-label small text-muted fw-semibold">Name</label>
-                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Name" value="{{ queue_group.name }}" required>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Name" value="{{ queue_group.name }}" required placeholder="e.g. barbora-aggregations">
                             </div>
 
                             <div class="col-md-12">
-                                <label class="form-label small text-muted fw-semibold">Description</label>
-                                <textarea class="form-control form-control-sm border-light-subtle bg-white" name="Description" rows="2">{{ queue_group.description }}</textarea>
+                                <label class="form-label small text-muted fw-semibold">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <textarea class="form-control form-control-sm border-light-subtle bg-white" name="Description" rows="2" placeholder="e.g. Aggregation group for Barbora cluster queues">{{ queue_group.description }}</textarea>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">Allocation Type</label>
+                                <label class="form-label small text-muted fw-semibold">Allocation Type <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
                                 <select class="form-select form-select-sm border-light-subtle bg-white" id="allocationTypeSelect" name="AllocationType">
                                     <option value="CN">CN</option>
                                     <option value="ACN">ACN</option>
@@ -81,16 +81,16 @@
 
                             <div class="col-md-6" id="customAllocationDiv" style="display: none;">
                                 <label class="form-label small text-muted fw-semibold">Custom Allocation Type</label>
-                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="AllocationTypeCustom" id="customAllocationInput">
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="AllocationTypeCustom" id="customAllocationInput" placeholder="e.g. GPU">
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">Validity From</label>
+                                <label class="form-label small text-muted fw-semibold">Validity From <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
                                 <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="ValidityFrom" value="{{ queue_group.validity_from }}">
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">Validity To</label>
+                                <label class="form-label small text-muted fw-semibold">Validity To <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
                                 <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="ValidityTo" value="{{ queue_group.validity_to }}">
                             </div>
                         </div>

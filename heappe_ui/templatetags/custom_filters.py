@@ -58,5 +58,17 @@ def format_datetime(value, format_str='%d.%m.%Y %H:%M:%S'):
     return value
 
 
+@register.filter
+def instance_links(instance_name):
+    if not instance_name:
+        return {}
+    from heappe_ui.view.utils import get_instance_api_links
+    try:
+        return get_instance_api_links(instance_name)
+    except Exception:
+        return {}
+
+
+
 
 

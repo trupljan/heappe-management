@@ -188,6 +188,35 @@ def queue_delete(request: HttpRequest, queue_id: int) -> HttpResponse:
 @login_required
 def queue_groups(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "delete_queue_group":
+            group_id = int(request.POST.get("QueueGroupId"))
+            payload = _create_payload(request.session_code, {"Id": group_id})
+            _handle_api_call(
+                request,
+                lambda: controller.heappe_management_cluster_node_type_aggregation_delete(**payload),
+                "Queue Group deleted successfully!",
+                "Failed to delete Queue Group"
+            )
+            return redirect("queue_groups")
+        elif action == "bulk_delete":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for gid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {"Id": int(gid)})
+                    controller.heappe_management_cluster_node_type_aggregation_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error deleting queue group {gid}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully deleted {success_count} queue group(s).")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to delete {len(selected_ids) - success_count} queue group(s).")
+            return redirect("queue_groups")
+
     queue_groups = [g.to_dict() for g in controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code)]
     return render(request, "queue_groups.html", {"queue_groups": queue_groups})
 
@@ -214,6 +243,24 @@ def queue_group_detail(request: HttpRequest, group_id: int) -> HttpResponse:
             return assign_project_to_group(request, group_id)
         if action == "unassign_project_to_group":
             return unassign_project_to_group(request, group_id)
+        if action == "bulk_unassign_group":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for pid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {
+                        "ClusterNodeTypeAggregationId": group_id,
+                        "ProjectId": int(pid)
+                    })
+                    controller.heappe_management_project_cluster_node_type_aggregation_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error unassigning project {pid} from group {group_id}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully unassigned {success_count} project(s) from group.")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to unassign {len(selected_ids) - success_count} project(s) from group.")
+            return redirect(f"{reverse('queue_group_detail', kwargs={'group_id': group_id})}?tab=projects")
 
 
     if request.method == "GET":

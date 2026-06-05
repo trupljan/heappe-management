@@ -86,6 +86,24 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
         elif action == "delete_filetransfer":
             filetransfer_id = int(request.POST.get("Id"))
             return delete_filetransfer_method(request, cluster_id, filetransfer_id)
+        elif action == "bulk_unassign_cluster":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for pid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {
+                        "ProjectId": int(pid),
+                        "ClusterId": cluster_id
+                    })
+                    controller.heappe_management_project_assignment_to_cluster_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error unassigning project {pid} from cluster {cluster_id}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully unassigned {success_count} project(s) from cluster.")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to unassign {len(selected_ids) - success_count} project(s) from cluster.")
+            return redirect(f"{reverse('cluster_detail', kwargs={'cluster_id': cluster_id})}?tab=projects")
 
         payload_data = {
             "Name": request.POST.get("Name"),

@@ -191,9 +191,19 @@ def middleware_update_renderer(request):
                 'age_str': "Live"
             }
 
+    # Fetch API and Swagger URLs for the selected instance
+    api_links = {}
+    if instance_name:
+        try:
+            from heappe_ui.view.utils import get_instance_api_links
+            api_links = get_instance_api_links(instance_name)
+        except Exception as e:
+            print(f"Error getting instance API links: {e}")
+
     return {
         'middleware_update_available': update_available,
         'middleware_deployed_version': deployed_version,
         'middleware_latest_version': latest_version,
         'cache_status': cache_status,
+        **api_links
     }

@@ -45,27 +45,27 @@
 
                     <div class="col-md-4">
                         <label class="form-label small text-muted fw-semibold">Name</label>
-                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Name" value="{{ node_type.name }}" required>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Name" value="{{ node_type.name }}" required placeholder="e.g. qprod">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label small text-muted fw-semibold">Description</label>
-                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Description" value="{{ node_type.description }}">
+                        <label class="form-label small text-muted fw-semibold">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Description" value="{{ node_type.description }}" placeholder="e.g. Standard production queue">
                     </div>
 
                     <div class="col-md-3">
                         <label class="form-label small text-muted fw-semibold">Number of Nodes</label>
-                        <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="NumberOfNodes" value="{{ node_type.number_of_nodes }}" required>
+                        <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="NumberOfNodes" value="{{ node_type.number_of_nodes }}" required placeholder="e.g. 10">
                     </div>
 
                     <div class="col-md-3">
                         <label class="form-label small text-muted fw-semibold">Cores per Node</label>
-                        <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="CoresPerNode" value="{{ node_type.cores_per_node }}" required>
+                        <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="CoresPerNode" value="{{ node_type.cores_per_node }}" required placeholder="e.g. 128">
                     </div>
 
                     <div class="col-md-3">
                         <label class="form-label small text-muted fw-semibold">Max Walltime (s)</label>
-                        <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="MaxWalltime" value="{{ node_type.max_walltime }}" required>
+                        <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="MaxWalltime" value="{{ node_type.max_walltime }}" required placeholder="e.g. 86400">
                     </div>
 
                     {% if cluster %}
@@ -78,17 +78,17 @@
 
                     <div class="col-md-4">
                         <label class="form-label small text-muted fw-semibold">Queue Scheduler Name</label>
-                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Queue" value="{{ node_type.queue }}" required>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Queue" value="{{ node_type.queue }}" required placeholder="e.g. workq">
                     </div>
 
                     <div class="col-md-4">
-                        <label class="form-label small text-muted fw-semibold">Quality of Service</label>
-                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="QualityOfService" value="{{ node_type.quality_of_service }}">
+                        <label class="form-label small text-muted fw-semibold">Quality of Service <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="QualityOfService" value="{{ node_type.quality_of_service }}" placeholder="e.g. normal">
                     </div>
 
                     <div class="col-md-4">
-                        <label class="form-label small text-muted fw-semibold">Cluster Allocation Name</label>
-                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ClusterAllocationName" value="{{ node_type.cluster_allocation_name }}">
+                        <label class="form-label small text-muted fw-semibold">Cluster Allocation Name <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ClusterAllocationName" value="{{ node_type.cluster_allocation_name }}" placeholder="e.g. OPEN-28-5">
                     </div>
 
                     <!-- File Transfer Selection -->

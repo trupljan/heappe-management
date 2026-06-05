@@ -457,6 +457,21 @@ def project_list(request: HttpRequest) -> HttpResponse:
                 "Failed to delete Project"
             )
             return redirect("project_list")
+        elif action == "bulk_delete":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for pid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {"Id": int(pid)})
+                    controller.heappe_management_project_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error deleting project {pid}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully deleted {success_count} project(s).")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to delete {len(selected_ids) - success_count} project(s).")
+            return redirect("project_list")
 
     return render(request, "projects.html", {
         "projects": projects
