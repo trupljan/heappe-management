@@ -976,9 +976,12 @@ def _create_preset_template(request: HttpRequest, project_id: int, controller: h
         "ProjectId": project_id,
         "Name": preset["name"],
         "Description": preset["description"],
+        "ExtendedAllocationCommand": "",
         "ExecutableFile": executable_file,
+        "PreparationScript": "",
         "ClusterNodeTypeId": cluster_node_type_id,
         "IsEnabled": True,
+        "TemplateParameters": []
     }
 
     payload = _create_payload(session_code, payload_data)

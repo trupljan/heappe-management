@@ -362,8 +362,13 @@ class ProjectPresetTemplateTests(TestCase):
         call_args = mock_mgmt_instance.heappe_management_command_template_post.call_args[1]
         self.assertEqual(call_args['body']['ProjectId'], 1)
         self.assertEqual(call_args['body']['Name'], "TestTemplate")
+        self.assertEqual(call_args['body']['Description'], "Predefined test command template")
+        self.assertEqual(call_args['body']['ExtendedAllocationCommand'], "")
         self.assertEqual(call_args['body']['ExecutableFile'], "/path/to/keyscripts/test.sh")
+        self.assertEqual(call_args['body']['PreparationScript'], "")
         self.assertEqual(call_args['body']['ClusterNodeTypeId'], 5)
+        self.assertEqual(call_args['body']['IsEnabled'], True)
+        self.assertEqual(call_args['body']['TemplateParameters'], [])
 
         # Verify parameter creation payload
         mock_mgmt_instance.heappe_management_command_template_parameter_post.assert_called_once()

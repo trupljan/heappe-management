@@ -432,8 +432,8 @@
                             </select>
                         </form>
                         <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-sm btn-success fw-bold shadow-sm d-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#quickTemplateModal">
-                                <i class="bi bi-lightning-charge-fill text-warning"></i> Add Quick Template
+                            <button type="button" class="btn btn-sm btn-success fw-bold shadow-sm d-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#presetTemplateModal">
+                                <i class="bi bi-lightning-charge-fill text-warning"></i> Add Preset Template
                             </button>
                             <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-outline-primary fw-bold shadow-sm">
                                 <i class="bi bi-plus-lg me-1"></i>Add Custom Template
@@ -820,8 +820,8 @@
   </div>
 </div>
 
-<!-- Modal for Quick Template Creation -->
-<div class="modal fade" id="quickTemplateModal" tabindex="-1" aria-hidden="true">
+<!-- Modal for Preset Template Creation -->
+<div class="modal fade" id="presetTemplateModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow">
       <form method="post">
@@ -829,7 +829,7 @@
         <input type="hidden" name="action" value="create_preset_template">
         <div class="modal-header bg-success bg-opacity-10 py-3">
             <h5 class="modal-title fw-bold text-success-emphasis">
-                <i class="bi bi-lightning-charge-fill text-warning me-1.5 animate-pulse"></i>Create Quick Template
+                <i class="bi bi-lightning-charge-fill text-warning me-1.5 animate-pulse"></i>Create Preset Template
             </h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
@@ -969,7 +969,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // Quick template preset selection handling
+    // Preset template selection handling
     const presetSelect = document.getElementById('presetSelect');
     if (presetSelect) {
         const projectKeyScriptsDir = "{{ project.key_scripts_directory_path|default:'' }}";
