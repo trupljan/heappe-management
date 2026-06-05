@@ -1,6 +1,22 @@
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
 
+# Predefined templates available for creation
+COMMAND_TEMPLATE_PRESETS = {
+    "test": {
+        "name": "TestTemplate",
+        "description": "Predefined test command template",
+        "executable_file_suffix": "test.sh",
+        "parameters": [
+            {
+                "Identifier": "inputParam",
+                "Description": "Input parameter for the test script",
+                "Query": None
+            }
+        ]
+    }
+}
+
 @login_required
 def command_template_detail(request: HttpRequest, command_template_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
@@ -158,6 +174,21 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
             "Failed to create Command Template"
         )
         if result:
+            # Check for preset parameter addition
+            preset_name = request.POST.get("preset")
+            if preset_name in COMMAND_TEMPLATE_PRESETS:
+                for param in COMMAND_TEMPLATE_PRESETS[preset_name].get("parameters", []):
+                    try:
+                        param_payload_data = {
+                            "CommandTemplateId": result['Id'],
+                            "Identifier": param["Identifier"],
+                            "Query": param.get("Query"),
+                            "Description": param.get("Description")
+                        }
+                        param_payload = _create_payload(request.session_code, param_payload_data)
+                        controller.heappe_management_command_template_parameter_post(**param_payload)
+                    except Exception as e:
+                        print(f"Error adding preset parameter {param['Identifier']}: {e}")
             return redirect("command_template_detail", command_template_id=result['Id'])
 
     controller = hp.ManagementApi(request.api_instance)
@@ -175,6 +206,23 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
         from django.contrib import messages as _messages
         _messages.error(request, f"Project with ID {project_id} could not be loaded.")
         return redirect("project_list")
+
+    # Handle preset prefill
+    preset_name = request.GET.get("preset")
+    preset_data = None
+    if preset_name in COMMAND_TEMPLATE_PRESETS:
+        p_info = COMMAND_TEMPLATE_PRESETS[preset_name]
+        key_scripts_dir = project.get('key_scripts_directory_path') or ''
+        if key_scripts_dir and not key_scripts_dir.endswith('/'):
+            exec_file = f"{key_scripts_dir}/{p_info['executable_file_suffix']}"
+        else:
+            exec_file = f"{key_scripts_dir}{p_info['executable_file_suffix']}"
+            
+        preset_data = {
+            "name": p_info["name"],
+            "description": p_info["description"],
+            "executable_file": exec_file
+        }
 
     import time
     import os
@@ -228,7 +276,9 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
         'node_types': cluster_node_types,
         'project_id': project_id,
         'project': project,
-        'command_template': None
+        'command_template': None,
+        'preset': preset_data,
+        'preset_name': preset_name or ''
     })
 
 

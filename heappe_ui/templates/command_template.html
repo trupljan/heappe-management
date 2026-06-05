@@ -78,6 +78,7 @@
             <form method="post">
               {% csrf_token %}
               <input type="hidden" name="action" value="{% if command_template %}update_command_template{% else %}create_command_template{% endif %}">
+              <input type="hidden" name="preset" value="{{ preset_name|default:'' }}">
               {% if command_template %}
                 <input type="hidden" name="Id" value="{{ command_template.Id|default:command_template.id|default:0 }}">
               {% else %}
@@ -98,13 +99,13 @@
                 {% else %}
                   <div class="col-md-12">
                     <label class="form-label small fw-bold text-secondary text-uppercase">Name</label>
-                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="" required placeholder="e.g. Barbora MPI Run">
+                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="{{ preset.name|default:'' }}" required placeholder="e.g. Barbora MPI Run">
                   </div>
                 {% endif %}
 
                 <div class="col-md-6">
                   <label class="form-label small fw-bold text-secondary text-uppercase">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                  <input type="text" class="form-control border-secondary-subtle py-2" name="Description" value="{{ command_template.description|default:'' }}" placeholder="e.g. Executable configuration for Python jobs on Barbora">
+                  <input type="text" class="form-control border-secondary-subtle py-2" name="Description" value="{{ command_template.description|default:preset.description|default:'' }}" placeholder="e.g. Executable configuration for Python jobs on Barbora">
                 </div>
                 <div class="col-md-6">
                   <label class="form-label small fw-bold text-secondary text-uppercase">Extended Allocation Command <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
@@ -117,12 +118,12 @@
                       <label class="form-label small fw-bold text-secondary text-uppercase">KeyScripts Directory Path</label>
                       <input type="text" class="form-control border-secondary-subtle py-2 bg-light font-monospace" name="KeyScriptsDirectoryPath" readonly disabled value="{{ project.key_scripts_directory_path|default:'' }}">
                     </div>
-                  {% endif %}
+                  {%   endif %}
                 {% endif %}
 
                 <div class="col-md-6">
                   <label class="form-label small fw-bold text-secondary text-uppercase">Executable File <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExecutableFile" value="{{ command_template.executable_file|default:'' }}" placeholder="e.g. /usr/bin/python3">
+                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExecutableFile" value="{{ command_template.executable_file|default:preset.executable_file|default:'' }}" placeholder="e.g. /usr/bin/python3">
                 </div>
                 <div class="col-md-6">
                   <label class="form-label small fw-bold text-secondary text-uppercase">Preparation Script <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>

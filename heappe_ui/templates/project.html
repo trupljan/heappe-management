@@ -431,9 +431,21 @@
                                 <option value="own" {% if not request.GET.project_filter or request.GET.project_filter == "own" %}selected{% endif %}>Own Only</option>
                             </select>
                         </form>
-                        <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
-                            <i class="bi bi-plus-lg me-1"></i>Add New Template
-                        </a>
+                        <div class="btn-group shadow-sm">
+                            <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-primary fw-bold">
+                                <i class="bi bi-plus-lg me-1"></i>Add New Template
+                            </a>
+                            <button type="button" class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                                <span class="visually-hidden">Toggle Dropdown</span>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="font-size: 0.85rem;">
+                                <li>
+                                    <a class="dropdown-item py-2 small d-flex align-items-center gap-2" href="{% url 'command_template_create' project.id %}?preset=test">
+                                        <i class="bi bi-file-earmark-plus text-primary"></i>Add Test Template
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
                         <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();">
                             <i class="bi bi-arrow-clockwise"></i>
                         </button>
