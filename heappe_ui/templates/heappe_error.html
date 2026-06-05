@@ -113,7 +113,14 @@
         window.addEventListener('load', function() {
             setTimeout(function() {
                 try {
-                    html2canvas(document.body, { useCORS: true, scale: 0.8 }).then(function(canvas) {
+                    html2canvas(document.body, {
+                        useCORS: true,
+                        scale: 0.8,
+                        scrollX: -window.scrollX,
+                        scrollY: -window.scrollY,
+                        windowWidth: document.documentElement.scrollWidth,
+                        windowHeight: document.documentElement.scrollHeight
+                    }).then(function(canvas) {
                         try {
                             sessionStorage.setItem('heappe_error_screenshot', canvas.toDataURL('image/png'));
                         } catch(e) {

@@ -194,7 +194,14 @@ $(document).ready(function () {
         $('#screenshot-loading').show();
         $('#screenshot-preview').hide();
         $('#screenshot-badge').remove(); // remove error page badge when manual capture is requested
-        html2canvas(document.body, { useCORS: true, scale: 0.8 }).then(function (canvas) {
+        html2canvas(document.body, {
+            useCORS: true,
+            scale: 0.8,
+            scrollX: -window.scrollX,
+            scrollY: -window.scrollY,
+            windowWidth: document.documentElement.scrollWidth,
+            windowHeight: document.documentElement.scrollHeight
+        }).then(function (canvas) {
             screenshotDataUrl = canvas.toDataURL('image/png');
             $('#screenshot-preview').attr('src', screenshotDataUrl).show();
             $('#screenshot-loading').hide();
