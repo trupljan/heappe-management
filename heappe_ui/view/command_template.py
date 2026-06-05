@@ -162,9 +162,19 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
 
     controller = hp.ManagementApi(request.api_instance)
 
-    project = controller.heappe_management_project_get(
-        Id=project_id, SessionCode=request.session_code
-    ).to_dict()
+    try:
+        project = controller.heappe_management_project_get(
+            Id=project_id, SessionCode=request.session_code
+        ).to_dict()
+    except Exception as e:
+        print(f"Error fetching project {project_id}: {e}")
+        raise e
+
+    # Validate that project has a valid id before proceeding to render
+    if not project or not project.get('id'):
+        from django.contrib import messages as _messages
+        _messages.error(request, f"Project with ID {project_id} could not be loaded.")
+        return redirect("project_list")
 
     import time
     import os

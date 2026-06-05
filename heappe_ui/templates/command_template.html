@@ -5,7 +5,7 @@
 {% block breadcrumbs %}
     <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
     <li class="breadcrumb-item"><a href="{% url 'project_list' %}" class="text-decoration-none text-secondary">Projects</a></li>
-    {% if project %}
+    {% if project and project.id %}
         <li class="breadcrumb-item"><a href="{% url 'project_detail' project.id %}" class="text-decoration-none text-secondary">{{ project.name }}</a></li>
     {% endif %}
     <li class="breadcrumb-item active" aria-current="page">{% if command_template %}{{ command_template.name|default:command_template.Name }}{% else %}New Command Template{% endif %}</li>
@@ -27,7 +27,7 @@
             <span class="text-muted small">Configure command execution parameters and cluster bindings</span>
           </div>
         </div>
-        {% if project %}
+        {% if project and project.id %}
         <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
           <i class="bi bi-arrow-left me-1.5"></i>Back to Project
         </a>
@@ -40,7 +40,7 @@
           <i class="bi bi-info-circle-fill text-warning fs-3 d-block mb-2"></i>
           <h5 class="fw-bold">Shared Command Template</h5>
           <p class="mb-3 text-secondary">This command template is shared across all projects and cannot be modified.</p>
-          {% if project %}
+          {% if project and project.id %}
           <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-sm btn-secondary fw-semibold rounded-3 px-4 py-2">Back</a>
           {% endif %}
         </div>
@@ -164,7 +164,7 @@
                 <button type="submit" class="btn btn-primary fw-bold px-4 py-2 rounded-3 shadow-sm">
                   {% if command_template %}<i class="bi bi-save me-1.5"></i>Save Changes{% else %}<i class="bi bi-plus-lg me-1.5"></i>Create Template{% endif %}
                 </button>
-                {% if project %}
+                {% if project and project.id %}
                 <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-outline-secondary fw-semibold px-4 py-2 rounded-3">Cancel</a>
                 {% else %}
                 <a href="{% url 'dashboard_view' %}" class="btn btn-outline-secondary fw-semibold px-4 py-2 rounded-3">Cancel</a>
