@@ -169,7 +169,7 @@ class HeappeExceptionMiddlewareTests(TestCase):
 
         data = json.loads(response.content.decode("utf-8"))
         self.assertEqual(data["status"], "manual")
-        self.assertEqual(data["to_email"], "jakub.konvicka@vsb.cz")
+        self.assertEqual(data["to_email"], "support.heappe@it4i.cz")
         self.assertIn("[HEAppE Support]", data["subject"])
         self.assertIn("Test issue summary", data["subject"])
         self.assertIn("Detailed test description of the problem.", data["body"])

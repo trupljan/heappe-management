@@ -189,6 +189,6 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', 10))
 
-SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'jakub.konvicka@vsb.cz')
+SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'support.heappe@it4i.cz')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply.heappe@it4i.cz')
 

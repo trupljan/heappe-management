@@ -20,7 +20,7 @@
         </div>
         <div>
             <h2 class="mb-0 fw-bold">Report a Problem</h2>
-            <p class="text-muted small mb-0">Describe the issue and optionally attach a screenshot. The report will be sent to <code>jakub.konvicka@vsb.cz</code>.</p>
+            <p class="text-muted small mb-0">Describe the issue and optionally attach a screenshot. You will be able to submit a ticket on GitLab or send the report manually via email.</p>
         </div>
     </div>
 
@@ -28,7 +28,7 @@
     <div class="alert alert-success d-flex align-items-center gap-3 border-0 shadow-sm mb-4" style="border-radius:12px;">
         <i class="bi bi-check-circle-fill fs-3 text-success flex-shrink-0"></i>
         <div>
-            <strong>Report sent!</strong> Our support team at <code>jakub.konvicka@vsb.cz</code> will review your report.
+            <strong>Report generated!</strong> Please submit the ticket on GitLab or send it to <code>support.heappe@it4i.cz</code>.
             <div class="mt-2"><a href="{% url 'dashboard_view' %}" class="btn btn-sm btn-outline-success">← Back to Dashboard</a></div>
         </div>
     </div>
@@ -310,26 +310,28 @@ $(document).ready(function () {
                 `---\n\n` +
                 `<!-- Please paste the full report details/traceback here (it has been automatically copied to your clipboard) -->\n`;
 
+            const mailtoBody = body.length > 1500 ? body.substring(0, 1500) + '\n\n... (detailed traceback truncated due to URL length limit, please copy/paste the full message body from the clipboard)' : body;
+            const mailtoUrl = `mailto:support.heappe@it4i.cz?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailtoBody)}`;
             const gitlabUrl = `https://opencode.it4i.eu/heappe-middleware/heappe-management/-/issues/new?issue[title]=${encodeURIComponent(subject)}&issue[description]=${encodeURIComponent(briefDescription)}`;
             const dashboardUrl = `${basePath}/`;
 
             const showScreenshotBtn = screenshotDataUrl ? '' : 'style="display:none;"';
-            const screenshotNote = screenshotDataUrl ? ' and upload the downloaded screenshot.' : '.';
+            const screenshotNote = screenshotDataUrl ? ' and attach/upload the downloaded screenshot.' : '.';
 
             const manualHtml = `
                 <div class="card border-primary shadow-sm mb-4" style="border-radius:14px; border-left: 5px solid #0d6efd !important;">
                     <div class="card-body p-4">
                         <div class="d-flex align-items-center gap-2 mb-3 text-primary">
-                            <i class="bi bi-git fs-4 text-orange" style="color: #fc6d26;"></i>
-                            <h5 class="fw-bold mb-0">Submit Ticket to GitLab</h5>
+                            <i class="bi bi-bug-fill fs-4"></i>
+                            <h5 class="fw-bold mb-0">Submit Problem Report</h5>
                         </div>
                         <p class="text-secondary small mb-4">
-                            The error report has been generated successfully. You can submit it directly to our public GitLab issue tracker. Copy the details below, download the screenshot, and click the button to create the ticket.
+                            The error report has been generated successfully. You can submit it directly to our public GitLab issue tracker or send it manually via email to <code>support.heappe@it4i.cz</code>. Copy the details below, download the screenshot, and click one of the action buttons.
                         </p>
 
                         <!-- Subject -->
                         <div class="mb-3">
-                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Issue Title</label>
+                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Report Title / Subject</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control font-monospace bg-light" id="fallback-subject" readonly value="${subject}">
                                 <button class="btn btn-outline-secondary copy-btn" type="button" data-clipboard-target="#fallback-subject" title="Copy to clipboard">
@@ -340,7 +342,7 @@ $(document).ready(function () {
 
                         <!-- Body -->
                         <div class="mb-3">
-                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Issue Description</label>
+                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Report Description / Body</label>
                             <div class="position-relative">
                                 <textarea class="form-control font-monospace small" id="fallback-body" rows="10" readonly style="max-height: 250px; background:#f8f9fa;">${body}</textarea>
                                 <button class="btn btn-xs btn-dark position-absolute copy-btn" type="button" data-clipboard-target="#fallback-body" style="top:8px; right:8px; z-index:5;" title="Copy body">
@@ -354,6 +356,9 @@ $(document).ready(function () {
                             <a href="${gitlabUrl}" id="create-ticket-btn" class="btn btn-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1 shadow-sm" target="_blank" style="background-color:#fc6d26; border-color:#fc6d26;">
                                 <i class="bi bi-git"></i> Create Ticket on GitLab
                             </a>
+                            <a href="${mailtoUrl}" id="send-email-btn" class="btn btn-outline-danger btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1 shadow-sm">
+                                <i class="bi bi-envelope-fill"></i> Send via Email
+                            </a>
                             <button class="btn btn-outline-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1" id="download-screenshot-btn" ${showScreenshotBtn}>
                                 <i class="bi bi-download"></i> Download Screenshot
                             </button>
@@ -362,7 +367,7 @@ $(document).ready(function () {
                             </a>
                         </div>
                         <div class="text-muted mt-3" style="font-size:0.75rem; border-top: 1px dashed #dee2e6; padding-top: 8px;">
-                            <i class="bi bi-info-circle me-1"></i> <strong>How-to:</strong> Click the GitLab button (the full description will be copied automatically to your clipboard), paste it into the issue text field,${screenshotNote}
+                            <i class="bi bi-info-circle me-1"></i> <strong>How-to:</strong> Click the GitLab button (which copies the full body to clipboard) or the Email button, paste the copied description,${screenshotNote}
                         </div>
                     </div>
                 </div>
