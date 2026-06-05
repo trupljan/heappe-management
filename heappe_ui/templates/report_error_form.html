@@ -302,26 +302,13 @@ $(document).ready(function () {
             const username = '{{ request.user.username|default:"Anonymous" }}';
             const categoryLabel = $('#report-category option:selected').text();
             
-            // Encode the full body to base64 safely supporting Unicode (Czech characters)
-            let base64Body = '';
-            try {
-                base64Body = btoa(unescape(encodeURIComponent(body)));
-                if (base64Body.length > 3000) {
-                    base64Body = base64Body.substring(0, 3000) + '\n... [truncated due to URL length limits]';
-                }
-            } catch (e) {
-                console.error("Base64 encoding failed:", e);
-            }
-
             const briefDescription = `### HEAppE Management — Problem Report\n\n` +
                 `- **Reporter:** ${username} <${contactEmail}>\n` +
                 `- **Category:** ${categoryLabel}\n` +
                 `- **Affected URL:** ${$('#report-url').val()}\n` +
                 `- **Summary:** ${summary}\n\n` +
                 `---\n\n` +
-                `#### Detailed Report & Traceback (Base64)\n` +
-                `Please decode the following string to view details:\n` +
-                `\`\`\`\n${base64Body}\n\`\`\`\n`;
+                `<!-- Please paste the full report details/traceback here (it was copied automatically) -->\n`;
 
             const mailtoBody = body.length > 1500 ? body.substring(0, 1500) + '\n\n... (detailed traceback truncated due to URL length limit, please copy/paste the full message body from the clipboard)' : body;
             const mailtoUrl = `mailto:support.heappe@it4i.cz?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailtoBody)}`;
