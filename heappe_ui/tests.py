@@ -3,6 +3,7 @@ from django.http import HttpResponse, Http404
 from django.core.exceptions import PermissionDenied
 from django.conf import settings
 from heappe_ui.middleware import HeappeExceptionMiddleware
+from unittest import mock
 
 from django.contrib.auth.models import AnonymousUser, User
 
@@ -135,8 +136,8 @@ class HeappeExceptionMiddlewareTests(TestCase):
         finally:
             settings.DEBUG = old_debug
 
-    def test_report_error_view_sends_email(self):
-        from django.core import mail
+    def test_report_error_view_manual_generation_success(self):
+        import json
         from heappe_ui.views import report_error_view
         
         request = self._create_request()
@@ -166,14 +167,16 @@ class HeappeExceptionMiddlewareTests(TestCase):
         response = report_error_view(request)
         self.assertEqual(response.status_code, 200)
 
-        self.assertEqual(len(mail.outbox), 1)
-        sent_email = mail.outbox[0]
-        self.assertIn("[HEAppE Support]", sent_email.subject)
-        self.assertIn("jakub.konvicka@vsb.cz", sent_email.to)
-        self.assertEqual(len(sent_email.attachments), 1)
-        self.assertEqual(sent_email.attachments[0][0], "screenshot.png")
-
+        data = json.loads(response.content.decode("utf-8"))
+        self.assertEqual(data["status"], "manual")
+        self.assertEqual(data["to_email"], "jakub.konvicka@vsb.cz")
+        self.assertIn("[HEAppE Support]", data["subject"])
+        self.assertIn("Test issue summary", data["subject"])
+        self.assertIn("Detailed test description of the problem.", data["body"])
+        self.assertIn("Traceback info here", data["body"])
         self.assertNotIn("last_error_report", request.session)
+
+
 
 
     def test_generate_session_code_missing_credentials(self):

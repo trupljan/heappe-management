@@ -197,7 +197,7 @@ def dashboard_view(request):
         return redirect("instance_credentials_list")
 
     # ⚠️ TEMPORARY TEST ERROR — remove after testing report-error flow
-    raise ConnectionError("Test error: HEAppE API unreachable (this is intentional for testing)")
+    # raise ConnectionError("Test error: HEAppE API unreachable (this is intentional for testing)")
 
     # Initialize controller
     controller = hp.ManagementApi(request.api_instance)
@@ -1688,28 +1688,17 @@ Traceback:
 {last_error.get('traceback')}
 """
 
-        email = EmailMessage(
-            subject=subject,
-            body=body,
-            from_email='noreply.heappe@it4i.cz',
-            to=['jakub.konvicka@vsb.cz'],
-            reply_to=[contact_email],
-        )
+        from django.conf import settings
+        support_email = getattr(settings, 'SUPPORT_EMAIL', 'jakub.konvicka@vsb.cz')
 
-        if screenshot_data and ',' in screenshot_data:
-            try:
-                _, base64_data = screenshot_data.split(',', 1)
-                img_data = base64.b64decode(base64_data)
-                email.attach('screenshot.png', img_data, 'image/png')
-            except Exception as e:
-                print(f"[report_error_view] Failed to attach screenshot: {e}")
+        # Clean cached error details from session as they are now compiled into the report
+        request.session.pop('last_error_report', None)
 
-        try:
-            email.send(fail_silently=False)
-            request.session.pop('last_error_report', None)
-            return JsonResponse({'status': 'success', 'message': 'Report sent successfully.'})
-        except Exception as e:
-            print(f"[report_error_view] Failed to send email: {e}")
-            return JsonResponse({'status': 'error', 'message': f'Failed to send email: {e}'}, status=500)
+        return JsonResponse({
+            'status': 'manual',
+            'to_email': support_email,
+            'subject': subject,
+            'body': body
+        })
 
     return JsonResponse({'status': 'error', 'message': 'Method not allowed.'}, status=405)

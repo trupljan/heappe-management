@@ -36,7 +36,7 @@
 
     <div class="row g-4">
         <!-- Left: Form -->
-        <div class="col-lg-7">
+        <div class="col-lg-7" id="form-container">
             <div class="card border-0 shadow-sm" style="border-radius:14px;">
                 <div class="card-body p-4">
                     <form id="report-form">
@@ -166,10 +166,35 @@
 $(document).ready(function () {
     let screenshotDataUrl = '';
 
+    function loadInitialScreenshot() {
+        try {
+            const storedScreenshot = sessionStorage.getItem('heappe_error_screenshot');
+            if (storedScreenshot) {
+                screenshotDataUrl = storedScreenshot;
+                $('#screenshot-preview').attr('src', screenshotDataUrl).show();
+                $('#screenshot-loading').hide();
+                
+                // Add a small info badge to indicate this is the error page screenshot
+                if ($('#screenshot-badge').length === 0) {
+                    $('#screenshot-preview').before(
+                        '<div id="screenshot-badge" class="alert alert-info border border-info-subtle mb-2 px-3 py-2 small w-100 text-wrap rounded-3" style="font-size:0.72rem;">' +
+                        '<i class="bi bi-info-circle-fill me-1"></i> Captured automatically from the previous error page.' +
+                        '</div>'
+                    );
+                }
+                return true;
+            }
+        } catch (e) {
+            console.error('sessionStorage error:', e);
+        }
+        return false;
+    }
+
     function captureScreenshot() {
         if (!$('#include-screenshot').is(':checked')) return;
         $('#screenshot-loading').show();
         $('#screenshot-preview').hide();
+        $('#screenshot-badge').remove(); // remove error page badge when manual capture is requested
         html2canvas(document.body, { useCORS: true, scale: 0.8 }).then(function (canvas) {
             screenshotDataUrl = canvas.toDataURL('image/png');
             $('#screenshot-preview').attr('src', screenshotDataUrl).show();
@@ -190,6 +215,7 @@ $(document).ready(function () {
             $('#screenshot-loading').hide();
             $('#screenshot-disabled-msg').show();
             $('#screenshot-info').hide();
+            $('#screenshot-badge').remove();
         }
     });
 
@@ -197,8 +223,10 @@ $(document).ready(function () {
         captureScreenshot();
     });
 
-    // Initial capture
-    setTimeout(captureScreenshot, 600);
+    // Initial capture or load
+    if (!loadInitialScreenshot()) {
+        setTimeout(captureScreenshot, 600);
+    }
 
     $('#report-form').on('submit', function (e) {
         e.preventDefault();
@@ -233,18 +261,153 @@ $(document).ready(function () {
                 csrfmiddlewaretoken: '{{ csrf_token }}'
             },
             success: function (r) {
-                if (r.status === 'success') {
-                    window.location.href = window.location.pathname + '?sent=1';
+                if (r.status === 'manual') {
+                    showManualUI(r);
                 } else {
-                    alert('Could not send report: ' + r.message);
+                    alert('Could not generate report: ' + r.message);
                     $('#submit-btn').prop('disabled', false).html('<i class="bi bi-send-fill me-2"></i>Send Report');
                 }
             },
             error: function (xhr) {
-                alert('Error sending report: ' + (xhr.responseJSON?.message || xhr.responseText));
+                let errData = xhr.responseJSON || {};
+                alert('Error generating report: ' + (errData.message || xhr.responseText));
                 $('#submit-btn').prop('disabled', false).html('<i class="bi bi-send-fill me-2"></i>Send Report');
             }
         });
+
+        function showManualUI(errData) {
+            // Compile manual data using server returned data or compute client-side fallback
+            const toEmail = errData.to_email || 'jakub.konvicka@vsb.cz';
+            const subject = errData.subject || `[HEAppE Support] ${$('#report-category option:selected').text()}: ${summary.substring(0, 80)}`;
+            
+            let body = errData.body;
+            if (!body) {
+                const categoryLabel = $('#report-category option:selected').text();
+                const username = '{{ request.user.username|default:"Anonymous" }}';
+                const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+                body = `HEAppE Management — Problem Report\n`;
+                body += `====================================\n\n`;
+                body += `Reporter:       ${username} <${contactEmail}>\n`;
+                body += `Category:       ${categoryLabel}\n`;
+                body += `Affected URL:   ${$('#report-url').val()}\n`;
+                body += `Timestamp(UTC): ${timestamp}\n\n`;
+                body += `Summary\n`;
+                body += `-------\n`;
+                body += `${summary}\n\n`;
+                body += `Description\n`;
+                body += `-----------\n`;
+                body += `${description}\n`;
+            }
+
+            const mailtoBody = body.length > 1500 ? body.substring(0, 1500) + '\n\n... (detailed info truncated, please paste full body from clipboard)' : body;
+            const mailtoUrl = `mailto:${encodeURIComponent(toEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailtoBody)}`;
+            const dashboardUrl = `${basePath}/`;
+
+            const showScreenshotBtn = screenshotDataUrl ? '' : 'style="display:none;"';
+            const screenshotNote = screenshotDataUrl ? ' and attach the downloaded screenshot.' : '.';
+
+            const manualHtml = `
+                <div class="card border-primary shadow-sm mb-4" style="border-radius:14px; border-left: 5px solid #0d6efd !important;">
+                    <div class="card-body p-4">
+                        <div class="d-flex align-items-center gap-2 mb-3 text-primary">
+                            <i class="bi bi-envelope-fill fs-4"></i>
+                            <h5 class="fw-bold mb-0">Send Report via Email</h5>
+                        </div>
+                        <p class="text-secondary small mb-4">
+                            The report has been generated successfully. Please send it to the support email address below using your email client.
+                        </p>
+
+                        <!-- Recipient -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Send To</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control font-monospace bg-light" id="fallback-to" readonly value="${toEmail}">
+                                <button class="btn btn-outline-secondary copy-btn" type="button" data-clipboard-target="#fallback-to" title="Copy to clipboard">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Subject -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Subject</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control font-monospace bg-light" id="fallback-subject" readonly value="${subject}">
+                                <button class="btn btn-outline-secondary copy-btn" type="button" data-clipboard-target="#fallback-subject" title="Copy to clipboard">
+                                    <i class="bi bi-clipboard"></i> Copy
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Body -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Message Body</label>
+                            <div class="position-relative">
+                                <textarea class="form-control font-monospace small" id="fallback-body" rows="10" readonly style="background:#f8f9fa;">${body}</textarea>
+                                <button class="btn btn-xs btn-dark position-absolute copy-btn" type="button" data-clipboard-target="#fallback-body" style="top:8px; right:8px; z-index:5;" title="Copy body">
+                                    <i class="bi bi-clipboard me-1"></i> Copy Body
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="d-flex flex-wrap gap-2 pt-3 border-top mt-3">
+                            <a href="${mailtoUrl}" class="btn btn-danger btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1">
+                                <i class="bi bi-envelope-open-fill"></i> Open Email Client
+                            </a>
+                            <button class="btn btn-outline-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1" id="download-screenshot-btn" ${showScreenshotBtn}>
+                                <i class="bi bi-download"></i> Download Screenshot
+                            </button>
+                            <a href="${dashboardUrl}" class="btn btn-outline-secondary btn-sm px-3">
+                                ← Return to Dashboard
+                            </a>
+                        </div>
+                        <div class="text-muted mt-3" style="font-size:0.75rem; border-top: 1px dashed #dee2e6; padding-top: 8px;">
+                            <i class="bi bi-info-circle me-1"></i> <strong>How-to:</strong> Open the email client, paste the copied body into the email message,${screenshotNote}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            $('#form-container').html(manualHtml);
+            
+            // Try removing error screenshot since the user is manual-handling it
+            try { sessionStorage.removeItem('heappe_error_screenshot'); } catch(e) {}
+        }
+    });
+
+    // Handle clipboard copy
+    $(document).on('click', '.copy-btn', function () {
+        const targetSelector = $(this).attr('data-clipboard-target');
+        const targetElement = $(targetSelector)[0];
+        targetElement.select();
+        targetElement.setSelectionRange(0, 99999);
+        try {
+            navigator.clipboard.writeText(targetElement.value);
+        } catch (err) {
+            document.execCommand('copy');
+        }
+
+        const btn = $(this);
+        const originalHtml = btn.html();
+        btn.html('<i class="bi bi-check-lg text-success"></i> Copied!').addClass('btn-outline-success').removeClass('btn-outline-secondary btn-dark');
+        setTimeout(function () {
+            btn.html(originalHtml).removeClass('btn-outline-success').addClass(targetSelector === '#fallback-body' ? 'btn-dark' : 'btn-outline-secondary');
+        }, 1500);
+    });
+
+    // Handle screenshot download
+    $(document).on('click', '#download-screenshot-btn', function () {
+        if (!screenshotDataUrl) {
+            alert('No screenshot to download.');
+            return;
+        }
+        const link = document.createElement('a');
+        link.download = 'heappe_error_screenshot.png';
+        link.href = screenshotDataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     });
 });
 </script>

@@ -100,3 +100,29 @@
 </div>
 
 {% endblock %}
+
+{% block extra_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script>
+    // Silently capture this error page and store it for the report form
+    (function() {
+        try {
+            sessionStorage.removeItem('heappe_error_screenshot');
+        } catch(e) {}
+
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                try {
+                    html2canvas(document.body, { useCORS: true, scale: 0.8 }).then(function(canvas) {
+                        try {
+                            sessionStorage.setItem('heappe_error_screenshot', canvas.toDataURL('image/png'));
+                        } catch(e) {
+                            // sessionStorage quota exceeded — skip silently
+                        }
+                    });
+                } catch(e) {}
+            }, 800);
+        });
+    })();
+</script>
+{% endblock %}
