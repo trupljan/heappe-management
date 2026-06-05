@@ -12,7 +12,7 @@
             {% if projects %}
             <button type="button" class="btn btn-sm btn-danger fw-semibold d-none" id="projectBulkBtn" data-bs-toggle="modal" data-bs-target="#projectBulkModal">
                 {% if cluster.id or queue_group %}
-                    <i class="bi bi-link-45deg-slash me-1"></i>Unassign Selected (<span id="projectSelectCount">0</span>)
+                    <i class="bi bi-x-circle me-1"></i>Unassign Selected (<span id="projectSelectCount">0</span>)
                 {% else %}
                     <i class="bi bi-trash me-1"></i>Delete Selected (<span id="projectSelectCount">0</span>)
                 {% endif %}
@@ -101,12 +101,17 @@
                                     </a>
                                     {% if cluster.id %}
                                     <button type="button" class="btn btn-sm btn-outline-danger px-2.5" onclick="unassignProjectFromCluster('{{ project.id }}', '{{ cluster.id }}')" title="Unassign project">
-                                        <i class="bi bi-link-45deg-slash"></i>
+                                        <i class="bi bi-x-circle"></i>
                                     </button>
                                     {% endif %}
                                     {% if queue_group %}
                                     <button type="button" class="btn btn-sm btn-outline-danger px-2.5" onclick="unassignProjectFromGroup('{{ project.id }}')" title="Unassign project">
-                                        <i class="bi bi-link-45deg-slash"></i>
+                                        <i class="bi bi-x-circle"></i>
+                                    </button>
+                                    {% endif %}
+                                    {% if not cluster.id and not queue_group %}
+                                    <button type="button" class="btn btn-sm btn-outline-danger px-2.5" onclick="deleteProject('{{ project.id }}', '{{ project.name|escapejs }}')" title="Delete project">
+                                        <i class="bi bi-trash"></i>
                                     </button>
                                     {% endif %}
                                 </div>
@@ -234,6 +239,22 @@ function unassignProjectFromGroup(projectId) {
     if (confirm('Are you sure you want to unassign this project from the group?')) {
         document.getElementById('groupProjectIdInput').value = projectId;
         document.getElementById('singleUnassignGroupForm').submit();
+    }
+}
+</script>
+{% endif %}
+
+{% if not cluster.id and not queue_group %}
+<form id="singleDeleteProjectForm" method="post" action="">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="delete_project">
+    <input type="hidden" name="ProjectId" id="deleteProjectIdInput">
+</form>
+<script>
+function deleteProject(projectId, projectName) {
+    if (confirm('Are you sure you want to permanently delete project "' + projectName + '"? This action cannot be undone and will remove it from all clusters and queue groups.')) {
+        document.getElementById('deleteProjectIdInput').value = projectId;
+        document.getElementById('singleDeleteProjectForm').submit();
     }
 }
 </script>
