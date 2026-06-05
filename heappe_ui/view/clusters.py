@@ -4,6 +4,25 @@ from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, SCHEDULE
 @login_required
 def cluster_list(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "bulk_delete":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for cid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {"Id": int(cid)})
+                    controller.heappe_management_cluster_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error deleting cluster {cid}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully deleted {success_count} cluster(s).")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to delete {len(selected_ids) - success_count} cluster(s).")
+            return redirect("cluster_list")
+
     clusters = controller.heappe_management_clusters_get(SessionCode=request.session_code)
     cluster_list = [c.to_dict() for c in clusters]
 

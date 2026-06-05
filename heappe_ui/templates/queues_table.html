@@ -5,6 +5,9 @@
             <h5 class="h6 mb-0 fw-bold text-dark">Queue Configurations</h5>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-danger fw-semibold d-none" id="queueBulkDeleteBtn" data-bs-toggle="modal" data-bs-target="#queueBulkDeleteModal">
+                <i class="bi bi-trash me-1"></i>Delete Selected (<span id="queueSelectCount">0</span>)
+            </button>
             {% if cluster.id %}
             <a href="{% url 'queue_create' cluster.id %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
                 <i class="bi bi-plus-lg me-1"></i>Add New Queue
@@ -18,54 +21,65 @@
 
     <div class="card-body p-0">
         {% if queues %}
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th class="ps-4" style="width: 8%;">ID</th>
-                        <th style="width: 20%;">Name & Description</th>
-                        <th style="width: 18%;">Allocation Limits</th>
-                        <th style="width: 12%;">Max Walltime</th>
-                        <th style="width: 18%;">Transfer Method</th>
-                        <th style="width: 14%;">Queue Group</th>
-                        <th class="text-end pe-4" style="width: 10%;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for queue in queues %}
-                    <tr>
-                        <td class="ps-4 font-monospace text-secondary fw-semibold">#{{ queue.id }}</td>
-                        <td>
-                            <div class="fw-bold text-dark" style="font-size: 0.9rem;">{{ queue.name }}</div>
-                            <div class="text-muted small mt-0.5" style="font-size: 0.78rem;">{{ queue.description|default:"No description" }}</div>
-                        </td>
-                        <td>
-                            <div class="small text-dark fw-semibold d-flex align-items-center gap-1.5">
-                                <i class="bi bi-grid-3x3-gap text-muted"></i>{{ queue.number_of_nodes }} nodes
-                            </div>
-                            <div class="text-muted small mt-1 d-flex align-items-center gap-1.5" style="font-size: 0.75rem;">
-                                <i class="bi bi-cpu text-muted"></i>{{ queue.cores_per_node }} cores/node
-                            </div>
-                        </td>
-                        <td>
-                            <span class="badge bg-light text-secondary border font-monospace px-2 py-1"><i class="bi bi-clock me-1 text-muted"></i>{{ queue.max_walltime }}s</span>
-                        </td>
-                        <td>
-                            <span class="text-dark small"><i class="bi bi-arrow-left-right text-muted me-1"></i>{{ queue.fileTransferMethodName|default:"-" }}</span>
-                        </td>
-                        <td>
-                            {% if queue.cluster_node_type_aggregation %}
-                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1"><i class="bi bi-tag me-1"></i>{{ queue.cluster_node_type_aggregation.name }}</span>
-                            {% else %}
-                                <span class="text-muted small">-</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-end pe-4">
+        <form method="post" id="queueBulkDeleteForm" action="{% url 'queues_view' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="bulk_delete">
+            {% if cluster.id %}
+            <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+            {% endif %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="queuesTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4" style="width: 5%;">
+                                <input type="checkbox" class="form-check-input" id="queueSelectAll">
+                            </th>
+                            <th style="width: 8%;">ID</th>
+                            <th style="width: 20%;">Name & Description</th>
+                            <th style="width: 18%;">Allocation Limits</th>
+                            <th style="width: 12%;">Max Walltime</th>
+                            <th style="width: 18%;">Transfer Method</th>
+                            <th style="width: 14%;">Queue Group</th>
+                            <th class="text-end pe-4" style="width: 10%;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for queue in queues %}
+                        <tr>
+                            <td class="ps-4">
+                                <input type="checkbox" name="selected_ids" value="{{ queue.id }}" class="form-check-input queue-select-item">
+                            </td>
+                            <td class="font-monospace text-secondary fw-semibold">#{{ queue.id }}</td>
+                            <td>
+                                <div class="fw-bold text-dark" style="font-size: 0.9rem;">{{ queue.name }}</div>
+                                <div class="text-muted small mt-0.5" style="font-size: 0.78rem;">{{ queue.description|default:"No description" }}</div>
+                            </td>
+                            <td>
+                                <div class="small text-dark fw-semibold d-flex align-items-center gap-1.5">
+                                    <i class="bi bi-grid-3x3-gap text-muted"></i>{{ queue.number_of_nodes }} nodes
+                                </div>
+                                <div class="text-muted small mt-1 d-flex align-items-center gap-1.5" style="font-size: 0.75rem;">
+                                    <i class="bi bi-cpu text-muted"></i>{{ queue.cores_per_node }} cores/node
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-secondary border font-monospace px-2 py-1"><i class="bi bi-clock me-1 text-muted"></i>{{ queue.max_walltime }}s</span>
+                            </td>
+                            <td>
+                                <span class="text-dark small"><i class="bi bi-arrow-left-right text-muted me-1"></i>{{ queue.fileTransferMethodName|default:"-" }}</span>
+                            </td>
+                            <td>
+                                {% if queue.cluster_node_type_aggregation %}
+                                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1"><i class="bi bi-tag me-1"></i>{{ queue.cluster_node_type_aggregation.name }}</span>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end pe-4">
                                 <div class="d-flex gap-2 justify-content-end">
                                     <a href="{% url 'queue_detail' queue.id %}" class="btn btn-sm btn-outline-primary fw-semibold px-2.5" title="Edit queue">
                                         <i class="bi bi-pencil me-1"></i>Edit
                                     </a>
-                                    {% if cluster.id %}
                                     <button type="button"
                                             class="btn btn-sm btn-outline-danger px-2.5"
                                             title="Delete queue"
@@ -97,7 +111,9 @@
                                                     <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
                                                     <form action="{% url 'queue_delete' queue.id %}" method="post" class="d-inline m-0">
                                                         {% csrf_token %}
+                                                        {% if cluster.id %}
                                                         <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+                                                        {% endif %}
                                                         <button type="submit" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
                                                             <i class="bi bi-trash me-1"></i>Delete Queue
                                                         </button>
@@ -106,7 +122,6 @@
                                             </div>
                                         </div>
                                     </div>
-                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -114,17 +129,100 @@
                     </tbody>
                 </table>
             </div>
-            {% else %}
-            <div class="text-center py-5 text-muted">
-                <i class="bi bi-list-columns-reverse fs-1 mb-3 d-block text-secondary"></i>
-                <p class="mb-1 fw-semibold">No queues configured</p>
-                <p class="small text-secondary mb-3">Queues define partitions, node counts, core limits, and scheduling parameters.</p>
-                {% if cluster.id %}
-                <a href="{% url 'queue_create' cluster.id %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
-                    <i class="bi bi-plus-lg me-1"></i>Add First Queue
-                </a>
-                {% endif %}
+        </form>
+
+        <!-- Queue Bulk Delete Modal -->
+        <div class="modal fade" id="queueBulkDeleteModal" tabindex="-1" aria-labelledby="queueBulkDeleteLabel" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow-lg rounded-3">
+                    <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                        <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="queueBulkDeleteLabel">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <span>Confirm Bulk Delete</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-center">
+                        <p class="text-secondary small mb-2">You are about to permanently delete the selected queues:</p>
+                        <h5 class="fw-bold text-dark my-3"><span id="queueBulkDeleteCount">0</span> queues</h5>
+                        <div class="alert alert-danger border-0 rounded-3 small mb-0 d-flex gap-2 text-start">
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5 flex-shrink-0"></i>
+                            <div><strong>Warning:</strong> This action is irreversible. The selected queues will be permanently removed.</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="confirmQueueBulkDeleteBtn">
+                            <i class="bi bi-trash me-1"></i>Delete Selected
+                        </button>
+                    </div>
+                </div>
             </div>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+            <i class="bi bi-list-columns-reverse fs-1 mb-3 d-block text-secondary"></i>
+            <p class="mb-1 fw-semibold">No queues configured</p>
+            <p class="small text-secondary mb-3">Queues define partitions, node counts, core limits, and scheduling parameters.</p>
+            {% if cluster.id %}
+            <a href="{% url 'queue_create' cluster.id %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
+                <i class="bi bi-plus-lg me-1"></i>Add First Queue
+            </a>
             {% endif %}
         </div>
+        {% endif %}
     </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Bulk selection logic for queues
+        const selectAll = document.getElementById('queueSelectAll');
+        const selectItems = document.querySelectorAll('.queue-select-item');
+        const bulkDeleteBtn = document.getElementById('queueBulkDeleteBtn');
+        const selectCount = document.getElementById('queueSelectCount');
+        const bulkDeleteCount = document.getElementById('queueBulkDeleteCount');
+        const confirmBulkDeleteBtn = document.getElementById('confirmQueueBulkDeleteBtn');
+        const bulkDeleteForm = document.getElementById('queueBulkDeleteForm');
+
+        function updateBulkDeleteState() {
+            const checkedCount = document.querySelectorAll('.queue-select-item:checked').length;
+            if (checkedCount > 0) {
+                bulkDeleteBtn.classList.remove('d-none');
+                selectCount.textContent = checkedCount;
+                bulkDeleteCount.textContent = checkedCount;
+            } else {
+                bulkDeleteBtn.classList.add('d-none');
+            }
+            if (selectAll) {
+                selectAll.checked = (checkedCount === selectItems.length && selectItems.length > 0);
+            }
+        }
+
+        if (selectAll) {
+            selectAll.addEventListener('change', function () {
+                const isChecked = this.checked;
+                // Only toggle visible items
+                const tbody = document.querySelector('#queuesTable tbody');
+                const rows = tbody.querySelectorAll('tr');
+                rows.forEach(row => {
+                    if (row.style.display !== 'none') {
+                        const cb = row.querySelector('.queue-select-item');
+                        if (cb) cb.checked = isChecked;
+                    }
+                });
+                updateBulkDeleteState();
+            });
+        }
+
+        selectItems.forEach(item => {
+            item.addEventListener('change', updateBulkDeleteState);
+        });
+
+        if (confirmBulkDeleteBtn) {
+            confirmBulkDeleteBtn.addEventListener('click', function () {
+                bulkDeleteForm.submit();
+            });
+        }
+    });
+</script>

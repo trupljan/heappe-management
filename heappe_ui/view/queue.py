@@ -11,6 +11,28 @@ from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_vi
 @login_required
 def queues_view(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "bulk_delete":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for qid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {"Id": int(qid)})
+                    controller.heappe_management_cluster_node_type_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error deleting queue {qid}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully deleted {success_count} queue(s).")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to delete {len(selected_ids) - success_count} queue(s).")
+            cluster_id = request.POST.get("ClusterId")
+            if cluster_id:
+                return redirect(f"/clusters/{cluster_id}/?tab=queues")
+            return redirect("queues_view")
+
     queues = [c.to_dict() for c in controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
     
     filetransfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code) or []
@@ -158,7 +180,9 @@ def queue_delete(request: HttpRequest, queue_id: int) -> HttpResponse:
         "Queue deleted successfully!",
         "Failed to delete Queue"
     )
-    return redirect(f"/clusters/{cluster_id}/?tab=queues")
+    if cluster_id:
+        return redirect(f"/clusters/{cluster_id}/?tab=queues")
+    return redirect("queues_view")
 
 
 @login_required
