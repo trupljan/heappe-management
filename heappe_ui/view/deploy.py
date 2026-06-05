@@ -175,20 +175,49 @@ import string
 
 def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
     """Handle the deployment process and return the result."""
+    from datetime import datetime
     service = HEAppEDeployService(config)
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
+    log_dir = os.path.join(config.base_path, instance_name, "app", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, "deploy.log")
+
+    def log_message(msg):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted = f"[{timestamp}] {msg}\n"
+        print(msg)
+        try:
+            with open(log_file_path, "a", encoding="utf-8") as f:
+                f.write(formatted)
+        except Exception as e:
+            print(f"Error writing to deploy log: {e}")
 
     try:
+        # Clear previous log
+        try:
+            with open(log_file_path, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            pass
+
+        log_message("Starting HEAppE deployment process...")
+        log_message(f"Repository URL: {config.repo_url}")
+        log_message(f"Repository branch/tag: {config.repo_branch}")
 
         for s in [s1, s2, s3, s4]:
-            if 's' in locals(): s.close()
+            if 's' in locals() and s:
+                try:
+                    s.close()
+                except Exception:
+                    pass
 
         admin_password = generate_secure_password()
         vault_password = generate_secure_password()
         sa_password = generate_secure_password()
         data_staging_token = generate_secure_password()
 
-        instance_settings = service.deploy_init(
+        log_message("Initializing configuration files and directory structure...")
+        init_result = service.deploy_init(
             instance_name=instance_name,
             username="admin",
             password=admin_password,
@@ -199,7 +228,15 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             overwrite_existing=True,
             deployed_ip='localhost',
             version=config.repo_branch
-        )['instance_settings']
+        )
+        if init_result.get("status") == "error":
+            raise RuntimeError(f"deploy_init failed: {init_result.get('message')}")
+
+        instance_settings = init_result['instance_settings']
+        log_message("Configuration initialized. Core settings generated.")
+
+        # Re-set updating status to True just in case deploy_init updated it
+        _set_updating_status(instance_name, True)
 
         build_command = [
             "docker", "compose",
@@ -209,8 +246,17 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "-p", instance_name,
             "build",  "--no-cache"
         ]
+        log_message("Building docker containers (this can take a few minutes)...")
         build_result = execute_docker_compose(build_command, compose_dir)
-        print(f"Docker Compose build result done")
+        log_message(f"Docker Compose build finished with return code {build_result.returncode}")
+        if build_result.stdout:
+            log_message(f"Build stdout:\n{build_result.stdout}")
+        if build_result.stderr:
+            log_message(f"Build stderr:\n{build_result.stderr}")
+
+        if build_result.returncode != 0:
+            raise RuntimeError(f"Docker compose build failed: {build_result.stderr}")
+
         up_command = [
             "docker", "compose",
             "--profile", "db",
@@ -219,12 +265,20 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "-p", instance_name,
             "up", "-d"
         ]
+        log_message("Starting containers...")
         up_result = execute_docker_compose(up_command, compose_dir)
-        print(f"Docker Compose up done: {up_result.returncode} {up_result.stdout} {up_result.stderr}")
-        #wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
-        # Initialize the database with retries
+        log_message(f"Docker Compose up finished with return code {up_result.returncode}")
+        if up_result.stdout:
+            log_message(f"Up stdout:\n{up_result.stdout}")
+        if up_result.stderr:
+            log_message(f"Up stderr:\n{up_result.stderr}")
 
-        run_with_retries(instance_name, ports, sa_password)
+        if up_result.returncode != 0:
+            raise RuntimeError(f"Docker compose up failed: {up_result.stderr}")
+
+        log_message("Running database migrations and initialization...")
+        run_with_retries(instance_name, ports, sa_password, logger=log_message)
+        log_message("Database initialization completed successfully.")
 
         restart_command = [
             "docker", "compose",
@@ -234,21 +288,31 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             "restart"
         ]
 
+        log_message("Waiting for heappe and mssql containers to be running...")
         wait_for_container_running(f"{instance_name}_heappe", timeout=300, interval=10)
         wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
 
+        log_message("Restarting services to apply database and vault configs...")
         restart_result = execute_docker_compose(restart_command, compose_dir)
-        print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
-        if restart_result.returncode != 0:
-            return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
+        log_message(f"Docker Compose restart finished with return code {restart_result.returncode}")
+        if restart_result.stdout:
+            log_message(f"Restart stdout:\n{restart_result.stdout}")
+        if restart_result.stderr:
+            log_message(f"Restart stderr:\n{restart_result.stderr}")
 
-        #set the instance as deployed in the database
-        from ..models import InstanceCredentials
+        if restart_result.returncode != 0:
+            raise RuntimeError(f"Docker compose restart failed: {restart_result.stderr}")
+
+        # Set the instance as deployed in the database
         instance_settings.is_deployed = True
+        instance_settings.is_updating = False
         instance_settings.save()
+
+        log_message("SUCCESS: Deployment completed successfully.")
         return restart_result, "Deployment completed successfully.", 'success'
     except Exception as e:
-        print(f"Deployment error: {str(e)}")
+        log_message(f"EXCEPTION: Deployment error: {str(e)}")
+        _set_updating_status(instance_name, False)
         return None, f"Deployment error: {str(e)}", 'danger'
 
 def handle_container_action(client, instance_name, action, container_id):
@@ -480,7 +544,8 @@ def initialize_database(
         ("Error", "Error description"),
         ("Critical", "Critical description"),
         ("None", "None description"),
-    ]
+    ],
+    logger=print
 ):
     try:
         # Step 1: Create database if it doesn't exist
@@ -494,7 +559,7 @@ def initialize_database(
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(f"IF DB_ID(N'{db_name}') IS NULL CREATE DATABASE [{db_name}]")
-            print(f"Database '{db_name}' created or already exists.")
+            logger(f"Database '{db_name}' created or already exists.")
 
         # Step 2: Connect to the new database for permissions, tables, and inserts
         with pymssql.connect(
@@ -515,7 +580,7 @@ def initialize_database(
 
             for grant_sql in grants:
                 cursor.execute(grant_sql)
-            print(f"Permissions granted on database '{db_name}'.")
+            logger(f"Permissions granted on database '{db_name}'.")
 
             # Create LoggingLevelType table
             cursor.execute("""
@@ -573,42 +638,42 @@ def initialize_database(
                 """, (name, name, desc))
 
             conn.commit()
-            print(f"Database '{db_name}' initialized successfully with tables and log levels.")
+            logger(f"Database '{db_name}' initialized successfully with tables and log levels.")
             return True
 
     except pymssql.Error as e:
-        print(f"Database error: {e}")
+        logger(f"Database error: {e}")
         return False
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logger(f"Unexpected error: {e}")
         return False
 
 # Retry logic
-def run_with_retries(instance_name, ports, password):
+def run_with_retries(instance_name, ports, password, logger=print):
     max_attempts = 10
     attempt = 1
     retry_delay = 5  # seconds
 
     while attempt <= max_attempts:
-        print(f"Attempt {attempt} of {max_attempts}")
+        logger(f"Attempt {attempt} of {max_attempts}")
         success = initialize_database(
             server='localhost',
             port=ports['mssql_port'],
             db_name='heappe-monitoring',
             db_user='SA',
-            db_password=password
+            db_password=password,
+            logger=logger
         )
         if success:
-            print("Database initialization succeeded!")
+            logger("Database initialization succeeded!")
             break
         else:
-            print(f"Attempt {attempt} failed. Retrying in {retry_delay} seconds...")
+            logger(f"Attempt {attempt} failed. Retrying in {retry_delay} seconds...")
             time.sleep(retry_delay)
             attempt += 1
 
     if attempt > max_attempts:
-        print("Max attempts reached. Database initialization failed.")
-        #raise Exception("Failed to initialize database after maximum retries.")
+        logger("Max attempts reached. Database initialization failed.")
 
 
 import subprocess
@@ -769,6 +834,33 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     target_dir="heappe-core"
                 )
 
+                # Pre-create instance credentials in database to avoid race condition and mark as deploying (is_updating=True)
+                service = HEAppEDeployService(config)
+                service.save_instance_settings(
+                    instance_name=instance_name,
+                    heappe_host=ip,
+                    heappe_login="admin",
+                    heappe_password="",
+                    log_db_host=ip,
+                    heappe_port=app_port,
+                    log_db_port=str(mssql_port),
+                    log_db_user="SA",
+                    log_db_password="",
+                    log_db_database="heappe-monitoring",
+                    is_deployed=False
+                )
+                _set_updating_status(instance_name, True)
+
+                # Set in session as chosen instance
+                request.session["chosen_instance"] = instance_name
+                request.session["force_reauth"] = True
+                # Clear old instance connection variables to prevent leakage/fallback
+                request.session.pop("heappe_session_code", None)
+                request.session.pop("heappe_host", None)
+                request.session.pop("heappe_host_url", None)
+                request.session.pop("heappe_use_api_key", None)
+                request.session.pop("heappe_last_auth", None)
+
                 deploy_background(config, instance_name, ports, s1, s2, s3, s4)
 
                 action_message = "Deployment started in the background."
@@ -915,7 +1007,10 @@ def update_status_view(request, instance_name):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
     base_path = "/opt/heappe-deployment/"
-    log_file_path = os.path.join(base_path, instance_name, "app", "logs", "update.log")
+    if instance and not instance.is_deployed:
+        log_file_path = os.path.join(base_path, instance_name, "app", "logs", "deploy.log")
+    else:
+        log_file_path = os.path.join(base_path, instance_name, "app", "logs", "update.log")
 
     logs = ""
     if os.path.exists(log_file_path):

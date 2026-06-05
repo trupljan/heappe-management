@@ -524,7 +524,7 @@
                         <p class="text-muted small mb-0">Please do not close this window or navigate away. The process might take up to 5 minutes.</p>
                     </div>
 
-                    <label class="form-label fw-bold text-secondary mb-2 small"><i class="bi bi-journal-text me-1"></i>Journal (Update Logs):</label>
+                    <label id="update-logs-label" class="form-label fw-bold text-secondary mb-2 small"><i class="bi bi-journal-text me-1"></i>Journal (Update Logs):</label>
                     <div class="position-relative">
                         <pre id="update-logs" class="p-3 mb-0 rounded text-light bg-dark font-monospace" style="height: 300px; overflow-y: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap; border: 1px solid #343a40;"></pre>
                     </div>
@@ -568,11 +568,22 @@ let updatePollInterval = null;
 let treeEditor = null;
 let currentEditorMode = 'tree'; // 'tree', 'code', 'split'
 
-function startUpdatePolling() {
+function startUpdatePolling(isUpdate = true) {
     // Show update progress modal (non-dismissible)
     const updateModalEl = document.getElementById('updateProgressModal');
     if (!updateModalEl) return;
     
+    // Adjust modal titles and log labels based on deploy vs update
+    if (isUpdate) {
+        $('#updateProgressModalLabel').html('<i class="bi bi-arrow-repeat spin-icon me-2 text-primary"></i>HEAppE Middleware Update');
+        $('#update-status-title').text('Updating Instance...');
+        $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Update Logs):');
+    } else {
+        $('#updateProgressModalLabel').html('<i class="bi bi-rocket-takeoff spin-icon me-2 text-success"></i>HEAppE Middleware Deployment');
+        $('#update-status-title').text('Deploying Instance...');
+        $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Deployment Logs):');
+    }
+
     let updateModal = bootstrap.Modal.getInstance(updateModalEl);
     if (!updateModal) {
         updateModal = new bootstrap.Modal(updateModalEl, {
@@ -602,13 +613,13 @@ function startUpdatePolling() {
                     logElement.scrollTop(logElement[0].scrollHeight);
 
                     if (!response.is_updating) {
-                        // Update has finished!
+                        // Action has finished!
                         clearInterval(updatePollInterval);
                         updatePollInterval = null;
                         
                         // Check if log contains success or error
                         const logText = response.logs || '';
-                        const isSuccess = logText.includes('SUCCESS:') || logText.includes('Update completed successfully.');
+                        const isSuccess = logText.includes('SUCCESS:') || logText.includes('completed successfully.');
                         
                         // Adjust UI
                         const $spinner = $('.modal-body .spinner-border');
@@ -616,11 +627,21 @@ function startUpdatePolling() {
                         $spinner.css('animation', 'none');
                         
                         if (isSuccess) {
-                            $('#update-status-title').text('Update Succeeded!').removeClass('text-dark').addClass('text-success');
-                            $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Instance updated successfully.</span>');
+                            if (isUpdate) {
+                                $('#update-status-title').text('Update Succeeded!').removeClass('text-dark').addClass('text-success');
+                                $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Instance updated successfully.</span>');
+                            } else {
+                                $('#update-status-title').text('Deployment Succeeded!').removeClass('text-dark').addClass('text-success');
+                                $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Instance deployed successfully.</span>');
+                            }
                         } else {
-                            $('#update-status-title').text('Update Failed').removeClass('text-dark').addClass('text-danger');
-                            $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during update. See logs above.</span>');
+                            if (isUpdate) {
+                                $('#update-status-title').text('Update Failed').removeClass('text-dark').addClass('text-danger');
+                                $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during update. See logs above.</span>');
+                            } else {
+                                $('#update-status-title').text('Deployment Failed').removeClass('text-dark').addClass('text-danger');
+                                $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during deployment. See logs above.</span>');
+                            }
                         }
                         
                         $('#update-close-btn').show();
@@ -647,16 +668,9 @@ $(document).ready(function() {
     }
     window.hideLoading = function() { $('#loading-overlay').css('display','none'); }
 
-    // --- AUTOMATIC LOADING STATE FOR REDIRECTED USERS ---
-    // If we have an instance name but it's not deployed yet, show the loader automatically
-    {% if instance_name and not is_deployed and not is_updating %}
-        showLoading("Deployment in progress...", "Your instance is being created. Please wait.");
-        startStatusPolling();
-    {% endif %}
-
-    // --- AUTOMATIC UPDATE STATE ON PAGE LOAD ---
+    // --- AUTOMATIC UPDATE / DEPLOYMENT STATE ON PAGE LOAD ---
     {% if instance_name and is_updating %}
-        startUpdatePolling();
+        startUpdatePolling({% if is_deployed %}true{% else %}false{% endif %});
     {% endif %}
 
     // --- DEPLOY / UPDATE LOGIC ---

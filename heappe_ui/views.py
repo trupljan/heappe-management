@@ -178,6 +178,12 @@ def chose_instance_view(request):
         if instance_name:
             request.session["chosen_instance"] = instance_name
             request.session["force_reauth"] = True
+            # Clear old instance connection variables to prevent leakage/fallback
+            request.session.pop("heappe_session_code", None)
+            request.session.pop("heappe_host", None)
+            request.session.pop("heappe_host_url", None)
+            request.session.pop("heappe_use_api_key", None)
+            request.session.pop("heappe_last_auth", None)
             return redirect("dashboard_view")
 
     instances = InstanceCredentials.objects.all()
@@ -644,6 +650,12 @@ def instance_credentials_list(request, pk=None):
         if instance:
             request.session["chosen_instance"] = instance.instance_name
             request.session["force_reauth"] = True
+            # Clear old instance connection variables to prevent leakage/fallback
+            request.session.pop("heappe_session_code", None)
+            request.session.pop("heappe_host", None)
+            request.session.pop("heappe_host_url", None)
+            request.session.pop("heappe_use_api_key", None)
+            request.session.pop("heappe_last_auth", None)
             return redirect("dashboard_view")
 
     instances = InstanceCredentials.objects.all().order_by('instance_name')

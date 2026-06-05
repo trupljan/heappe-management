@@ -25,14 +25,29 @@ class HeappeSessionMiddleware:
             if not use_api_key:
                 if force_reauth or (now - last_auth > 300) or not session_code:
                     auth_backend = HeappeAuthBackend()
-                    auth_backend.re_authenticate(request)
+                    auth_user = auth_backend.re_authenticate(request)
+                    if not auth_user:
+                        # Clear old credentials to prevent hybrid state
+                        request.session.pop("heappe_session_code", None)
+                        request.session.pop("heappe_host", None)
+                        request.session.pop("heappe_host_url", None)
+                        request.session.pop("heappe_use_api_key", None)
+                        request.session.pop("heappe_last_auth", None)
 
                     session_code = request.session.get("heappe_session_code")
                     use_api_key = request.session.get("heappe_use_api_key", False)
+                    request.session["force_reauth"] = False
             else:
                 if force_reauth:
                     auth_backend = HeappeAuthBackend()
-                    auth_backend.re_authenticate(request)
+                    auth_user = auth_backend.re_authenticate(request)
+                    if not auth_user:
+                        # Clear old credentials to prevent hybrid state
+                        request.session.pop("heappe_session_code", None)
+                        request.session.pop("heappe_host", None)
+                        request.session.pop("heappe_host_url", None)
+                        request.session.pop("heappe_use_api_key", None)
+                        request.session.pop("heappe_last_auth", None)
                     use_api_key = request.session.get("heappe_use_api_key", False)
                     request.session["force_reauth"] = False
 
