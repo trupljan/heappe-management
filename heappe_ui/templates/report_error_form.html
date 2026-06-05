@@ -332,7 +332,7 @@ $(document).ready(function () {
                 `- **Server OS:** ${serverOs}\n` +
                 `- **Browser User Agent:** ${userAgent}\n\n` +
                 `---\n\n` +
-                `<!-- Please paste the full report details/traceback here (it was copied automatically) -->\n`;
+                `**[IMPORTANT] Please paste (Ctrl+V / Cmd+V) the copied detailed description & traceback from your clipboard below:**\n\n`;
 
             const mailtoBody = body.length > 1500 ? body.substring(0, 1500) + '\n\n... (detailed traceback truncated due to URL length limit, please copy/paste the full message body from the clipboard)' : body;
             const mailtoUrl = `mailto:support.heappe@it4i.cz?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailtoBody)}`;
