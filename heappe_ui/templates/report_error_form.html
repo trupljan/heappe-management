@@ -299,38 +299,27 @@ $(document).ready(function () {
                 body += `${description}\n`;
             }
 
-            const mailtoBody = body.length > 1500 ? body.substring(0, 1500) + '\n\n... (detailed info truncated, please paste full body from clipboard)' : body;
-            const mailtoUrl = `mailto:${encodeURIComponent(toEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(mailtoBody)}`;
+            const gitlabDescription = body.length > 4000 ? body.substring(0, 4000) + '\n\n... (traceback truncated due to URL length limit, please copy and paste the full message body from the clipboard)' : body;
+            const gitlabUrl = `https://opencode.it4i.eu/heappe-middleware/heappe-management/-/issues/new?issue[title]=${encodeURIComponent(subject)}&issue[description]=${encodeURIComponent(gitlabDescription)}`;
             const dashboardUrl = `${basePath}/`;
 
             const showScreenshotBtn = screenshotDataUrl ? '' : 'style="display:none;"';
-            const screenshotNote = screenshotDataUrl ? ' and attach the downloaded screenshot.' : '.';
+            const screenshotNote = screenshotDataUrl ? ' and upload the downloaded screenshot.' : '.';
 
             const manualHtml = `
                 <div class="card border-primary shadow-sm mb-4" style="border-radius:14px; border-left: 5px solid #0d6efd !important;">
                     <div class="card-body p-4">
                         <div class="d-flex align-items-center gap-2 mb-3 text-primary">
-                            <i class="bi bi-envelope-fill fs-4"></i>
-                            <h5 class="fw-bold mb-0">Send Report via Email</h5>
+                            <i class="bi bi-git fs-4 text-orange" style="color: #fc6d26;"></i>
+                            <h5 class="fw-bold mb-0">Submit Ticket to GitLab</h5>
                         </div>
                         <p class="text-secondary small mb-4">
-                            The report has been generated successfully. Please send it to the support email address below using your email client.
+                            The error report has been generated successfully. You can submit it directly to our public GitLab issue tracker. Copy the details below, download the screenshot, and click the button to create the ticket.
                         </p>
-
-                        <!-- Recipient -->
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Send To</label>
-                            <div class="input-group input-group-sm">
-                                <input type="text" class="form-control font-monospace bg-light" id="fallback-to" readonly value="${toEmail}">
-                                <button class="btn btn-outline-secondary copy-btn" type="button" data-clipboard-target="#fallback-to" title="Copy to clipboard">
-                                    <i class="bi bi-clipboard"></i> Copy
-                                </button>
-                            </div>
-                        </div>
 
                         <!-- Subject -->
                         <div class="mb-3">
-                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Subject</label>
+                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Issue Title</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" class="form-control font-monospace bg-light" id="fallback-subject" readonly value="${subject}">
                                 <button class="btn btn-outline-secondary copy-btn" type="button" data-clipboard-target="#fallback-subject" title="Copy to clipboard">
@@ -341,7 +330,7 @@ $(document).ready(function () {
 
                         <!-- Body -->
                         <div class="mb-3">
-                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Message Body</label>
+                            <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Issue Description</label>
                             <div class="position-relative">
                                 <textarea class="form-control font-monospace small" id="fallback-body" rows="10" readonly style="background:#f8f9fa;">${body}</textarea>
                                 <button class="btn btn-xs btn-dark position-absolute copy-btn" type="button" data-clipboard-target="#fallback-body" style="top:8px; right:8px; z-index:5;" title="Copy body">
@@ -352,8 +341,8 @@ $(document).ready(function () {
 
                         <!-- Actions -->
                         <div class="d-flex flex-wrap gap-2 pt-3 border-top mt-3">
-                            <a href="${mailtoUrl}" class="btn btn-danger btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1">
-                                <i class="bi bi-envelope-open-fill"></i> Open Email Client
+                            <a href="${gitlabUrl}" class="btn btn-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1 shadow-sm" target="_blank" style="background-color:#fc6d26; border-color:#fc6d26;">
+                                <i class="bi bi-git"></i> Create Ticket on GitLab
                             </a>
                             <button class="btn btn-outline-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1" id="download-screenshot-btn" ${showScreenshotBtn}>
                                 <i class="bi bi-download"></i> Download Screenshot
@@ -363,7 +352,7 @@ $(document).ready(function () {
                             </a>
                         </div>
                         <div class="text-muted mt-3" style="font-size:0.75rem; border-top: 1px dashed #dee2e6; padding-top: 8px;">
-                            <i class="bi bi-info-circle me-1"></i> <strong>How-to:</strong> Open the email client, paste the copied body into the email message,${screenshotNote}
+                            <i class="bi bi-info-circle me-1"></i> <strong>How-to:</strong> Click the GitLab button, paste the copied description into the text field,${screenshotNote}
                         </div>
                     </div>
                 </div>
