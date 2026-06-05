@@ -995,6 +995,16 @@ document.addEventListener('DOMContentLoaded', function () {
         presetSelect.addEventListener('change', updatePresetPreview);
         updatePresetPreview();
     }
+
+    // Toggle overflow visible on table-responsive when dropdown is open to prevent clipping
+    document.querySelectorAll('.table-responsive').forEach(function (el) {
+        el.addEventListener('show.bs.dropdown', function () {
+            el.style.overflow = 'visible';
+        });
+        el.addEventListener('hidden.bs.dropdown', function () {
+            el.style.overflow = '';
+        });
+    });
 });
 </script>
 {% endblock %}
