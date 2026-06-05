@@ -141,6 +141,8 @@ class HeappeExceptionMiddlewareTests(TestCase):
         from heappe_ui.views import report_error_view
         
         request = self._create_request()
+        request.session["middleware_deployed_version"] = "v6.1.2"
+        request.session["chosen_instance"] = "test_instance"
         request.session["last_error_report"] = {
             "instance_name": "test_instance",
             "host_url": "http://heappe.local",
@@ -174,6 +176,11 @@ class HeappeExceptionMiddlewareTests(TestCase):
         self.assertIn("Test issue summary", data["subject"])
         self.assertIn("Detailed test description of the problem.", data["body"])
         self.assertIn("Traceback info here", data["body"])
+        self.assertEqual(data["heappe_version"], "v6.1.2")
+        self.assertEqual(data["chosen_instance"], "test_instance")
+        self.assertIn("admin_version", data)
+        self.assertIn("python_version", data)
+        self.assertIn("server_os", data)
         self.assertNotIn("last_error_report", request.session)
 
 

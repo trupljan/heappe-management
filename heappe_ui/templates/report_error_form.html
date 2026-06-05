@@ -300,12 +300,27 @@ $(document).ready(function () {
 
             const username = '{{ request.user.username|default:"Anonymous" }}';
             const categoryLabel = $('#report-category option:selected').text();
-            
+
+            const adminVersion = errData.admin_version || 'unknown';
+            const adminBranch = errData.admin_branch || 'unknown';
+            const heappeVersion = errData.heappe_version || 'unknown';
+            const pythonVersion = errData.python_version || 'unknown';
+            const serverOs = errData.server_os || 'unknown';
+            const userAgent = errData.user_agent || navigator.userAgent;
+            const chosenInstance = errData.chosen_instance || 'unknown';
+
             const briefDescription = `### HEAppE Management — Problem Report\n\n` +
                 `- **Reporter:** ${username} <${contactEmail}>\n` +
                 `- **Category:** ${categoryLabel}\n` +
                 `- **Affected URL:** ${$('#report-url').val()}\n` +
-                `- **Summary:** ${summary}\n\n` +
+                `- **Summary:** ${summary}\n` +
+                `- **Chosen Instance:** ${chosenInstance}\n\n` +
+                `#### Environment & Versions\n` +
+                `- **HEAppE Admin Panel:** ${adminVersion} (${adminBranch})\n` +
+                `- **HEAppE Middleware:** ${heappeVersion}\n` +
+                `- **Python Version:** ${pythonVersion}\n` +
+                `- **Server OS:** ${serverOs}\n` +
+                `- **Browser User Agent:** ${userAgent}\n\n` +
                 `---\n\n` +
                 `<!-- Please paste the full report details/traceback here (it was copied automatically) -->\n`;
 

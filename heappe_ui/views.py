@@ -1654,6 +1654,27 @@ def report_error_view(request):
         username = request.user.username if hasattr(request, 'user') and request.user.is_authenticated else 'Anonymous'
         timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 
+        # Get admin panel version and branch
+        try:
+            from heappe_ui.context_processors import get_git_info
+            git_info = get_git_info()
+            admin_version = git_info.get('version', 'unknown')
+            admin_branch = git_info.get('branch', 'unknown')
+        except Exception:
+            admin_version = 'unknown'
+            admin_branch = 'unknown'
+
+        # Get HEAppE middleware version
+        heappe_version = request.session.get("middleware_deployed_version", "unknown")
+
+        # Get additional debugging details
+        import sys
+        import platform
+        python_version = sys.version.split()[0]
+        server_os = platform.platform()
+        user_agent = request.META.get('HTTP_USER_AGENT', 'unknown')
+        chosen_instance = request.session.get("chosen_instance", "unknown")
+
         subject = f"[HEAppE Support] {category_label}: {summary[:80]}"
 
         body = f"""HEAppE Management — Problem Report
@@ -1663,6 +1684,15 @@ Reporter:       {username} <{contact_email}>
 Category:       {category_label}
 Affected URL:   {affected_url or 'N/A'}
 Timestamp(UTC): {timestamp}
+Chosen Instance: {chosen_instance}
+
+Environment & Versions:
+-----------------------
+HEAppE Admin Panel:  {admin_version} ({admin_branch})
+HEAppE Middleware:   {heappe_version}
+Python Version:      {python_version}
+Server OS:           {server_os}
+Browser User Agent:  {user_agent}
 
 Summary
 -------
@@ -1698,7 +1728,14 @@ Traceback:
             'status': 'manual',
             'to_email': support_email,
             'subject': subject,
-            'body': body
+            'body': body,
+            'admin_version': admin_version,
+            'admin_branch': admin_branch,
+            'heappe_version': heappe_version,
+            'python_version': python_version,
+            'server_os': server_os,
+            'user_agent': user_agent,
+            'chosen_instance': chosen_instance
         })
 
     return JsonResponse({'status': 'error', 'message': 'Method not allowed.'}, status=405)
