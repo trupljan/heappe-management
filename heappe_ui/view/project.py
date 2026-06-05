@@ -223,6 +223,84 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         except Exception:
             pass
 
+    # Calculate project-specific setup checklist
+    setup_checklist = {
+        "clusters_exist": False,
+        "project_cluster_linked": False,
+        "queue_groups_exist": False,
+        "project_group_linked": False,
+        "formulas_exist_and_mapped": False,
+        "queues_exist": False,
+        "command_template_exists": False,
+        "ssh_account_active": False,
+    }
+
+    try:
+        # 1. Clusters check
+        all_clusters = get_cached_clusters() or []
+        setup_checklist["clusters_exist"] = len(all_clusters) > 0
+        
+        # 2. Project Cluster link and Queues check
+        project_assignments_all = controller.heappe_management_project_assignment_to_clusters_get(
+            ProjectId=project_id, SessionCode=session_code
+        ) or []
+        setup_checklist["project_cluster_linked"] = len(project_assignments_all) > 0
+        
+        # Check if the clusters that the project is assigned to have any queues
+        assigned_cluster_ids = {a.cluster_id for a in project_assignments_all}
+        queues_count = 0
+        for cluster in all_clusters:
+            if cluster.get("id") in assigned_cluster_ids:
+                queues_count += len(cluster.get("node_types", []))
+        setup_checklist["queues_exist"] = queues_count > 0
+
+        # 3. Queue Groups and Project Group assignment check
+        all_groups = controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=session_code) or []
+        setup_checklist["queue_groups_exist"] = len(all_groups) > 0
+
+        project_aggregations = controller.heappe_management_project_cluster_node_type_aggregations_get(
+            SessionCode=session_code
+        ) or []
+        
+        assigned_group_ids = {g.cluster_node_type_aggregation_id for g in project_aggregations if g.project_id == project_id}
+        setup_checklist["project_group_linked"] = len(assigned_group_ids) > 0
+
+        # 4. Accounting Formula check
+        if assigned_group_ids:
+            group_formula_mappings = controller.heappe_management_cluster_node_type_aggregation_accountings_get(
+                SessionCode=session_code
+            ) or []
+            for mapping in group_formula_mappings:
+                if mapping.cluster_node_type_aggregation_id in assigned_group_ids:
+                    setup_checklist["formulas_exist_and_mapped"] = True
+                    break
+
+        # 5. Command Template check
+        project_templates = controller.heappe_management_command_templates_get(
+            SessionCode=session_code, ProjectId=project_id
+        ) or []
+        # Filter for own templates (not shared templates)
+        own_templates = [t for t in project_templates if t.project_id == project_id]
+        setup_checklist["command_template_exists"] = len(own_templates) > 0
+
+        # 6. SSH Account active check
+        ssh_keys = controller.heappe_management_secure_shell_keys_get(
+            ProjectId=project_id, SessionCode=session_code
+        ) or []
+        for key in ssh_keys:
+            try:
+                status_results = controller.heappe_management_cluster_account_status_get(
+                    ProjectId=project_id, Username=key.username, SessionCode=session_code
+                ) or []
+                init_ok = sum(1 for s in status_results if s.is_initialized)
+                if len(status_results) > 0 and init_ok == len(status_results):
+                    setup_checklist["ssh_account_active"] = True
+                    break
+            except Exception:
+                pass
+    except Exception as ex:
+        print(f"Error computing project checklist: {ex}")
+
     return render(request, "project.html", {
         "project": project_data,
         "clusters": clusters,
@@ -236,6 +314,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "adaptor_users_not_in_project": adaptor_users_not_in_project,
         "ui_features": ui_features,
         "templates_cache_age_str": templates_cache_age_str if tab == "commandtemplates" else None,
+        "setup_checklist": setup_checklist,
     })
 
 

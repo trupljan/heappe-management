@@ -415,58 +415,6 @@ def dashboard_view(request):
         page_number = request.GET.get('page', 1)
         page_obj = paginator.get_page(page_number)
 
-        # Project setup checklist guide logic
-        checklist = {
-            "clusters_exist": len(context.get("clusters", [])) > 0,
-            "queue_groups_exist": len(context.get("queue_groups", [])) > 0,
-            "formulas_exist_and_mapped": False,
-            "queues_exist": len(context.get("queues", [])) > 0,
-            "project_cluster_linked": False,
-            "command_template_exists": False,
-            "ssh_account_active": False,
-        }
-        try:
-            mappings = controller.heappe_management_cluster_node_type_aggregation_accountings_get(SessionCode=request.session_code) or []
-            checklist["formulas_exist_and_mapped"] = len(mappings) > 0
-        except Exception as ex:
-            print(f"Checklist error (formulas): {ex}")
-
-        try:
-            assignments = controller.heappe_management_project_assignment_to_clusters_get(SessionCode=request.session_code) or []
-            checklist["project_cluster_linked"] = len(assignments) > 0
-        except Exception as ex:
-            print(f"Checklist error (assignments): {ex}")
-
-        try:
-            all_templates = controller.heappe_management_command_templates_get(SessionCode=request.session_code) or []
-            checklist["command_template_exists"] = len(all_templates) > 0
-        except Exception as ex:
-            print(f"Checklist error (templates): {ex}")
-
-        try:
-            for proj in context.get("projects", []):
-                proj_id = proj.id if hasattr(proj, "id") else proj.get("id")
-                if proj_id:
-                    keys = controller.heappe_management_secure_shell_keys_get(ProjectId=proj_id, SessionCode=request.session_code) or []
-                    for key in keys:
-                        username = key.username if hasattr(key, "username") else key.get("username")
-                        try:
-                            status_results = controller.heappe_management_cluster_account_status_get(
-                                ProjectId=proj_id, Username=username, SessionCode=request.session_code
-                            ) or []
-                            init_ok = sum(1 for s in status_results if s.is_initialized)
-                            if len(status_results) > 0 and init_ok == len(status_results):
-                                checklist["ssh_account_active"] = True
-                                break
-                        except Exception:
-                            pass
-                    if checklist["ssh_account_active"]:
-                        break
-        except Exception as ex:
-            print(f"Checklist error (ssh accounts): {ex}")
-
-        context["setup_checklist"] = checklist
-
         context["job_details"] = page_obj.object_list  # teď obsahuje jen job_itemy, které se zobrazí
         context["page_obj"] = page_obj
     except Exception as e:

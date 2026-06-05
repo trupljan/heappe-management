@@ -150,6 +150,160 @@
         <!-- Right Side: Cluster Assignment & Active list -->
         <div class="col-lg-5">
             {% if project %}
+            <!-- Project Setup Checklist Card -->
+            <div class="card border-0 shadow-sm bg-white rounded-3 mb-4">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-patch-check text-primary fs-5"></i>
+                        <h5 class="h6 mb-0 fw-bold text-dark">Project Setup Guide & Checklist</h5>
+                    </div>
+                </div>
+                <div class="card-body p-3.5">
+                    <p class="text-secondary small mb-3">Ensure that this project is fully configured by completing the checklist below to run jobs successfully.</p>
+                    
+                    <div class="d-flex flex-column gap-3">
+                        <!-- Step 1: Infrastructure Cluster -->
+                        <div class="d-flex align-items-start gap-2.5">
+                            <span class="fs-5 flex-shrink-0">
+                                {% if setup_checklist.clusters_exist %}
+                                    <i class="bi bi-check-circle-fill text-success" title="Cluster exists"></i>
+                                {% else %}
+                                    <i class="bi bi-dash-circle text-warning" title="No cluster registered"></i>
+                                {% endif %}
+                            </span>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <span class="small fw-bold text-dark">1. Infrastructure Cluster</span>
+                                    {% if not setup_checklist.clusters_exist %}
+                                    <a href="{% url 'cluster_create' %}" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-plus-lg me-1"></i>Add</a>
+                                    {% endif %}
+                                </div>
+                                <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">At least one HPC cluster must be registered in the system.</p>
+                            </div>
+                        </div>
+
+                        <!-- Step 2: Project-Cluster Connection -->
+                        <div class="d-flex align-items-start gap-2.5">
+                            <span class="fs-5 flex-shrink-0">
+                                {% if setup_checklist.project_cluster_linked %}
+                                    <i class="bi bi-check-circle-fill text-success" title="Project cluster linked"></i>
+                                {% else %}
+                                    <i class="bi bi-dash-circle text-warning" title="No project assignment to cluster exists"></i>
+                                {% endif %}
+                            </span>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <span class="small fw-bold text-dark">2. Project-Cluster Assignment</span>
+                                </div>
+                                <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Assign this project to at least one Cluster (use the card below).</p>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Queue Configuration -->
+                        <div class="d-flex align-items-start gap-2.5">
+                            <span class="fs-5 flex-shrink-0">
+                                {% if setup_checklist.queues_exist %}
+                                    <i class="bi bi-check-circle-fill text-success" title="Queue exists"></i>
+                                {% else %}
+                                    <i class="bi bi-dash-circle text-warning" title="No queues defined"></i>
+                                {% endif %}
+                            </span>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <span class="small fw-bold text-dark">3. Queue Configuration</span>
+                                    {% if setup_checklist.project_cluster_linked and not setup_checklist.queues_exist %}
+                                        {% if project_assignments.0.cluster_id %}
+                                        <a href="/clusters/{{ project_assignments.0.cluster_id }}/?tab=queues" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-gear me-1"></i>Configure</a>
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                                <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Queues must be defined on the assigned clusters to process calculations.</p>
+                            </div>
+                        </div>
+
+                        <!-- Step 4: Queue Group (Aggregation) -->
+                        <div class="d-flex align-items-start gap-2.5">
+                            <span class="fs-5 flex-shrink-0">
+                                {% if setup_checklist.project_group_linked %}
+                                    <i class="bi bi-check-circle-fill text-success" title="Queue group assigned"></i>
+                                {% else %}
+                                    <i class="bi bi-dash-circle text-warning" title="Not assigned to any Queue Group"></i>
+                                {% endif %}
+                            </span>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <span class="small fw-bold text-dark">4. Queue Group (Aggregation)</span>
+                                    {% if not setup_checklist.project_group_linked %}
+                                        <a href="{% url 'queue_groups' %}" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-link me-1"></i>Link to Group</a>
+                                    {% endif %}
+                                </div>
+                                <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Assign this project to a Queue Group to organize compute resources.</p>
+                            </div>
+                        </div>
+
+                        <!-- Step 5: Accounting Formula -->
+                        <div class="d-flex align-items-start gap-2.5">
+                            <span class="fs-5 flex-shrink-0">
+                                {% if setup_checklist.formulas_exist_and_mapped %}
+                                    <i class="bi bi-check-circle-fill text-success" title="Accounting formula mapped"></i>
+                                {% else %}
+                                    <i class="bi bi-dash-circle text-warning" title="No accounting formula mapped"></i>
+                                {% endif %}
+                            </span>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <span class="small fw-bold text-dark">5. Accounting Formula</span>
+                                    {% if setup_checklist.project_group_linked and not setup_checklist.formulas_exist_and_mapped %}
+                                        <a href="{% url 'queue_groups' %}" class="btn btn-xs btn-outline-secondary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-gear me-1"></i>Configure</a>
+                                    {% endif %}
+                                </div>
+                                <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Assign an Accounting Formula to the queue group associated with this project.</p>
+                            </div>
+                        </div>
+
+                        <!-- Step 6: Command Template -->
+                        <div class="d-flex align-items-start gap-2.5">
+                            <span class="fs-5 flex-shrink-0">
+                                {% if setup_checklist.command_template_exists %}
+                                    <i class="bi bi-check-circle-fill text-success" title="Command template exists"></i>
+                                {% else %}
+                                    <i class="bi bi-dash-circle text-warning" title="No command templates exist for this project"></i>
+                                {% endif %}
+                            </span>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <span class="small fw-bold text-dark">6. Command Template</span>
+                                    {% if not setup_checklist.command_template_exists %}
+                                        <a href="?tab=commandtemplates" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-plus-lg me-1"></i>Create</a>
+                                    {% endif %}
+                                </div>
+                                <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Create at least one executable Command Template for this project.</p>
+                            </div>
+                        </div>
+
+                        <!-- Step 7: SSH Account -->
+                        <div class="d-flex align-items-start gap-2.5">
+                            <span class="fs-5 flex-shrink-0">
+                                {% if setup_checklist.ssh_account_active %}
+                                    <i class="bi bi-check-circle-fill text-success" title="Active/initialized SSH account exists"></i>
+                                {% else %}
+                                    <i class="bi bi-dash-circle text-warning" title="No active/initialized SSH accounts found"></i>
+                                {% endif %}
+                            </span>
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <span class="small fw-bold text-dark">7. Active SSH Account</span>
+                                    {% if not setup_checklist.ssh_account_active %}
+                                        <a href="?tab=accounts" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-shield-lock me-1"></i>Configure</a>
+                                    {% endif %}
+                                </div>
+                                <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Register and initialize an SSH account on the target cluster for task execution.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Assign to Cluster -->
             <div class="card border-0 shadow-sm bg-white mb-4">
                 <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">

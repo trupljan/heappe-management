@@ -112,31 +112,6 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
     })
 
 @login_required
-def command_template_create(request: HttpRequest, project_id: int) -> HttpResponse:
-    controller = hp.ManagementApi(request.api_instance)
-
-    if request.method == "POST":
-        payload_data = {
-            "ProjectId": project_id,
-            "Name": request.POST.get("Name"),
-            "Description": request.POST.get("Description"),
-            "Command": request.POST.get("Command"),
-            "IsActive": request.POST.get("IsActive") == "on",
-        }
-        payload = _create_payload(request.session_code, payload_data)
-        return _handle_api_call(
-            request,
-            lambda: controller.heappe_management_command_template_post(**payload),
-            "Command Template created successfully!",
-            "Failed to create Command Template",
-            redirect_url=f"/projects/{project_id}/?tab=command_templates"
-        )
-
-    return render(request, "command_template_create.html", {
-        "project_id": project_id,
-    })
-
-@login_required
 def command_template_modify(request: HttpRequest, command_template_id: int) -> HttpResponse:
     payload_data = {
         "Id": command_template_id,
@@ -239,8 +214,12 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
                 ntype_dict['cluster_name'] = cluster_name
                 cluster_node_types.append(ntype_dict)
 
-    return render(request, 'command_template.html',
-                  {'node_types': cluster_node_types, 'project_id': project_id, 'project': project})
+    return render(request, 'command_template.html', {
+        'node_types': cluster_node_types,
+        'project_id': project_id,
+        'project': project,
+        'command_template': None
+    })
 
 
 @login_required
