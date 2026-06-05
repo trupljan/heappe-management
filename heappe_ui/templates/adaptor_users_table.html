@@ -221,11 +221,12 @@
                     if (tableType === 'out') {
                         const sysId = $row.find('td:eq(1)').text();
                         t2.row($row).remove().draw();
+                        const profileUrl = "{% url 'adaptor_user_detail' 'PLACEHOLDER' %}".replace('PLACEHOLDER', username);
                         const node = t1.row.add([
                             sysId,
                             `<span class="fw-bold text-dark font-monospace">${username}</span>`,
                             `<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 w-100"><div class="d-flex flex-wrap role-container-${username}"><div class="role-badge"><div class="d-flex flex-column"><span class="role-name">${data.role_name}</span><span class="group-name">Project Group</span></div></div></div></div>`,
-                            `<div class="text-end pe-4"><a href="/adaptor_users/detail/${username}/" class="btn btn-sm btn-outline-secondary fw-semibold px-2.5 rounded-3">Profile</a></div>`
+                            `<div class="text-end pe-4"><a href="${profileUrl}" class="btn btn-sm btn-outline-secondary fw-semibold px-2.5 rounded-3">Profile</a></div>`
                         ]).draw().node();
                         $(node).addClass('table-success-fade');
                     } else {

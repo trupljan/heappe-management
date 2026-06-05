@@ -78,7 +78,11 @@
             <form method="post">
               {% csrf_token %}
               <input type="hidden" name="action" value="{% if command_template %}update_command_template{% else %}create_command_template{% endif %}">
-              <input type="hidden" name="Id" value="{{ command_template.Id|default:command_template.id|default:0 }}">
+              {% if command_template %}
+                <input type="hidden" name="Id" value="{{ command_template.Id|default:command_template.id|default:0 }}">
+              {% else %}
+                <input type="hidden" name="Id" value="0">
+              {% endif %}
               <input type="hidden" name="ProjectId" value="{{ project_id }}">
               
               <div class="row g-3">
@@ -94,7 +98,7 @@
                 {% else %}
                   <div class="col-md-12">
                     <label class="form-label small fw-bold text-secondary text-uppercase">Name</label>
-                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="{{ command_template.name|default:command_template.Name|default:'' }}" required placeholder="e.g. Barbora MPI Run">
+                    <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="" required placeholder="e.g. Barbora MPI Run">
                   </div>
                 {% endif %}
 
