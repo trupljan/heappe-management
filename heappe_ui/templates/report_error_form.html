@@ -299,8 +299,18 @@ $(document).ready(function () {
                 body += `${description}\n`;
             }
 
-            const gitlabDescription = body.length > 4000 ? body.substring(0, 4000) + '\n\n... (traceback truncated due to URL length limit, please copy and paste the full message body from the clipboard)' : body;
-            const gitlabUrl = `https://opencode.it4i.eu/heappe-middleware/heappe-management/-/issues/new?issue[title]=${encodeURIComponent(subject)}&issue[description]=${encodeURIComponent(gitlabDescription)}`;
+            const username = '{{ request.user.username|default:"Anonymous" }}';
+            const categoryLabel = $('#report-category option:selected').text();
+            
+            const briefDescription = `### HEAppE Management — Problem Report\n\n` +
+                `- **Reporter:** ${username} <${contactEmail}>\n` +
+                `- **Category:** ${categoryLabel}\n` +
+                `- **Affected URL:** ${$('#report-url').val()}\n` +
+                `- **Summary:** ${summary}\n\n` +
+                `---\n\n` +
+                `<!-- Please paste the full report details/traceback here (it has been automatically copied to your clipboard) -->\n`;
+
+            const gitlabUrl = `https://opencode.it4i.eu/heappe-middleware/heappe-management/-/issues/new?issue[title]=${encodeURIComponent(subject)}&issue[description]=${encodeURIComponent(briefDescription)}`;
             const dashboardUrl = `${basePath}/`;
 
             const showScreenshotBtn = screenshotDataUrl ? '' : 'style="display:none;"';
@@ -332,7 +342,7 @@ $(document).ready(function () {
                         <div class="mb-3">
                             <label class="form-label fw-semibold small text-secondary text-uppercase mb-1" style="letter-spacing:.04em;">Issue Description</label>
                             <div class="position-relative">
-                                <textarea class="form-control font-monospace small" id="fallback-body" rows="10" readonly style="background:#f8f9fa;">${body}</textarea>
+                                <textarea class="form-control font-monospace small" id="fallback-body" rows="10" readonly style="max-height: 250px; background:#f8f9fa;">${body}</textarea>
                                 <button class="btn btn-xs btn-dark position-absolute copy-btn" type="button" data-clipboard-target="#fallback-body" style="top:8px; right:8px; z-index:5;" title="Copy body">
                                     <i class="bi bi-clipboard me-1"></i> Copy Body
                                 </button>
@@ -341,7 +351,7 @@ $(document).ready(function () {
 
                         <!-- Actions -->
                         <div class="d-flex flex-wrap gap-2 pt-3 border-top mt-3">
-                            <a href="${gitlabUrl}" class="btn btn-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1 shadow-sm" target="_blank" style="background-color:#fc6d26; border-color:#fc6d26;">
+                            <a href="${gitlabUrl}" id="create-ticket-btn" class="btn btn-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1 shadow-sm" target="_blank" style="background-color:#fc6d26; border-color:#fc6d26;">
                                 <i class="bi bi-git"></i> Create Ticket on GitLab
                             </a>
                             <button class="btn btn-outline-primary btn-sm fw-bold px-3 d-inline-flex align-items-center gap-1" id="download-screenshot-btn" ${showScreenshotBtn}>
@@ -352,7 +362,7 @@ $(document).ready(function () {
                             </a>
                         </div>
                         <div class="text-muted mt-3" style="font-size:0.75rem; border-top: 1px dashed #dee2e6; padding-top: 8px;">
-                            <i class="bi bi-info-circle me-1"></i> <strong>How-to:</strong> Click the GitLab button, paste the copied description into the text field,${screenshotNote}
+                            <i class="bi bi-info-circle me-1"></i> <strong>How-to:</strong> Click the GitLab button (the full description will be copied automatically to your clipboard), paste it into the issue text field,${screenshotNote}
                         </div>
                     </div>
                 </div>
@@ -362,6 +372,18 @@ $(document).ready(function () {
             
             // Try removing error screenshot since the user is manual-handling it
             try { sessionStorage.removeItem('heappe_error_screenshot'); } catch(e) {}
+        }
+    });
+
+    // Handle GitLab button click (auto-copies full body first)
+    $(document).on('click', '#create-ticket-btn', function () {
+        const targetElement = $('#fallback-body')[0];
+        targetElement.select();
+        targetElement.setSelectionRange(0, 99999);
+        try {
+            navigator.clipboard.writeText(targetElement.value);
+        } catch (err) {
+            document.execCommand('copy');
         }
     });
 
