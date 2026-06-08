@@ -25,17 +25,30 @@
             </div>
         </div>
         <div class="d-flex align-items-center gap-3 flex-wrap">
-            <div class="d-flex align-items-center gap-2 text-muted small border border-light-subtle bg-white px-2.5 py-1.5 rounded-3 shadow-xs" style="font-size: 0.78rem;">
-                <div class="progress" style="width: 50px; height: 4px; background-color: #f1f3f5;">
-                    <div id="refresh-progress" class="progress-bar bg-primary" role="progressbar" style="width: 100%; transition: width 1s linear;"></div>
+            <!-- Sleek Auto-Refresh Control -->
+            <div class="d-flex align-items-center gap-3 bg-white border border-light-subtle px-3 py-1.5 rounded-3 shadow-xs" style="font-size: 0.8rem; min-height: 38px;">
+                <!-- Play/Pause Button -->
+                <button id="toggle-refresh-btn" class="btn btn-link p-0 border-0 d-flex align-items-center justify-content-center" style="width: 20px; height: 20px; transition: color 0.15s ease-in-out; text-decoration: none; outline: none; box-shadow: none;" onclick="toggleAutoRefresh();" title="Pause Auto-refresh">
+                    <i id="refresh-icon" class="bi bi-pause-circle-fill fs-5 text-primary"></i>
+                </button>
+                
+                <!-- Divider -->
+                <div class="vr text-light-subtle" style="height: 16px;"></div>
+
+                <!-- Timer info and bar -->
+                <div class="d-flex align-items-center gap-2 text-muted">
+                    <div class="progress" style="width: 60px; height: 5px; background-color: #f1f3f5; border-radius: 10px;">
+                        <div id="refresh-progress" class="progress-bar bg-primary rounded-pill" role="progressbar" style="width: 100%; transition: width 1s linear;"></div>
+                    </div>
+                    <span id="refresh-text" style="min-width: 125px;">Auto-refresh in <strong id="refresh-counter" class="text-dark font-monospace">10</strong>s</span>
                 </div>
-                <span>Auto-refresh in <strong id="refresh-counter" class="text-dark">10</strong>s</span>
             </div>
-            <button class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3" onclick="location.reload();">
+
+            <button class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs" onclick="location.reload();">
                 <i class="bi bi-arrow-clockwise me-1.5"></i>Reload Status
             </button>
             {% if project %}
-            <a href="{% url 'project_detail' project.id %}" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3">
+            <a href="{% url 'project_detail' project.id %}" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
                 <i class="bi bi-arrow-left me-1.5"></i>Back
             </a>
             {% endif %}
@@ -343,18 +356,64 @@
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         let timeLeft = 10;
+        let isPaused = localStorage.getItem('auto_refresh_paused') === 'true';
+        
         const counterEl = document.getElementById("refresh-counter");
         const progressEl = document.getElementById("refresh-progress");
+        const iconEl = document.getElementById("refresh-icon");
+        const btnEl = document.getElementById("toggle-refresh-btn");
+        const textEl = document.getElementById("refresh-text");
+        
+        function updateUI() {
+            if (isPaused) {
+                if (iconEl) {
+                    iconEl.className = "bi bi-play-circle-fill fs-5 text-success";
+                }
+                if (btnEl) {
+                    btnEl.title = "Resume Auto-refresh";
+                }
+                if (progressEl) {
+                    progressEl.classList.remove("bg-primary");
+                    progressEl.classList.add("bg-secondary-subtle");
+                    progressEl.style.width = "100%";
+                }
+                if (textEl) {
+                    textEl.innerHTML = '<span class="text-secondary fw-semibold"><i class="bi bi-pause-fill me-1"></i>Refresh paused</span>';
+                }
+            } else {
+                if (iconEl) {
+                    iconEl.className = "bi bi-pause-circle-fill fs-5 text-primary";
+                }
+                if (btnEl) {
+                    btnEl.title = "Pause Auto-refresh";
+                }
+                if (progressEl) {
+                    progressEl.classList.remove("bg-secondary-subtle");
+                    progressEl.classList.add("bg-primary");
+                    const percentage = (timeLeft / 10) * 100;
+                    progressEl.style.width = percentage + "%";
+                }
+                if (textEl) {
+                    textEl.innerHTML = 'Auto-refresh in <strong id="refresh-counter" class="text-dark font-monospace">' + timeLeft + '</strong>s';
+                }
+            }
+        }
+
+        window.toggleAutoRefresh = function() {
+            isPaused = !isPaused;
+            localStorage.setItem('auto_refresh_paused', isPaused);
+            updateUI();
+        };
+
+        // Initialize UI
+        updateUI();
         
         const timer = setInterval(function() {
+            if (isPaused) return;
+
             timeLeft -= 1;
-            if (counterEl) {
-                counterEl.textContent = timeLeft;
-            }
-            if (progressEl) {
-                const percentage = (timeLeft / 10) * 100;
-                progressEl.style.width = percentage + "%";
-            }
+            updateUI();
+
             if (timeLeft <= 0) {
                 clearInterval(timer);
                 location.reload();
