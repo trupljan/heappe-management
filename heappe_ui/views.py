@@ -1491,8 +1491,17 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
                                             controller.heappe_management_adaptor_users_in_project_get(
                                                 SessionCode=session_code, ProjectId=project_id
                                             )]
-            except Exception:
-                pass
+                for u in adaptor_users_in_project:
+                    roles = []
+                    for group in u.get("adaptor_user_groups", []):
+                        g_proj = group.get("project")
+                        if g_proj and g_proj.get("id") == project_id:
+                            for r in group.get("roles", []):
+                                if r not in roles:
+                                    roles.append(r)
+                    u["roles"] = roles
+            except Exception as e:
+                print(f"Error fetching adaptor users in project: {e}")
 
 
             all_adaptor_users = [u.to_dict() for u in

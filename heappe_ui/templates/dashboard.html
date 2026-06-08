@@ -266,28 +266,28 @@
                 
                 <!-- Integrated Toolbar (Filters & Live Query inline) -->
                 <div class="card-body border-bottom bg-light bg-opacity-40 p-3">
-                    <div class="row g-3 align-items-center">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
                         <!-- Date range filter -->
-                        <div class="col-xl-7 col-lg-12">
-                            <form method="get" class="d-flex align-items-center gap-2 flex-wrap" id="reporting-filter-form">
-                                <div class="input-group input-group-sm flex-grow-1" style="max-width: 420px;">
-                                    <span class="input-group-text bg-white border-light-subtle text-muted small"><i class="bi bi-calendar-range me-1.5"></i>Range</span>
-                                    <input type="datetime-local" class="form-control border-light-subtle bg-white text-secondary" name="time_from" value="{{ time_from }}" min="{{ min_date }}" max="{{ max_date }}">
-                                    <span class="input-group-text bg-white border-light-subtle text-muted small">&rarr;</span>
-                                    <input type="datetime-local" class="form-control border-light-subtle bg-white text-secondary" name="time_to" value="{{ time_to }}" min="{{ min_date }}" max="{{ max_date }}">
+                        <div style="flex: 1 1 auto; max-width: 500px; min-width: 290px;">
+                            <form method="get" class="m-0 p-0" id="reporting-filter-form">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-white border-light-subtle text-secondary fw-semibold" style="font-size: 0.75rem;"><i class="bi bi-calendar-range me-1.5 text-primary"></i>Range</span>
+                                    <input type="datetime-local" class="form-control border-light-subtle bg-white text-dark" name="time_from" value="{{ time_from }}" min="{{ min_date }}" max="{{ max_date }}" style="font-size: 0.78rem;">
+                                    <span class="input-group-text bg-white border-light-subtle text-muted fw-bold">&rarr;</span>
+                                    <input type="datetime-local" class="form-control border-light-subtle bg-white text-dark" name="time_to" value="{{ time_to }}" min="{{ min_date }}" max="{{ max_date }}" style="font-size: 0.78rem;">
+                                    <button type="submit" class="btn btn-primary fw-bold px-3 shadow-sm d-flex align-items-center gap-1">
+                                        <i class="bi bi-filter"></i>Apply
+                                    </button>
                                 </div>
-                                <button type="submit" class="btn btn-sm btn-primary fw-semibold px-3 shadow-xs">
-                                    <i class="bi bi-filter me-1"></i>Apply
-                                </button>
                             </form>
                         </div>
                         <!-- Live Job Query -->
-                        <div class="col-xl-5 col-lg-12">
+                        <div style="flex: 1 1 auto; max-width: 320px; min-width: 200px;">
                             <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-end-0 border-light-subtle text-muted"><i class="bi bi-hash"></i></span>
-                                <input type="number" class="form-control border-start-0 border-light-subtle bg-white" id="live_job_id" placeholder="Live Job ID Info (CurrentInfoForJob)">
-                                <button class="btn btn-primary fw-semibold shadow-xs" type="button" id="btn_query_live_job">
-                                    <i class="bi bi-cpu me-1"></i>Query
+                                <span class="input-group-text bg-white border-light-subtle text-secondary fw-semibold" style="font-size: 0.75rem;"><i class="bi bi-hash text-primary me-0.5"></i>Job ID</span>
+                                <input type="number" class="form-control border-light-subtle bg-white text-dark" id="live_job_id" placeholder="Enter Job ID..." title="Query live information (CurrentInfoForJob)" style="font-size: 0.78rem;">
+                                <button class="btn btn-outline-primary fw-bold px-3 shadow-sm d-flex align-items-center gap-1" type="button" id="btn_query_live_job">
+                                    <i class="bi bi-cpu"></i>Query
                                 </button>
                             </div>
                         </div>
