@@ -558,6 +558,15 @@ def download_job_file_view(request: HttpRequest, job_id: int) -> HttpResponse:
                 text_content = file_bytes.decode("utf-8")
             except Exception:
                 text_content = file_bytes.decode("latin-1", errors="replace")
+            
+            # Sanitize control characters (including null bytes) to prevent Safari DOMException 
+            # (DOMException 12: The string did not match the expected pattern)
+            control_chars = {i: 0xFFFD for i in range(32) if i not in (9, 10, 13)}
+            control_chars[127] = 0xFFFD
+            for i in range(128, 160):
+                control_chars[i] = 0xFFFD
+            text_content = text_content.translate(control_chars)
+            
             return JsonResponse({"content": text_content})
 
         # Default: download
@@ -572,6 +581,63 @@ def download_job_file_view(request: HttpRequest, job_id: int) -> HttpResponse:
         messages.error(request, f"Failed to retrieve file: {str(e)}")
         return redirect("job_status_view", job_id=job_id)
 
+
+@login_required
+def job_status_partial_view(request: HttpRequest, job_id: int) -> HttpResponse:
+    controller = hp.JobManagementApi(request.api_instance)
+
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_job_management_current_info_for_job_get(SubmittedJobInfoId=job_id, SessionCode=request.session_code),
+        None,
+        None,
+        silent=True
+    )
+
+    project = None
+    if result:
+        tasks = None
+        if isinstance(result, dict):
+            tasks = result.get('tasks')
+        elif hasattr(result, 'tasks'):
+            tasks = result.tasks
+
+        if tasks and len(tasks) > 0:
+            first_task = tasks[0]
+            node_type = None
+            if isinstance(first_task, dict):
+                node_type = first_task.get('node_type')
+            elif hasattr(first_task, 'node_type'):
+                node_type = first_task.node_type
+
+            if node_type:
+                proj = None
+                if isinstance(node_type, dict):
+                    proj = node_type.get('project')
+                elif hasattr(node_type, 'project'):
+                    proj = node_type.project
+
+                if proj:
+                    project = proj
+
+    changed_files = []
+    try:
+        file_transfer_controller = hp.FileTransferApi(request.api_instance)
+        changed_files_res = file_transfer_controller.heappe_file_transfer_list_changed_files_for_job_get(
+            SessionCode=request.session_code,
+            SubmittedJobInfoId=job_id
+        )
+        if changed_files_res:
+            changed_files = changed_files_res
+    except Exception:
+        pass
+
+    context = {
+        "job": result,
+        "project": project,
+        "changed_files": changed_files
+    }
+    return render(request, "job_status_content.html", context)
 
 
 @login_required
