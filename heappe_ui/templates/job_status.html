@@ -101,6 +101,10 @@
 
 {% block extra_scripts %}
 <script>
+    let activeModalJobId = null;
+    let activeModalFilePath = null;
+    let fileModal = null;
+
     document.addEventListener("DOMContentLoaded", function() {
         let timeLeft = 10;
         let isPaused = localStorage.getItem('auto_refresh_paused') === 'true';
@@ -112,6 +116,16 @@
         const textEl = document.getElementById("refresh-text");
         const reloadBtn = document.getElementById("reload-status-btn");
         
+        // Initialize Modal and listener to reset active file on close
+        const modalEl = document.getElementById('fileViewerModal');
+        if (modalEl) {
+            fileModal = new bootstrap.Modal(modalEl);
+            modalEl.addEventListener('hidden.bs.modal', function () {
+                activeModalJobId = null;
+                activeModalFilePath = null;
+            });
+        }
+
         function updateUI() {
             if (isPaused) {
                 if (iconEl) {
@@ -182,6 +196,8 @@
                     if (container) {
                         container.innerHTML = htmlContent;
                     }
+                    // Refresh opened file content too if any is active
+                    refreshActiveFileContent();
                 })
                 .catch(error => {
                     console.error("Failed to refresh job status in background:", error);
@@ -219,14 +235,55 @@
         }, 1000);
     });
 
+    function refreshActiveFileContent() {
+        if (!activeModalJobId || !activeModalFilePath) return;
+
+        const contentEl = document.getElementById('file-content');
+        const errorEl = document.getElementById('file-error');
+
+        const url = "{% url 'download_job_file' 0 %}".replace('0', activeModalJobId) + `?file_path=${encodeURIComponent(activeModalFilePath)}&action=view`;
+        fetch(url)
+            .then(response => {
+                return response.text().then(text => {
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        if (!response.ok) {
+                            throw new Error(`Server error (${response.status})`);
+                        } else {
+                            throw new Error(`Invalid response format`);
+                        }
+                    }
+                    if (!response.ok) {
+                        throw new Error(data.error || `Server error (${response.status})`);
+                    }
+                    return data;
+                });
+            })
+            .then(data => {
+                const wasAtBottom = contentEl.scrollHeight - contentEl.clientHeight <= contentEl.scrollTop + 50;
+                contentEl.textContent = data.content;
+                errorEl.classList.add('d-none');
+                
+                if (wasAtBottom) {
+                    contentEl.scrollTop = contentEl.scrollHeight;
+                }
+            })
+            .catch(error => {
+                console.error("Failed to auto-refresh file content:", error);
+            });
+    }
+
     function viewJobFile(jobId, filePath) {
-        const modalEl = document.getElementById('fileViewerModal');
-        const modal = new bootstrap.Modal(modalEl);
-        const filenameEl = document.getElementById('modal-filename');
+        activeModalJobId = jobId;
+        activeModalFilePath = filePath;
+
         const contentEl = document.getElementById('file-content');
         const spinnerEl = document.getElementById('file-spinner');
         const errorEl = document.getElementById('file-error');
         const downloadBtn = document.getElementById('modal-download-btn');
+        const filenameEl = document.getElementById('modal-filename');
 
         // Reset modal state
         filenameEl.textContent = filePath;
@@ -239,7 +296,9 @@
         const downloadUrl = "{% url 'download_job_file' 0 %}".replace('0', jobId) + `?file_path=${encodeURIComponent(filePath)}&action=download`;
         downloadBtn.href = downloadUrl;
 
-        modal.show();
+        if (fileModal) {
+            fileModal.show();
+        }
 
         const url = "{% url 'download_job_file' 0 %}".replace('0', jobId) + `?file_path=${encodeURIComponent(filePath)}&action=view`;
         fetch(url)
@@ -265,6 +324,8 @@
                 spinnerEl.classList.add('d-none');
                 contentEl.textContent = data.content;
                 contentEl.classList.remove('d-none');
+                // Scroll to bottom initially for stdout/stderr logs
+                contentEl.scrollTop = contentEl.scrollHeight;
             })
             .catch(error => {
                 spinnerEl.classList.add('d-none');
