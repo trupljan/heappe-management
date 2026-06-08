@@ -7,6 +7,25 @@ from heappe_ui.DeployService import get_instance_settings
 import py4heappe.heappe_v6.core as hp
 
 
+def _get_session_code_fallback(api_instance) -> str | None:
+    """Return the current session code from the request attached to api_instance, or None.
+
+    Used to back-fill a null/empty SessionCode in request bodies so that old HEAppE server
+    versions (which require SessionCode in the body) continue to work even when the management
+    app authenticates via X-API-Key (where session_code would otherwise be None).
+    """
+    req = getattr(api_instance, '_request', None)
+    if req is None:
+        return None
+    code = getattr(req, 'session_code', None)
+    if code:
+        return code
+    try:
+        return req.session.get('heappe_session_code') or None
+    except Exception:
+        return None
+
+
 def patch_api_client(api_instance):
     if getattr(api_instance, '_is_patched', False):
         return api_instance
@@ -66,12 +85,19 @@ def patch_api_client(api_instance):
         if body:
             if isinstance(body, dict):
                 if 'SessionCode' in body and (body['SessionCode'] is None or body['SessionCode'] == ''):
+                    # Try to fill SessionCode from session – old HEAppE versions require it in body.
+                    # New versions ignore the field, so this is backwards-compatible.
+                    fallback_code = _get_session_code_fallback(api_instance)
                     new_body = dict(body)
-                    new_body.pop('SessionCode', None)
+                    if fallback_code:
+                        new_body['SessionCode'] = fallback_code
+                    else:
+                        new_body.pop('SessionCode', None)
                     bound_args.arguments['body'] = new_body
             elif hasattr(body, 'SessionCode') or hasattr(body, 'session_code'):
                 if hasattr(body, 'SessionCode') and (getattr(body, 'SessionCode') is None or getattr(body, 'SessionCode') == ''):
-                    body.SessionCode = None
+                    fallback_code = _get_session_code_fallback(api_instance)
+                    body.SessionCode = fallback_code  # None if no fallback, which is the original behaviour
                 if hasattr(body, 'session_code') and (getattr(body, 'session_code') is None or getattr(body, 'session_code') == ''):
                     body.session_code = None
 
