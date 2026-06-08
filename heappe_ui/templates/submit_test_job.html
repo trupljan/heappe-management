@@ -98,15 +98,12 @@
                                 <input type="text" class="form-control border-secondary-subtle py-2 rounded-3" id="task_name" name="TaskName" placeholder="Enter task name" value="HEAppE-Management-Task" required>
                             </div>
                             
-                            <div class="col-md-4">
-                                <label for="min_cores" class="form-label small fw-bold text-secondary text-uppercase">Min Cores</label>
-                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="min_cores" name="MinCores" value="1" min="1" required>
-                            </div>
-                            <div class="col-md-4">
+                            <input type="hidden" name="MinCores" value="1">
+                            <div class="col-md-6">
                                 <label for="max_cores" class="form-label small fw-bold text-secondary text-uppercase">Max Cores</label>
-                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="max_cores" name="MaxCores" value="1" min="1" required>
+                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="max_cores" name="MaxCores" value="{{ node_type.cores_per_node|default:1 }}" min="1" required>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <label for="walltime" class="form-label small fw-bold text-secondary text-uppercase">Walltime limit (seconds)</label>
                                 <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="walltime" name="WalltimeLimit" value="600" min="1" required>
                             </div>
