@@ -7,6 +7,25 @@ from heappe_ui.DeployService import get_instance_settings
 import py4heappe.heappe_v6.core as hp
 
 
+def _get_session_code_fallback(api_instance) -> str | None:
+    """Return the current session code from the request attached to api_instance, or None.
+
+    Used to back-fill a null/empty SessionCode in request bodies so that old HEAppE server
+    versions (which require SessionCode in the body) continue to work even when the management
+    app authenticates via X-API-Key (where session_code would otherwise be None).
+    """
+    req = getattr(api_instance, '_request', None)
+    if req is None:
+        return None
+    code = getattr(req, 'session_code', None)
+    if code:
+        return code
+    try:
+        return req.session.get('heappe_session_code') or None
+    except Exception:
+        return None
+
+
 def patch_api_client(api_instance):
     if getattr(api_instance, '_is_patched', False):
         return api_instance
@@ -37,14 +56,18 @@ def patch_api_client(api_instance):
         if body:
             if isinstance(body, dict):
                 if 'SessionCode' in body and (body['SessionCode'] is None or body['SessionCode'] == ''):
+                    # Try to fill SessionCode from session – old HEAppE versions require it in body.
+                    # New versions ignore the field, so this is backwards-compatible.
+                    # Fall back to sentinel "ignore" when no real session code is available.
+                    fallback_code = _get_session_code_fallback(api_instance) or 'ignore'
                     new_body = dict(body)
-                    new_body.pop('SessionCode', None)
+                    new_body['SessionCode'] = fallback_code
                     bound_args.arguments['body'] = new_body
             elif hasattr(body, 'SessionCode') or hasattr(body, 'session_code'):
                 if hasattr(body, 'SessionCode') and (getattr(body, 'SessionCode') is None or getattr(body, 'SessionCode') == ''):
-                    body.SessionCode = None
+                    body.SessionCode = _get_session_code_fallback(api_instance) or 'ignore'
                 if hasattr(body, 'session_code') and (getattr(body, 'session_code') is None or getattr(body, 'session_code') == ''):
-                    body.session_code = None
+                    body.session_code = _get_session_code_fallback(api_instance) or 'ignore'
 
         # Outgoing Request Log
         resource_path = bound_args.arguments.get('resource_path', 'unknown')
@@ -115,6 +138,25 @@ class HeappeAuthBackend:
             ulm.heappe_user_and_limitation_management_current_user_info_get()
             print(f"[auth_backend] X-API-Key authentication successful.")
             use_api_key = True
+
+            # Best-effort: also obtain a session code so that old HEAppE server versions
+            # (which require SessionCode in some request bodies) continue to work.
+            # New servers ignore the field, so this is backwards-compatible.
+            try:
+                cred = {
+                    "_preload_content": False,
+                    "body": {
+                        "Credentials": {
+                            "Username": username,
+                            "Password": password,
+                        }
+                    }
+                }
+                r = ulm.heappe_user_and_limitation_management_authenticate_user_password_post(**cred)
+                session_code = json.loads(r.data)
+                print(f"[auth_backend] Also obtained session code for old-API body compatibility.")
+            except Exception as e_sc:
+                print(f"[auth_backend] Could not obtain session code (new API only, no fallback): {e_sc}")
         except Exception as e:
             print(f"[auth_backend] X-API-Key authentication failed or unsupported: {e}")
             # Fallback to session code
