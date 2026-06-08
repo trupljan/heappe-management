@@ -50,10 +50,17 @@ ACCOUNTING_NUMBERS = [
 ]
 
 def _create_payload(session_code: str, data: Dict[str, Any], id_field: Optional[str] = None) -> Dict[str, Any]:
-    """Create a standardized payload for API requests."""
+    """Create a standardized payload for API requests.
+
+    SessionCode is always included in the body (as None when not available) so that
+    patched_call_api in auth_backend can back-fill it from the session for old HEAppE
+    server versions that require it. New servers simply ignore the field.
+    """
     body = {**data}
-    if session_code:
-        body["SessionCode"] = session_code
+    # Always set SessionCode – even if None. patched_call_api will try to fill in a
+    # fallback from the session when it finds a null value, which is needed for old
+    # HEAppE server versions that require SessionCode in the request body.
+    body["SessionCode"] = session_code or None
     payload = {
         "_preload_content": False,
         "body": body
