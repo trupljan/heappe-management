@@ -154,13 +154,6 @@
                                         </a>
                                     </td>
                                 </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="3" class="text-center py-4 text-muted">
-                                        <i class="bi bi-person-exclamation fs-3 d-block mb-2"></i>
-                                        No external users are currently assigned to this project.
-                                    </td>
-                                </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -197,13 +190,6 @@
                                                 <i class="bi bi-plus-lg me-1"></i>Add
                                             </button>
                                         </form>
-                                    </td>
-                                </tr>
-                                {% empty %}
-                                <tr>
-                                    <td colspan="2" class="text-center py-4 text-muted">
-                                        <i class="bi bi-person-check fs-3 d-block mb-2"></i>
-                                        All available accounts are already members of this project context.
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -283,7 +269,11 @@
                  "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
             language: { 
                 search: "_INPUT_",
-                searchPlaceholder: "Search users..."
+                searchPlaceholder: "Search users...",
+                emptyTable: `<div class="text-center py-4 text-muted">
+                                <i class="bi bi-person-exclamation fs-3 d-block mb-2"></i>
+                                No external users are currently assigned to this project.
+                             </div>`
             } 
         });
         
@@ -294,7 +284,11 @@
                  "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
             language: { 
                 search: "_INPUT_",
-                searchPlaceholder: "Search users..."
+                searchPlaceholder: "Search users...",
+                emptyTable: `<div class="text-center py-4 text-muted">
+                                <i class="bi bi-person-check fs-3 d-block mb-2"></i>
+                                All available accounts are already members of this project context.
+                             </div>`
             } 
         });
 

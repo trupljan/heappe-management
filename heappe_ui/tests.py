@@ -377,3 +377,114 @@ class ProjectPresetTemplateTests(TestCase):
         self.assertEqual(param_call_args['body']['Identifier'], "inputParam")
 
 
+class SelfHealingSessionTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser", password="password")
+
+    @mock.patch("heappe_ui.auth_backend.HeappeAuthBackend.re_authenticate")
+    def test_session_middleware_does_not_purge_config_on_auth_failure(self, mock_re_auth):
+        mock_re_auth.return_value = None  # Auth failed
+
+        from heappe_ui.middleware import HeappeSessionMiddleware
+        middleware = HeappeSessionMiddleware(get_response=lambda req: HttpResponse("OK"))
+
+        request = self.factory.get("/")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_host": "heappe.local",
+            "heappe_host_url": "http://heappe.local",
+            "heappe_session_code": "old_token",
+            "heappe_use_api_key": False,
+            "heappe_last_auth": 0
+        }
+
+        # Run middleware
+        response = middleware(request)
+
+        # Host config should still remain
+        self.assertEqual(request.session.get("heappe_host"), "heappe.local")
+        self.assertEqual(request.session.get("heappe_host_url"), "http://heappe.local")
+        # Session token should be popped
+        self.assertNotIn("heappe_session_code", request.session)
+        # Failed auth timestamp must be set
+        self.assertGreater(request.session.get("heappe_last_failed_auth", 0), 0)
+
+    @mock.patch("heappe_ui.auth_backend.HeappeAuthBackend.re_authenticate")
+    def test_session_middleware_cooldown_behavior(self, mock_re_auth):
+        from heappe_ui.middleware import HeappeSessionMiddleware
+        import time
+        middleware = HeappeSessionMiddleware(get_response=lambda req: HttpResponse("OK"))
+
+        request = self.factory.get("/")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_host": "heappe.local",
+            "heappe_session_code": "old_token",
+            "heappe_last_auth": 0,
+            "heappe_last_failed_auth": time.time() - 10,  # 10s ago, within 30s cooldown
+            "force_reauth": False
+        }
+
+        response = middleware(request)
+
+        # Re-authenticate should NOT be called due to cooldown
+        mock_re_auth.assert_not_called()
+
+    @mock.patch("heappe_ui.auth_backend.HeappeAuthBackend.re_authenticate")
+    def test_api_client_transparent_auto_reauth_success(self, mock_re_auth):
+        from heappe_ui.auth_backend import patch_api_client
+        import py4heappe.heappe_v6.core as hp
+
+        class MockApiException(Exception):
+            def __init__(self, status):
+                self.status = status
+
+        called_query_params = []
+        def mock_call_api(resource_path, method, path_params=None, query_params=None, **kwargs):
+            called_query_params.append(query_params)
+            if len(called_query_params) == 1:
+                raise MockApiException(401)
+            return "Success response"
+
+        config = hp.Configuration()
+        api_client = hp.ApiClient(config)
+        api_client.call_api = mock_call_api
+
+        request = self.factory.get("/")
+        request.session = {
+            "heappe_session_code": "old_token"
+        }
+        
+        # Configure client with request reference and force re-patching
+        api_client._request = request
+        api_client._is_patched = False
+        patch_api_client(api_client)
+
+        # Re-authenticate mock behavior
+        def side_effect_reauth(req):
+            req.session["heappe_session_code"] = "new_token"
+            return self.user
+        mock_re_auth.side_effect = side_effect_reauth
+
+        # Call with session code parameter in query params
+        result = api_client.call_api(
+            resource_path="/test", method="GET",
+            query_params=[("SessionCode", "old_token")]
+        )
+
+        # Should successfully retry and return success response
+        self.assertEqual(result, "Success response")
+        # Re-auth should be called once
+        mock_re_auth.assert_called_once_with(request)
+        # Session code updated in request
+        self.assertEqual(request.session_code, "new_token")
+        
+        # Verify call_api was called twice (first fail, second retry)
+        self.assertEqual(len(called_query_params), 2)
+        # Check that the second call received 'new_token'
+        self.assertIn(("SessionCode", "new_token"), called_query_params[1])
+
+
