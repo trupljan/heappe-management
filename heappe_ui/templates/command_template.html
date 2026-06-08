@@ -109,7 +109,7 @@
                 </div>
                 <div class="col-md-6">
                   <label class="form-label small fw-bold text-secondary text-uppercase">Extended Allocation Command <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExtendedAllocationCommand" value="{{ command_template.extended_allocation_command|default:'' }}" placeholder="e.g. --partition=qprod">
+                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExtendedAllocationCommand" value="{{ command_template.extended_allocation_command|default:'' }}" placeholder="e.g. --mem=10G">
                 </div>
 
                 {% if v620_check %}
@@ -122,8 +122,8 @@
                 {% endif %}
 
                 <div class="col-md-6">
-                  <label class="form-label small fw-bold text-secondary text-uppercase">Executable File <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExecutableFile" value="{% if command_template %}{{ command_template.executable_file|default:'' }}{% elif preset %}{{ preset.executable_file|default:'' }}{% endif %}" placeholder="e.g. /usr/bin/python3">
+                  <label class="form-label small fw-bold text-secondary text-uppercase">Executable File</label>
+                  <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExecutableFile" value="{% if command_template %}{{ command_template.executable_file|default:'' }}{% elif preset %}{{ preset.executable_file|default:'' }}{% endif %}" required placeholder="e.g. /usr/bin/python3">
                 </div>
                 <div class="col-md-6">
                   <label class="form-label small fw-bold text-secondary text-uppercase">Preparation Script <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>

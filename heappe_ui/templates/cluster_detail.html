@@ -68,8 +68,8 @@
                                     <input type="text" class="form-control form-control-sm border-light-subtle" name="Description" value="{{ cluster.description }}" placeholder="e.g. Primary compute cluster at IT4I">
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small text-muted fw-semibold">Master Node Name <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="MasterNodeName" value="{{ cluster.master_node_name }}" placeholder="e.g. master.barbora.it4i.cz">
+                                    <label class="form-label small text-muted fw-semibold">Master Node Name</label>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="MasterNodeName" value="{{ cluster.master_node_name }}" required placeholder="e.g. master.barbora.it4i.cz">
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small text-muted fw-semibold">Domain Name <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
@@ -93,8 +93,18 @@
                                     </select>
                                 </div>
                                 <div class="col-md-4">
-                                    <label class="form-label small text-muted fw-semibold">Time Zone <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="TimeZone" value="{{ cluster.time_zone }}" placeholder="e.g. Central Europe Standard Time">
+                                    <label class="form-label small text-muted fw-semibold">Time Zone</label>
+                                    <select class="form-select form-select-sm border-light-subtle bg-white" name="TimeZone" required>
+                                        <option value="" disabled {% if not cluster.time_zone %}selected{% endif %}>Select Time Zone...</option>
+                                        <option value="Central Europe Standard Time" {% if cluster.time_zone == "Central Europe Standard Time" or cluster.time_zone == "CET" %}selected{% endif %}>Central Europe Standard Time (CET/CEST)</option>
+                                        <option value="W. Europe Standard Time" {% if cluster.time_zone == "W. Europe Standard Time" %}selected{% endif %}>W. Europe Standard Time (CET/CEST)</option>
+                                        <option value="FLE Standard Time" {% if cluster.time_zone == "FLE Standard Time" %}selected{% endif %}>FLE Standard Time (EET/EEST)</option>
+                                        <option value="GMT Standard Time" {% if cluster.time_zone == "GMT Standard Time" %}selected{% endif %}>GMT Standard Time (GMT/BST)</option>
+                                        <option value="UTC" {% if cluster.time_zone == "UTC" %}selected{% endif %}>Coordinated Universal Time (UTC)</option>
+                                        {% if cluster.time_zone and cluster.time_zone != "Central Europe Standard Time" and cluster.time_zone != "CET" and cluster.time_zone != "W. Europe Standard Time" and cluster.time_zone != "FLE Standard Time" and cluster.time_zone != "GMT Standard Time" and cluster.time_zone != "UTC" %}
+                                            <option value="{{ cluster.time_zone }}" selected>{{ cluster.time_zone }}</option>
+                                        {% endif %}
+                                    </select>
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small text-muted fw-semibold">Port <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>

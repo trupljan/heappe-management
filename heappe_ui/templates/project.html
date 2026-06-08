@@ -119,13 +119,13 @@
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">Start Date <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="StartDate" value="{{ project.start_date }}">
+                                <label class="form-label small text-muted fw-semibold">Start Date</label>
+                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="StartDate" value="{{ project.start_date }}" required>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">End Date <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="EndDate" value="{{ project.end_date }}">
+                                <label class="form-label small text-muted fw-semibold">End Date</label>
+                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="EndDate" value="{{ project.end_date }}" required>
                             </div>
 
                             <div class="col-12">
@@ -181,8 +181,8 @@
                                 </select>
                             </div>
                             <div class="col-12">
-                                <label class="form-label small text-muted fw-semibold">Scratch Path <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ScratchStoragePath" placeholder="e.g. /mnt/scratch/project_123">
+                                <label class="form-label small text-muted fw-semibold">Scratch Path</label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ScratchStoragePath" required placeholder="e.g. /mnt/scratch/project_123">
                             </div>
                             <div class="col-12">
                                 <label class="form-label small text-muted fw-semibold">Project Path <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>

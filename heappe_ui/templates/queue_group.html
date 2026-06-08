@@ -70,12 +70,13 @@
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">Allocation Type <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                                <select class="form-select form-select-sm border-light-subtle bg-white" id="allocationTypeSelect" name="AllocationType">
-                                    <option value="CN">CN</option>
-                                    <option value="ACN">ACN</option>
-                                    <option value="FAT">FAT</option>
-                                    <option value="optional">Optional (Custom)</option>
+                                <label class="form-label small text-muted fw-semibold">Allocation Type</label>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" id="allocationTypeSelect" name="AllocationType" required>
+                                    <option value="" disabled {% if not queue_group.allocation_type %}selected{% endif %}>Select Allocation Type...</option>
+                                    <option value="CN" {% if queue_group.allocation_type == "CN" %}selected{% endif %}>CN</option>
+                                    <option value="ACN" {% if queue_group.allocation_type == "ACN" %}selected{% endif %}>ACN</option>
+                                    <option value="FAT" {% if queue_group.allocation_type == "FAT" %}selected{% endif %}>FAT</option>
+                                    <option value="optional" {% if queue_group.allocation_type and queue_group.allocation_type != "CN" and queue_group.allocation_type != "ACN" and queue_group.allocation_type != "FAT" %}selected{% endif %}>Optional (Custom)</option>
                                 </select>
                             </div>
 
@@ -85,8 +86,8 @@
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted fw-semibold">Validity From <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="ValidityFrom" value="{{ queue_group.validity_from }}">
+                                <label class="form-label small text-muted fw-semibold">Validity From</label>
+                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="ValidityFrom" value="{{ queue_group.validity_from }}" required>
                             </div>
 
                             <div class="col-md-6">
@@ -122,23 +123,29 @@
             const customInput = document.getElementById('customAllocationInput');
 
             const backendValue = "{{ queue_group.allocation_type }}";
-            const customValue = "{{ queue_group.allocation_type_custom }}";
 
             if (['CN', 'ACN', 'FAT'].includes(backendValue)) {
                 select.value = backendValue;
                 customDiv.style.display = 'none';
+                customInput.required = false;
             } else if (backendValue) {
                 select.value = 'optional';
                 customDiv.style.display = 'block';
                 customInput.value = backendValue;
+                customInput.required = true;
+            } else {
+                customDiv.style.display = 'none';
+                customInput.required = false;
             }
 
             select.addEventListener('change', function() {
                 if (select.value === 'optional') {
                     customDiv.style.display = 'block';
+                    customInput.required = true;
                 } else {
                     customDiv.style.display = 'none';
                     customInput.value = '';
+                    customInput.required = false;
                 }
             });
         });
