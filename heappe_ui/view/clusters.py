@@ -340,6 +340,35 @@ def create_or_edit_proxy_connection(request: HttpRequest, cluster_id: int) -> Ht
             "Proxy connection created successfully!",
             "Failed to create proxy connection"
         )
+        if result and result != []:
+            new_proxy_id = None
+            if isinstance(result, dict):
+                new_proxy_id = result.get("Id") or result.get("id")
+            else:
+                new_proxy_id = getattr(result, "id", None) or getattr(result, "Id", None)
+
+            if new_proxy_id:
+                try:
+                    cluster = controller.heappe_management_cluster_get(Id=cluster_id, SessionCode=request.session_code)
+                    if not getattr(cluster, "proxy_connection", None):
+                        payload_data = {
+                            "Name": getattr(cluster, "name", None),
+                            "Description": getattr(cluster, "description", None),
+                            "MasterNodeName": getattr(cluster, "master_node_name", None),
+                            "SchedulerType": getattr(cluster, "scheduler_type", None),
+                            "ConnectionProtocol": getattr(cluster, "connection_protocol", None),
+                            "TimeZone": getattr(cluster, "time_zone", None),
+                            "Port": getattr(cluster, "port", None),
+                            "UpdateJobStateByServiceAccount": getattr(cluster, "update_job_state_by_service_account", False),
+                            "DomainName": getattr(cluster, "domain_name", None),
+                            "ProxyConnectionId": new_proxy_id,
+                        }
+                        payload = _create_payload(request.session_code, payload_data)
+                        payload["body"]["Id"] = cluster_id
+                        controller.heappe_management_cluster_put(**payload)
+                        messages.success(request, f"Automatically assigned new proxy connection to cluster.")
+                except Exception as e:
+                    print(f"Error auto-assigning proxy connection to cluster {cluster_id}: {e}")
     return redirect(f"{reverse('cluster_detail', kwargs={'cluster_id': cluster_id})}?tab=proxy_connections")
 
 
