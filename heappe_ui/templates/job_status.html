@@ -169,7 +169,8 @@
                 }
             }
 
-            return fetch(`/job-status/{{ job.id }}/partial/`)
+            const url = "{% url 'job_status_partial' job.id %}";
+            return fetch(url)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
@@ -234,19 +235,31 @@
         errorEl.classList.add('d-none');
         spinnerEl.classList.remove('d-none');
         
-        // Set download button URL
-        downloadBtn.href = `/job-status/${jobId}/file/?file_path=${encodeURIComponent(filePath)}&action=download`;
+        // Set download button URL dynamically
+        const downloadUrl = "{% url 'download_job_file' 0 %}".replace('0', jobId) + `?file_path=${encodeURIComponent(filePath)}&action=download`;
+        downloadBtn.href = downloadUrl;
 
         modal.show();
 
-        fetch(`/job-status/${jobId}/file/?file_path=${encodeURIComponent(filePath)}&action=view`)
+        const url = "{% url 'download_job_file' 0 %}".replace('0', jobId) + `?file_path=${encodeURIComponent(filePath)}&action=view`;
+        fetch(url)
             .then(response => {
-                if (!response.ok) {
-                    return response.json().then(data => {
-                        throw new Error(data.error || 'Failed to load file');
-                    });
-                }
-                return response.json();
+                return response.text().then(text => {
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        if (!response.ok) {
+                            throw new Error(`Server error (${response.status})`);
+                        } else {
+                            throw new Error(`Invalid response format`);
+                        }
+                    }
+                    if (!response.ok) {
+                        throw new Error(data.error || `Server error (${response.status})`);
+                    }
+                    return data;
+                });
             })
             .then(data => {
                 spinnerEl.classList.add('d-none');
