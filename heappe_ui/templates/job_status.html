@@ -5,6 +5,7 @@
 
 {% block breadcrumbs %}
     <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'project_list' %}" class="text-decoration-none text-secondary">Projects</a></li>
     {% if project %}
         <li class="breadcrumb-item"><a href="{% url 'project_detail' project.id %}" class="text-decoration-none text-secondary">{{ project.name }}</a></li>
     {% endif %}
@@ -23,7 +24,13 @@
                 <span class="text-muted small">ID: <strong class="font-monospace text-secondary">{{ job.id }}</strong></span>
             </div>
         </div>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="d-flex align-items-center gap-2 text-muted small border border-light-subtle bg-white px-2.5 py-1.5 rounded-3 shadow-xs" style="font-size: 0.78rem;">
+                <div class="progress" style="width: 50px; height: 4px; background-color: #f1f3f5;">
+                    <div id="refresh-progress" class="progress-bar bg-primary" role="progressbar" style="width: 100%; transition: width 1s linear;"></div>
+                </div>
+                <span>Auto-refresh in <strong id="refresh-counter" class="text-dark">10</strong>s</span>
+            </div>
             <button class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3" onclick="location.reload();">
                 <i class="bi bi-arrow-clockwise me-1.5"></i>Reload Status
             </button>
@@ -126,6 +133,57 @@
                         <div class="text-dark fw-semibold mt-1" style="font-size: 0.9rem;">{{ job.sub_project }}</div>
                     </div>
                 </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Changed Files Card -->
+    <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-file-earmark-diff-fill text-primary"></i>
+                <h5 class="h6 mb-0 fw-bold text-dark">Changed Files ({{ changed_files|length }})</h5>
+            </div>
+            <span class="text-muted small">Files modified during job execution</span>
+        </div>
+        <div class="card-body p-0">
+            {% if changed_files %}
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+                    <thead class="table-light text-secondary fw-semibold">
+                        <tr>
+                            <th class="ps-4 py-3" style="width: 60%;">File Path</th>
+                            <th class="py-3">Last Modified</th>
+                            <th class="pe-4 py-3 text-end" style="width: 25%;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for file in changed_files %}
+                        <tr>
+                            <td class="ps-4 py-3 fw-medium text-dark font-monospace">
+                                <i class="bi bi-file-earmark-text text-secondary me-2"></i>{{ file.file_name }}
+                            </td>
+                            <td class="py-3 text-secondary">
+                                {{ file.last_modified_date|format_datetime|default:"N/A" }}
+                            </td>
+                            <td class="pe-4 py-3 text-end">
+                                <button type="button" class="btn btn-xs btn-outline-primary fw-semibold px-2.5 py-1 rounded-2 me-1.5" onclick="viewJobFile('{{ job.id }}', '{{ file.file_name|escapejs }}')">
+                                    <i class="bi bi-eye me-1"></i>View
+                                </button>
+                                <a href="{% url 'download_job_file' job.id %}?file_path={{ file.file_name|urlencode }}&action=download" class="btn btn-xs btn-outline-secondary fw-semibold px-2.5 py-1 rounded-2">
+                                    <i class="bi bi-download me-1"></i>Download
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-folder-x fs-1 mb-2 d-block text-secondary opacity-50"></i>
+                <p class="mb-0 small">No modified files detected for this job yet.</p>
             </div>
             {% endif %}
         </div>
@@ -241,4 +299,109 @@
     </div>
 
 </div>
+
+<!-- File Viewer Modal -->
+<div class="modal fade" id="fileViewerModal" tabindex="-1" aria-labelledby="fileViewerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold text-dark" id="fileViewerModalLabel">
+                    <i class="bi bi-file-earmark-text-fill text-primary me-2"></i>
+                    File: <span id="modal-filename" class="font-monospace text-secondary small"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 position-relative">
+                <!-- Spinner -->
+                <div id="file-spinner" class="position-absolute top-50 start-50 translate-middle d-none text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="text-muted small mt-2">Fetching file content...</div>
+                </div>
+                <!-- Error message -->
+                <div id="file-error" class="alert alert-danger m-3 d-none">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <span id="file-error-text"></span>
+                </div>
+                <!-- Content display -->
+                <pre class="m-0 p-4 bg-dark text-light font-monospace small" id="file-content" style="max-height: 70vh; overflow: auto; white-space: pre-wrap; word-break: break-all;"></pre>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" id="modal-download-btn" class="btn btn-sm btn-primary fw-bold px-3">
+                    <i class="bi bi-download me-1.5"></i>Download Full File
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        let timeLeft = 10;
+        const counterEl = document.getElementById("refresh-counter");
+        const progressEl = document.getElementById("refresh-progress");
+        
+        const timer = setInterval(function() {
+            timeLeft -= 1;
+            if (counterEl) {
+                counterEl.textContent = timeLeft;
+            }
+            if (progressEl) {
+                const percentage = (timeLeft / 10) * 100;
+                progressEl.style.width = percentage + "%";
+            }
+            if (timeLeft <= 0) {
+                clearInterval(timer);
+                location.reload();
+            }
+        }, 1000);
+    });
+
+    function viewJobFile(jobId, filePath) {
+        const modalEl = document.getElementById('fileViewerModal');
+        const modal = new bootstrap.Modal(modalEl);
+        const filenameEl = document.getElementById('modal-filename');
+        const contentEl = document.getElementById('file-content');
+        const spinnerEl = document.getElementById('file-spinner');
+        const errorEl = document.getElementById('file-error');
+        const downloadBtn = document.getElementById('modal-download-btn');
+
+        // Reset modal state
+        filenameEl.textContent = filePath;
+        contentEl.textContent = '';
+        contentEl.classList.add('d-none');
+        errorEl.classList.add('d-none');
+        spinnerEl.classList.remove('d-none');
+        
+        // Set download button URL
+        downloadBtn.href = `/job-status/${jobId}/file/?file_path=${encodeURIComponent(filePath)}&action=download`;
+
+        modal.show();
+
+        fetch(`/job-status/${jobId}/file/?file_path=${encodeURIComponent(filePath)}&action=view`)
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Failed to load file');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                spinnerEl.classList.add('d-none');
+                contentEl.textContent = data.content;
+                contentEl.classList.remove('d-none');
+            })
+            .catch(error => {
+                spinnerEl.classList.add('d-none');
+                document.getElementById('file-error-text').textContent = error.message;
+                errorEl.classList.remove('d-none');
+            });
+    }
+</script>
 {% endblock %}

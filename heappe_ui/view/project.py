@@ -478,10 +478,99 @@ def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
         "FAIL"
     )
 
+    project = None
+    if result:
+        tasks = None
+        if isinstance(result, dict):
+            tasks = result.get('tasks')
+        elif hasattr(result, 'tasks'):
+            tasks = result.tasks
+
+        if tasks and len(tasks) > 0:
+            first_task = tasks[0]
+            node_type = None
+            if isinstance(first_task, dict):
+                node_type = first_task.get('node_type')
+            elif hasattr(first_task, 'node_type'):
+                node_type = first_task.node_type
+
+            if node_type:
+                proj = None
+                if isinstance(node_type, dict):
+                    proj = node_type.get('project')
+                elif hasattr(node_type, 'project'):
+                    proj = node_type.project
+
+                if proj:
+                    project = proj
+
     context = {
-        "job": result
+        "job": result,
+        "project": project,
+        "changed_files": []
     }
+
+    # Fetch changed files list from cluster
+    try:
+        file_transfer_controller = hp.FileTransferApi(request.api_instance)
+        changed_files_res = file_transfer_controller.heappe_file_transfer_list_changed_files_for_job_get(
+            SessionCode=request.session_code,
+            SubmittedJobInfoId=job_id
+        )
+        if changed_files_res:
+            context["changed_files"] = changed_files_res
+    except Exception as e:
+        print(f"Error fetching changed files for job {job_id}: {e}")
+
     return render(request, "job_status.html", context)
+
+
+@login_required
+def download_job_file_view(request: HttpRequest, job_id: int) -> HttpResponse:
+    file_path = request.GET.get("file_path")
+    action = request.GET.get("action", "download") # "download" or "view"
+
+    if not file_path:
+        return HttpResponse("Missing file_path parameter", status=400)
+
+    controller = hp.FileTransferApi(request.api_instance)
+
+    from py4heappe.heappe_v6.core import DownloadFileFromClusterModel
+    body = DownloadFileFromClusterModel(
+        session_code=request.session_code,
+        submitted_job_info_id=job_id,
+        relative_file_path=file_path
+    )
+
+    try:
+        import base64
+        b64_content = controller.heappe_file_transfer_download_file_from_cluster_post(body=body)
+
+        if not b64_content:
+            if action == "view":
+                return JsonResponse({"content": ""})
+            return HttpResponse("File is empty or could not be retrieved.", status=404)
+
+        file_bytes = base64.b64decode(b64_content)
+
+        if action == "view":
+            try:
+                text_content = file_bytes.decode("utf-8")
+            except Exception:
+                text_content = file_bytes.decode("latin-1", errors="replace")
+            return JsonResponse({"content": text_content})
+
+        # Default: download
+        import os
+        filename = os.path.basename(file_path) or "download"
+        response = HttpResponse(file_bytes, content_type="application/octet-stream")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+    except Exception as e:
+        if action == "view":
+            return JsonResponse({"error": str(e)}, status=500)
+        messages.error(request, f"Failed to retrieve file: {str(e)}")
+        return redirect("job_status_view", job_id=job_id)
 
 
 

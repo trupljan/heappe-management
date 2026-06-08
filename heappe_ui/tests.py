@@ -488,3 +488,102 @@ class SelfHealingSessionTests(TestCase):
         self.assertIn(("SessionCode", "new_token"), called_query_params[1])
 
 
+class JobStatusViewTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser", password="password")
+
+    @mock.patch("py4heappe.heappe_v6.core.FileTransferApi")
+    @mock.patch("py4heappe.heappe_v6.core.JobManagementApi")
+    def test_job_status_view_context(self, mock_job_mgmt_api, mock_file_transfer_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_job_mgmt_api.return_value = mock_mgmt_instance
+
+        mock_ft_instance = mock.MagicMock()
+        mock_file_transfer_api.return_value = mock_ft_instance
+        mock_ft_instance.heappe_file_transfer_list_changed_files_for_job_get.return_value = []
+
+        class SimpleObj:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        mock_project = SimpleObj(id=7, name="Breadcrumb Project")
+        mock_node_type = SimpleObj(project=mock_project)
+        mock_task = SimpleObj(node_type=mock_node_type)
+        mock_job = SimpleObj(
+            id=123, 
+            name="My Test Job", 
+            tasks=[mock_task],
+            state=1,
+            creation_time=None,
+            submit_time=None,
+            start_time=None,
+            end_time=None,
+            total_allocated_time=None,
+            sub_project=None
+        )
+
+        mock_mgmt_instance.heappe_job_management_current_info_for_job_get.return_value = mock_job
+
+        request = self.factory.get("/job-status/123")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.project import job_status_view
+        response = job_status_view(request, job_id=123)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Job Details: My Test Job", response.content)
+        self.assertIn(b"Breadcrumb Project", response.content)
+
+    @mock.patch("py4heappe.heappe_v6.core.FileTransferApi")
+    def test_download_job_file_view_success(self, mock_file_transfer_api):
+        mock_ft_instance = mock.MagicMock()
+        mock_file_transfer_api.return_value = mock_ft_instance
+
+        import base64
+        mock_ft_instance.heappe_file_transfer_download_file_from_cluster_post.return_value = base64.b64encode(b"Hello World").decode("utf-8")
+
+        # Test view/preview action (JSON response)
+        request = self.factory.get("/job-status/123/file/?file_path=stdout&action=view")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from heappe_ui.view.project import download_job_file_view
+        response = download_job_file_view(request, job_id=123)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Hello World", response.content)
+        self.assertIn(b"content", response.content)
+
+        # Test download action (file attachment)
+        request = self.factory.get("/job-status/123/file/?file_path=stdout&action=download")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        response = download_job_file_view(request, job_id=123)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"Hello World")
+        self.assertEqual(response["Content-Disposition"], 'attachment; filename="stdout"')
+
+
+
+
