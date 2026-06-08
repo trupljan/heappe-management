@@ -116,7 +116,7 @@
                                     <select class="form-select form-select-sm border-light-subtle bg-white" name="ProxyConnectionId">
                                         <option value="">None (Direct Connection)</option>
                                         {% for pc in proxy_connections %}
-                                            <option value="{{ pc.id }}" {% if cluster.proxy_connection == pc.id %}selected{% endif %}>
+                                            <option value="{{ pc.id }}" {% if cluster.proxy_connection == pc.id or cluster.proxy_connection.id == pc.id %}selected{% endif %}>
                                                 #{{ pc.id }} - {% if pc.username %}{{ pc.username }}@{% endif %}{{ pc.host }}:{{ pc.port }} ({{ pc.type_name }})
                                             </option>
                                         {% endfor %}
