@@ -634,3 +634,129 @@ class JobStatusViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Execution State", response.content)
         self.assertIn(b"Changed Files", response.content)
+
+
+class ClusterAndProxyConnectionTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser", password="password")
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_cluster_create_get(self, mock_mgmt_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_mgmt_instance
+        
+        # Mock proxy connections list
+        class SimpleObj:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+            def to_dict(self):
+                return self.__dict__.copy()
+
+        mock_pc = SimpleObj(id=1, host="1.2.3.4", port=1080, type=2, username="puser", password="ppass")
+        mock_mgmt_instance.heappe_management_cluster_proxy_connections_get.return_value = [mock_pc]
+
+        request = self.factory.get("/clusters/create/")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from heappe_ui.view.clusters import cluster_create
+        response = cluster_create(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Proxy Connection", response.content)
+        self.assertIn(b"puser@1.2.3.4:1080 (SOCKS5)", response.content)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_cluster_detail_get(self, mock_mgmt_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_mgmt_instance
+
+        class SimpleObj:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+            def to_dict(self):
+                return self.__dict__.copy()
+
+        mock_cluster = SimpleObj(
+            id=45,
+            name="TestCluster",
+            description="A test cluster",
+            master_node_name="master",
+            scheduler_type=4,
+            connection_protocol=2,
+            time_zone="UTC",
+            port=22,
+            proxy_connection=1,
+            update_job_state_by_service_account=True,
+            domain_name="cluster.it4i.cz",
+            node_types=[]
+        )
+        mock_mgmt_instance.heappe_management_cluster_get.return_value = mock_cluster
+
+        mock_pc = SimpleObj(id=1, host="1.2.3.4", port=1080, type=2, username="puser", password="ppass")
+        mock_mgmt_instance.heappe_management_cluster_proxy_connections_get.return_value = [mock_pc]
+
+        # GET request for proxy connections tab
+        request = self.factory.get("/clusters/45/?tab=proxy_connections")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from heappe_ui.view.clusters import cluster_detail
+        response = cluster_detail(request, cluster_id=45)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Proxy Connections", response.content)
+        self.assertIn(b"1.2.3.4:1080", response.content)
+        self.assertIn(b"puser", response.content)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_create_proxy_connection_post(self, mock_mgmt_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_mgmt_instance
+
+        # POST request to create new proxy connection
+        request = self.factory.post("/clusters/45/", {
+            "action": "add_proxy_connection",
+            "Host": "5.6.7.8",
+            "Port": "8080",
+            "Type": "3",
+            "Username": "httpuser",
+            "Password": "httppassword"
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.clusters import cluster_detail
+        response = cluster_detail(request, cluster_id=45)
+
+        # Should redirect to cluster detail tab=proxy_connections
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("tab=proxy_connections", response.url)
+
+        # Verify SDK was called correctly
+        call_args = mock_mgmt_instance.heappe_management_cluster_proxy_connection_post.call_args[1]
+        body = call_args["body"]
+        self.assertEqual(body.host, "5.6.7.8")
+        self.assertEqual(body.port, 8080)
+        self.assertEqual(body.type, 3)
+        self.assertEqual(body.username, "httpuser")
+        self.assertEqual(body.password, "httppassword")

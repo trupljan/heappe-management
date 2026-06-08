@@ -1,4 +1,5 @@
 from .imports import *
+from django.urls import reverse
 from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, SCHEDULER_CHOICES, CONNECTION_PROTOCOL_CHOICES, login_view, login_required
 
 @login_required
@@ -41,10 +42,32 @@ def cluster_list(request: HttpRequest) -> HttpResponse:
 @login_required
 def cluster_create(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
+        controller = hp.ManagementApi(request.api_instance)
+        proxy_connections = []
+        try:
+            pcs = controller.heappe_management_cluster_proxy_connections_get(SessionCode=request.session_code)
+            if pcs:
+                proxy_connections = pcs
+        except Exception as e:
+            print(f"Error fetching proxy connections in cluster_create: {e}")
+
+        PROXY_TYPE_NAMES = {1: "SOCKS4", 2: "SOCKS5", 3: "HTTP"}
+        proxy_list = []
+        for pc in proxy_connections:
+            pc_dict = pc.to_dict()
+            type_val = pc_dict.get('type')
+            try:
+                t_int = int(type_val) if type_val is not None else 1
+            except (ValueError, TypeError):
+                t_int = 1
+            pc_dict['type_name'] = PROXY_TYPE_NAMES.get(t_int, "SOCKS4")
+            proxy_list.append(pc_dict)
+
         return render(request, "cluster_detail.html", {
             'PROTOCOL_CHOICES': PROTOCOL_CHOICES,
             'SCHEDULER_CHOICES': SCHEDULER_CHOICES,
             'CONNECTION_PROTOCOL_CHOICES': CONNECTION_PROTOCOL_CHOICES,
+            'proxy_connections': proxy_list,
             'active_tab': 'detail',
         })
     if request.method == "POST":
@@ -86,6 +109,11 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
         elif action == "delete_filetransfer":
             filetransfer_id = int(request.POST.get("Id"))
             return delete_filetransfer_method(request, cluster_id, filetransfer_id)
+        elif action == "add_proxy_connection" or action == "edit_proxy_connection":
+            return create_or_edit_proxy_connection(request, cluster_id)
+        elif action == "delete_proxy_connection":
+            proxy_id = int(request.POST.get("Id"))
+            return delete_proxy_connection(request, cluster_id, proxy_id)
         elif action == "bulk_unassign_cluster":
             selected_ids = request.POST.getlist("selected_ids")
             success_count = 0
@@ -129,7 +157,28 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
             return redirect("cluster_detail", cluster_id=cluster_id)
 
     cluster = controller.heappe_management_cluster_get(Id=cluster_id, SessionCode=request.session_code)
-    context = {'cluster': cluster.to_dict(), 'active_tab': tab}
+    
+    proxy_connections = []
+    try:
+        pcs = controller.heappe_management_cluster_proxy_connections_get(SessionCode=request.session_code)
+        if pcs:
+            proxy_connections = pcs
+    except Exception as e:
+        print(f"Error fetching proxy connections in cluster_detail: {e}")
+
+    PROXY_TYPE_NAMES = {1: "SOCKS4", 2: "SOCKS5", 3: "HTTP"}
+    proxy_list = []
+    for pc in proxy_connections:
+        pc_dict = pc.to_dict()
+        type_val = pc_dict.get('type')
+        try:
+            t_int = int(type_val) if type_val is not None else 1
+        except (ValueError, TypeError):
+            t_int = 1
+        pc_dict['type_name'] = PROXY_TYPE_NAMES.get(t_int, "SOCKS4")
+        proxy_list.append(pc_dict)
+
+    context = {'cluster': cluster.to_dict(), 'active_tab': tab, 'proxy_connections': proxy_list}
     context['PROTOCOL_CHOICES'] = PROTOCOL_CHOICES
     if tab == 'detail':
         filetarnsfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code)
@@ -246,5 +295,68 @@ def delete_filetransfer_method(request: HttpRequest, cluster_id: int, filetransf
         "Failed to delete file transfer method"
     )
     return redirect("cluster_detail", cluster_id=cluster_id)
+
+
+@login_required
+def create_or_edit_proxy_connection(request: HttpRequest, cluster_id: int) -> HttpResponse:
+    host = request.POST.get("Host")
+    port = int(request.POST.get("Port")) if request.POST.get("Port") else None
+    type_val = int(request.POST.get("Type")) if request.POST.get("Type") else None
+    username = request.POST.get("Username") or None
+    password = request.POST.get("Password") or None
+    id_val = int(request.POST.get("Id")) if request.POST.get("Id") else None
+
+    controller = hp.ManagementApi(request.api_instance)
+    if id_val:
+        from py4heappe.heappe_v6.core import ModifyClusterProxyConnectionModel
+        body = ModifyClusterProxyConnectionModel(
+            session_code=request.session_code,
+            id=id_val,
+            host=host,
+            port=port,
+            type=type_val,
+            username=username,
+            password=password
+        )
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_cluster_proxy_connection_put(body=body),
+            "Proxy connection updated successfully!",
+            "Failed to update proxy connection"
+        )
+    else:
+        from py4heappe.heappe_v6.core import CreateClusterProxyConnectionModel
+        body = CreateClusterProxyConnectionModel(
+            session_code=request.session_code,
+            host=host,
+            port=port,
+            type=type_val,
+            username=username,
+            password=password
+        )
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_cluster_proxy_connection_post(body=body),
+            "Proxy connection created successfully!",
+            "Failed to create proxy connection"
+        )
+    return redirect(f"{reverse('cluster_detail', kwargs={'cluster_id': cluster_id})}?tab=proxy_connections")
+
+
+@login_required
+def delete_proxy_connection(request: HttpRequest, cluster_id: int, proxy_id: int) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    from py4heappe.heappe_v6.core import RemoveClusterProxyConnectionModel
+    body = RemoveClusterProxyConnectionModel(
+        session_code=request.session_code,
+        id=proxy_id
+    )
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_cluster_proxy_connection_delete(body=body),
+        "Proxy connection deleted successfully!",
+        "Failed to delete proxy connection"
+    )
+    return redirect(f"{reverse('cluster_detail', kwargs={'cluster_id': cluster_id})}?tab=proxy_connections")
 
 
