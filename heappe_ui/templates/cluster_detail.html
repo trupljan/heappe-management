@@ -96,12 +96,13 @@
                                     <label class="form-label small text-muted fw-semibold">Time Zone</label>
                                     <select class="form-select form-select-sm border-light-subtle bg-white" name="TimeZone" required>
                                         <option value="" disabled {% if not cluster.time_zone %}selected{% endif %}>Select Time Zone...</option>
-                                        <option value="Central Europe Standard Time" {% if cluster.time_zone == "Central Europe Standard Time" or cluster.time_zone == "CET" %}selected{% endif %}>Central Europe Standard Time (CET/CEST)</option>
-                                        <option value="W. Europe Standard Time" {% if cluster.time_zone == "W. Europe Standard Time" %}selected{% endif %}>W. Europe Standard Time (CET/CEST)</option>
-                                        <option value="FLE Standard Time" {% if cluster.time_zone == "FLE Standard Time" %}selected{% endif %}>FLE Standard Time (EET/EEST)</option>
-                                        <option value="GMT Standard Time" {% if cluster.time_zone == "GMT Standard Time" %}selected{% endif %}>GMT Standard Time (GMT/BST)</option>
-                                        <option value="UTC" {% if cluster.time_zone == "UTC" %}selected{% endif %}>Coordinated Universal Time (UTC)</option>
-                                        {% if cluster.time_zone and cluster.time_zone != "Central Europe Standard Time" and cluster.time_zone != "CET" and cluster.time_zone != "W. Europe Standard Time" and cluster.time_zone != "FLE Standard Time" and cluster.time_zone != "GMT Standard Time" and cluster.time_zone != "UTC" %}
+                                        <option value="CET" {% if cluster.time_zone == "CET" %}selected{% endif %}>CET (Central European Time)</option>
+                                        <option value="CEST" {% if cluster.time_zone == "CEST" %}selected{% endif %}>CEST (Central European Summer Time)</option>
+                                        <option value="UTC" {% if cluster.time_zone == "UTC" %}selected{% endif %}>UTC (Coordinated Universal Time)</option>
+                                        <option value="GMT" {% if cluster.time_zone == "GMT" %}selected{% endif %}>GMT (Greenwich Mean Time)</option>
+                                        <option value="EET" {% if cluster.time_zone == "EET" %}selected{% endif %}>EET (Eastern European Time)</option>
+                                        <option value="WET" {% if cluster.time_zone == "WET" %}selected{% endif %}>WET (Western European Time)</option>
+                                        {% if cluster.time_zone and cluster.time_zone != "CET" and cluster.time_zone != "CEST" and cluster.time_zone != "UTC" and cluster.time_zone != "GMT" and cluster.time_zone != "EET" and cluster.time_zone != "WET" %}
                                             <option value="{{ cluster.time_zone }}" selected>{{ cluster.time_zone }}</option>
                                         {% endif %}
                                     </select>
