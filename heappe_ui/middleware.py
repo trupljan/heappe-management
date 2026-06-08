@@ -22,17 +22,37 @@ class HeappeSessionMiddleware:
             session_code = request.session.get("heappe_session_code")
             use_api_key = request.session.get("heappe_use_api_key", False)
 
+            last_failed_auth = request.session.get("heappe_last_failed_auth", 0)
+            should_attempt = True
+            if not force_reauth and (now - last_failed_auth < 30):
+                should_attempt = False
+
             if not use_api_key:
                 if force_reauth or (now - last_auth > 300) or not session_code:
-                    auth_backend = HeappeAuthBackend()
-                    auth_backend.re_authenticate(request)
-
+                    if should_attempt:
+                        auth_backend = HeappeAuthBackend()
+                        auth_user = auth_backend.re_authenticate(request)
+                        if not auth_user:
+                            # Clear old session code to trigger retry later, but keep configuration intact
+                            request.session.pop("heappe_session_code", None)
+                            request.session["heappe_last_failed_auth"] = now
+                        else:
+                            # Reset failed auth timestamp on success
+                            request.session["heappe_last_failed_auth"] = 0
+                    
                     session_code = request.session.get("heappe_session_code")
                     use_api_key = request.session.get("heappe_use_api_key", False)
+                    request.session["force_reauth"] = False
             else:
                 if force_reauth:
-                    auth_backend = HeappeAuthBackend()
-                    auth_backend.re_authenticate(request)
+                    if should_attempt:
+                        auth_backend = HeappeAuthBackend()
+                        auth_user = auth_backend.re_authenticate(request)
+                        if not auth_user:
+                            request.session.pop("heappe_session_code", None)
+                            request.session["heappe_last_failed_auth"] = now
+                        else:
+                            request.session["heappe_last_failed_auth"] = 0
                     use_api_key = request.session.get("heappe_use_api_key", False)
                     request.session["force_reauth"] = False
 
@@ -53,6 +73,7 @@ class HeappeSessionMiddleware:
                     api_instance = hp.ApiClient(user_config)
 
                 from heappe_ui.auth_backend import patch_api_client
+                api_instance._request = request
                 patch_api_client(api_instance)
 
                 request.api_instance = api_instance
@@ -138,6 +159,7 @@ class HeappeExceptionMiddleware:
         # Log the exception for tracing in server logs
         print(f"[HeappeExceptionMiddleware] Caught unhandled exception: {exception}")
         traceback.print_exc()
+        tb_str = traceback.format_exc()
 
         error_type = exception.__class__.__name__
         error_message = str(exception)
@@ -169,6 +191,9 @@ class HeappeExceptionMiddleware:
                     error_icon = "bi-question-circle-fill"
                     error_theme = "warning"
                 elif status_int in (401, 403):
+                    # Invalidate session code on auth errors
+                    request.session.pop("heappe_session_code", None)
+                    request.session["force_reauth"] = True
                     error_title = "Access Denied / Unauthorized"
                     error_desc = "Your session may have expired, credentials might be invalid, or you lack permission for this request."
                     error_icon = "bi-shield-lock-fill"
@@ -197,6 +222,23 @@ class HeappeExceptionMiddleware:
         # Retrieve active instance info from session
         instance_name = request.session.get("chosen_instance", "N/A")
         host_url = request.session.get("heappe_host_url") or request.session.get("heappe_host", "N/A")
+
+        # Save details to session for error reporting endpoint
+        from datetime import datetime
+        username = request.user.username if hasattr(request, 'user') and request.user.is_authenticated else 'Anonymous'
+        request.session['last_error_report'] = {
+            'instance_name': instance_name,
+            'host_url': host_url,
+            'current_path': request.path,
+            'username': username,
+            'timestamp': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'),
+            'error_title': error_title,
+            'error_desc': error_desc,
+            'error_type': error_type,
+            'error_status': error_status,
+            'error_message': error_message,
+            'traceback': tb_str
+        }
 
         context = {
             "error_type": error_type,

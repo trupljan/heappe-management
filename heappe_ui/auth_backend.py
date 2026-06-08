@@ -32,6 +32,35 @@ def patch_api_client(api_instance):
     original_call_api = api_instance.call_api
     sig = inspect.signature(original_call_api)
 
+    def replace_session_code(bound_args, new_code):
+        # Modify query_params
+        query_params = bound_args.arguments.get('query_params')
+        if query_params:
+            new_query_params = []
+            for name, val in query_params:
+                if name == 'SessionCode':
+                    new_query_params.append((name, new_code))
+                else:
+                    new_query_params.append((name, val))
+            bound_args.arguments['query_params'] = new_query_params
+
+        # Modify body
+        body = bound_args.arguments.get('body')
+        if body:
+            if isinstance(body, dict):
+                if 'SessionCode' in body:
+                    body['SessionCode'] = new_code
+            elif hasattr(body, 'SessionCode'):
+                try:
+                    setattr(body, 'SessionCode', new_code)
+                except Exception:
+                    pass
+            elif hasattr(body, 'session_code'):
+                try:
+                    setattr(body, 'session_code', new_code)
+                except Exception:
+                    pass
+
     def patched_call_api(*args, **kwargs):
         # Bind the arguments to the signature
         bound_args = sig.bind(*args, **kwargs)
@@ -102,9 +131,32 @@ def patch_api_client(api_instance):
             return response
         except Exception as e:
             print(f"[HEAppE API Response] Exception raised on: {resource_path} | Details: {e}")
+            # Check for 401/403 (unauthorized/expired token) to trigger auto-reauthentication
+            status = getattr(e, 'status', None)
+            try:
+                status_int = int(status)
+            except (ValueError, TypeError):
+                status_int = None
+
+            if status_int in (401, 403) and not getattr(api_instance, '_is_reauthenticating', False):
+                request = getattr(api_instance, '_request', None)
+                if request:
+                    print(f"[HEAppE API client] Caught {status_int}. Attempting transparent auto-reauthentication...")
+                    from heappe_ui.auth_backend import HeappeAuthBackend
+                    auth_backend = HeappeAuthBackend()
+                    auth_user = auth_backend.re_authenticate(request)
+                    if auth_user:
+                        new_session_code = request.session.get("heappe_session_code")
+                        if new_session_code:
+                            print(f"[HEAppE API client] Re-authentication successful. Retrying call with new session code.")
+                            request.session_code = new_session_code
+                            replace_session_code(bound_args, new_session_code)
+                            # Retry the call
+                            return original_call_api(*bound_args.args, **bound_args.kwargs)
             raise
 
     api_instance.call_api = patched_call_api
+    api_instance._is_patched = True
     return api_instance
 
 
@@ -126,6 +178,8 @@ class HeappeAuthBackend:
         config.api_key['X-API-Key'] = f"{username}:{password}"
         api_instance = hp.ApiClient(config)
         api_instance.set_default_header("X-API-Key", f"{username}:{password}")
+        api_instance._is_reauthenticating = True
+        api_instance._request = request
         patch_api_client(api_instance)
 
         ulm = hp.UserAndLimitationManagementApi(api_instance)
