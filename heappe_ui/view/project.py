@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 from django.http import JsonResponse
 from .imports import *
-from .utils import _create_payload, _handle_api_call, login_view, login_required
+from .utils import _create_payload, _handle_api_call, login_view, login_required, _parse_datetime_local
 from .command_template import COMMAND_TEMPLATE_PRESETS
 
 
@@ -652,12 +652,12 @@ def project_create(request: HttpRequest) -> HttpResponse:
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),
             "AccountingString": request.POST.get("AccountingString"),
-            "StartDate": request.POST.get("StartDate"),
-            "EndDate": request.POST.get("EndDate"),
+            "StartDate": _parse_datetime_local(request.POST.get("StartDate")),
+            "EndDate": _parse_datetime_local(request.POST.get("EndDate")),
             "UsageType": int(request.POST.get("UsageType")),
             "UseAccountingStringForScheduler": request.POST.get("UseAccountingStringForScheduler") == "on",
             "IsOneToOneMapping": request.POST.get("IsOneToOneMapping") == "on",
-            "PIEmail": request.POST.get("PIEmail"),
+            "PIEmail": request.POST.get("PIEmail") or None,
         }
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
@@ -746,8 +746,8 @@ def project_update(request: HttpRequest, project_id: int) -> HttpResponse:
         "Id": project_id,
         "Name": request.POST.get("Name"),
         "Description": request.POST.get("Description"),
-        "StartDate": request.POST.get("StartDate"),
-        "EndDate": request.POST.get("EndDate"),
+        "StartDate": _parse_datetime_local(request.POST.get("StartDate")),
+        "EndDate": _parse_datetime_local(request.POST.get("EndDate")),
         "UsageType": int(request.POST.get("UsageType")),
         "UseAccountingStringForScheduler": request.POST.get("UseAccountingStringForScheduler") == "on",
         "IsOneToOneMapping": request.POST.get("IsOneToOneMapping") == "on",

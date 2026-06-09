@@ -1,4 +1,5 @@
 from .imports import *
+from datetime import datetime
 from django.contrib.auth import authenticate, login
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -68,6 +69,17 @@ def _create_payload(session_code: str, data: Dict[str, Any], id_field: Optional[
     if id_field and id_field in data:
         payload["body"]["Id"] = data[id_field]
     return payload
+
+
+def _parse_datetime_local(date_str: Optional[str]) -> Optional[datetime]:
+    if not date_str:
+        return None
+    from django.utils.dateparse import parse_datetime
+    from django.utils.timezone import is_aware, make_aware
+    dt = parse_datetime(date_str)
+    if dt and not is_aware(dt):
+        dt = make_aware(dt)
+    return dt
 
 
 def _handle_api_call(request, api_call, success_message, error_message, silent=False):

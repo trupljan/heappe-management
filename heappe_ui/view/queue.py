@@ -2,7 +2,7 @@ from django.conf import settings
 from django.urls import reverse
 
 from .imports import *
-from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_view, login_required, ACCOUNTING_OPERATORS, ACCOUNTING_TIMES, ACCOUNTING_NUMBERS
+from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_view, login_required, ACCOUNTING_OPERATORS, ACCOUNTING_TIMES, ACCOUNTING_NUMBERS, _parse_datetime_local
 
 
 
@@ -345,8 +345,8 @@ def queue_group_create(request: HttpRequest) -> HttpResponse:
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),
             "AllocationType": allocation_type,
-            "ValidityFrom": None if request.POST.get("ValidityFrom") == "" else request.POST.get("ValidityFrom"),
-            "ValidityTo": None if request.POST.get("ValidityTo") == "" else request.POST.get("ValidityTo"),
+            "ValidityFrom": _parse_datetime_local(request.POST.get("ValidityFrom")),
+            "ValidityTo": _parse_datetime_local(request.POST.get("ValidityTo")),
         }
         payload = _create_payload(request.session_code, payload_data)
         result =  _handle_api_call(
@@ -374,8 +374,8 @@ def queue_group_modify(request: HttpRequest, group_id: int) -> HttpResponse:
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),
             "AllocationType": allocation_type,
-            "ValidityFrom": None if request.POST.get("ValidityFrom") == "" else request.POST.get("ValidityFrom"),
-            "ValidityTo": None if request.POST.get("ValidityTo") == "" else request.POST.get("ValidityTo"),
+            "ValidityFrom": _parse_datetime_local(request.POST.get("ValidityFrom")),
+            "ValidityTo": _parse_datetime_local(request.POST.get("ValidityTo")),
         }
         payload = _create_payload(request.session_code, payload_data)
         result =  _handle_api_call(
@@ -445,8 +445,8 @@ def add_formula(request: HttpRequest, group_id: int) -> HttpResponse:
 
         payload_data = {
             "Formula": formula,
-            "ValidityFrom": None if validityFrom == "" else validityFrom,
-            "ValidityTo": None if validityTo == "" else validityTo,
+            "ValidityFrom": _parse_datetime_local(validityFrom),
+            "ValidityTo": _parse_datetime_local(validityTo),
         }
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
@@ -471,8 +471,8 @@ def edit_formula(request: HttpRequest, group_id: int) -> HttpResponse:
         payload_data = {
             "Id": formulaId,
             "Formula": formula,
-            "ValidityFrom": None if validityFrom == "" else validityFrom,
-            "ValidityTo": None if validityTo == "" else validityTo,
+            "ValidityFrom": _parse_datetime_local(validityFrom),
+            "ValidityTo": _parse_datetime_local(validityTo),
         }
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
