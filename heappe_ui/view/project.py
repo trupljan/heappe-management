@@ -56,7 +56,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
 
     if request.method == "POST":
         action = request.POST.get("action")
-        if action == "update_project": return project_update(request, project_id)
+        if action in ("update_project", "project_update"): return project_update(request, project_id)
         if action == "project_assign_to_cluster": return project_assign_to_cluster_with_project_id(request, project_id)
         if action == "delete_assignment": return delete_assignment(request, project_id)
         if action == "update_assignment": return update_assignment(request)
