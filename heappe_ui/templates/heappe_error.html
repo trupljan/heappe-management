@@ -40,6 +40,20 @@
 {{ error_message }}</div>
                     </div>
 
+                    <!-- Technical Stack Trace -->
+                    {% if traceback %}
+                    <div class="mb-4">
+                        <details class="border rounded p-2.5 bg-light-subtle shadow-sm" style="border-radius: 8px; border-color: #dee2e6 !important; background-color: #f8f9fa !important;">
+                            <summary class="text-secondary small fw-bold cursor-pointer d-flex align-items-center gap-1.5" style="user-select: none; outline: none;">
+                                <i class="bi bi-terminal"></i> Technical Stack Trace (Click to Expand)
+                            </summary>
+                            <div class="mt-2">
+                                <pre class="p-3 bg-dark text-light rounded border font-monospace text-break small mb-0" style="max-height: 250px; overflow-y: auto; white-space: pre-wrap; font-size: 0.72rem; border-radius: 6px;">{{ traceback }}</pre>
+                            </div>
+                        </details>
+                    </div>
+                    {% endif %}
+
                     <!-- Troubleshooting Alert -->
                     <div class="alert alert-warning d-flex align-items-start border-0 shadow-sm mb-4" role="alert">
                         <i class="bi bi-exclamation-triangle-fill me-3 fs-4 text-warning"></i>

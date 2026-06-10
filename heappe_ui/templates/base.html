@@ -189,7 +189,11 @@
             <div class="d-flex flex-column gap-2 small">
                 <div class="d-flex align-items-center justify-content-between">
                     <span class="text-secondary fw-semibold">Instance:</span>
+                    {% if request.session.heappe_last_failed_auth %}
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0.5 fw-bold d-flex align-items-center gap-1" title="HEAppE Connection is Offline"><i class="bi bi-exclamation-triangle-fill"></i>{{ request.session.chosen_instance }} (Offline)</span>
+                    {% else %}
                     <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 fw-bold">{{ request.session.chosen_instance }}</span>
+                    {% endif %}
                 </div>
                 <div class="text-truncate d-flex align-items-center justify-content-between">
                     <span class="text-secondary fw-semibold">Host:</span>
@@ -301,7 +305,11 @@
                 <div class="d-flex flex-column gap-2 small">
                     <div class="d-flex align-items-center justify-content-between">
                         <span class="text-secondary fw-semibold">Instance:</span>
+                        {% if request.session.heappe_last_failed_auth %}
+                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0.5 fw-bold d-flex align-items-center gap-1" title="HEAppE Connection is Offline"><i class="bi bi-exclamation-triangle-fill"></i>{{ request.session.chosen_instance }} (Offline)</span>
+                        {% else %}
                         <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 fw-bold">{{ request.session.chosen_instance }}</span>
+                        {% endif %}
                     </div>
                     <div class="text-truncate d-flex align-items-center justify-content-between">
                         <span class="text-secondary fw-semibold">Host:</span>
@@ -427,6 +435,28 @@
         <!-- Update Banners Area -->
         {% if user.is_authenticated %}
         <div class="container-fluid px-4 mt-3">
+
+            <!-- HEAppE Connection Error Banner -->
+            {% if request.session.heappe_last_failed_auth %}
+            <div class="alert alert-danger border-danger shadow-sm d-flex align-items-center justify-content-between p-3 mb-3 animate-pulse" style="border-radius: 8px;">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-wifi-off text-danger fs-4 me-2"></i>
+                    <div>
+                        <strong class="text-danger-emphasis">HEAppE Connection Offline:</strong>
+                        Cannot establish a connection to the selected HEAppE instance (<code>{{ request.session.chosen_instance }}</code>).
+                        <div class="small text-muted mt-1">Host: <code>{{ request.session.heappe_host|default:"N/A" }}</code>. The service might be temporarily offline, or your credentials might be invalid.</div>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="{% url 'reconnect_view' %}" class="btn btn-danger btn-sm fw-bold shadow-sm text-white">
+                        <i class="bi bi-arrow-repeat me-1"></i>Reconnect Now
+                    </a>
+                    <a href="{% url 'instance_credentials_list' %}" class="btn btn-outline-secondary btn-sm">
+                        Switch Instance
+                    </a>
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Admin Panel Update Banner -->
             <div class="alert alert-info border border-info shadow-sm d-none align-items-center justify-content-between p-3 mb-3"

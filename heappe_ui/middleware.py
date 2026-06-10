@@ -143,10 +143,6 @@ class HeappeExceptionMiddleware:
         from django.shortcuts import render
         import traceback
 
-        # If in debug mode, let Django raise the standard traceback screen
-        if settings.DEBUG:
-            return None
-
         # Do not catch Django's internal control exceptions
         if isinstance(exception, (
             django.http.Http404,
@@ -156,14 +152,27 @@ class HeappeExceptionMiddleware:
         )):
             return None
 
+        error_type = exception.__class__.__name__
+        error_message = str(exception)
+        error_status = getattr(exception, 'status', None)
+
+        is_heappe_error = False
+        if error_status:
+            is_heappe_error = True
+        else:
+            exc_lower = error_type.lower() + " " + error_message.lower()
+            if any(term in exc_lower for term in ["timeout", "conn", "unreachable", "refused", "maxretry", "apiexception"]):
+                is_heappe_error = True
+
+        # If in debug mode, let Django raise the standard traceback screen unless it's a HEAppE error
+        if settings.DEBUG and not is_heappe_error:
+            return None
+
         # Log the exception for tracing in server logs
         print(f"[HeappeExceptionMiddleware] Caught unhandled exception: {exception}")
         traceback.print_exc()
         tb_str = traceback.format_exc()
 
-        error_type = exception.__class__.__name__
-        error_message = str(exception)
-        error_status = getattr(exception, 'status', None)
         error_body = getattr(exception, 'body', None)
 
         if error_body and isinstance(error_body, str):
@@ -251,6 +260,8 @@ class HeappeExceptionMiddleware:
             "error_desc": error_desc,
             "error_icon": error_icon,
             "error_theme": error_theme,
+            "traceback": tb_str,
+            "debug_mode": settings.DEBUG,
         }
 
         # Render custom elegant error page

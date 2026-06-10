@@ -295,6 +295,7 @@ def dashboard_view(request):
         context["heappe"] = result
     except Exception as e:
         print(f"Error fetching version information: {e}")
+        raise e
 
     # Get cluster information
     try:
