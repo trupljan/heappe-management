@@ -377,10 +377,16 @@ def submit_job_view(request, command_template_id:int):
             job_name = request.POST.get("JobName")
             project_id = request.POST.get("ProjectId")
             cluster_id = request.POST.get("ClusterId")
-            notify_email = request.POST.get("NotificationEmail")
-            notify_start = request.POST.get("NotifyOnStart") == "true"
-            notify_finish = request.POST.get("NotifyOnFinish") == "true"
-            notify_abort = request.POST.get("NotifyOnAbort") == "true"
+            notify_email = request.POST.get("NotificationEmail", "").strip()
+            if not notify_email:
+                notify_email = ""
+                notify_start = False
+                notify_finish = False
+                notify_abort = False
+            else:
+                notify_start = request.POST.get("NotifyOnStart") == "true"
+                notify_finish = request.POST.get("NotifyOnFinish") == "true"
+                notify_abort = request.POST.get("NotifyOnAbort") == "true"
 
             # Task-level data
             task_name = request.POST.get("TaskName")

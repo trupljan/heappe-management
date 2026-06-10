@@ -636,6 +636,106 @@ class JobStatusViewTests(TestCase):
         self.assertIn(b"Changed Files", response.content)
 
 
+class SubmitJobTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser", password="password")
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    @mock.patch("py4heappe.heappe_v6.core.JobManagementApi")
+    def test_submit_job_empty_email_disables_notifications(self, mock_job_mgmt_api, mock_mgmt_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_mgmt_instance
+
+        mock_job_mgmt_instance = mock.MagicMock()
+        mock_job_mgmt_api.return_value = mock_job_mgmt_instance
+
+        # Mock GET info for template, project, node type, cluster
+        mock_mgmt_instance.heappe_management_clusters_get.return_value = []
+        
+        mock_template = mock.MagicMock()
+        mock_template.to_dict.return_value = {
+            "project_id": 1,
+            "cluster_node_type_id": 2,
+            "template_parameters": []
+        }
+        mock_mgmt_instance.heappe_management_command_template_get.return_value = mock_template
+
+        mock_project = mock.MagicMock()
+        mock_project.to_dict.return_value = {
+            "id": 1,
+            "name": "Test Project",
+        }
+        mock_mgmt_instance.heappe_management_project_get.return_value = mock_project
+
+        mock_node_type = mock.MagicMock()
+        mock_node_type.to_dict.return_value = {
+            "id": 2,
+            "cluster_id": 3,
+            "file_transfer_method_id": 4,
+            "cores_per_node": 16,
+        }
+        mock_mgmt_instance.heappe_management_cluster_node_type_get.return_value = mock_node_type
+
+        mock_cluster = mock.MagicMock()
+        mock_cluster.to_dict.return_value = {
+            "id": 3,
+            "name": "Test Cluster",
+        }
+        mock_mgmt_instance.heappe_management_cluster_get.return_value = mock_cluster
+
+        # Mock CreateJob / SubmitJob responses
+        mock_job_mgmt_instance.heappe_job_management_create_job_post.return_value = {"Id": 123}
+        mock_job_mgmt_instance.heappe_job_management_submit_job_put.return_value = {"Id": 123}
+
+        # POST payload with empty email but notify flags set to "true"
+        request = self.factory.post("/submit-job/1/", {
+            "action": "submit_job",
+            "JobName": "Test Job",
+            "ProjectId": "1",
+            "ClusterId": "3",
+            "NotificationEmail": "  ",  # empty after strip
+            "NotifyOnStart": "true",
+            "NotifyOnFinish": "true",
+            "NotifyOnAbort": "true",
+            "TaskName": "Test Task",
+            "MinCores": "1",
+            "MaxCores": "8",
+            "WalltimeLimit": "600",
+            "ClusterNodeTypeId": "2",
+            "CommandTemplateId": "1",
+            "IsExclusive": "false",
+            "IsRerunnable": "true",
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.project import submit_job_view
+        response = submit_job_view(request, command_template_id=1)
+
+        # It should redirect to job_status_view
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/job-status/123"))
+
+        # Verify that create_job_post was called with notification flags set to False
+        mock_job_mgmt_instance.heappe_job_management_create_job_post.assert_called_once()
+        call_kwargs = mock_job_mgmt_instance.heappe_job_management_create_job_post.call_args[1]
+        
+        job_spec = call_kwargs['body']['JobSpecification']
+        self.assertEqual(job_spec['NotificationEmail'], '')
+        self.assertFalse(job_spec['NotifyOnStart'])
+        self.assertFalse(job_spec['NotifyOnFinish'])
+        self.assertFalse(job_spec['NotifyOnAbort'])
+
+
 class ClusterAndProxyConnectionTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
