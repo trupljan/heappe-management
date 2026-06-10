@@ -657,7 +657,7 @@ def project_create(request: HttpRequest) -> HttpResponse:
             "UsageType": int(request.POST.get("UsageType")),
             "UseAccountingStringForScheduler": request.POST.get("UseAccountingStringForScheduler") == "on",
             "IsOneToOneMapping": request.POST.get("IsOneToOneMapping") == "on",
-            "PIEmail": request.POST.get("PIEmail") or None,
+            "PIEmail": request.POST.get("PIEmail") or "",
         }
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
