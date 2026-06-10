@@ -859,7 +859,7 @@ $(document).ready(function() {
                 try {
                     const json = treeEditor.get();
                     const path = selectedFilePath || '';
-                    if (path.endsWith('.njson') && Array.isArray(json)) {
+                    if (path.endsWith('.ndjson') && Array.isArray(json)) {
                         const ndjsonString = json.map(item => JSON.stringify(item)).join('\n');
                         $('#file-content').val(ndjsonString);
                     } else {
@@ -907,7 +907,7 @@ $(document).ready(function() {
         const codeValue = $('#file-content').val();
         try {
             const path = selectedFilePath || '';
-            if (path.endsWith('.njson')) {
+            if (path.endsWith('.ndjson')) {
                 const lines = codeValue.split('\n').filter(l => l.trim() !== '');
                 const jsonArray = lines.map(line => JSON.parse(line));
                 treeEditor.set(jsonArray);
@@ -954,8 +954,8 @@ $(document).ready(function() {
     }
 
     function validateJsonContent(path, content) {
-        const isJson = path.endsWith('.json');
-        const isNjson = path.endsWith('.njson');
+        const isJson = path.endsWith('.json') || path.endsWith('.njson');
+        const isNjson = path.endsWith('.ndjson');
         if (!isJson && !isNjson) return null;
 
         if (isJson) {
@@ -1029,8 +1029,8 @@ $(document).ready(function() {
     function validateCurrentFile() {
         const content = $('#file-content').val();
         const path = selectedFilePath || '';
-        const isJson = path.endsWith('.json');
-        const isNjson = path.endsWith('.njson');
+        const isJson = path.endsWith('.json') || path.endsWith('.njson');
+        const isNjson = path.endsWith('.ndjson');
 
         if (!isJson && !isNjson) {
             $('#json-validation-status').hide().empty();
