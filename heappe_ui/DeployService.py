@@ -155,6 +155,10 @@ HOST_SSHAGENT_CONTAINER_MAP_FOLD_PATH=/opt/heappe/sshagent_keys:ro
 HOST_MSSQL_NAME=mssql-{instance_name}
 HOST_MSSQL_PORT={ports['mssql_port']}
 HOST_MSSQL_PASSWORD={sa_password}
+HOST_MSSQL_PID=Developer
+HOST_MSSQL_MEMORY_LIMIT_MB=4096
+HOST_MSSQL_CPUS=4
+HOST_MSSQL_MEMORY=6G
 
 HOST_APP_NAME=heappe-{instance_name}
 HOST_APP_PORT={ports['app_port']}
