@@ -795,6 +795,13 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     default_ports=ports,
                     target_dir="heappe-core"
                 )
+                # Invalidate middleware update cache to force a recheck on the next request
+                request.session.pop("last_middleware_check_time", None)
+                request.session.pop("last_middleware_checked_instance", None)
+                request.session.pop("middleware_update_available", None)
+                request.session.pop("middleware_deployed_version", None)
+                request.session.pop("middleware_latest_version", None)
+
                 update_background(config, instance_name)
                 action_message = "Update started in the background."
                 action_status = 'info'

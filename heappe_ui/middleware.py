@@ -93,7 +93,12 @@ class HeappeSessionMiddleware:
                 "accountings_cache",
                 "queue_groups_cache",
                 "mappings_cache",
-                "projects_list_cache"
+                "projects_list_cache",
+                "last_middleware_check_time",
+                "last_middleware_checked_instance",
+                "middleware_update_available",
+                "middleware_deployed_version",
+                "middleware_latest_version"
             ]
             for key in cache_keys:
                 request.session.pop(key, None)

@@ -518,8 +518,13 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                     old_appsettings = {}
 
                 old_version = old_appsettings.get("ApplicationAPISettings", {}).get("DeploymentSettings", {}).get("Version", "")
+                old_version = old_version or "unknown"
                 # change version in old appsettings to the new version
                 if version:
+                    if "ApplicationAPISettings" not in old_appsettings:
+                        old_appsettings["ApplicationAPISettings"] = {}
+                    if "DeploymentSettings" not in old_appsettings["ApplicationAPISettings"]:
+                        old_appsettings["ApplicationAPISettings"]["DeploymentSettings"] = {}
                     old_appsettings["ApplicationAPISettings"]["DeploymentSettings"]["Version"] = version
 
                 # Generate configuration files
@@ -527,9 +532,10 @@ PWD={self.config.base_path}{instance_name}/heappe-core
 
                 # archive old appsettings
                 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-                archived_appsettings_path = os.path.join(self.config.base_path, instance_name, "app", "confs", f"appsettings_{old_version}_{timestamp}.json")
-                shutil.copy2(old_appsettings_path, archived_appsettings_path)
-                self.logger.info(f"Archived old appsettings to: {archived_appsettings_path}")
+                if os.path.exists(old_appsettings_path):
+                    archived_appsettings_path = os.path.join(self.config.base_path, instance_name, "app", "confs", f"appsettings_{old_version}_{timestamp}.json")
+                    shutil.copy2(old_appsettings_path, archived_appsettings_path)
+                    self.logger.info(f"Archived old appsettings to: {archived_appsettings_path}")
                 # save new merged appsettings
                 output_dir = os.path.join(self.config.base_path, instance_name, "app", "confs")
                 output_path_app = os.path.join(output_dir, "appsettings.json")
@@ -540,29 +546,30 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 #generate and update .env file
                 #archive old .env
                 old_env_path = os.path.join(self.config.base_path, instance_name, self.config.target_dir, ".env")
+                ports = self.config.default_ports.copy()
+                vault_password = ""
+                sa_password = ""
+
                 if os.path.exists(old_env_path):
                     archived_env_path = os.path.join(self.config.base_path, instance_name, self.config.target_dir, f".env_{old_version}_{timestamp}")
                     shutil.copy2(old_env_path, archived_env_path)
                     self.logger.info(f"Archived old .env to: {archived_env_path}")
 
-                # get ports from old .env
-                ports = {}
-                vault_password = ""
-                sa_password = ""
-                with open(archived_env_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        if line.startswith("HOST_MSSQL_PORT="):
-                            ports["mssql_port"] = int(line.strip().split("=")[1])
-                        elif line.startswith("HOST_APP_PORT="):
-                            ports["app_port"] = int(line.strip().split("=")[1])
-                        elif line.startswith("HOST_DATA_STAGING_PORT="):
-                            ports["data_staging_port"] = int(line.strip().split("=")[1])
-                        elif line.startswith("HOST_LOCAL_PORT="):
-                            ports["local_port"] = int(line.strip().split("=")[1])
-                        elif line.startswith("VAULT_PASSWORD="):
-                            vault_password = line.strip().split("=", 1)[1]
-                        elif line.startswith("HOST_MSSQL_PASSWORD="):
-                            sa_password = line.strip().split("=", 1)[1]
+                    # get ports from old .env
+                    with open(archived_env_path, "r", encoding="utf-8") as f:
+                        for line in f:
+                            if line.startswith("HOST_MSSQL_PORT="):
+                                ports["mssql_port"] = int(line.strip().split("=")[1])
+                            elif line.startswith("HOST_APP_PORT="):
+                                ports["app_port"] = int(line.strip().split("=")[1])
+                            elif line.startswith("HOST_DATA_STAGING_PORT="):
+                                ports["data_staging_port"] = int(line.strip().split("=")[1])
+                            elif line.startswith("HOST_LOCAL_PORT="):
+                                ports["local_port"] = int(line.strip().split("=")[1])
+                            elif line.startswith("VAULT_PASSWORD="):
+                                vault_password = line.strip().split("=", 1)[1]
+                            elif line.startswith("HOST_MSSQL_PASSWORD="):
+                                sa_password = line.strip().split("=", 1)[1]
 
                 env_path = self.generate_env_file(
                     instance_name,
@@ -573,11 +580,12 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 )
                 self.logger.info(f"Updated .env file generated at: {env_path}")
                 self.logger.info("HEAppE update initialization completed successfully")
-            except Exception as e:
-                self.logger.error(f"Update initialization failed: {e}")
                 return {
                     "status": "success",
                     "appsettings": appsettings_new,
                     "instance_settings": get_instance_settings(instance_name)
                 }
+            except Exception as e:
+                self.logger.error(f"Update initialization failed: {e}")
+                raise e
 

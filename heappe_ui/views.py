@@ -167,6 +167,12 @@ def generate_session_code_view(request):
 @login_required
 def reconnect_view(request):
     request.session["force_reauth"] = True
+    # Clear middleware update cache
+    request.session.pop("last_middleware_check_time", None)
+    request.session.pop("last_middleware_checked_instance", None)
+    request.session.pop("middleware_update_available", None)
+    request.session.pop("middleware_deployed_version", None)
+    request.session.pop("middleware_latest_version", None)
     # reload
     return redirect(request.META.get('HTTP_REFERER', '/'))  # Redirect back to the previous page or home if no referrer
 

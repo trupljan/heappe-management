@@ -56,13 +56,16 @@ def middleware_update_renderer(request):
 
     # Run check at most once per hour (3600 seconds), or if instance has changed, or if cache is empty
     if (now - last_check > 3600) or (instance_name != last_checked_instance) or not deployed_version or not latest_version:
+        is_updating = False
         try:
             from heappe_ui.models import InstanceCredentials
             instance_service = InstanceCredentials.objects.filter(instance_name=instance_name).first()
+            if instance_service:
+                is_updating = getattr(instance_service, "is_updating", False)
             
             # 1. Try to query the Healthcheck endpoint
             import py4heappe.heappe_v6.core as hp
-            if instance_service:
+            if instance_service and not is_updating:
                 try:
                     host = instance_service.heappe_host
                     port = instance_service.heappe_port
@@ -120,7 +123,7 @@ def middleware_update_renderer(request):
         except Exception as e:
             print(f"Error checking middleware update: {e}")
 
-        request.session["last_middleware_check_time"] = now
+        request.session["last_middleware_check_time"] = 0 if is_updating else now
         request.session["last_middleware_checked_instance"] = instance_name
         request.session["middleware_update_available"] = update_available
         request.session["middleware_deployed_version"] = deployed_version

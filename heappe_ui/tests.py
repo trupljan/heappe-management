@@ -234,3 +234,109 @@ class DashboardReportingTests(TestCase):
         # It should be very close to min_allowed_date (within a few seconds)
         self.assertAlmostEqual(called_time_from.timestamp(), min_allowed_date.timestamp(), delta=10)
 
+
+import tempfile
+import shutil
+import os
+import json
+from heappe_ui.DeployService import HEAppEDeployService, HEAppEConfig
+
+class HEAppEDeployServiceTests(TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.base_path = self.temp_dir.name
+        self.instance_name = "test_instance"
+        self.config = HEAppEConfig(
+            base_path=self.base_path,
+            target_dir="heappe-core",
+            repo_branch="V6.3.3"
+        )
+        self.service = HEAppEDeployService(self.config)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_update_init_success(self):
+        # Create directories
+        confs_dir = os.path.join(self.base_path, self.instance_name, "app", "confs")
+        core_dir = os.path.join(self.base_path, self.instance_name, "heappe-core")
+        os.makedirs(confs_dir, exist_ok=True)
+        os.makedirs(core_dir, exist_ok=True)
+
+        # Write dummy appsettings.json
+        dummy_appsettings = {
+            "ApplicationAPISettings": {
+                "DeploymentSettings": {
+                    "Version": "v6.2.2"
+                }
+            }
+        }
+        with open(os.path.join(confs_dir, "appsettings.json"), "w", encoding="utf-8") as f:
+            json.dump(dummy_appsettings, f)
+
+        # Write dummy .env
+        dummy_env = (
+            "VAULT_PASSWORD=secret_vault\n"
+            "HOST_MSSQL_PASSWORD=secret_db\n"
+            "HOST_MSSQL_PORT=6000\n"
+            "HOST_APP_PORT=5005\n"
+            "HOST_DATA_STAGING_PORT=5001\n"
+        )
+        with open(os.path.join(core_dir, ".env"), "w", encoding="utf-8") as f:
+            f.write(dummy_env)
+
+        # Run update_init
+        res = self.service.update_init(self.instance_name, "V6.3.3")
+        self.assertEqual(res["status"], "success")
+
+        # Verify new appsettings.json has the new version
+        with open(os.path.join(confs_dir, "appsettings.json"), "r", encoding="utf-8") as f:
+            updated_settings = json.load(f)
+        self.assertEqual(
+            updated_settings["ApplicationAPISettings"]["DeploymentSettings"]["Version"],
+            "V6.3.3"
+        )
+
+        # Verify new .env contains the correct values
+        with open(os.path.join(core_dir, ".env"), "r", encoding="utf-8") as f:
+            updated_env_content = f.read()
+        self.assertIn("VAULT_PASSWORD=secret_vault", updated_env_content)
+        self.assertIn("HOST_MSSQL_PASSWORD=secret_db", updated_env_content)
+        self.assertIn("HOST_MSSQL_PORT=6000", updated_env_content)
+        self.assertIn("HOST_APP_PORT=5005", updated_env_content)
+        self.assertIn("HOST_DATA_STAGING_PORT=5001", updated_env_content)
+        # Verify local port default is written because it was missing in the old env
+        self.assertIn("HOST_LOCAL_PORT=49005", updated_env_content)
+
+        # Verify old appsettings and old env were archived
+        files_in_confs = os.listdir(confs_dir)
+        archived_appsettings = [f for f in files_in_confs if f.startswith("appsettings_v6.2.2_")]
+        self.assertEqual(len(archived_appsettings), 1)
+
+        files_in_core = os.listdir(core_dir)
+        archived_env = [f for f in files_in_core if f.startswith(".env_v6.2.2_")]
+        self.assertEqual(len(archived_env), 1)
+
+    def test_update_init_missing_env_uses_defaults(self):
+        # Create directories but do NOT create .env or appsettings
+        confs_dir = os.path.join(self.base_path, self.instance_name, "app", "confs")
+        os.makedirs(confs_dir, exist_ok=True)
+
+        res = self.service.update_init(self.instance_name, "V6.3.3")
+        self.assertEqual(res["status"], "success")
+
+        # Verify appsettings.json was generated
+        self.assertTrue(os.path.exists(os.path.join(confs_dir, "appsettings.json")))
+
+        # Verify new .env was generated at heappe-core/.env
+        env_path = os.path.join(self.base_path, self.instance_name, "heappe-core", ".env")
+        self.assertTrue(os.path.exists(env_path))
+
+    def test_update_init_failure_raises_original_exception(self):
+        # Trigger an exception by mocking generate_appsettings_and_merge_with_old
+        from unittest.mock import patch
+        with patch.object(self.service, "generate_appsettings_and_merge_with_old", side_effect=ValueError("Merger failed")):
+            with self.assertRaises(ValueError) as ctx:
+                self.service.update_init(self.instance_name, "V6.3.3")
+            self.assertEqual(str(ctx.exception), "Merger failed")
+
