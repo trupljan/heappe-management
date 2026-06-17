@@ -39,13 +39,18 @@ class HEAppEConfig:
     default_ports: Dict[str, int] = None
 
     def __post_init__(self):
+        defaults = {
+            "mssql_port": 6000,
+            "app_port": 5000,
+            "data_staging_port": 5001,
+            "local_port": 49005
+        }
         if self.default_ports is None:
-            self.default_ports = {
-                "mssql_port": 6000,
-                "app_port": 5000,
-                "data_staging_port": 5001,
-                "local_port": 49005
-            }
+            self.default_ports = defaults
+        else:
+            for k, v in defaults.items():
+                if k not in self.default_ports:
+                    self.default_ports[k] = v
 
 
 def get_instance_settings(instance_name:str= 'heappe_instance'):
@@ -137,7 +142,10 @@ class HEAppEDeployService:
             ports: Optional[Dict[str, int]] = None
     ) -> str:
         """Build content for .env file for HEAppE project."""
-        ports = ports or self.config.default_ports
+        merged_ports = self.config.default_ports.copy()
+        if ports:
+            merged_ports.update(ports)
+        ports = merged_ports
         return f"""COMPOSE_instance_name=heappe
 INSTANCE_NAME={instance_name}
 
