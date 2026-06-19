@@ -987,7 +987,7 @@ class ClusterAndProxyConnectionTests(TestCase):
         error_msgs = [str(m) for m in storage if m.level == messages.ERROR]
         self.assertTrue(any("Invalid Custom Configuration" in msg for msg in error_msgs))
 
-        # Case 3: SchedulerType=16, CustomConfiguration valid with IdpUrl -> succeeds and redirects
+        # Case 3: SchedulerType=16, CustomConfiguration valid with only IdpUrl -> succeeds and redirects
         mock_mgmt_instance.heappe_management_cluster_post.return_value = {"Id": 12}
         request = self.factory.post("/clusters/new/", {
             "Name": "FC-Cluster",
@@ -1012,6 +1012,7 @@ class ClusterAndProxyConnectionTests(TestCase):
         self.assertTrue(response.url.endswith("/clusters/12/"))
 
         # Case 4: SchedulerType=16, CustomConfiguration valid with ExpirioSecretName -> succeeds and redirects
+        mock_mgmt_instance.heappe_management_cluster_post.return_value = {"Id": 12}
         request = self.factory.post("/clusters/new/", {
             "Name": "FC-Cluster",
             "MasterNodeName": "fc.master.cz",
@@ -1032,3 +1033,4 @@ class ClusterAndProxyConnectionTests(TestCase):
 
         response = cluster_create(request)
         self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/clusters/12/"))

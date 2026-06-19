@@ -139,76 +139,51 @@
                                     </div>
                                 </div>
                                 {% if is_v6_4_0_plus %}
-                                <div id="firecrest-settings-container" class="col-12 py-2" style="display: none;">
+                                <!-- Hidden textarea where the serialized JSON config is sent to backend -->
+                                <textarea name="CustomConfiguration" style="display: none;">{{ custom_configuration_json }}</textarea>
+
+                                <div class="col-12 py-2">
                                     <div class="card border border-light-subtle bg-light bg-opacity-25 shadow-xs p-3">
                                         <div class="card-title d-flex align-items-center gap-2 mb-3 border-bottom pb-2">
-                                            <i class="bi bi-shield-lock-fill text-primary"></i>
-                                            <h6 class="h6 mb-0 fw-bold text-dark">FirecREST Settings</h6>
+                                            <i class="bi bi-sliders text-primary"></i>
+                                            <h6 class="h6 mb-0 fw-bold text-dark">Custom Configuration</h6>
                                         </div>
-                                        
-                                        <div class="mb-3">
-                                            <label class="form-label small text-muted fw-semibold d-block mb-2">Authentication Method</label>
-                                            <div class="d-flex gap-3">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="radio" name="firecrest_auth_method" id="fc-auth-direct" value="direct" checked>
-                                                    <label class="form-check-label small fw-medium" for="fc-auth-direct">
-                                                        Direct Authentication
-                                                    </label>
+
+                                        <!-- FirecREST Specific Settings (Visible only when FirecREST scheduler type is selected) -->
+                                        <div id="fc-settings-section" class="mb-3" style="display: none;">
+                                            <div class="fw-bold small text-primary mb-2">
+                                                <i class="bi bi-shield-lock-fill me-1"></i> FirecREST Settings
+                                            </div>
+                                            <div class="row g-2 mb-3 bg-white p-3 rounded border border-light-subtle">
+                                                <div class="col-12">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="fc-IdpUrl">IdpUrl <span class="text-danger">*</span></label>
+                                                    <input type="url" class="form-control form-control-sm border-light-subtle bg-white" id="fc-IdpUrl" placeholder="e.g. https://keycloak.example.cz/auth/realms/it4i/protocol/openid-connect/token">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>URL address of the Keycloak token endpoint for Direct Authentication.</div>
                                                 </div>
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="radio" name="firecrest_auth_method" id="fc-auth-expirio" value="expirio">
-                                                    <label class="form-check-label small fw-medium" for="fc-auth-expirio">
-                                                        Expirio Integration
-                                                    </label>
+                                                <div class="col-12 mt-2">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="fc-ExpirioSecretName">ExpirioSecretName <span class="text-danger">*</span></label>
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-ExpirioSecretName" placeholder="e.g. firecrest-secret-key">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Name of the secret key in Expirio for dynamic credential downloading.</div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Direct Auth Fields -->
-                                        <div id="fc-direct-fields" class="mb-2">
-                                            <div class="mb-2">
-                                                <label class="form-label small text-muted fw-semibold" for="fc-IdpUrl">IdpUrl <span class="text-danger">*</span></label>
-                                                <input type="url" class="form-control form-control-sm border-light-subtle bg-white" id="fc-IdpUrl" placeholder="e.g. https://keycloak.example.cz/auth/realms/it4i/protocol/openid-connect/token">
-                                                <div class="form-text text-muted" style="font-size: 0.75rem;"><i class="bi bi-info-circle me-1"></i>URL address of the Keycloak token endpoint for signing in to FirecREST.</div>
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- Expirio Auth Fields -->
-                                        <div id="fc-expirio-fields" class="mb-2" style="display: none;">
-                                            <div class="mb-3">
-                                                <label class="form-label small text-muted fw-semibold" for="fc-ExpirioSecretName">ExpirioSecretName <span class="text-danger">*</span></label>
-                                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-ExpirioSecretName" placeholder="e.g. firecrest-secret-key">
-                                                <div class="form-text text-muted" style="font-size: 0.75rem;"><i class="bi bi-info-circle me-1"></i>Name of the secret key in Expirio to fetch credentials dynamically.</div>
-                                            </div>
-                                            
-                                            <div class="border-top pt-2 mt-3">
-                                                <span class="small text-muted fw-semibold d-block mb-2">Expirio Secret Mapping Keys (Optional)</span>
-                                                <div class="row g-2">
-                                                    <div class="col-md-6">
-                                                        <label class="form-label small text-muted mb-1" for="fc-ExpirioClientIdKey">Client ID Key <span class="text-muted" style="font-size: 0.7rem;">(default: "client_id")</span></label>
-                                                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-ExpirioClientIdKey" placeholder="client_id">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label small text-muted mb-1" for="fc-ExpirioClientSecretKey">Client Secret Key <span class="text-muted" style="font-size: 0.7rem;">(default: "client_secret")</span></label>
-                                                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-ExpirioClientSecretKey" placeholder="client_secret">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label small text-muted mb-1" for="fc-ExpirioUrlKey">URL Key <span class="text-muted" style="font-size: 0.7rem;">(default: not used)</span></label>
-                                                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-ExpirioUrlKey" placeholder="Omit to use default URL">
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <label class="form-label small text-muted mb-1" for="fc-ExpirioIdpUrlKey">IDP URL Key <span class="text-muted" style="font-size: 0.7rem;">(default: not used)</span></label>
-                                                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-ExpirioIdpUrlKey" placeholder="Omit to use default IDP URL">
-                                                    </div>
+                                                <div class="col-12 mt-2">
+                                                    <div class="form-text text-danger small fw-medium"><i class="bi bi-exclamation-circle me-1"></i>Note: At least one of the fields above must be specified for FirecREST.</div>
                                                 </div>
                                             </div>
+                                        </div>
+
+                                        <!-- General Custom Parameters (Key-Value Dynamic Table) -->
+                                        <div>
+                                            <div class="fw-bold small text-secondary mb-2">
+                                                <i class="bi bi-list-nested me-1"></i> Parameters
+                                            </div>
+                                            <div id="custom-kv-container">
+                                                <!-- Dynamic rows will be inserted here by JavaScript -->
+                                            </div>
+                                            <button type="button" id="btn-add-param" class="btn btn-xs btn-outline-primary fw-bold mt-2">
+                                                <i class="bi bi-plus-lg me-1"></i>Add Parameter
+                                            </button>
                                         </div>
                                     </div>
-                                </div>
-                                <div class="col-12 py-2">
-                                    <label class="form-label small text-muted fw-semibold">Custom Configuration (JSON) <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
-                                    <textarea class="form-control form-control-sm font-monospace border-light-subtle bg-white" name="CustomConfiguration" rows="5" placeholder='{ "key": "value" }'>{{ custom_configuration_json }}</textarea>
-                                    <div class="form-text small text-muted">A valid JSON object representing additional key-value configuration pairs for the cluster. Keys and values must be strings.</div>
                                 </div>
 
                                 <script>
@@ -216,20 +191,16 @@
                                         const schedulerSelect = document.querySelector('select[name="SchedulerType"]');
                                         const customConfigTextarea = document.querySelector('textarea[name="CustomConfiguration"]');
                                         
-                                        const firecrestContainer = document.getElementById('firecrest-settings-container');
-                                        const authDirectRadio = document.getElementById('fc-auth-direct');
-                                        const authExpirioRadio = document.getElementById('fc-auth-expirio');
-                                        const directFields = document.getElementById('fc-direct-fields');
-                                        const expirioFields = document.getElementById('fc-expirio-fields');
-                                        
+                                        const fcSettingsSection = document.getElementById('fc-settings-section');
                                         const fcIdpUrl = document.getElementById('fc-IdpUrl');
                                         const fcExpirioSecretName = document.getElementById('fc-ExpirioSecretName');
-                                        const fcClientIdKey = document.getElementById('fc-ExpirioClientIdKey');
-                                        const fcClientSecretKey = document.getElementById('fc-ExpirioClientSecretKey');
-                                        const fcUrlKey = document.getElementById('fc-ExpirioUrlKey');
-                                        const fcIdpUrlKey = document.getElementById('fc-ExpirioIdpUrlKey');
+                                        
+                                        const kvContainer = document.getElementById('custom-kv-container');
+                                        const btnAddParam = document.getElementById('btn-add-param');
                                         
                                         if (!customConfigTextarea || !schedulerSelect) return;
+
+                                        const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName'];
 
                                         function getParsedJSON() {
                                             try {
@@ -242,148 +213,153 @@
                                             }
                                         }
 
-                                        function populateFieldsFromJSON() {
+                                        function addParameterRow(key = '', value = '') {
+                                            const rowId = 'kv-row-' + Math.random().toString(36).substr(2, 9);
+                                            const rowDiv = document.createElement('div');
+                                            rowDiv.className = 'row g-2 mb-2 align-items-center';
+                                            rowDiv.id = rowId;
+                                            
+                                            rowDiv.innerHTML = `
+                                                <div class="col-5">
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-key" placeholder="Key" value="${escapeHtml(key)}">
+                                                </div>
+                                                <div class="col-6">
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-value" placeholder="Value" value="${escapeHtml(value)}">
+                                                </div>
+                                                <div class="col-1 text-end">
+                                                    <button type="button" class="btn btn-xs btn-outline-danger btn-remove-row p-1" title="Remove parameter">
+                                                        <i class="bi bi-dash-lg"></i>
+                                                    </button>
+                                                </div>
+                                            `;
+                                            
+                                            const keyInput = rowDiv.querySelector('.kv-key');
+                                            const valInput = rowDiv.querySelector('.kv-value');
+                                            const btnRemove = rowDiv.querySelector('.btn-remove-row');
+                                            
+                                            keyInput.addEventListener('input', serializeToJSON);
+                                            valInput.addEventListener('input', serializeToJSON);
+                                            btnRemove.addEventListener('click', function() {
+                                                rowDiv.remove();
+                                                serializeToJSON();
+                                            });
+                                            
+                                            kvContainer.appendChild(rowDiv);
+                                            return rowDiv;
+                                        }
+
+                                        function escapeHtml(str) {
+                                            return str.replace(/&/g, "&amp;")
+                                                      .replace(/</g, "&lt;")
+                                                      .replace(/>/g, "&gt;")
+                                                      .replace(/"/g, "&quot;")
+                                                      .replace(/'/g, "&#039;");
+                                        }
+
+                                        function populateUIFromJSON() {
                                             const data = getParsedJSON();
                                             
                                             fcIdpUrl.value = data['IdpUrl'] || '';
                                             fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
-                                            fcClientIdKey.value = data['ExpirioClientIdKey'] || '';
-                                            fcClientSecretKey.value = data['ExpirioClientSecretKey'] || '';
-                                            fcUrlKey.value = data['ExpirioUrlKey'] || '';
-                                            fcIdpUrlKey.value = data['ExpirioIdpUrlKey'] || '';
                                             
-                                            if ('ExpirioSecretName' in data) {
-                                                authExpirioRadio.checked = true;
-                                                directFields.style.display = 'none';
-                                                expirioFields.style.display = 'block';
-                                            } else {
-                                                authDirectRadio.checked = true;
-                                                directFields.style.display = 'block';
-                                                expirioFields.style.display = 'none';
+                                            kvContainer.innerHTML = '';
+                                            
+                                            let hasGeneral = false;
+                                            for (const [k, v] of Object.entries(data)) {
+                                                if (!RESERVED_FC_KEYS.includes(k)) {
+                                                    addParameterRow(k, v);
+                                                    hasGeneral = true;
+                                                }
+                                            }
+                                            
+                                            if (!hasGeneral) {
+                                                addParameterRow('', '');
                                             }
                                         }
 
-                                        let isUpdatingTextarea = false;
-                                        function updateJSONFromFields() {
-                                            if (isUpdatingTextarea) return;
-                                            isUpdatingTextarea = true;
+                                        function serializeToJSON() {
+                                            const data = {};
                                             
-                                            const data = getParsedJSON();
-                                            
-                                            if (authDirectRadio.checked) {
+                                            if (schedulerSelect.value === '16') {
                                                 if (fcIdpUrl.value.trim()) {
                                                     data['IdpUrl'] = fcIdpUrl.value.trim();
-                                                } else {
-                                                    delete data['IdpUrl'];
                                                 }
-                                                
-                                                delete data['ExpirioSecretName'];
-                                                delete data['ExpirioClientIdKey'];
-                                                delete data['ExpirioClientSecretKey'];
-                                                delete data['ExpirioUrlKey'];
-                                                delete data['ExpirioIdpUrlKey'];
-                                            } else {
-                                                delete data['IdpUrl'];
-                                                
                                                 if (fcExpirioSecretName.value.trim()) {
                                                     data['ExpirioSecretName'] = fcExpirioSecretName.value.trim();
-                                                } else {
-                                                    delete data['ExpirioSecretName'];
-                                                }
-                                                
-                                                if (fcClientIdKey.value.trim()) {
-                                                    data['ExpirioClientIdKey'] = fcClientIdKey.value.trim();
-                                                } else {
-                                                    delete data['ExpirioClientIdKey'];
-                                                }
-                                                
-                                                if (fcClientSecretKey.value.trim()) {
-                                                    data['ExpirioClientSecretKey'] = fcClientSecretKey.value.trim();
-                                                } else {
-                                                    delete data['ExpirioClientSecretKey'];
-                                                }
-                                                
-                                                if (fcUrlKey.value.trim()) {
-                                                    data['ExpirioUrlKey'] = fcUrlKey.value.trim();
-                                                } else {
-                                                    delete data['ExpirioUrlKey'];
-                                                }
-                                                
-                                                if (fcIdpUrlKey.value.trim()) {
-                                                    data['ExpirioIdpUrlKey'] = fcIdpUrlKey.value.trim();
-                                                } else {
-                                                    delete data['ExpirioIdpUrlKey'];
                                                 }
                                             }
                                             
-                                            customConfigTextarea.value = JSON.stringify(data, null, 4);
-                                            isUpdatingTextarea = false;
-                                        }
-
-                                        function toggleSettingsVisibility() {
-                                            if (schedulerSelect.value === '16') {
-                                                firecrestContainer.style.display = 'block';
-                                            } else {
-                                                firecrestContainer.style.display = 'none';
-                                            }
-                                        }
-
-                                        schedulerSelect.addEventListener('change', toggleSettingsVisibility);
-                                        
-                                        const radios = [authDirectRadio, authExpirioRadio];
-                                        radios.forEach(radio => {
-                                            radio.addEventListener('change', function() {
-                                                if (authDirectRadio.checked) {
-                                                    directFields.style.display = 'block';
-                                                    expirioFields.style.display = 'none';
-                                                } else {
-                                                    directFields.style.display = 'none';
-                                                    expirioFields.style.display = 'block';
+                                            const rows = kvContainer.querySelectorAll('.row');
+                                            rows.forEach(row => {
+                                                const key = row.querySelector('.kv-key').value.trim();
+                                                const value = row.querySelector('.kv-value').value.trim();
+                                                
+                                                if (key) {
+                                                    if (schedulerSelect.value === '16' && RESERVED_FC_KEYS.includes(key)) {
+                                                        return;
+                                                    }
+                                                    data[key] = value;
                                                 }
-                                                updateJSONFromFields();
                                             });
+                                            
+                                            customConfigTextarea.value = JSON.stringify(data, null, 4);
+                                        }
+
+                                        function toggleSchedulerSections() {
+                                            if (schedulerSelect.value === '16') {
+                                                fcSettingsSection.style.display = 'block';
+                                            } else {
+                                                fcSettingsSection.style.display = 'none';
+                                            }
+                                            serializeToJSON();
+                                        }
+
+                                        schedulerSelect.addEventListener('change', toggleSchedulerSections);
+                                        
+                                        const fcFields = [fcIdpUrl, fcExpirioSecretName];
+                                        fcFields.forEach(input => {
+                                            input.addEventListener('input', serializeToJSON);
                                         });
 
-                                        const inputs = [fcIdpUrl, fcExpirioSecretName, fcClientIdKey, fcClientSecretKey, fcUrlKey, fcIdpUrlKey];
-                                        inputs.forEach(input => {
-                                            input.addEventListener('input', updateJSONFromFields);
+                                        btnAddParam.addEventListener('click', function() {
+                                            addParameterRow('', '');
                                         });
 
-                                        customConfigTextarea.addEventListener('input', function() {
-                                            if (isUpdatingTextarea) return;
-                                            populateFieldsFromJSON();
-                                        });
-
-                                        populateFieldsFromJSON();
-                                        toggleSettingsVisibility();
+                                        populateUIFromJSON();
+                                        toggleSchedulerSections();
 
                                         const form = customConfigTextarea.closest('form');
                                         if (form) {
                                             form.addEventListener('submit', function(e) {
                                                 if (schedulerSelect.value === '16') {
-                                                    try {
-                                                        JSON.parse(customConfigTextarea.value);
-                                                    } catch(err) {
-                                                        alert('Custom Configuration JSON is not valid. Please correct the JSON format before saving.');
+                                                    if (!fcIdpUrl.value.trim() && !fcExpirioSecretName.value.trim()) {
+                                                        alert('For FirecREST scheduler, please specify either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration).');
+                                                        fcIdpUrl.focus();
                                                         e.preventDefault();
                                                         return false;
                                                     }
-
-                                                    if (authDirectRadio.checked) {
-                                                        if (!fcIdpUrl.value.trim()) {
-                                                            alert('Please fill out the Keycloak token URL endpoint (IdpUrl) for Direct Authentication.');
-                                                            fcIdpUrl.focus();
-                                                            e.preventDefault();
-                                                            return false;
-                                                        }
-                                                    } else if (authExpirioRadio.checked) {
-                                                        if (!fcExpirioSecretName.value.trim()) {
-                                                            alert('Please fill out the ExpirioSecretName for Expirio Integration.');
-                                                            fcExpirioSecretName.focus();
-                                                            e.preventDefault();
-                                                            return false;
+                                                }
+                                                
+                                                const keys = [];
+                                                let hasDuplicates = false;
+                                                const rows = kvContainer.querySelectorAll('.row');
+                                                rows.forEach(row => {
+                                                    const keyInput = row.querySelector('.kv-key');
+                                                    const k = keyInput.value.trim();
+                                                    if (k) {
+                                                        if (keys.includes(k)) {
+                                                            alert('Duplicate custom configuration key: "' + k + '". Keys must be unique.');
+                                                            keyInput.focus();
+                                                            hasDuplicates = true;
+                                                        } else {
+                                                            keys.push(k);
                                                         }
                                                     }
+                                                });
+                                                
+                                                if (hasDuplicates) {
+                                                    e.preventDefault();
+                                                    return false;
                                                 }
                                             });
                                         }
