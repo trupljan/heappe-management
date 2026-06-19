@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 from django.http import JsonResponse
 from .imports import *
-from .utils import _create_payload, _handle_api_call, login_view, login_required, _parse_datetime_local
+from .utils import _create_payload, _handle_api_call, login_view, login_required, _parse_datetime_local, clean_ver
 from .command_template import COMMAND_TEMPLATE_PRESETS
 
 
@@ -372,9 +372,6 @@ def submit_job_view(request, command_template_id:int):
     ).to_dict()
 
     deployed_version = request.session.get("middleware_deployed_version", "")
-    def clean_ver(v):
-        res = [int(n) for n in v.lower().split('.') if n.isdigit()]
-        return res if res else [0]
     is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
 
     if request.method == "POST":

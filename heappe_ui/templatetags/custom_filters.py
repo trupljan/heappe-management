@@ -1,5 +1,6 @@
 from django import template
 import py4heappe.heappe_v6.core as hp
+from heappe_ui.view.utils import clean_ver
 
 register = template.Library()
 
@@ -17,9 +18,7 @@ def heappe_version_ok(context, min_version):
         health_info = controller.heappe_health_get()
         current_version = health_info.version.lstrip("vV")
 
-        def clean_ver(v):
-            res = [int(n) for n in v.lower().split('.') if n.isdigit()]
-            return res if res else [0]
+
 
         return clean_ver(current_version) >= clean_ver(str(min_version))
     except Exception:

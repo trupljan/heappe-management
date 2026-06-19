@@ -1,7 +1,7 @@
 import io
 
 from .imports import *
-from .utils import _create_payload, _handle_api_call, login_view, login_required
+from .utils import _create_payload, _handle_api_call, login_view, login_required, clean_ver
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -787,9 +787,6 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     print(f"Error reading appsettings.json: {e}")
 
         if deployed_version and latest_version:
-            def clean_ver(v):
-                res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
-                return res if res else [0]
             try:
                 if clean_ver(latest_version) > clean_ver(deployed_version):
                     update_available = True

@@ -1,6 +1,6 @@
 from .imports import *
 from django.urls import reverse
-from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, SCHEDULER_CHOICES, CONNECTION_PROTOCOL_CHOICES, login_view, login_required
+from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, SCHEDULER_CHOICES, CONNECTION_PROTOCOL_CHOICES, login_view, login_required, clean_ver
 
 @login_required
 def cluster_list(request: HttpRequest) -> HttpResponse:
@@ -42,9 +42,6 @@ def cluster_list(request: HttpRequest) -> HttpResponse:
 @login_required
 def cluster_create(request: HttpRequest) -> HttpResponse:
     deployed_version = request.session.get("middleware_deployed_version", "")
-    def clean_ver(v):
-        res = [int(n) for n in v.lower().split('.') if n.isdigit()]
-        return res if res else [0]
     is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
 
     controller = hp.ManagementApi(request.api_instance)
@@ -188,9 +185,6 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
         tab = _tab
 
     deployed_version = request.session.get("middleware_deployed_version", "")
-    def clean_ver(v):
-        res = [int(n) for n in v.lower().split('.') if n.isdigit()]
-        return res if res else [0]
     is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
 
     if request.method == "POST":

@@ -268,9 +268,6 @@ def dashboard_view(request):
 
         update_available = False
         if deployed_version and isinstance(deployed_version, str) and latest_version and isinstance(latest_version, str):
-            def clean_ver(v):
-                res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
-                return res if res else [0]
             try:
                 if clean_ver(latest_version) > clean_ver(deployed_version):
                     update_available = True

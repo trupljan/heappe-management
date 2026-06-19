@@ -28,6 +28,15 @@ CONNECTION_PROTOCOL_CHOICES = [
     (16, "HTTPS")
 ]
 
+def clean_ver(v: str) -> list[int]:
+    if not v:
+        return [0, 0, 0]
+    import re
+    res = [int(n) for n in re.findall(r'\d+', str(v))]
+    while len(res) < 3:
+        res.append(0)
+    return res
+
 ACCOUNTING_OPERATORS = [
     '+',
     '-',

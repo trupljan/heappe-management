@@ -1034,3 +1034,36 @@ class ClusterAndProxyConnectionTests(TestCase):
         response = cluster_create(request)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.url.endswith("/clusters/12/"))
+
+
+class VersionParsingTests(TestCase):
+    def test_clean_ver_various_formats(self):
+        from heappe_ui.view.utils import clean_ver
+        
+        # Standard versions
+        self.assertEqual(clean_ver("6.4.0"), [6, 4, 0])
+        self.assertEqual(clean_ver("v6.4.0"), [6, 4, 0])
+        self.assertEqual(clean_ver("V6.4.0"), [6, 4, 0])
+        
+        # Missing patch version or short versions
+        self.assertEqual(clean_ver("6.4"), [6, 4, 0])
+        self.assertEqual(clean_ver("6"), [6, 0, 0])
+        
+        # Complex versions with suffixes/prefixes
+        self.assertEqual(clean_ver("v6.4.0-rc1"), [6, 4, 0, 1])
+        self.assertEqual(clean_ver("6.4.0-beta"), [6, 4, 0])
+        self.assertEqual(clean_ver("v6.4.1.2"), [6, 4, 1, 2])
+        
+        # Edge cases
+        self.assertEqual(clean_ver(""), [0, 0, 0])
+        self.assertEqual(clean_ver(None), [0, 0, 0])
+        
+        # Comparisons
+        self.assertTrue(clean_ver("6.4.0") >= [6, 4, 0])
+        self.assertTrue(clean_ver("v6.4.0") >= [6, 4, 0])
+        self.assertTrue(clean_ver("6.4") >= [6, 4, 0])
+        self.assertTrue(clean_ver("6.4.1") >= [6, 4, 0])
+        self.assertTrue(clean_ver("v6.4.0-rc1") >= [6, 4, 0])
+        self.assertFalse(clean_ver("6.3.9") >= [6, 4, 0])
+        self.assertFalse(clean_ver("6.3") >= [6, 4, 0])
+

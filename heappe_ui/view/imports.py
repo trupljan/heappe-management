@@ -20,9 +20,8 @@ def ensure_heappe_version(
     # clean v/V prefix
     version = health_info.version.lstrip("vV")
 
-    def clean_ver(v):
-        res = [int(n) for n in v.lower().split('.') if n.isdigit()]
-        return res if res else [0]
+    from .utils import clean_ver
+
 
     # if version is too low → stop and redirect
     if clean_ver(version) < clean_ver(min_version):

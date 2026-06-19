@@ -2,6 +2,7 @@
 
 import subprocess
 import os
+from heappe_ui.view.utils import clean_ver
 
 def get_git_info():
     path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -102,10 +103,7 @@ def middleware_update_renderer(request):
             if branches:
                 latest_version = branches[0].lstrip("vV")
                 
-                def clean_ver(v):
-                    res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
-                    return res if res else [0]
-                
+
                 try:
                     if clean_ver(latest_version) > clean_ver(deployed_version):
                         update_available = True
@@ -202,9 +200,6 @@ def middleware_update_renderer(request):
 
     is_v6_4_0_plus = False
     if deployed_version:
-        def clean_ver(v):
-            res = [int(n) for n in v.lower().split('.') if n.isdigit()]
-            return res if res else [0]
         is_v6_4_0_plus = (clean_ver(deployed_version) >= [6, 4, 0])
 
     return {
