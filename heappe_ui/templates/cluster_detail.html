@@ -84,7 +84,7 @@
                                         <option value="4" {% if cluster.scheduler_type == 4 %}selected{% endif %}>Slurm</option>
                                         <option value="8" {% if cluster.scheduler_type == 8 %}selected{% endif %}>HyperQueue</option>
                                         {% if is_v6_4_0_plus %}
-                                        <option value="16" {% if cluster.scheduler_type == 16 %}selected{% endif %}>FirecREST</option>
+                                        <option value="16" {% if cluster.scheduler_type == 16 %}selected{% endif %}>FirecREST (Slurm)</option>
                                         {% endif %}
                                     </select>
                                 </div>

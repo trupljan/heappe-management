@@ -16,10 +16,11 @@ SCHEDULER_CHOICES = [
     (2, "PBS Pro"),
     (4, "Slurm"),
     (8, "HyperQueue"),
-    (16, "FirecREST")
+    (16, "FirecREST (Slurm)")
 ]
 
 CONNECTION_PROTOCOL_CHOICES = [
+    (0, "None"),
     (1, "Microsoft HPC Api"),
     (2, "SSH"),
     (3, "SSH Interactive (Legacy)"),
