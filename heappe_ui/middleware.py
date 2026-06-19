@@ -17,17 +17,22 @@ class HeappeSessionMiddleware:
             logs = getattr(request, 'heappe_api_logs', [])
             if logs:
                 import json
-                import urllib.parse
-                try:
-                    logs_json = json.dumps(logs)
-                    logs_encoded = urllib.parse.quote(logs_json)
-                    resp['X-HEAppE-Logs'] = logs_encoded
-                except Exception as e_header:
-                    print(f"[middleware] Failed to set X-HEAppE-Logs header: {e_header}")
                 
-                # If HTML response, inject script tag
-                if resp.status_code == 200 and 'text/html' in resp.get('Content-Type', ''):
+                # If JSON response, inject _heappe_logs directly into the body
+                if resp.status_code == 200 and 'application/json' in resp.get('Content-Type', ''):
                     try:
+                        content_str = resp.content.decode('utf-8')
+                        data = json.loads(content_str)
+                        if isinstance(data, dict):
+                            data['_heappe_logs'] = logs
+                            resp.content = json.dumps(data).encode('utf-8')
+                    except Exception as e_json:
+                        print(f"[middleware] Failed to inject logs into JsonResponse: {e_json}")
+
+                # If HTML response, inject script tag before </body>
+                elif resp.status_code == 200 and 'text/html' in resp.get('Content-Type', ''):
+                    try:
+                        logs_json = json.dumps(logs)
                         logs_json_escaped = logs_json.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
                         script_tag = f"""
 <script>

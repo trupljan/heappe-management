@@ -864,16 +864,9 @@
             });
         };
 
-        function processHeaders(headersGetter) {
-            try {
-                var logsHeader = headersGetter('X-HEAppE-Logs') || headersGetter('x-heappe-logs');
-                if (logsHeader) {
-                    var logsJson = decodeURIComponent(logsHeader);
-                    var logs = JSON.parse(logsJson);
-                    window.printHEAppELogs(logs);
-                }
-            } catch (e) {
-                console.error('Error processing HEAppE response logs:', e);
+        function processJSON(data) {
+            if (data && data._heappe_logs) {
+                window.printHEAppELogs(data._heappe_logs);
             }
         }
 
@@ -882,7 +875,12 @@
         if (originalFetch) {
             window.fetch = function() {
                 return originalFetch.apply(this, arguments).then(function(response) {
-                    processHeaders(function(name) { return response.headers.get(name); });
+                    try {
+                        var contentType = response.headers.get('content-type') || '';
+                        if (contentType.indexOf('application/json') !== -1) {
+                            response.clone().json().then(processJSON).catch(function() {});
+                        }
+                    } catch (e) {}
                     return response;
                 });
             };
@@ -892,8 +890,13 @@
         var originalOpen = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function() {
             this.addEventListener('load', function() {
-                var self = this;
-                processHeaders(function(name) { return self.getResponseHeader(name); });
+                try {
+                    var contentType = this.getResponseHeader('content-type') || '';
+                    if (contentType.indexOf('application/json') !== -1) {
+                        var data = JSON.parse(this.responseText);
+                        processJSON(data);
+                    }
+                } catch (e) {}
             });
             return originalOpen.apply(this, arguments);
         };
