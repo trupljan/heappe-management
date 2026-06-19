@@ -91,5 +91,6 @@ urlpatterns = [
     path('manage-external-users/<int:project_id>/', views.manage_project_adaptor_users,
          name='manage_project_adaptor_users'),
     path('api/invalidate-cache/', views.invalidate_cache_api, name='invalidate_cache_api'),
+    path('database-backups/', views.database_backups, name='database_backups'),
     path('report-error/', views.report_error_view, name='report_error_view'),
 ]

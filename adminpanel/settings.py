@@ -15,6 +15,24 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Configure local py4heappe redirection
+try:
+    import sys
+    import py4heappe
+    local_heappe_v6 = BASE_DIR / "heappe_v6"
+    if local_heappe_v6.exists():
+        # Ensure local __init__.py exists in heappe_v6
+        init_file = local_heappe_v6 / "__init__.py"
+        if not init_file.exists():
+            init_file.touch()
+        # Prepend BASE_DIR to py4heappe.__path__ so that importing py4heappe.heappe_v6 resolves to local
+        repo_path_str = str(BASE_DIR)
+        if repo_path_str not in py4heappe.__path__:
+            py4heappe.__path__.insert(0, repo_path_str)
+except Exception as e:
+    print(f"[settings] Failed to redirect py4heappe to local folder: {e}")
+
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/

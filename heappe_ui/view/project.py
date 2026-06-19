@@ -371,6 +371,12 @@ def submit_job_view(request, command_template_id:int):
         Id=node_type['cluster_id'], SessionCode=request.session_code
     ).to_dict()
 
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    def clean_ver(v):
+        res = [int(n) for n in v.lower().split('.') if n.isdigit()]
+        return res if res else [0]
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+
     if request.method == "POST":
         if request.POST.get("action") == "submit_job":
             # Job-level data
@@ -410,6 +416,42 @@ def submit_job_view(request, command_template_id:int):
                             "ParameterValue": value
                         })
 
+            task_spec = {
+                "Name": task_name,
+                "MinCores": min_cores,
+                "MaxCores": max_cores,
+                "WalltimeLimit": walltime,
+                "StandardOutputFile": "stdout",
+                "StandardErrorFile": "stderr",
+                "ProgressFile": "stdprog",
+                "LogFile": "log.txt",
+                "ClusterNodeTypeId": int(node_type_id) if node_type_id else 0,
+                "CommandTemplateId": int(command_template_id) if command_template_id else 0,
+                "IsExclusive": is_exclusive,
+                "IsRerunnable": is_rerunnable,
+                "TemplateParameterValues": template_parameters
+            }
+
+            if is_v6_4_0_plus:
+                gpu_cores = request.POST.get("GpuCores")
+                if gpu_cores and gpu_cores.strip():
+                    task_spec["GpuCores"] = int(gpu_cores)
+                gpu_nodes = request.POST.get("GpuNodes")
+                if gpu_nodes and gpu_nodes.strip():
+                    task_spec["GpuNodes"] = int(gpu_nodes)
+                required_nodes = request.POST.get("RequiredNodes")
+                if required_nodes and required_nodes.strip():
+                    task_spec["RequiredNodes"] = [n.strip() for n in required_nodes.split(",") if n.strip()]
+                memory = request.POST.get("Memory")
+                if memory and memory.strip():
+                    task_spec["Memory"] = int(memory)
+                memory_per_cpu = request.POST.get("MemoryPerCpu")
+                if memory_per_cpu and memory_per_cpu.strip():
+                    task_spec["MemoryPerCPU"] = int(memory_per_cpu)
+                memory_per_gpu = request.POST.get("MemoryPerGpu")
+                if memory_per_gpu and memory_per_gpu.strip():
+                    task_spec["MemoryPerGPU"] = int(memory_per_gpu)
+
             # Build JSON payload
             payload_data = {
                 "JobSpecification": {
@@ -421,23 +463,7 @@ def submit_job_view(request, command_template_id:int):
                     "NotifyOnAbort": notify_abort,
                     "ClusterId": int(cluster_id),
                     "FileTransferMethodId": node_type['file_transfer_method_id'],
-                    "Tasks": [
-                        {
-                            "Name": task_name,
-                            "MinCores": min_cores,
-                            "MaxCores": max_cores,
-                            "WalltimeLimit": walltime,
-                            "StandardOutputFile": "stdout",
-                            "StandardErrorFile": "stderr",
-                            "ProgressFile": "stdprog",
-                            "LogFile": "log.txt",
-                            "ClusterNodeTypeId": int(node_type_id) if node_type_id else 0,
-                            "CommandTemplateId": int(command_template_id) if command_template_id else 0,
-                            "IsExclusive": is_exclusive,
-                            "IsRerunnable": is_rerunnable,
-                            "TemplateParameterValues": template_parameters
-                        }
-                    ],
+                    "Tasks": [task_spec],
                     "ProjectId": project['id']
                 }
             }
@@ -469,6 +495,7 @@ def submit_job_view(request, command_template_id:int):
         "cluster": cluster,
         "node_type": node_type,
         "command_template": command_template,
+        "is_v6_4_0_plus": is_v6_4_0_plus,
     }
     return render(request, "submit_test_job.html", context)
 

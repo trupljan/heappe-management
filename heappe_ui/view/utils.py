@@ -15,13 +15,17 @@ SCHEDULER_CHOICES = [
     (1, "Local Simulator"),
     (2, "PBS Pro"),
     (4, "Slurm"),
-    (8, "HyperQueue")
+    (8, "HyperQueue"),
+    (16, "FirecREST")
 ]
 
 CONNECTION_PROTOCOL_CHOICES = [
     (1, "Microsoft HPC Api"),
     (2, "SSH"),
-    (3, "SSH Interactive")
+    (3, "SSH Interactive (Legacy)"),
+    (4, "SSH Interactive"),
+    (8, "HTTP"),
+    (16, "HTTPS")
 ]
 
 ACCOUNTING_OPERATORS = [

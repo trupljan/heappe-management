@@ -41,8 +41,15 @@ def cluster_list(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def cluster_create(request: HttpRequest) -> HttpResponse:
-    if request.method == "GET":
-        controller = hp.ManagementApi(request.api_instance)
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    def clean_ver(v):
+        res = [int(n) for n in v.lower().split('.') if n.isdigit()]
+        return res if res else [0]
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+
+    controller = hp.ManagementApi(request.api_instance)
+
+    def get_proxy_list():
         proxy_connections = []
         try:
             pcs = controller.heappe_management_cluster_proxy_connections_get(SessionCode=request.session_code)
@@ -62,16 +69,19 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                 t_int = 1
             pc_dict['type_name'] = PROXY_TYPE_NAMES.get(t_int, "SOCKS4")
             proxy_list.append(pc_dict)
+        return proxy_list
 
+    if request.method == "GET":
         return render(request, "cluster_detail.html", {
             'PROTOCOL_CHOICES': PROTOCOL_CHOICES,
             'SCHEDULER_CHOICES': SCHEDULER_CHOICES,
             'CONNECTION_PROTOCOL_CHOICES': CONNECTION_PROTOCOL_CHOICES,
-            'proxy_connections': proxy_list,
+            'proxy_connections': get_proxy_list(),
             'active_tab': 'detail',
+            'custom_configuration_json': '{}',
+            'is_v6_4_0_plus': is_v6_4_0_plus,
         })
     if request.method == "POST":
-        controller = hp.ManagementApi(request.api_instance)
         payload_data = {
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),
@@ -84,6 +94,40 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
             "DomainName": request.POST.get("DomainName"),
             "ProxyConnectionId": int(request.POST.get("ProxyConnectionId")) if request.POST.get("ProxyConnectionId") else None,
         }
+
+        if is_v6_4_0_plus:
+            custom_config_raw = request.POST.get("CustomConfiguration", "")
+            if custom_config_raw.strip():
+                try:
+                    custom_config_parsed = json.loads(custom_config_raw)
+                    if not isinstance(custom_config_parsed, dict):
+                        raise ValueError("Custom configuration must be a JSON object (dictionary)")
+                    custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
+                    payload_data["CustomConfiguration"] = custom_configuration
+                except Exception as e:
+                    messages.error(request, f"Invalid Custom Configuration JSON: {e}")
+                    return render(request, "cluster_detail.html", {
+                        'PROTOCOL_CHOICES': PROTOCOL_CHOICES,
+                        'SCHEDULER_CHOICES': SCHEDULER_CHOICES,
+                        'CONNECTION_PROTOCOL_CHOICES': CONNECTION_PROTOCOL_CHOICES,
+                        'proxy_connections': get_proxy_list(),
+                        'active_tab': 'detail',
+                        'cluster': {
+                            'name': request.POST.get("Name"),
+                            'description': request.POST.get("Description"),
+                            'master_node_name': request.POST.get("MasterNodeName"),
+                            'scheduler_type': int(request.POST.get("SchedulerType")) if request.POST.get("SchedulerType") else None,
+                            'connection_protocol': int(request.POST.get("ConnectionProtocol")) if request.POST.get("ConnectionProtocol") else None,
+                            'time_zone': request.POST.get("TimeZone"),
+                            'port': int(request.POST.get("Port")) if request.POST.get("Port") else None,
+                            'update_job_state_by_service_account': request.POST.get("UpdateJobStateByServiceAccount") == "on",
+                            'domain_name': request.POST.get("DomainName"),
+                            'proxy_connection': int(request.POST.get("ProxyConnectionId")) if request.POST.get("ProxyConnectionId") else None,
+                        },
+                        'custom_configuration_json': custom_config_raw,
+                        'is_v6_4_0_plus': is_v6_4_0_plus,
+                    })
+
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
             request,
@@ -92,8 +136,17 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
             "Failed to create cluster"
         )
         if result:
-            # cluster_detail
-            return redirect("cluster_detail", cluster_id=result["Id"])
+            cid = None
+            if isinstance(result, dict):
+                cid = result.get("Id") or result.get("id")
+            elif hasattr(result, "id"):
+                cid = result.id
+            elif hasattr(result, "Id"):
+                cid = result.Id
+            
+            if cid:
+                return redirect("cluster_detail", cluster_id=cid)
+        return redirect("cluster_list")
 
 @login_required
 def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> HttpResponse:
@@ -101,6 +154,13 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
     tab = request.GET.get('tab', 'detail')
     if _tab:
         tab = _tab
+
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    def clean_ver(v):
+        res = [int(n) for n in v.lower().split('.') if n.isdigit()]
+        return res if res else [0]
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+
     if request.method == "POST":
         action = request.POST.get("action")
 
@@ -145,6 +205,23 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
             "DomainName": request.POST.get("DomainName"),
             "ProxyConnectionId": int(request.POST.get("ProxyConnectionId")) if request.POST.get("ProxyConnectionId") else None,
         }
+
+        if is_v6_4_0_plus:
+            custom_config_raw = request.POST.get("CustomConfiguration", "")
+            if custom_config_raw.strip():
+                try:
+                    custom_config_parsed = json.loads(custom_config_raw)
+                    if not isinstance(custom_config_parsed, dict):
+                        raise ValueError("Custom configuration must be a JSON object (dictionary)")
+                    custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
+                    payload_data["CustomConfiguration"] = custom_configuration
+                except Exception as e:
+                    messages.error(request, f"Invalid Custom Configuration JSON: {e}")
+                    request.session['invalid_custom_config'] = custom_config_raw
+                    return redirect("cluster_detail", cluster_id=cluster_id)
+            else:
+                payload_data["CustomConfiguration"] = {}
+
         payload = _create_payload(request.session_code, payload_data)
         payload["body"]["Id"] = cluster_id
         result = _handle_api_call(
@@ -178,7 +255,22 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
         pc_dict['type_name'] = PROXY_TYPE_NAMES.get(t_int, "SOCKS4")
         proxy_list.append(pc_dict)
 
-    context = {'cluster': cluster.to_dict(), 'active_tab': tab, 'proxy_connections': proxy_list}
+    cluster_dict = cluster.to_dict()
+    custom_config_json = request.session.pop('invalid_custom_config', None)
+    if custom_config_json is None:
+        if 'custom_configuration' in cluster_dict:
+            custom_config = cluster_dict.get('custom_configuration') or {}
+            custom_config_json = json.dumps(custom_config, indent=4)
+        else:
+            custom_config_json = '{}'
+
+    context = {
+        'cluster': cluster_dict,
+        'active_tab': tab,
+        'proxy_connections': proxy_list,
+        'custom_configuration_json': custom_config_json,
+        'is_v6_4_0_plus': is_v6_4_0_plus,
+    }
     context['PROTOCOL_CHOICES'] = PROTOCOL_CHOICES
     if tab == 'detail':
         filetarnsfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code)

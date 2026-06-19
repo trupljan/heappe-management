@@ -200,10 +200,18 @@ def middleware_update_renderer(request):
         except Exception as e:
             print(f"Error getting instance API links: {e}")
 
+    is_v6_4_0_plus = False
+    if deployed_version:
+        def clean_ver(v):
+            res = [int(n) for n in v.lower().split('.') if n.isdigit()]
+            return res if res else [0]
+        is_v6_4_0_plus = (clean_ver(deployed_version) >= [6, 4, 0])
+
     return {
         'middleware_update_available': update_available,
         'middleware_deployed_version': deployed_version,
         'middleware_latest_version': latest_version,
         'cache_status': cache_status,
+        'is_v6_4_0_plus': is_v6_4_0_plus,
         **api_links
     }

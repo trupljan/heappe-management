@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 
 {% block title %}{{ cluster.name }}{% endblock %}
 
@@ -82,6 +83,9 @@
                                         <option value="2" {% if cluster.scheduler_type == 2 %}selected{% endif %}>PbsPro</option>
                                         <option value="4" {% if cluster.scheduler_type == 4 %}selected{% endif %}>Slurm</option>
                                         <option value="8" {% if cluster.scheduler_type == 8 %}selected{% endif %}>HyperQueue</option>
+                                        {% if is_v6_4_0_plus %}
+                                        <option value="16" {% if cluster.scheduler_type == 16 %}selected{% endif %}>FirecREST</option>
+                                        {% endif %}
                                     </select>
                                 </div>
                                 <div class="col-md-6">
@@ -90,6 +94,10 @@
                                         <option value="1" {% if cluster.connection_protocol == 1 %}selected{% endif %}>MicrosoftHpcApi</option>
                                         <option value="2" {% if cluster.connection_protocol == 2 %}selected{% endif %}>Ssh</option>
                                         <option value="4" {% if cluster.connection_protocol == 4 %}selected{% endif %}>SshInteractive</option>
+                                        {% if is_v6_4_0_plus %}
+                                        <option value="8" {% if cluster.connection_protocol == 8 %}selected{% endif %}>HTTP</option>
+                                        <option value="16" {% if cluster.connection_protocol == 16 %}selected{% endif %}>HTTPS</option>
+                                        {% endif %}
                                     </select>
                                 </div>
                                 <div class="col-md-4">
@@ -130,6 +138,13 @@
                                         </label>
                                     </div>
                                 </div>
+                                {% if is_v6_4_0_plus %}
+                                <div class="col-12 py-2">
+                                    <label class="form-label small text-muted fw-semibold">Custom Configuration (JSON) <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <textarea class="form-control form-control-sm font-monospace border-light-subtle bg-white" name="CustomConfiguration" rows="5" placeholder='{ "key": "value" }'>{{ custom_configuration_json }}</textarea>
+                                    <div class="form-text small text-muted">A valid JSON object representing additional key-value configuration pairs for the cluster. Keys and values must be strings.</div>
+                                </div>
+                                {% endif %}
                             </div>
                             <div class="mt-4 pt-3 border-top d-flex justify-content-between">
                                 <a href="{% url 'cluster_list' %}" class="btn btn-sm btn-outline-secondary fw-semibold px-3">

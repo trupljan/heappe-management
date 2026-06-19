@@ -17,7 +17,11 @@ def heappe_version_ok(context, min_version):
         health_info = controller.heappe_health_get()
         current_version = health_info.version.lstrip("vV")
 
-        return current_version >= str(min_version)
+        def clean_ver(v):
+            res = [int(n) for n in v.lower().split('.') if n.isdigit()]
+            return res if res else [0]
+
+        return clean_ver(current_version) >= clean_ver(str(min_version))
     except Exception:
         return False
 
