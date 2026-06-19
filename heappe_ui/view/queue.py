@@ -117,7 +117,8 @@ def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
         "clusternodetypeaggregation": clusternodetypeaggregation,
         "cluster": cluster,
         "filetransfer_methods": cluster_filetransfer_methods,
-        "queue_groups": queue_groups
+        "queue_groups": queue_groups,
+        "PROTOCOL_CHOICES": PROTOCOL_CHOICES,
     })
 
 @login_required
@@ -140,7 +141,8 @@ def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
         return render(request, "queue.html", {
             "cluster": cluster,
             "filetransfer_methods": cluster_filetransfer_methods,
-            "queue_groups": queue_groups
+            "queue_groups": queue_groups,
+            "PROTOCOL_CHOICES": PROTOCOL_CHOICES,
         })
 
     if request.method == "POST":
