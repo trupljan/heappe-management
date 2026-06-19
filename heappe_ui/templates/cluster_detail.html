@@ -476,7 +476,9 @@
                                 <label class="form-label small text-muted fw-semibold">Protocol</label>
                                 <select class="form-select form-select-sm border-light-subtle bg-white" name="Protocol" required>
                                     {% for pid, pname in PROTOCOL_CHOICES %}
-                                        <option value="{{ pid }}">{{ pname }}</option>
+                                        {% if is_v6_4_0_plus or pid < 8 %}
+                                            <option value="{{ pid }}">{{ pname }}</option>
+                                        {% endif %}
                                     {% endfor %}
                                 </select>
                             </div>
@@ -515,7 +517,9 @@
                                 <label class="form-label small text-muted fw-semibold">Protocol</label>
                                 <select class="form-select form-select-sm border-light-subtle bg-white" name="Protocol" id="editProtocol" required>
                                     {% for pid, pname in PROTOCOL_CHOICES %}
-                                        <option value="{{ pid }}">{{ pname }}</option>
+                                        {% if is_v6_4_0_plus or pid < 8 %}
+                                            <option value="{{ pid }}">{{ pname }}</option>
+                                        {% endif %}
                                     {% endfor %}
                                 </select>
                             </div>

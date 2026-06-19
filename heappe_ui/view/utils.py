@@ -8,7 +8,9 @@ from django.contrib.auth.decorators import login_required
 PROTOCOL_CHOICES = [
     (1, "Network Share"),
     (2, "SFTP/SCP"),
-    (3, "Local SFTP/SCP"),
+    (4, "Local SFTP/SCP"),
+    (8, "HTTP"),
+    (16, "HTTPS"),
 ]
 
 SCHEDULER_CHOICES = [
