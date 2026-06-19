@@ -832,6 +832,72 @@
             }
         }
     });
+
+    /* ── HEAppE Client-Side Log Interceptor ── */
+    (function() {
+        window.printHEAppELogs = function(logs) {
+            if (!logs || !logs.length) return;
+            logs.forEach(function(entry) {
+                var path = entry.path;
+                if (entry.type === 'request') {
+                    console.groupCollapsed('%c[HEAppE Request] %c' + path, 'color: #3b82f6; font-weight: bold;', 'color: inherit; font-weight: normal;');
+                    console.log('Path:', path);
+                    if (entry.body) {
+                        console.log('Payload:', entry.body);
+                    }
+                    console.groupEnd();
+                } else if (entry.type === 'response') {
+                    console.groupCollapsed('%c[HEAppE Response] %c' + path, 'color: #10b981; font-weight: bold;', 'color: inherit; font-weight: normal;');
+                    console.log('Path:', path);
+                    if (entry.content) {
+                        console.log('Response:', entry.content);
+                    }
+                    console.groupEnd();
+                } else if (entry.type === 'exception') {
+                    console.groupCollapsed('%c[HEAppE Exception] %c' + path, 'color: #ef4444; font-weight: bold;', 'color: inherit; font-weight: normal;');
+                    console.error('Path:', path);
+                    if (entry.details) {
+                        console.error('Details:', entry.details);
+                    }
+                    console.groupEnd();
+                }
+            });
+        };
+
+        function processHeaders(headersGetter) {
+            try {
+                var logsHeader = headersGetter('X-HEAppE-Logs') || headersGetter('x-heappe-logs');
+                if (logsHeader) {
+                    var logsJson = decodeURIComponent(logsHeader);
+                    var logs = JSON.parse(logsJson);
+                    window.printHEAppELogs(logs);
+                }
+            } catch (e) {
+                console.error('Error processing HEAppE response logs:', e);
+            }
+        }
+
+        // Override fetch
+        var originalFetch = window.fetch;
+        if (originalFetch) {
+            window.fetch = function() {
+                return originalFetch.apply(this, arguments).then(function(response) {
+                    processHeaders(function(name) { return response.headers.get(name); });
+                    return response;
+                });
+            };
+        }
+
+        // Override XMLHttpRequest
+        var originalOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function() {
+            this.addEventListener('load', function() {
+                var self = this;
+                processHeaders(function(name) { return self.getResponseHeader(name); });
+            });
+            return originalOpen.apply(this, arguments);
+        };
+    })();
 </script>
 {% block extra_scripts %}{% endblock %}
 </body>

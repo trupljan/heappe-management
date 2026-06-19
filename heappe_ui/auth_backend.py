@@ -98,16 +98,49 @@ def patch_api_client(api_instance):
                 if hasattr(body, 'session_code') and (getattr(body, 'session_code') is None or getattr(body, 'session_code') == ''):
                     body.session_code = _get_session_code_fallback(api_instance) or 'ignore'
 
+        def safe_truncate(val, limit=1000):
+            if val is None:
+                return None
+            val_str = str(val)
+            if len(val_str) > limit:
+                return val_str[:limit] + f"... [Truncated, original length: {len(val_str)}]"
+            return val_str
+
         # Outgoing Request Log
         resource_path = bound_args.arguments.get('resource_path', 'unknown')
         print(f"[HEAppE API Request] Outgoing path: {resource_path}")
         if body:
             print(f"[HEAppE API Request] Body payload: {body}")
 
+        request = getattr(api_instance, '_request', None)
+        if request:
+            if not hasattr(request, 'heappe_api_logs'):
+                request.heappe_api_logs = []
+            
+            # Format payload for log
+            log_body = None
+            if body:
+                try:
+                    if hasattr(body, 'to_dict'):
+                        log_body = body.to_dict()
+                    elif hasattr(body, 'to_str'):
+                        log_body = body.to_str()
+                    else:
+                        log_body = body
+                except Exception:
+                    log_body = str(body)
+            
+            request.heappe_api_logs.append({
+                'type': 'request',
+                'path': resource_path,
+                'body': safe_truncate(log_body)
+            })
+
         try:
             response = original_call_api(*bound_args.args, **bound_args.kwargs)
             # Incoming Response Log
             print(f"[HEAppE API Response] Success on: {resource_path}")
+            log_content = None
             if hasattr(response, 'data'):
                 # Preload content = False -> response is RESTResponse with .data (bytes)
                 data = response.data
@@ -117,20 +150,42 @@ def patch_api_client(api_instance):
                     except Exception:
                         pass
                 print(f"[HEAppE API Response Content]: {data}")
+                log_content = data
             else:
                 # Preload content = True -> response is deserialized model
                 try:
                     if hasattr(response, 'to_dict'):
-                        print(f"[HEAppE API Response Content]: {response.to_dict()}")
+                        val = response.to_dict()
+                        print(f"[HEAppE API Response Content]: {val}")
+                        log_content = val
                     elif hasattr(response, 'to_str'):
-                        print(f"[HEAppE API Response Content]: {response.to_str()}")
+                        val = response.to_str()
+                        print(f"[HEAppE API Response Content]: {val}")
+                        log_content = val
                     else:
                         print(f"[HEAppE API Response Content]: {response}")
+                        log_content = response
                 except Exception as ex:
                     print(f"[HEAppE API Response Content] Serialization error: {ex}")
+                    log_content = f"Serialization error: {ex}"
+            
+            if request:
+                request.heappe_api_logs.append({
+                    'type': 'response',
+                    'path': resource_path,
+                    'content': safe_truncate(log_content)
+                })
             return response
         except Exception as e:
             print(f"[HEAppE API Response] Exception raised on: {resource_path} | Details: {e}")
+            if request:
+                if not hasattr(request, 'heappe_api_logs'):
+                    request.heappe_api_logs = []
+                request.heappe_api_logs.append({
+                    'type': 'exception',
+                    'path': resource_path,
+                    'details': safe_truncate(str(e))
+                })
             # Check for 401/403 (unauthorized/expired token) to trigger auto-reauthentication
             status = getattr(e, 'status', None)
             try:

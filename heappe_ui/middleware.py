@@ -8,12 +8,55 @@ class HeappeSessionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        request.heappe_api_logs = []
+
+        def process_response(resp):
+            if resp is None:
+                return resp
+            
+            logs = getattr(request, 'heappe_api_logs', [])
+            if logs:
+                import json
+                import urllib.parse
+                try:
+                    logs_json = json.dumps(logs)
+                    logs_encoded = urllib.parse.quote(logs_json)
+                    resp['X-HEAppE-Logs'] = logs_encoded
+                except Exception as e_header:
+                    print(f"[middleware] Failed to set X-HEAppE-Logs header: {e_header}")
+                
+                # If HTML response, inject script tag
+                if resp.status_code == 200 and 'text/html' in resp.get('Content-Type', ''):
+                    try:
+                        logs_json_escaped = logs_json.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+                        script_tag = f"""
+<script>
+(function() {{
+    var logs = {logs_json_escaped};
+    if (logs && window.printHEAppELogs) {{
+        window.printHEAppELogs(logs);
+    }}
+}})();
+</script>
+"""
+                        content = resp.content
+                        if isinstance(content, bytes):
+                            content_str = content.decode('utf-8')
+                            if '</body>' in content_str:
+                                content_str = content_str.replace('</body>', f"{script_tag}</body>", 1)
+                            else:
+                                content_str += script_tag
+                            resp.content = content_str.encode('utf-8')
+                    except Exception as e_inject:
+                        print(f"[middleware] Failed to inject logs script: {e_inject}")
+            return resp
+
         path = request.path
         if any(p in path for p in ["/instances/", "/logout/", "/login/", "/reconnect/"]):
-            return self.get_response(request)
+            return process_response(self.get_response(request))
 
         if not hasattr(request, 'user') or not request.user.is_authenticated:
-            return self.get_response(request)
+            return process_response(self.get_response(request))
 
         try:
             now = time.time()
@@ -118,7 +161,7 @@ class HeappeSessionMiddleware:
             redirect_path = request.path
             if query_params:
                 redirect_path += '?' + query_params.urlencode()
-            return HttpResponseRedirect(redirect_path)
+            return process_response(HttpResponseRedirect(redirect_path))
 
         # Check if this is a mutating request that should invalidate the metadata cache globally
         if request.method in ["POST", "PUT", "DELETE"]:
@@ -133,7 +176,7 @@ class HeappeSessionMiddleware:
                 except Exception as ex:
                     print(f"[middleware] Error updating metadata timestamp: {ex}")
 
-        return self.get_response(request)
+        return process_response(self.get_response(request))
 
 
 class HeappeExceptionMiddleware:
