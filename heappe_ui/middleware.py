@@ -105,6 +105,13 @@ class HeappeSessionMiddleware:
                     request.session.pop(key, None)
                     request.session.pop(f"{key}_time", None)
             
+            # Also clear the cached middleware version and update-check info
+            request.session.pop("last_middleware_check_time", None)
+            request.session.pop("last_middleware_checked_instance", None)
+            request.session.pop("middleware_update_available", None)
+            request.session.pop("middleware_deployed_version", None)
+            request.session.pop("middleware_latest_version", None)
+            
             from django.http import HttpResponseRedirect
             query_params = request.GET.copy()
             query_params.pop('refresh', None)
