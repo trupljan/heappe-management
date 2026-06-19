@@ -102,6 +102,13 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                     custom_config_parsed = json.loads(custom_config_raw)
                     if not isinstance(custom_config_parsed, dict):
                         raise ValueError("Custom configuration must be a JSON object (dictionary)")
+                    
+                    if payload_data.get("SchedulerType") == 16:
+                        expirio_secret = custom_config_parsed.get("ExpirioSecretName", "").strip()
+                        idp_url = custom_config_parsed.get("IdpUrl", "").strip()
+                        if not expirio_secret and not idp_url:
+                            raise ValueError("For FirecREST scheduler, either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration) must be specified.")
+
                     custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
                     payload_data["CustomConfiguration"] = custom_configuration
                 except Exception as e:
@@ -127,6 +134,31 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                         'custom_configuration_json': custom_config_raw,
                         'is_v6_4_0_plus': is_v6_4_0_plus,
                     })
+            else:
+                if payload_data.get("SchedulerType") == 16:
+                    messages.error(request, "Validation Error: For FirecREST scheduler, either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration) must be specified.")
+                    return render(request, "cluster_detail.html", {
+                        'PROTOCOL_CHOICES': PROTOCOL_CHOICES,
+                        'SCHEDULER_CHOICES': SCHEDULER_CHOICES,
+                        'CONNECTION_PROTOCOL_CHOICES': CONNECTION_PROTOCOL_CHOICES,
+                        'proxy_connections': get_proxy_list(),
+                        'active_tab': 'detail',
+                        'cluster': {
+                            'name': request.POST.get("Name"),
+                            'description': request.POST.get("Description"),
+                            'master_node_name': request.POST.get("MasterNodeName"),
+                            'scheduler_type': 16,
+                            'connection_protocol': int(request.POST.get("ConnectionProtocol")) if request.POST.get("ConnectionProtocol") else None,
+                            'time_zone': request.POST.get("TimeZone"),
+                            'port': int(request.POST.get("Port")) if request.POST.get("Port") else None,
+                            'update_job_state_by_service_account': request.POST.get("UpdateJobStateByServiceAccount") == "on",
+                            'domain_name': request.POST.get("DomainName"),
+                            'proxy_connection': int(request.POST.get("ProxyConnectionId")) if request.POST.get("ProxyConnectionId") else None,
+                        },
+                        'custom_configuration_json': "{}",
+                        'is_v6_4_0_plus': is_v6_4_0_plus,
+                    })
+                payload_data["CustomConfiguration"] = {}
 
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
@@ -213,6 +245,13 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                     custom_config_parsed = json.loads(custom_config_raw)
                     if not isinstance(custom_config_parsed, dict):
                         raise ValueError("Custom configuration must be a JSON object (dictionary)")
+                    
+                    if payload_data.get("SchedulerType") == 16:
+                        expirio_secret = custom_config_parsed.get("ExpirioSecretName", "").strip()
+                        idp_url = custom_config_parsed.get("IdpUrl", "").strip()
+                        if not expirio_secret and not idp_url:
+                            raise ValueError("For FirecREST scheduler, either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration) must be specified.")
+
                     custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
                     payload_data["CustomConfiguration"] = custom_configuration
                 except Exception as e:
@@ -220,6 +259,10 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                     request.session['invalid_custom_config'] = custom_config_raw
                     return redirect("cluster_detail", cluster_id=cluster_id)
             else:
+                if payload_data.get("SchedulerType") == 16:
+                    messages.error(request, "Validation Error: For FirecREST scheduler, either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration) must be specified.")
+                    request.session['invalid_custom_config'] = "{}"
+                    return redirect("cluster_detail", cluster_id=cluster_id)
                 payload_data["CustomConfiguration"] = {}
 
         payload = _create_payload(request.session_code, payload_data)
