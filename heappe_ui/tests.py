@@ -2,6 +2,7 @@ from django.test import TestCase, RequestFactory
 from django.http import HttpResponse, Http404
 from django.core.exceptions import PermissionDenied
 from django.conf import settings
+from django.contrib import messages
 from heappe_ui.middleware import HeappeExceptionMiddleware
 from unittest import mock
 
@@ -922,3 +923,112 @@ class ClusterAndProxyConnectionTests(TestCase):
         self.assertTrue(mock_mgmt_instance.heappe_management_cluster_put.called)
         put_call_args = mock_mgmt_instance.heappe_management_cluster_put.call_args[1]
         self.assertEqual(put_call_args["body"]["ProxyConnectionId"], 99)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_cluster_create_firecrest_validation(self, mock_mgmt_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_mgmt_instance
+
+        # Mock proxy list
+        mock_mgmt_instance.heappe_management_cluster_proxy_connections_get.return_value = []
+
+        # Case 1: SchedulerType=16 (FirecREST), CustomConfiguration empty -> should show error message
+        request = self.factory.post("/clusters/new/", {
+            "Name": "FC-Cluster",
+            "MasterNodeName": "fc.master.cz",
+            "SchedulerType": "16",
+            "ConnectionProtocol": "16",
+            "TimeZone": "UTC",
+            "CustomConfiguration": ""
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123",
+            "middleware_deployed_version": "6.4.0"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.clusters import cluster_create
+        response = cluster_create(request)
+        self.assertEqual(response.status_code, 200) # Re-renders the form on validation error
+        
+        # Check messages contains error
+        storage = messages.get_messages(request)
+        error_msgs = [str(m) for m in storage if m.level == messages.ERROR]
+        self.assertTrue(any("Validation Error" in msg or "specified" in msg for msg in error_msgs))
+
+        # Case 2: SchedulerType=16, CustomConfiguration invalid JSON -> error message
+        request = self.factory.post("/clusters/new/", {
+            "Name": "FC-Cluster",
+            "MasterNodeName": "fc.master.cz",
+            "SchedulerType": "16",
+            "ConnectionProtocol": "16",
+            "TimeZone": "UTC",
+            "CustomConfiguration": "{invalid_json}"
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123",
+            "middleware_deployed_version": "6.4.0"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+        setattr(request, '_messages', FallbackStorage(request))
+
+        response = cluster_create(request)
+        self.assertEqual(response.status_code, 200)
+        storage = messages.get_messages(request)
+        error_msgs = [str(m) for m in storage if m.level == messages.ERROR]
+        self.assertTrue(any("Invalid Custom Configuration" in msg for msg in error_msgs))
+
+        # Case 3: SchedulerType=16, CustomConfiguration valid with IdpUrl -> succeeds and redirects
+        mock_mgmt_instance.heappe_management_cluster_post.return_value = {"Id": 12}
+        request = self.factory.post("/clusters/new/", {
+            "Name": "FC-Cluster",
+            "MasterNodeName": "fc.master.cz",
+            "SchedulerType": "16",
+            "ConnectionProtocol": "16",
+            "TimeZone": "UTC",
+            "CustomConfiguration": '{"IdpUrl": "https://keycloak.url"}'
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123",
+            "middleware_deployed_version": "6.4.0"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+        setattr(request, '_messages', FallbackStorage(request))
+
+        response = cluster_create(request)
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/clusters/12/"))
+
+        # Case 4: SchedulerType=16, CustomConfiguration valid with ExpirioSecretName -> succeeds and redirects
+        request = self.factory.post("/clusters/new/", {
+            "Name": "FC-Cluster",
+            "MasterNodeName": "fc.master.cz",
+            "SchedulerType": "16",
+            "ConnectionProtocol": "16",
+            "TimeZone": "UTC",
+            "CustomConfiguration": '{"ExpirioSecretName": "secret-key"}'
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123",
+            "middleware_deployed_version": "6.4.0"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+        setattr(request, '_messages', FallbackStorage(request))
+
+        response = cluster_create(request)
+        self.assertEqual(response.status_code, 302)
