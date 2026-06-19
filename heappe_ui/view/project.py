@@ -449,6 +449,35 @@ def submit_job_view(request, command_template_id:int):
                 if memory_per_gpu and memory_per_gpu.strip():
                     task_spec["MemoryPerGPU"] = int(memory_per_gpu)
 
+            # Authentication settings
+            auth_method = request.POST.get("AuthMethod", "default")
+            auth_credential = request.POST.get("AuthCredential", "").strip()
+
+            submit_api_instance = request.api_instance
+            submit_session_code = request.session_code
+
+            if auth_method != "default" and auth_credential:
+                user_config = hp.Configuration()
+                host = request.session.get("heappe_host")
+                user_config.host = 'http://' + host if not host.startswith('http') else host
+                user_config.verify_ssl = True
+
+                submit_api_instance = hp.ApiClient(user_config)
+                submit_api_instance.custom_auth = True
+
+                if auth_method == "jwt":
+                    user_config.api_key['Authorization'] = auth_credential
+                    user_config.api_key_prefix['Authorization'] = 'Bearer'
+                    submit_api_instance.set_default_header("Authorization", f"Bearer {auth_credential}")
+                elif auth_method == "apikey":
+                    user_config.api_key['X-API-Key'] = auth_credential
+                    submit_api_instance.set_default_header("X-API-Key", auth_credential)
+
+                from heappe_ui.auth_backend import patch_api_client
+                submit_api_instance._request = request
+                patch_api_client(submit_api_instance)
+                submit_session_code = None
+
             # Build JSON payload
             payload_data = {
                 "JobSpecification": {
@@ -465,8 +494,8 @@ def submit_job_view(request, command_template_id:int):
                 }
             }
 
-            controller = hp.JobManagementApi(request.api_instance)
-            payload = _create_payload(request.session_code, payload_data)
+            controller = hp.JobManagementApi(submit_api_instance)
+            payload = _create_payload(submit_session_code, payload_data)
             result = _handle_api_call(
                 request,
                 lambda: controller.heappe_job_management_create_job_post(**payload),
@@ -477,7 +506,7 @@ def submit_job_view(request, command_template_id:int):
                 payload_data = {
                       "CreatedJobInfoId": result['Id']
                     }
-                payload = _create_payload(request.session_code, payload_data)
+                payload = _create_payload(submit_session_code, payload_data)
                 result = _handle_api_call(
                     request,
                     lambda: controller.heappe_job_management_submit_job_put(**payload),

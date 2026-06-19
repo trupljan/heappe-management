@@ -488,6 +488,22 @@ class SelfHealingSessionTests(TestCase):
         # Check that the second call received 'new_token'
         self.assertIn(("SessionCode", "new_token"), called_query_params[1])
 
+    def test_get_session_code_fallback_returns_none_if_custom_auth_is_true(self):
+        from heappe_ui.auth_backend import _get_session_code_fallback
+        import py4heappe.heappe_v6.core as hp
+
+        config = hp.Configuration()
+        api_client = hp.ApiClient(config)
+        api_client.custom_auth = True
+        
+        request = self.factory.get("/")
+        request.session = {
+            "heappe_session_code": "token123"
+        }
+        api_client._request = request
+
+        self.assertIsNone(_get_session_code_fallback(api_client))
+
 
 class JobStatusViewTests(TestCase):
     def setUp(self):
@@ -735,6 +751,195 @@ class SubmitJobTests(TestCase):
         self.assertFalse(job_spec['NotifyOnStart'])
         self.assertFalse(job_spec['NotifyOnFinish'])
         self.assertFalse(job_spec['NotifyOnAbort'])
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    @mock.patch("py4heappe.heappe_v6.core.JobManagementApi")
+    @mock.patch("py4heappe.heappe_v6.core.ApiClient")
+    def test_submit_job_with_custom_jwt(self, mock_api_client_cls, mock_job_mgmt_api, mock_mgmt_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_mgmt_instance
+
+        mock_job_mgmt_instance = mock.MagicMock()
+        mock_job_mgmt_api.return_value = mock_job_mgmt_instance
+
+        mock_api_instance = mock.MagicMock()
+        mock_api_client_cls.return_value = mock_api_instance
+
+        # Mock GET info for template, project, node type, cluster
+        mock_mgmt_instance.heappe_management_clusters_get.return_value = []
+        
+        mock_template = mock.MagicMock()
+        mock_template.to_dict.return_value = {
+            "project_id": 1,
+            "cluster_node_type_id": 2,
+            "template_parameters": []
+        }
+        mock_mgmt_instance.heappe_management_command_template_get.return_value = mock_template
+
+        mock_project = mock.MagicMock()
+        mock_project.to_dict.return_value = {
+            "id": 1,
+            "name": "Test Project",
+        }
+        mock_mgmt_instance.heappe_management_project_get.return_value = mock_project
+
+        mock_node_type = mock.MagicMock()
+        mock_node_type.to_dict.return_value = {
+            "id": 2,
+            "cluster_id": 3,
+            "file_transfer_method_id": 4,
+            "cores_per_node": 16,
+        }
+        mock_mgmt_instance.heappe_management_cluster_node_type_get.return_value = mock_node_type
+
+        mock_cluster = mock.MagicMock()
+        mock_cluster.to_dict.return_value = {
+            "id": 3,
+            "name": "Test Cluster",
+        }
+        mock_mgmt_instance.heappe_management_cluster_get.return_value = mock_cluster
+
+        # Mock CreateJob / SubmitJob responses
+        mock_job_mgmt_instance.heappe_job_management_create_job_post.return_value = {"Id": 123}
+        mock_job_mgmt_instance.heappe_job_management_submit_job_put.return_value = {"Id": 123}
+
+        # POST payload with custom JWT
+        request = self.factory.post("/submit-job/1/", {
+            "action": "submit_job",
+            "JobName": "Test Job",
+            "ProjectId": "1",
+            "ClusterId": "3",
+            "TaskName": "Test Task",
+            "MinCores": "1",
+            "MaxCores": "8",
+            "WalltimeLimit": "600",
+            "ClusterNodeTypeId": "2",
+            "CommandTemplateId": "1",
+            "IsExclusive": "false",
+            "IsRerunnable": "true",
+            "AuthMethod": "jwt",
+            "AuthCredential": "my_jwt_token_123"
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123",
+            "heappe_host": "heappe.local"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.project import submit_job_view
+        response = submit_job_view(request, command_template_id=1)
+
+        # It should redirect to job_status_view
+        self.assertEqual(response.status_code, 302)
+        
+        # Verify custom ApiClient was initialized and configured with JWT
+        mock_api_client_cls.assert_called_once()
+        config_passed = mock_api_client_cls.call_args[0][0]
+        self.assertEqual(config_passed.api_key['Authorization'], "my_jwt_token_123")
+        self.assertEqual(config_passed.api_key_prefix['Authorization'], "Bearer")
+        
+        # Verify custom JobManagementApi instantiation
+        mock_job_mgmt_api.assert_called_once_with(mock_api_instance)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    @mock.patch("py4heappe.heappe_v6.core.JobManagementApi")
+    @mock.patch("py4heappe.heappe_v6.core.ApiClient")
+    def test_submit_job_with_custom_apikey(self, mock_api_client_cls, mock_job_mgmt_api, mock_mgmt_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_mgmt_instance
+
+        mock_job_mgmt_instance = mock.MagicMock()
+        mock_job_mgmt_api.return_value = mock_job_mgmt_instance
+
+        mock_api_instance = mock.MagicMock()
+        mock_api_client_cls.return_value = mock_api_instance
+
+        # Mock GET info for template, project, node type, cluster
+        mock_mgmt_instance.heappe_management_clusters_get.return_value = []
+        
+        mock_template = mock.MagicMock()
+        mock_template.to_dict.return_value = {
+            "project_id": 1,
+            "cluster_node_type_id": 2,
+            "template_parameters": []
+        }
+        mock_mgmt_instance.heappe_management_command_template_get.return_value = mock_template
+
+        mock_project = mock.MagicMock()
+        mock_project.to_dict.return_value = {
+            "id": 1,
+            "name": "Test Project",
+        }
+        mock_mgmt_instance.heappe_management_project_get.return_value = mock_project
+
+        mock_node_type = mock.MagicMock()
+        mock_node_type.to_dict.return_value = {
+            "id": 2,
+            "cluster_id": 3,
+            "file_transfer_method_id": 4,
+            "cores_per_node": 16,
+        }
+        mock_mgmt_instance.heappe_management_cluster_node_type_get.return_value = mock_node_type
+
+        mock_cluster = mock.MagicMock()
+        mock_cluster.to_dict.return_value = {
+            "id": 3,
+            "name": "Test Cluster",
+        }
+        mock_mgmt_instance.heappe_management_cluster_get.return_value = mock_cluster
+
+        # Mock CreateJob / SubmitJob responses
+        mock_job_mgmt_instance.heappe_job_management_create_job_post.return_value = {"Id": 123}
+        mock_job_mgmt_instance.heappe_job_management_submit_job_put.return_value = {"Id": 123}
+
+        # POST payload with custom X-API-Key
+        request = self.factory.post("/submit-job/1/", {
+            "action": "submit_job",
+            "JobName": "Test Job",
+            "ProjectId": "1",
+            "ClusterId": "3",
+            "TaskName": "Test Task",
+            "MinCores": "1",
+            "MaxCores": "8",
+            "WalltimeLimit": "600",
+            "ClusterNodeTypeId": "2",
+            "CommandTemplateId": "1",
+            "IsExclusive": "false",
+            "IsRerunnable": "true",
+            "AuthMethod": "apikey",
+            "AuthCredential": "my_api_key_456"
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123",
+            "heappe_host": "heappe.local"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.project import submit_job_view
+        response = submit_job_view(request, command_template_id=1)
+
+        # It should redirect to job_status_view
+        self.assertEqual(response.status_code, 302)
+        
+        # Verify custom ApiClient was initialized and configured with X-API-Key
+        mock_api_client_cls.assert_called_once()
+        config_passed = mock_api_client_cls.call_args[0][0]
+        self.assertEqual(config_passed.api_key['X-API-Key'], "my_api_key_456")
+        
+        # Verify custom JobManagementApi instantiation
+        mock_job_mgmt_api.assert_called_once_with(mock_api_instance)
 
 
 class ClusterAndProxyConnectionTests(TestCase):

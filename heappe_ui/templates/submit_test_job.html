@@ -61,6 +61,27 @@
                             </div>
                         </div>
 
+                        <!-- Section 1.5: Authentication Settings -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="text-uppercase text-secondary fw-bold small border-bottom pb-2 mb-3" style="letter-spacing: 0.05em;">Authentication Settings</h6>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="auth_method" class="form-label small fw-bold text-secondary text-uppercase">Authentication Method</label>
+                                <select class="form-select border-secondary-subtle py-2 rounded-3" id="auth_method" name="AuthMethod" onchange="toggleAuthFields()">
+                                    <option value="default" selected>Currently Logged-in User</option>
+                                    <option value="jwt">JWT Token (Bearer)</option>
+                                    <option value="apikey">X-API-Key</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-6" id="auth_credential_container" style="display: none;">
+                                <label for="auth_credential" class="form-label small fw-bold text-secondary text-uppercase" id="auth_credential_label">Credential Value</label>
+                                <input type="text" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="auth_credential" name="AuthCredential" placeholder="Enter token/key">
+                            </div>
+                        </div>
+
                         <!-- Section 2: Notifications -->
                         <div class="row g-3 mb-4">
                             <div class="col-12">
@@ -207,4 +228,32 @@
         </div>
     </div>
 </div>
+
+<script>
+function toggleAuthFields() {
+    var method = document.getElementById("auth_method").value;
+    var container = document.getElementById("auth_credential_container");
+    var label = document.getElementById("auth_credential_label");
+    var input = document.getElementById("auth_credential");
+    
+    if (method === "default") {
+        container.style.display = "none";
+        input.removeAttribute("required");
+        input.value = "";
+    } else {
+        container.style.display = "block";
+        input.setAttribute("required", "required");
+        if (method === "jwt") {
+            label.textContent = "JWT Token (without Bearer prefix)";
+            input.placeholder = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
+        } else if (method === "apikey") {
+            label.textContent = "X-API-Key";
+            input.placeholder = "username:password or custom-key";
+        }
+    }
+}
+document.addEventListener("DOMContentLoaded", function() {
+    toggleAuthFields();
+});
+</script>
 {% endblock %}

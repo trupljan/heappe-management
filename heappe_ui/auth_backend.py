@@ -14,6 +14,8 @@ def _get_session_code_fallback(api_instance) -> str | None:
     versions (which require SessionCode in the body) continue to work even when the management
     app authenticates via X-API-Key (where session_code would otherwise be None).
     """
+    if getattr(api_instance, 'custom_auth', False):
+        return None
     req = getattr(api_instance, '_request', None)
     if req is None:
         return None
