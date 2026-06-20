@@ -10,6 +10,7 @@ from heappe_ui.view.deploy import *
 from heappe_ui.view.command_template import *
 from heappe_ui.view.adaptor_user import *
 from heappe_ui.view.backups import *
+from heappe_ui.view.admin_users import *
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 import datetime

@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Credentials Generated{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'admin_users_list' %}" class="text-decoration-none text-secondary">Admin Accounts</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Success</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+    <div class="row justify-content-center">
+        <div class="col-lg-8 col-md-10 col-sm-12">
+            <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+                <div class="card-header bg-success text-white border-0 py-3 px-4 d-flex align-items-center gap-2">
+                    <i class="bi bi-shield-check fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold">{% if type == 'create' %}Administrator Account Created{% else %}Password Updated{% endif %}</h5>
+                </div>
+                <div class="card-body p-4">
+                    <div class="alert alert-warning border-0 rounded-3 p-3.5 mb-4 d-flex align-items-start gap-2.5">
+                        <i class="bi bi-exclamation-triangle-fill fs-5 text-warning flex-shrink-0"></i>
+                        <div>
+                            <strong>Security Notice:</strong> The generated password is shown below. This is the <strong>only time</strong> the password will be visible in plaintext. Please copy it immediately.
+                        </div>
+                    </div>
+
+                    <!-- Credential Box -->
+                    <div class="bg-light border rounded-3 p-3.5 mb-4">
+                        <h6 class="fw-bold text-dark mb-3 small text-uppercase">Account Credentials</h6>
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <label class="small text-secondary fw-semibold">Username</label>
+                                <div class="font-monospace fw-bold text-dark bg-white border p-2 rounded d-flex justify-content-between align-items-center">
+                                    <span id="txtUsername">{{ username }}</span>
+                                    <button class="btn btn-sm btn-link py-0 text-decoration-none" onclick="copyText('txtUsername')"><i class="bi bi-copy"></i> Copy</button>
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="small text-secondary fw-semibold">Password</label>
+                                <div class="font-monospace fw-bold text-danger bg-white border p-2 rounded d-flex justify-content-between align-items-center">
+                                    <span id="txtPassword">{{ password }}</span>
+                                    <button class="btn btn-sm btn-link py-0 text-decoration-none text-danger" onclick="copyText('txtPassword')"><i class="bi bi-copy"></i> Copy</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Plaintext Email Tab -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <label class="form-label fw-bold text-dark mb-0"><i class="bi bi-envelope me-1"></i>Plaintext Email Draft (English)</label>
+                            <button class="btn btn-sm btn-outline-secondary fw-semibold py-1 px-2.5" onclick="copyTextarea('emailPlaintext')">
+                                <i class="bi bi-copy me-1"></i>Copy Plaintext Draft
+                            </button>
+                        </div>
+                        <textarea class="form-control font-monospace small bg-light text-dark" id="emailPlaintext" rows="12" readonly>Subject: Your HEAppE Admin Panel Access Credentials
+
+Hello,
+
+An administrator account has been set up for you in the HEAppE Management Admin Panel.
+
+Here are your access details:
+--------------------------------------------------
+Admin Panel URL: {{ admin_panel_url }}
+Username: {{ username }}
+Password: {{ password }}
+--------------------------------------------------
+
+[IMPORTANT - SECURITY NOTICE]
+For security reasons, your login credentials must be kept strictly confidential. 
+It is highly recommended that you:
+1. Log in immediately and change your password in the Profile section.
+2. Do not share these credentials with anyone.
+3. This message contains sensitive information and should be transmitted via a secure, encrypted channel.
+
+Best regards,
+HEAppE Management Team</textarea>
+                    </div>
+
+                    <hr class="my-4 text-muted">
+
+                    <!-- Encrypted Sharing Generator -->
+                    <div class="card border-primary border-opacity-25 bg-primary bg-opacity-10 p-3 rounded-3 mb-3">
+                        <h6 class="fw-bold text-primary mb-2 d-flex align-items-center gap-1.5">
+                            <i class="bi bi-shield-lock-fill"></i>Secure / Encrypted Sharing
+                        </h6>
+                        <p class="text-secondary small mb-3">Since we do not have an active email server, you can encrypt this email draft locally in your browser and send the encrypted block via email, and the passphrase via SMS or Signal.</p>
+                        
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-sm-8">
+                                <label for="encryptPassphrase" class="form-label small fw-semibold text-secondary mb-1">Encryption Passphrase</label>
+                                <div class="input-group">
+                                    <input type="text" id="encryptPassphrase" class="form-control font-monospace" placeholder="Enter passphrase to encrypt credentials">
+                                    <button class="btn btn-outline-secondary btn-sm" type="button" onclick="generatePassphrase()"><i class="bi bi-shuffle"></i> Gen</button>
+                                </div>
+                            </div>
+                            <div class="col-sm-4">
+                                <button class="btn btn-primary w-100 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-1.5" type="button" onclick="runEncryption()">
+                                    <i class="bi bi-lock-fill"></i>Encrypt Draft
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Result encrypted area -->
+                        <div id="encryptedResultArea" class="d-none">
+                            <div class="d-flex justify-content-between align-items-center mb-2 mt-3">
+                                <label class="small fw-bold text-dark"><i class="bi bi-file-earmark-lock me-1"></i>Copy Encrypted Message Draft</label>
+                                <button class="btn btn-sm btn-outline-primary fw-bold py-1 px-2.5" onclick="copyTextarea('emailEncrypted')">
+                                    <i class="bi bi-copy me-1"></i>Copy Encrypted Draft
+                                </button>
+                            </div>
+                            <textarea class="form-control font-monospace small bg-white text-dark border-primary border-opacity-25" id="emailEncrypted" rows="10" readonly></textarea>
+                            <div class="form-text text-primary small mt-1"><i class="bi bi-info-circle me-1"></i>Send this block to the user. They can decrypt it by going to the <a href="{% url 'decrypt_credentials_view' %}" target="_blank" class="fw-bold">Decryption Page</a> and entering the passphrase.</div>
+                        </div>
+                    </div>
+
+                    <!-- Done Button -->
+                    <div class="d-flex align-items-center justify-content-end mt-4">
+                        <a href="{% url 'admin_users_list' %}" class="btn btn-secondary px-4 fw-bold shadow-sm">
+                            <i class="bi bi-check-lg me-1"></i>Return to User List
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function copyText(elementId) {
+        const text = document.getElementById(elementId).textContent;
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Copied to clipboard: " + text);
+        });
+    }
+
+    function copyTextarea(elementId) {
+        const text = document.getElementById(elementId).value;
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Draft copied to clipboard!");
+        });
+    }
+
+    function generatePassphrase() {
+        const words = ["super", "secure", "heappe", "admin", "token", "password", "crypto", "safe", "pass", "vault", "lock", "key", "portal"];
+        let phrase = "";
+        for (let i = 0; i < 3; i++) {
+            phrase += words[Math.floor(Math.random() * words.length)] + (i < 2 ? "-" : "");
+        }
+        // Add random digits
+        phrase += "-" + Math.floor(100 + Math.random() * 900);
+        document.getElementById("encryptPassphrase").value = phrase;
+    }
+
+    async function encryptText(text, passphrase) {
+        const encoder = new TextEncoder();
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        
+        const baseKey = await window.crypto.subtle.importKey(
+            "raw", 
+            encoder.encode(passphrase), 
+            { name: "PBKDF2" }, 
+            false, 
+            ["deriveKey"]
+        );
+        
+        const key = await window.crypto.subtle.deriveKey(
+            {
+                name: "PBKDF2",
+                salt: salt,
+                iterations: 100000,
+                hash: "SHA-256"
+            },
+            baseKey,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["encrypt"]
+        );
+        
+        const encrypted = await window.crypto.subtle.encrypt(
+            { name: "AES-GCM", iv: iv },
+            key,
+            encoder.encode(text)
+        );
+        
+        const combined = new Uint8Array(salt.length + iv.length + encrypted.byteLength);
+        combined.set(salt, 0);
+        combined.set(iv, salt.length);
+        combined.set(new Uint8Array(encrypted), salt.length + iv.length);
+        
+        let binary = "";
+        const len = combined.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(combined[i]);
+        }
+        return btoa(binary);
+    }
+
+    function runEncryption() {
+        const passphrase = document.getElementById("encryptPassphrase").value.trim();
+        if (!passphrase) {
+            alert("Please enter or generate a passphrase first.");
+            return;
+        }
+        
+        const plaintext = document.getElementById("emailPlaintext").value;
+        const decryptUrl = window.location.origin + "{% url 'decrypt_credentials_view' %}";
+        
+        encryptText(plaintext, passphrase).then(ciphertext => {
+            const encryptedBody = 
+`----- HEAPPE ENCRYPTED CREDENTIALS -----
+You have been sent encrypted credentials for the HEAppE Management Admin Panel.
+
+To decrypt this message:
+1. Go to the decryption page: ${decryptUrl}
+2. Enter the ciphertext block below.
+3. Enter the secret passphrase shared with you via a secure channel (e.g. Signal or SMS).
+
+Ciphertext block:
+${ciphertext}
+----------------------------------------`;
+            document.getElementById("emailEncrypted").value = encryptedBody;
+            document.getElementById("encryptedResultArea").classList.remove("d-none");
+        }).catch(err => {
+            alert("Encryption failed: " + err);
+        });
+    }
+</script>
+{% endblock %}

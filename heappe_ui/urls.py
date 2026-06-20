@@ -16,6 +16,7 @@ urlpatterns = [
     path("deploy/<str:instance_name>/", views.deploy_view, name="deploy_view"),
     path("deploy/<str:instance_name>/config/", views.instance_config_view, name="instance_config_view"),
     path("deploy/<str:instance_name>/update-status/", views.update_status_view, name="update_status"),
+    path("deploy/<str:instance_name>/telemetry/toggle/", views.toggle_telemetry_view, name="toggle_telemetry"),
     path('chose-instance/', views.chose_instance_view, name='chose_instance_view'),
     path('reconnect/', views.reconnect_view, name='reconnect_view'),
     path('container/<str:container_id>/file/<str:action>/', views.handle_file_action, name='container_file_action'),
@@ -93,4 +94,12 @@ urlpatterns = [
     path('api/invalidate-cache/', views.invalidate_cache_api, name='invalidate_cache_api'),
     path('database-backups/', views.database_backups, name='database_backups'),
     path('report-error/', views.report_error_view, name='report_error_view'),
+
+    # Admin Users Management & Decrypt view
+    path('admin-users/', views.admin_users_list, name='admin_users_list'),
+    path('admin-users/create/', views.admin_users_create, name='admin_users_create'),
+    path('admin-users/<int:user_id>/edit/', views.admin_users_edit, name='admin_users_edit'),
+    path('admin-users/<int:user_id>/password/', views.admin_users_password, name='admin_users_password'),
+    path('admin-users/<int:user_id>/delete/', views.admin_users_delete, name='admin_users_delete'),
+    path('decrypt/', views.decrypt_credentials_view, name='decrypt_credentials_view'),
 ]

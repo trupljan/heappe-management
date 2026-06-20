@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}{% if action == 'create' %}Create Administrator{% else %}Edit Administrator{% endif %}{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'admin_users_list' %}" class="text-decoration-none text-secondary">Admin Accounts</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{% if action == 'create' %}Create{% else %}Edit{% endif %}</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+    <div class="row justify-content-center">
+        <div class="col-lg-6 col-md-8 col-sm-12">
+            <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi {% if action == 'create' %}bi-person-plus{% else %}bi-person-gear{% endif %} text-primary fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold text-dark">{% if action == 'create' %}Create New Admin Account{% else %}Modify Admin Account{% endif %}</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post" class="needs-validation">
+                        {% csrf_token %}
+                        
+                        <!-- Username -->
+                        <div class="mb-3">
+                            <label for="id_username" class="form-label fw-semibold text-secondary small">Username</label>
+                            <input type="text" name="username" id="id_username" class="form-control" 
+                                   value="{% if action == 'edit' %}{{ edit_user.username }}{% else %}{{ username|default:'' }}{% endif %}" 
+                                   required placeholder="Enter username (letters, digits and @/./+/-/_ only)">
+                        </div>
+
+                        <!-- Email Address -->
+                        <div class="mb-3">
+                            <label for="id_email" class="form-label fw-semibold text-secondary small">Email Address</label>
+                            <input type="email" name="email" id="id_email" class="form-control" 
+                                   value="{% if action == 'edit' %}{{ edit_user.email }}{% else %}{{ email|default:'' }}{% endif %}" 
+                                   placeholder="e.g. admin@company.com">
+                        </div>
+
+                        <!-- Password (Create Mode Only) -->
+                        {% if action == 'create' %}
+                        <div class="mb-4">
+                            <label for="id_password" class="form-label fw-semibold text-secondary small">Password</label>
+                            <div class="input-group">
+                                <input type="password" name="password" id="id_password" class="form-control" 
+                                       placeholder="Leave empty to generate automatically">
+                                <button class="btn btn-secondary fw-semibold d-flex align-items-center gap-1" type="button" onclick="generatePassword()">
+                                    <i class="bi bi-shuffle"></i><span>Generate</span>
+                                </button>
+                                <button class="btn btn-outline-secondary" type="button" id="togglePasswordBtn" onclick="togglePasswordVisibility()">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </div>
+                            <div class="form-text small">If left blank, a highly secure 16-character alphanumeric password will be automatically generated.</div>
+                        </div>
+                        {% endif %}
+
+                        <hr class="my-4 text-muted">
+
+                        <!-- Permissions / Status -->
+                        <h6 class="fw-bold text-dark mb-3 small text-uppercase" style="letter-spacing: 0.5px;">Privileges &amp; Status</h6>
+                        
+                        <div class="mb-3">
+                            <div class="form-check form-switch py-1">
+                                <input class="form-check-input" type="checkbox" role="switch" id="id_is_superuser" name="is_superuser" 
+                                       {% if action == 'edit' and edit_user.is_superuser %}checked{% endif %}
+                                       onchange="syncSuperuserStaff()">
+                                <label class="form-check-label fw-semibold text-dark" for="id_is_superuser">Is Superuser</label>
+                                <div class="form-text small">Designates that this user has all permissions in Django without explicitly assigning them.</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check form-switch py-1">
+                                <input class="form-check-input" type="checkbox" role="switch" id="id_is_staff" name="is_staff" 
+                                       {% if action == 'edit' and edit_user.is_staff %}checked{% endif %}
+                                       {% if action == 'edit' and edit_user.is_superuser %}disabled{% endif %}>
+                                <label class="form-check-label fw-semibold text-dark" for="id_is_staff">Is Staff (Access Admin Panel)</label>
+                                <div class="form-text small">Designates whether the user can log into the HEAppE Management admin panel.</div>
+                            </div>
+                        </div>
+
+                        {% if action == 'edit' %}
+                        <div class="mb-4">
+                            <div class="form-check form-switch py-1">
+                                <input class="form-check-input" type="checkbox" role="switch" id="id_is_active" name="is_active" 
+                                       {% if edit_user.is_active %}checked{% endif %}>
+                                <label class="form-check-label fw-semibold text-dark" for="id_is_active">Is Active Account</label>
+                                <div class="form-text small">Designates whether this account is active. Unselect this instead of deleting accounts to suspend access.</div>
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Submit Buttons -->
+                        <div class="d-flex align-items-center gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary px-4 py-2 fw-bold shadow-sm d-flex align-items-center gap-1.5">
+                                <i class="bi bi-check-lg"></i>Save Account
+                            </button>
+                            <a href="{% url 'admin_users_list' %}" class="btn btn-outline-secondary px-4 py-2 fw-semibold">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function generatePassword() {
+        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$*%";
+        let pass = "";
+        for (let i = 0; i < 16; i++) {
+            pass += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        const input = document.getElementById('id_password');
+        input.value = pass;
+        input.type = 'text'; // Make visible immediately after generation
+        
+        const btn = document.getElementById('togglePasswordBtn');
+        btn.innerHTML = '<i class="bi bi-eye-slash"></i>';
+    }
+
+    function togglePasswordVisibility() {
+        const input = document.getElementById('id_password');
+        const btn = document.getElementById('togglePasswordBtn');
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.innerHTML = '<i class="bi bi-eye-slash"></i>';
+        } else {
+            input.type = 'password';
+            btn.innerHTML = '<i class="bi bi-eye"></i>';
+        }
+    }
+
+    function syncSuperuserStaff() {
+        const isSuper = document.getElementById('id_is_superuser').checked;
+        const staffCheckbox = document.getElementById('id_is_staff');
+        
+        if (isSuper) {
+            staffCheckbox.checked = true;
+            staffCheckbox.disabled = true;
+        } else {
+            staffCheckbox.disabled = false;
+        }
+    }
+</script>
+{% endblock %}

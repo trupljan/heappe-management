@@ -33,6 +33,55 @@ def git_version_renderer(request):
     }
 
 
+def get_instance_jaeger_url(instance_name):
+    from heappe_ui.models import InstanceCredentials
+    import os
+
+    try:
+        instance = InstanceCredentials.objects.filter(instance_name=instance_name).first()
+    except Exception:
+        instance = None
+
+    if not instance:
+        return "", 16686, True
+
+    # Read .env to find OTEL_JAEGER_CLIENT_PORT and OTEL_DISABLED
+    base_path = "/opt/heappe-deployment/"
+    env_path = os.path.join(base_path, instance_name, "heappe-core", ".env")
+
+    otel_jaeger_port = 16686
+    otel_disabled = True
+
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip()
+                        if k == "OTEL_JAEGER_CLIENT_PORT":
+                            try:
+                                otel_jaeger_port = int(v)
+                            except ValueError:
+                                pass
+                        elif k == "OTEL_DISABLED":
+                            otel_disabled = (v.lower() == "true")
+        except Exception as e:
+            print(f"Error reading .env for Jaeger URL: {e}")
+
+    # Extract host IP/domain only
+    host = instance.heappe_host or "localhost"
+    if "://" in host:
+        host = host.split("://", 1)[1]
+    if ":" in host:
+        host = host.split(":", 1)[0]
+
+    jaeger_url = f"http://{host}:{otel_jaeger_port}"
+    return jaeger_url, otel_jaeger_port, otel_disabled
+
+
 def middleware_update_renderer(request):
     if not hasattr(request, 'user') or not request.user.is_authenticated:
         return {}
@@ -191,12 +240,32 @@ def middleware_update_renderer(request):
 
     # Fetch API and Swagger URLs for the selected instance
     api_links = {}
+    jaeger_url = ""
+    jaeger_port = 16686
+    otel_disabled = True
+    otel_active = False
+
     if instance_name:
         try:
             from heappe_ui.view.utils import get_instance_api_links
             api_links = get_instance_api_links(instance_name)
         except Exception as e:
             print(f"Error getting instance API links: {e}")
+
+        try:
+            jaeger_url, jaeger_port, otel_disabled = get_instance_jaeger_url(instance_name)
+            if not otel_disabled:
+                import docker
+                client = docker.from_env()
+                # Check if otel-collector is running
+                for c in client.containers.list(all=False):
+                    if c.labels.get('com.docker.compose.project') == instance_name:
+                        service_name = c.labels.get('com.docker.compose.service', '')
+                        if 'otel-collector' in service_name or 'otel-collector' in c.name:
+                            otel_active = True
+                            break
+        except Exception as e:
+            print(f"Error in context processor telemetry check: {e}")
 
     is_v6_4_0_plus = False
     if deployed_version:
@@ -208,5 +277,9 @@ def middleware_update_renderer(request):
         'middleware_latest_version': latest_version,
         'cache_status': cache_status,
         'is_v6_4_0_plus': is_v6_4_0_plus,
+        'jaeger_url': jaeger_url,
+        'jaeger_port': jaeger_port,
+        'otel_disabled': otel_disabled,
+        'otel_active': otel_active,
         **api_links
     }

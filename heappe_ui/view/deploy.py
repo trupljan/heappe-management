@@ -173,7 +173,7 @@ import secrets
 import string
 
 
-def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
+def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s6):
     """Handle the deployment process and return the result."""
     from datetime import datetime
     service = HEAppEDeployService(config)
@@ -204,7 +204,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
         log_message(f"Repository URL: {config.repo_url}")
         log_message(f"Repository branch/tag: {config.repo_branch}")
 
-        for s in [s1, s2, s3, s4]:
+        for s in [s1, s2, s3, s4, s5, s6]:
             if 's' in locals() and s:
                 try:
                     s.close()
@@ -707,10 +707,10 @@ def get_remote_tags(repo_url: str) -> list[str]:
 
 import threading
 
-def deploy_background(config, instance_name, ports, s1, s2, s3, s4):
+def deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6):
     thread = threading.Thread(
         target=handle_deployment_action,
-        args=(config, instance_name, ports, s1, s2, s3, s4),
+        args=(config, instance_name, ports, s1, s2, s3, s4, s5, s6),
         daemon=True
     )
     thread.start()
@@ -718,6 +718,14 @@ def deploy_background(config, instance_name, ports, s1, s2, s3, s4):
 def update_background(config, instance_name):
     thread = threading.Thread(
         target=handle_update_action,
+        args=(config, instance_name),
+        daemon=True
+    )
+    thread.start()
+
+def regenerate_configs_background(config, instance_name):
+    thread = threading.Thread(
+        target=handle_regenerate_configs_action,
         args=(config, instance_name),
         daemon=True
     )
@@ -815,11 +823,15 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 data_staging_port, s3 = get_port_with_fallback(start_port=5001, max_tries=100)
                 mssql_port, s1 = get_port_with_fallback(start_port=6000, max_tries=100)
                 local_port, s4 = get_port_with_fallback(start_port=49005, max_tries=100)
+                otel_grpc_port, s5 = get_port_with_fallback(start_port=4317, max_tries=100)
+                otel_jaeger_port, s6 = get_port_with_fallback(start_port=16686, max_tries=100)
                 ports = {
                     "mssql_port": mssql_port,
                     "app_port": app_port,
                     "data_staging_port": data_staging_port,
-                    "local_port": local_port
+                    "local_port": local_port,
+                    "otel_grpc_port": otel_grpc_port,
+                    "otel_jaeger_port": otel_jaeger_port
                 }
 
                 # --- START BACKGROUND DEPLOYMENT ---
@@ -860,7 +872,7 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 request.session.pop("heappe_use_api_key", None)
                 request.session.pop("heappe_last_auth", None)
 
-                deploy_background(config, instance_name, ports, s1, s2, s3, s4)
+                deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6)
 
                 action_message = "Deployment started in the background."
                 action_status = 'info'
@@ -888,6 +900,20 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 )
                 update_background(config, instance_name)
                 action_message = "Update started in the background."
+                action_status = 'info'
+
+            elif action == "regenerate_configs":
+                config = HEAppEConfig(
+                    base_path=base_path,
+                    repo_url=input_repo,
+                    repo_branch=input_branch,
+                    default_version=input_branch,
+                    default_ip=ip,
+                    default_ports=ports,
+                    target_dir="heappe-core"
+                )
+                regenerate_configs_background(config, instance_name)
+                action_message = "Configuration regeneration started in the background."
                 action_status = 'info'
 
             elif action in ['start', 'stop', 'restart']:
@@ -1184,3 +1210,218 @@ def instance_config_view(request, instance_name):
         "selected_file": selected_file,
     }
     return render(request, "instance_config.html", context)
+
+
+@login_required
+def toggle_telemetry_view(request, instance_name):
+    """View to enable/disable OpenTelemetry for a given HEAppE instance."""
+    if request.method != "POST":
+        return JsonResponse({'status': 'danger', 'message': 'Only POST method is allowed.'}, status=405)
+
+    action = request.POST.get('action') # 'enable' or 'disable'
+    base_path = "/opt/heappe-deployment/"
+    env_path = os.path.join(base_path, instance_name, "heappe-core", ".env")
+    compose_dir = os.path.join(base_path, instance_name, "heappe-core")
+
+    if not os.path.exists(env_path):
+        return JsonResponse({'status': 'danger', 'message': f'Config directory or .env not found for instance: {instance_name}'}, status=404)
+
+    # Read env variables
+    env_lines = []
+    env_vars = {}
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                env_lines.append(line)
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    k, v = stripped.split("=", 1)
+                    env_vars[k.strip()] = v.strip()
+    except Exception as e:
+        return JsonResponse({'status': 'danger', 'message': f'Failed to read .env file: {str(e)}'}, status=500)
+
+    if action == 'enable':
+        # 1. Verify ports
+        otel_grpc = int(env_vars.get('OTEL_HOST_GRPC_PORT', 4317))
+        otel_jaeger = int(env_vars.get('OTEL_JAEGER_CLIENT_PORT', 16686))
+
+        # Test if ports are free, if not, allocate free ones
+        grpc_free, s_grpc = get_port_with_fallback(start_port=otel_grpc, max_tries=100)
+        jaeger_free, s_jaeger = get_port_with_fallback(start_port=otel_jaeger, max_tries=100)
+
+        try:
+            s_grpc.close()
+        except:
+            pass
+        try:
+            s_jaeger.close()
+        except:
+            pass
+
+        # Update values
+        new_env_lines = []
+        for line in env_lines:
+            stripped = line.strip()
+            if stripped.startswith("OTEL_DISABLED="):
+                new_env_lines.append("OTEL_DISABLED=false\n")
+            elif stripped.startswith("OTEL_HOST_GRPC_PORT="):
+                new_env_lines.append(f"OTEL_HOST_GRPC_PORT={grpc_free}\n")
+            elif stripped.startswith("OTEL_JAEGER_CLIENT_PORT="):
+                new_env_lines.append(f"OTEL_JAEGER_CLIENT_PORT={jaeger_free}\n")
+            else:
+                new_env_lines.append(line)
+
+        # Write back to .env
+        try:
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_env_lines)
+        except Exception as e:
+            return JsonResponse({'status': 'danger', 'message': f'Failed to write to .env file: {str(e)}'}, status=500)
+
+        # 2. Run docker compose recreate
+        cmd = [
+            "docker", "compose",
+            "--profile", "telemetry",
+            "-p", instance_name,
+            "up", "-d", "--force-recreate", "RestApi", "DataStagingAPI", "otel-collector", "jaeger"
+        ]
+        result = execute_docker_compose(cmd, compose_dir)
+        if result.returncode == 0:
+            return JsonResponse({
+                'status': 'success',
+                'message': 'OpenTelemetry has been successfully enabled. Containers restarted.',
+                'otel_grpc_port': grpc_free,
+                'otel_jaeger_port': jaeger_free
+            })
+        else:
+            return JsonResponse({'status': 'danger', 'message': f'Failed to restart containers: {result.stderr}'}, status=500)
+
+    elif action == 'disable':
+        # Update values
+        new_env_lines = []
+        for line in env_lines:
+            stripped = line.strip()
+            if stripped.startswith("OTEL_DISABLED="):
+                new_env_lines.append("OTEL_DISABLED=true\n")
+            else:
+                new_env_lines.append(line)
+
+        # Write back to .env
+        try:
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_env_lines)
+        except Exception as e:
+            return JsonResponse({'status': 'danger', 'message': f'Failed to write to .env file: {str(e)}'}, status=500)
+
+        # 2. Run docker compose stop & recreate without telemetry
+        stop_cmd = [
+            "docker", "compose",
+            "--profile", "telemetry",
+            "-p", instance_name,
+            "stop", "otel-collector", "jaeger"
+        ]
+        execute_docker_compose(stop_cmd, compose_dir)
+
+        recreate_cmd = [
+            "docker", "compose",
+            "-p", instance_name,
+            "up", "-d", "--force-recreate", "RestApi", "DataStagingAPI"
+        ]
+        result = execute_docker_compose(recreate_cmd, compose_dir)
+        if result.returncode == 0:
+            return JsonResponse({
+                'status': 'success',
+                'message': 'OpenTelemetry has been successfully disabled. Telemetry containers stopped.'
+            })
+        else:
+            return JsonResponse({'status': 'danger', 'message': f'Failed to recreate API containers: {result.stderr}'}, status=500)
+
+    else:
+        return JsonResponse({'status': 'danger', 'message': f'Invalid action: {action}'}, status=400)
+
+
+def handle_regenerate_configs_action(config, instance_name):
+    """Regenerate configs (.env and appsettings.json) using update_init and restart all containers."""
+    from datetime import datetime
+    service = HEAppEDeployService(config)
+    compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
+    log_dir = os.path.join(config.base_path, instance_name, "app", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, "update.log")  # Write to update.log so the update progress modal displays it
+
+    def log_message(msg):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted = f"[{timestamp}] {msg}\n"
+        print(msg)
+        try:
+            with open(log_file_path, "a", encoding="utf-8") as f:
+                f.write(formatted)
+        except Exception as e:
+            print(f"Error writing to update log: {e}")
+
+    try:
+        # Clear previous log
+        try:
+            with open(log_file_path, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            pass
+
+        log_message("Starting configuration regeneration process...")
+        _set_updating_status(instance_name, True)
+        log_message("Database status set to updating.")
+
+        log_message("Updating configuration files (.env and appsettings.json)...")
+        service.update_init(instance_name=instance_name, version=config.repo_branch)
+        log_message("Configuration files successfully regenerated with new defaults and merged with existing values.")
+
+        log_message("Recreating and restarting containers with updated environment...")
+
+        # Read .env to check if telemetry is enabled
+        env_path = os.path.join(compose_dir, ".env")
+        otel_disabled = True
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip().startswith("OTEL_DISABLED="):
+                            otel_disabled = (line.strip().split("=", 1)[1].strip().lower() == "true")
+            except Exception:
+                pass
+
+        # Build start command with correct profiles
+        cmd = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging"
+        ]
+        if not otel_disabled:
+            cmd.extend(["--profile", "telemetry"])
+
+        cmd.extend(["-p", instance_name, "up", "-d", "--force-recreate"])
+
+        log_message(f"Executing: {' '.join(cmd)}")
+        result = execute_docker_compose(cmd, compose_dir)
+        log_message(f"Docker Compose finished with return code {result.returncode}")
+        if result.stdout:
+            log_message(f"Docker stdout:\n{result.stdout}")
+        if result.stderr:
+            log_message(f"Docker stderr:\n{result.stderr}")
+
+        if result.returncode != 0:
+            log_message("ERROR: Docker Compose recreate failed.")
+            _set_updating_status(instance_name, False)
+            return result, f"Failed to restart containers: {result.stderr}", 'danger'
+
+        log_message("SUCCESS: Configurations regenerated and containers restarted successfully.")
+        _set_updating_status(instance_name, False)
+        return result, "Configurations regenerated successfully.", 'success'
+    except Exception as e:
+        log_message(f"EXCEPTION: Regeneration error: {str(e)}")
+        _set_updating_status(instance_name, False)
+        return None, f"Regeneration error: {str(e)}", 'danger'

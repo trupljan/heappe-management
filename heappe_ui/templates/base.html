@@ -172,6 +172,13 @@
                     </li>
 
                     <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem; letter-spacing: 0.05em;">Admin Panel</li>
+                    {% if user.is_superuser %}
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'admin-users' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'admin_users_list' %}">
+                            <i class="bi bi-shield-lock fs-5"></i><span>Admin Accounts</span>
+                        </a>
+                    </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded text-secondary hover-bg-light" href="#" data-bs-toggle="modal" data-bs-target="#updateModal">
                             <i class="bi bi-arrow-up-circle fs-5"></i><span>Update Admin Panel</span>
@@ -305,6 +312,13 @@
                         </li>
 
                         <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem;">Admin Panel</li>
+                        {% if user.is_superuser %}
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'admin-users' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'admin_users_list' %}">
+                                <i class="bi bi-shield-lock fs-5"></i><span>Admin Accounts</span>
+                            </a>
+                        </li>
+                        {% endif %}
                         <li class="nav-item" data-bs-dismiss="offcanvas">
                             <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded text-secondary hover-bg-light" href="#" data-bs-toggle="modal" data-bs-target="#updateModal">
                                 <i class="bi bi-arrow-up-circle fs-5"></i><span>Update Admin Panel</span>

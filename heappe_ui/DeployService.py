@@ -44,7 +44,9 @@ class HEAppEConfig:
                 "mssql_port": 6000,
                 "app_port": 5000,
                 "data_staging_port": 5001,
-                "local_port": 49005
+                "local_port": 49005,
+                "otel_grpc_port": 4317,
+                "otel_jaeger_port": 16686
             }
 
 
@@ -87,6 +89,13 @@ class HEAppEDeployService:
                 shutil.rmtree(path, ignore_errors=True)
             os.makedirs(path, exist_ok=True)
             print(f"Path created: {path}")
+
+        # Create host directory for OpenTelemetry Collector logs
+        try:
+            os.makedirs("/var/log/otel", exist_ok=True)
+            self.logger.info("Host directory /var/log/otel successfully initialized.")
+        except Exception as e:
+            self.logger.warning(f"Could not create /var/log/otel directory on host: {e}")
 
     def clone_repository(self, instance_name: str, overwrite_existing: bool = False) -> None:
         """Clone HEAppE repository into the project directory."""
@@ -138,6 +147,35 @@ class HEAppEDeployService:
     ) -> str:
         """Build content for .env file for HEAppE project."""
         ports = ports or self.config.default_ports
+        otel_grpc = ports.get('otel_grpc_port', 4317)
+        otel_jaeger = ports.get('otel_jaeger_port', 16686)
+
+        # Read OTEL_DISABLED from existing or archived .env if present, otherwise default to true
+        otel_disabled = "true"
+        target_dir = os.path.join(self.config.base_path, instance_name, self.config.target_dir)
+        env_path = os.path.join(target_dir, ".env")
+
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip().startswith("OTEL_DISABLED="):
+                            otel_disabled = line.strip().split("=", 1)[1].strip()
+            except Exception:
+                pass
+        else:
+            try:
+                if os.path.exists(target_dir):
+                    archives = [os.path.join(target_dir, f) for f in os.listdir(target_dir) if f.startswith(".env_")]
+                    if archives:
+                        latest_archive = max(archives, key=os.path.getmtime)
+                        with open(latest_archive, "r", encoding="utf-8") as f:
+                            for line in f:
+                                if line.strip().startswith("OTEL_DISABLED="):
+                                    otel_disabled = line.strip().split("=", 1)[1].strip()
+            except Exception:
+                pass
+
         return f"""COMPOSE_instance_name=heappe
 INSTANCE_NAME={instance_name}
 
@@ -175,8 +213,14 @@ HOST_KRB5_CONF_PATH={self.config.base_path}{instance_name}/app/confs/krb5.conf
 HOST_LOCAL_NAME=localhpc-{instance_name}
 HOST_LOCAL_PORT={ports['local_port']}
 
+# OpenTelemetry configuration
+OTEL_DISABLED={otel_disabled}
+OTEL_HOST_GRPC_PORT={otel_grpc}
+OTEL_JAEGER_CLIENT_PORT={otel_jaeger}
+OTEL_SERVICE_SUFFIX_ID=0
+
 PWD={self.config.base_path}{instance_name}/heappe-core
-    """
+"""
 
     def save_env_file(
             self,
@@ -533,6 +577,12 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                     json.dump(appsettings_new, f, indent=3)
                 self.logger.info(f"Updated appsettings file generated at: {output_path_app}")
 
+                # Create host directory for OpenTelemetry Collector logs during update
+                try:
+                    os.makedirs("/var/log/otel", exist_ok=True)
+                except Exception as e:
+                    self.logger.warning(f"Could not create /var/log/otel directory on update: {e}")
+
                 #generate and update .env file
                 #archive old .env
                 old_env_path = os.path.join(self.config.base_path, instance_name, self.config.target_dir, ".env")
@@ -555,6 +605,16 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                             ports["data_staging_port"] = int(line.strip().split("=")[1])
                         elif line.startswith("HOST_LOCAL_PORT="):
                             ports["local_port"] = int(line.strip().split("=")[1])
+                        elif line.startswith("OTEL_HOST_GRPC_PORT="):
+                            try:
+                                ports["otel_grpc_port"] = int(line.strip().split("=")[1])
+                            except ValueError:
+                                pass
+                        elif line.startswith("OTEL_JAEGER_CLIENT_PORT="):
+                            try:
+                                ports["otel_jaeger_port"] = int(line.strip().split("=")[1])
+                            except ValueError:
+                                pass
                         elif line.startswith("VAULT_PASSWORD="):
                             vault_password = line.strip().split("=", 1)[1]
                         elif line.startswith("HOST_MSSQL_PASSWORD="):

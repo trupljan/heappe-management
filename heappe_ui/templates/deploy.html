@@ -71,6 +71,11 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2" id="telemetry-tab" data-bs-toggle="tab" data-bs-target="#telemetry-pane" type="button" role="tab" aria-controls="telemetry-pane" aria-selected="false">
+                <i class="bi bi-activity fs-5"></i>OpenTelemetry &amp; Tracing
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance-pane" type="button" role="tab" aria-controls="maintenance-pane" aria-selected="false">
                 <i class="bi bi-gear fs-5"></i>Maintenance &amp; Setup
             </button>
@@ -380,17 +385,79 @@
             </div>
         </div>
 
+        <!-- OpenTelemetry Tab Pane -->
+        <div class="tab-pane fade" id="telemetry-pane" role="tabpanel" aria-labelledby="telemetry-tab">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card border-0 shadow-sm rounded-3 bg-white mb-5" style="border: 1px solid #dee2e6 !important;">
+                        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-activity text-primary fs-5"></i>
+                                <h5 class="h6 mb-0 fw-bold text-dark">OpenTelemetry &amp; Distributed Tracing</h5>
+                            </div>
+
+                            <!-- Telemetry Status Indicator Badge -->
+                            <div id="telemetry-status-container">
+                                {% if otel_active %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1.5 rounded-pill fw-bold text-uppercase d-inline-flex align-items-center gap-1.5 animate-fade-in" style="font-size: 0.75rem;">
+                                        <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 8px; height: 8px;"></span>
+                                        Active
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-3 py-1.5 rounded-pill fw-bold text-uppercase d-inline-flex align-items-center gap-1.5 animate-fade-in" style="font-size: 0.75rem;">
+                                        <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: #dc3545;"></span>
+                                        Inactive
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="card-body p-4">
+                            <p class="text-muted small mb-4">
+                                Distributed request tracing records API interactions, database operations, and job execution details across the HEAppE middleware. This enables performance monitoring, call hierarchy diagrams, and deep diagnostics.
+                            </p>
+
+                            <div class="p-3 bg-light rounded-3 border mb-4">
+                                <div class="form-check form-switch d-flex align-items-center justify-content-between p-0">
+                                    <div>
+                                        <label for="otel-toggle-switch" class="fw-bold text-dark mb-0" style="cursor: pointer;">Enable Request Monitoring (OpenTelemetry)</label>
+                                        <div class="text-muted small mt-1">This launches Jaeger APM and Otel-Collector containers to enable trace recording for RestApi and DataStagingAPI.</div>
+                                    </div>
+                                    <div class="position-relative" style="margin-left: 20px;">
+                                        <input class="form-check-input ms-0" type="checkbox" id="otel-toggle-switch" style="width: 2.8em; height: 1.5em; cursor: pointer;" {% if not otel_disabled %}checked{% endif %}>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Jaeger Dashboard Link -->
+                            <div id="jaeger-dashboard-container" class="border-top pt-4 mt-4" style="{% if otel_disabled %}display: none;{% endif %}">
+                                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-display me-2 text-primary"></i>Jaeger Analytics Portal</h6>
+                                <p class="text-muted small">
+                                    The Jaeger APM UI allows visual timeline queries, trace dependency graphs, and span inspection for analyzed HEAppE operations.
+                                </p>
+                                <a href="{{ jaeger_url }}" target="_blank" id="jaeger-link-btn" class="btn btn-outline-primary fw-bold px-4 py-2 mt-2 shadow-sm rounded-3">
+                                    <i class="bi bi-box-arrow-up-right me-2"></i>Open Jaeger APM Dashboard
+                                </a>
+                                <div class="form-text small mt-2">
+                                    Port map: <code id="otel-jaeger-port-display">{{ jaeger_port }}</code>. Active Jaeger console URL: <a href="{{ jaeger_url }}" target="_blank" class="font-monospace text-decoration-none" id="jaeger-raw-link">{{ jaeger_url }}</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Maintenance & Setup Tab Pane -->
         <div class="tab-pane fade" id="maintenance-pane" role="tabpanel" aria-labelledby="maintenance-tab">
             <div class="row g-4 mb-5">
                 <!-- Update Middleware Panel -->
-                <div class="col-lg-6">
+                <div class="col-xl-4 col-md-6">
                     <div class="card border-0 shadow-sm h-100">
-                        <div class="card-body p-4">
+                        <div class="card-body p-4 d-flex flex-column">
                             <h5 class="fw-bold text-dark mb-3"><i class="bi bi-arrow-repeat me-2 text-warning"></i>Update Middleware</h5>
-                            <p class="text-muted small">Update the HEAppE middleware source code of the active instance, rebuild the Docker services, and restart the containers.</p>
+                            <p class="text-muted small mb-4">Update the HEAppE middleware source code of the active instance, rebuild the Docker services, and restart the containers.</p>
                             
-                            <form id="update-form" class="instance-action-form">
+                            <form id="update-form" class="instance-action-form mt-auto">
                                 {% csrf_token %}
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Instance Name</label>
@@ -419,20 +486,52 @@
                                         <strong>Maintenance Required:</strong> Updating the middleware will pull tags, compile configuration dependencies, rebuild docker containers, and restart services causing a <strong>short downtime</strong>. Please notify active users first.
                                     </div>
                                 </div>
-                                <button type="submit" class="btn btn-warning w-100 py-2 fw-bold text-dark shadow-sm"><i class="bi bi-arrow-repeat me-1.5"></i>Run Update Now</button>
+                                <button type="submit" class="btn btn-warning w-100 py-2 fw-bold text-dark shadow-sm mt-auto"><i class="bi bi-arrow-repeat me-1.5"></i>Run Update Now</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Regenerate Configurations Panel -->
+                <div class="col-xl-4 col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-gear-wide-connected me-2 text-danger"></i>Regenerate Configs</h5>
+                            <p class="text-muted small mb-4">Regenerate and merge <code>.env</code> and <code>appsettings.json</code> with templates (e.g. to inject new configuration variables) and restart containers without pulling new code.</p>
+                            
+                            <form id="regenerate-configs-form" class="instance-action-form mt-auto">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Instance Name</label>
+                                    <input type="text" name="InstanceName" class="form-control bg-light fw-bold" value="{{ instance_name }}" readonly>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Current Configuration Tag</label>
+                                    <input type="text" class="form-control bg-light font-monospace fw-bold text-dark" value="{{ repo_branch }}" readonly>
+                                </div>
+                                <input type="hidden" name="Repository" value="{{ repo_url }}">
+                                <input type="hidden" name="RepositoryBranch" value="{{ repo_branch }}">
+                                <input type="hidden" name="action" value="regenerate_configs">
+                                <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger-emphasis p-3 rounded-3 mb-4 small d-flex align-items-start gap-2.5">
+                                    <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+                                    <div>
+                                        <strong>Downtime Warning:</strong> Regenerating configs will merge defaults and restart all containers with <code>--force-recreate</code>, causing a <strong>short downtime</strong>.
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-danger w-100 py-2 fw-bold shadow-sm mt-auto"><i class="bi bi-gear-wide-connected me-1.5"></i>Regenerate &amp; Restart</button>
                             </form>
                         </div>
                     </div>
                 </div>
 
                 <!-- Deploy New Instance Panel -->
-                <div class="col-lg-6">
+                <div class="col-xl-4 col-md-6">
                     <div class="card border-0 shadow-sm h-100">
-                        <div class="card-body p-4">
+                        <div class="card-body p-4 d-flex flex-column">
                             <h5 class="fw-bold text-dark mb-3"><i class="bi bi-rocket-takeoff me-2 text-primary"></i>Deploy New Instance</h5>
-                            <p class="text-muted small">Deploy a separate, new HEAppE Middleware server instance. This will register a new configuration and provision fresh database schema.</p>
+                            <p class="text-muted small mb-4">Deploy a separate, new HEAppE Middleware server instance. This will register a new configuration and provision fresh database schema.</p>
                             
-                            <form id="deploy-form" class="instance-action-form">
+                            <form id="deploy-form" class="instance-action-form mt-auto">
                                 {% csrf_token %}
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">New Instance Name</label>
@@ -456,7 +555,7 @@
                                     <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
                                 </div>
                                 <input type="hidden" name="action" value="deploy">
-                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm"><i class="bi bi-rocket-takeoff me-1.5"></i>Start Deployment</button>
+                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm mt-auto"><i class="bi bi-rocket-takeoff me-1.5"></i>Start Deployment</button>
                             </form>
                         </div>
                     </div>
@@ -568,13 +667,20 @@ let updatePollInterval = null;
 let treeEditor = null;
 let currentEditorMode = 'tree'; // 'tree', 'code', 'split'
 
-function startUpdatePolling(isUpdate = true) {
+function startUpdatePolling(actionType = 'update') {
     // Show update progress modal (non-dismissible)
     const updateModalEl = document.getElementById('updateProgressModal');
     if (!updateModalEl) return;
     
-    // Adjust modal titles and log labels based on deploy vs update
-    if (isUpdate) {
+    const isUpdate = (actionType === true || actionType === 'update');
+    const isRegen = (actionType === 'regenerate_configs');
+    
+    // Adjust modal titles and log labels based on actionType
+    if (isRegen) {
+        $('#updateProgressModalLabel').html('<i class="bi bi-gear-wide-connected spin-icon me-2 text-danger"></i>HEAppE Configuration Regeneration');
+        $('#update-status-title').text('Regenerating Configurations...');
+        $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Regeneration Logs):');
+    } else if (isUpdate) {
         $('#updateProgressModalLabel').html('<i class="bi bi-arrow-repeat spin-icon me-2 text-primary"></i>HEAppE Middleware Update');
         $('#update-status-title').text('Updating Instance...');
         $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Update Logs):');
@@ -627,7 +733,10 @@ function startUpdatePolling(isUpdate = true) {
                         $spinner.css('animation', 'none');
                         
                         if (isSuccess) {
-                            if (isUpdate) {
+                            if (isRegen) {
+                                $('#update-status-title').text('Regeneration Succeeded!').removeClass('text-dark').addClass('text-success');
+                                $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Configurations regenerated successfully.</span>');
+                            } else if (isUpdate) {
                                 $('#update-status-title').text('Update Succeeded!').removeClass('text-dark').addClass('text-success');
                                 $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Instance updated successfully.</span>');
                             } else {
@@ -635,7 +744,10 @@ function startUpdatePolling(isUpdate = true) {
                                 $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Instance deployed successfully.</span>');
                             }
                         } else {
-                            if (isUpdate) {
+                            if (isRegen) {
+                                $('#update-status-title').text('Regeneration Failed').removeClass('text-dark').addClass('text-danger');
+                                $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during configuration regeneration. See logs above.</span>');
+                            } else if (isUpdate) {
                                 $('#update-status-title').text('Update Failed').removeClass('text-dark').addClass('text-danger');
                                 $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during update. See logs above.</span>');
                             } else {
@@ -660,6 +772,93 @@ function startUpdatePolling(isUpdate = true) {
 }
 
 $(document).ready(function() {
+    // --- OPENTELEMETRY TOGGLE SWITCH LOGIC ---
+    $('#otel-toggle-switch').on('change', function() {
+        const isChecked = $(this).is(':checked');
+        const action = isChecked ? 'enable' : 'disable';
+
+        // Show loading overlay
+        showLoading(
+            isChecked ? "Enabling OpenTelemetry..." : "Disabling OpenTelemetry...",
+            "Restarting RestApi and DataStagingAPI services..."
+        );
+
+        $.ajax({
+            url: "{% url 'toggle_telemetry' instance_name %}",
+            method: "POST",
+            data: {
+                'action': action,
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                hideLoading();
+                if (response.status === 'success') {
+                    // Update Status Badge
+                    if (isChecked) {
+                        $('#telemetry-status-container').html(`
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1.5 rounded-pill fw-bold text-uppercase d-inline-flex align-items-center gap-1.5 animate-fade-in" style="font-size: 0.75rem;">
+                                <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 8px; height: 8px;"></span>
+                                Active
+                            </span>
+                        `);
+                        $('#jaeger-dashboard-container').fadeIn();
+                        if (response.otel_jaeger_port) {
+                            $('#otel-jaeger-port-display').text(response.otel_jaeger_port);
+                            // Update jaeger URL dynamically
+                            const currentHost = window.location.hostname;
+                            const newJaegerUrl = `http://${currentHost}:${response.otel_jaeger_port}`;
+                            $('#jaeger-link-btn').attr('href', newJaegerUrl);
+                            $('#jaeger-raw-link').attr('href', newJaegerUrl).text(newJaegerUrl);
+                        }
+                    } else {
+                        $('#telemetry-status-container').html(`
+                            <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-3 py-1.5 rounded-pill fw-bold text-uppercase d-inline-flex align-items-center gap-1.5 animate-fade-in" style="font-size: 0.75rem;">
+                                <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: #dc3545;"></span>
+                                Inactive
+                            </span>
+                        `);
+                        $('#jaeger-dashboard-container').fadeOut();
+                    }
+
+                    // Show success feedback
+                    const alertHtml = `
+                        <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4 d-flex align-items-center gap-2" role="alert">
+                            <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                            <div>${response.message}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                    $('#action-feedback').html(alertHtml);
+                } else {
+                    // Revert switch state
+                    $('#otel-toggle-switch').prop('checked', !isChecked);
+                    const alertHtml = `
+                        <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4 d-flex align-items-center gap-2" role="alert">
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
+                            <div>Error: ${response.message}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                    $('#action-feedback').html(alertHtml);
+                }
+            },
+            error: function(xhr) {
+                hideLoading();
+                // Revert switch state
+                $('#otel-toggle-switch').prop('checked', !isChecked);
+                const errMsg = xhr.responseJSON ? xhr.responseJSON.message : "Network error occurred.";
+                const alertHtml = `
+                    <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4 d-flex align-items-center gap-2" role="alert">
+                        <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
+                        <div>Error: ${errMsg}</div>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                `;
+                $('#action-feedback').html(alertHtml);
+            }
+        });
+    });
+
     // --- UI HELPERS ---
     window.showLoading = function(title = "Operation in progress...", subtext = "Page will refresh automatically when done.") {
         $('#loading-title').text(title);
@@ -670,7 +869,7 @@ $(document).ready(function() {
 
     // --- AUTOMATIC UPDATE / DEPLOYMENT STATE ON PAGE LOAD ---
     {% if instance_name and is_updating %}
-        startUpdatePolling({% if is_deployed %}true{% else %}false{% endif %});
+        startUpdatePolling({% if is_deployed %}'update'{% else %}'deploy'{% endif %});
     {% endif %}
 
     // --- DEPLOY / UPDATE LOGIC ---
@@ -679,14 +878,19 @@ $(document).ready(function() {
         const action = form.find('input[name="action"]').val();
         e.preventDefault();
 
-        if (action === 'update') {
+        if (action === 'update' || action === 'regenerate_configs') {
             // Reset spinner & status text
             const $spinner = $('.modal-body .spinner-border');
             $spinner.removeClass('bi bi-check-circle-fill bi-exclamation-octagon-fill text-success text-danger fs-1 mb-3').addClass('spinner-border text-primary mb-3');
             $spinner.css('animation', '');
             
-            $('#update-status-title').text('Starting Update...').removeClass('text-success text-danger').addClass('text-dark');
-            $('#update-logs').text('Requesting update from server...');
+            const titleText = action === 'update' ? 'Starting Update...' : 'Starting Configuration Regeneration...';
+            const logText = action === 'update' ? 'Requesting update from server...' : 'Requesting configuration regeneration...';
+            const errorTitle = action === 'update' ? 'Update Request Failed' : 'Regeneration Request Failed';
+            const errorLog = action === 'update' ? 'FAILED to request update:\n' : 'FAILED to request configuration regeneration:\n';
+
+            $('#update-status-title').text(titleText).removeClass('text-success text-danger').addClass('text-dark');
+            $('#update-logs').text(logText);
             $('#update-close-btn').hide();
             $('#update-in-progress-footer').html('<i class="bi bi-info-circle me-1"></i>Performing background operations...');
 
@@ -706,12 +910,12 @@ $(document).ready(function() {
                 type: 'POST',
                 data: form.serialize(),
                 success: function(response) {
-                    startUpdatePolling();
+                    startUpdatePolling(action);
                 },
                 error: function(xhr) {
                     const errMsg = xhr.responseJSON?.message || 'Server Error';
-                    $('#update-logs').text('FAILED to request update:\n' + errMsg);
-                    $('#update-status-title').text('Update Request Failed').removeClass('text-dark').addClass('text-danger');
+                    $('#update-logs').text(errorLog + errMsg);
+                    $('#update-status-title').text(errorTitle).removeClass('text-dark').addClass('text-danger');
                     $spinner.removeClass('text-primary spinner-border').addClass('bi bi-exclamation-octagon-fill text-danger fs-1 mb-3');
                     $('#update-close-btn').show();
                 }

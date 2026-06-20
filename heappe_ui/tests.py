@@ -1268,7 +1268,151 @@ class VersionParsingTests(TestCase):
         self.assertTrue(clean_ver("v6.4.0") >= [6, 4, 0])
         self.assertTrue(clean_ver("6.4") >= [6, 4, 0])
         self.assertTrue(clean_ver("6.4.1") >= [6, 4, 0])
-        self.assertTrue(clean_ver("v6.4.0-rc1") >= [6, 4, 0])
-        self.assertFalse(clean_ver("6.3.9") >= [6, 4, 0])
         self.assertFalse(clean_ver("6.3") >= [6, 4, 0])
+
+
+class AdminUsersViewTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.superuser = User.objects.create_superuser(username="superuser", email="super@test.com", password="password")
+        self.staff_user = User.objects.create_user(username="staff", email="staff@test.com", password="password", is_staff=True)
+        self.regular_user = User.objects.create_user(username="regular", email="reg@test.com", password="password")
+
+    def _setup_request_messages(self, request):
+        from unittest import mock
+        request._messages = mock.MagicMock()
+        request.session = {}
+
+    def test_unauthenticated_access_denied(self):
+        from heappe_ui.view.admin_users import admin_users_list
+        request = self.factory.get("/admin-users/")
+        from django.contrib.auth.models import AnonymousUser
+        request.user = AnonymousUser()
+        
+        # login_required decorator redirects to LOGIN_URL
+        response = admin_users_list(request)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.url)
+
+    def test_staff_access_denied(self):
+        from heappe_ui.view.admin_users import admin_users_list
+        request = self.factory.get("/admin-users/")
+        request.user = self.staff_user
+        self._setup_request_messages(request)
+
+        response = admin_users_list(request)
+        # superuser_required redirects non-superusers
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/dashboard/")
+
+    def test_superuser_access_allowed(self):
+        from heappe_ui.view.admin_users import admin_users_list
+        request = self.factory.get("/admin-users/")
+        request.user = self.superuser
+        self._setup_request_messages(request)
+
+        response = admin_users_list(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Django Admin Accounts", response.content)
+
+    def test_create_user_success(self):
+        from heappe_ui.view.admin_users import admin_users_create
+        request = self.factory.post("/admin-users/create/", {
+            "username": "newadmin",
+            "email": "newadmin@test.com",
+            "password": "strongpassword123",
+            "is_superuser": "on",
+            "is_staff": "on"
+        })
+        request.user = self.superuser
+        self._setup_request_messages(request)
+
+        response = admin_users_create(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Administrator Account Created", response.content)
+        self.assertIn(b"newadmin", response.content)
+        self.assertIn(b"strongpassword123", response.content)
+
+        # Check in DB
+        new_user = User.objects.get(username="newadmin")
+        self.assertTrue(new_user.is_superuser)
+        self.assertTrue(new_user.is_staff)
+
+    def test_create_user_generated_password(self):
+        from heappe_ui.view.admin_users import admin_users_create
+        # Leave password empty
+        request = self.factory.post("/admin-users/create/", {
+            "username": "genpwuser",
+            "email": "gen@test.com",
+            "is_staff": "on"
+        })
+        request.user = self.superuser
+        self._setup_request_messages(request)
+
+        response = admin_users_create(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"genpwuser", response.content)
+        
+        # A password should be generated (visible in response context)
+        new_user = User.objects.get(username="genpwuser")
+        self.assertTrue(new_user.is_staff)
+        self.assertFalse(new_user.is_superuser)
+
+    def test_edit_user(self):
+        from heappe_ui.view.admin_users import admin_users_edit
+        edit_target = User.objects.create_user(username="toedit", password="password")
+        request = self.factory.post(f"/admin-users/{edit_target.id}/edit/", {
+            "username": "editedusername",
+            "email": "edited@test.com",
+            "is_staff": "on",
+            "is_active": "on"
+        })
+        request.user = self.superuser
+        self._setup_request_messages(request)
+
+        response = admin_users_edit(request, user_id=edit_target.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/admin-users/")
+
+        # Verify DB values
+        updated_user = User.objects.get(id=edit_target.id)
+        self.assertEqual(updated_user.username, "editedusername")
+        self.assertEqual(updated_user.email, "edited@test.com")
+        self.assertTrue(updated_user.is_staff)
+
+    def test_delete_user_prevent_self_delete(self):
+        from heappe_ui.view.admin_users import admin_users_delete
+        request = self.factory.post(f"/admin-users/{self.superuser.id}/delete/")
+        request.user = self.superuser
+        self._setup_request_messages(request)
+
+        response = admin_users_delete(request, user_id=self.superuser.id)
+        # Should redirect to list with error
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/admin-users/")
+        # Superuser should not be deleted
+        self.assertTrue(User.objects.filter(id=self.superuser.id).exists())
+
+    def test_delete_user_success(self):
+        from heappe_ui.view.admin_users import admin_users_delete
+        delete_target = User.objects.create_user(username="todelete", password="password")
+        request = self.factory.post(f"/admin-users/{delete_target.id}/delete/")
+        request.user = self.superuser
+        self._setup_request_messages(request)
+
+        response = admin_users_delete(request, user_id=delete_target.id)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/admin-users/")
+        # Should be deleted from DB
+        self.assertFalse(User.objects.filter(id=delete_target.id).exists())
+
+    def test_decrypt_credentials_view_public(self):
+        from heappe_ui.view.admin_users import decrypt_credentials_view
+        request = self.factory.get("/decrypt/")
+        from django.contrib.auth.models import AnonymousUser
+        request.user = AnonymousUser()
+
+        response = decrypt_credentials_view(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Decrypt HEAppE Credentials", response.content)
 

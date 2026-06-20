@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Admin Accounts{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Admin Accounts</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-lock text-primary fs-5"></i>
+                        <h5 class="h6 mb-0 fw-bold text-dark">Django Admin Accounts</h5>
+                    </div>
+                    <div>
+                        <a href="{% url 'admin_users_create' %}" class="btn btn-sm btn-primary fw-bold shadow-sm rounded-3 px-3 py-2 d-flex align-items-center gap-1.5">
+                            <i class="bi bi-person-plus-fill"></i>Create Administrator
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light text-secondary small text-uppercase">
+                                <tr>
+                                    <th class="ps-4" style="width: 25%;">Username</th>
+                                    <th style="width: 25%;">Email</th>
+                                    <th style="width: 15%;">Role / Status</th>
+                                    <th style="width: 20%;">Date Joined / Last Login</th>
+                                    <th class="text-end pe-4" style="width: 15%;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in users %}
+                                <tr {% if u.id == user.id %}class="table-light bg-opacity-10"{% endif %}>
+                                    <td class="ps-4">
+                                        <div class="d-flex align-items-center gap-2.5">
+                                            <i class="bi bi-person-circle fs-5 text-secondary"></i>
+                                            <div>
+                                                <div class="fw-bold text-dark" style="font-size: 0.95rem;">
+                                                    {{ u.username }}
+                                                    {% if u.id == user.id %}
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary ms-1.5" style="font-size: 0.65rem;">You</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if u.email %}
+                                            <a href="mailto:{{ u.email }}" class="text-secondary small font-monospace"><i class="bi bi-envelope me-1 text-secondary"></i>{{ u.email }}</a>
+                                        {% else %}
+                                            <span class="text-muted small italic">- No Email -</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            {% if u.is_superuser %}
+                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2 py-0.5 fw-bold" style="font-size: 0.68rem;">Superuser</span>
+                                            {% elif u.is_staff %}
+                                                <span class="badge bg-warning bg-opacity-10 text-warning-emphasis border border-warning-subtle px-2 py-0.5 fw-bold" style="font-size: 0.68rem;">Staff</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-2 py-0.5" style="font-size: 0.68rem;">Regular User</span>
+                                            {% endif %}
+
+                                            {% if u.is_active %}
+                                                <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-0.5 fw-bold" style="font-size: 0.68rem;">Active</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary bg-opacity-15 text-muted border border-light-subtle px-2 py-0.5" style="font-size: 0.68rem;">Inactive</span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="d-flex flex-column gap-1 small">
+                                            <span class="text-secondary">Joined: <span class="text-dark">{{ u.date_joined|date:"Y-m-d H:i" }}</span></span>
+                                            <span class="text-secondary">Login: <span class="text-dark">{% if u.last_login %}{{ u.last_login|date:"Y-m-d H:i" }}{% else %}-{% endif %}</span></span>
+                                        </div>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <div class="d-flex align-items-center justify-content-end gap-2">
+                                            <a href="{% url 'admin_users_password' u.id %}" class="btn btn-sm btn-outline-warning rounded-3 py-1.5 px-2.5" title="Change Password">
+                                                <i class="bi bi-key-fill"></i>
+                                            </a>
+                                            <a href="{% url 'admin_users_edit' u.id %}" class="btn btn-sm btn-outline-primary rounded-3 py-1.5 px-2.5" title="Edit Properties">
+                                                <i class="bi bi-pencil-fill"></i>
+                                            </a>
+                                            {% if u.id != user.id %}
+                                            <a href="{% url 'admin_users_delete' u.id %}" class="btn btn-sm btn-outline-danger rounded-3 py-1.5 px-2.5" title="Delete Account">
+                                                <i class="bi bi-trash-fill"></i>
+                                            </a>
+                                            {% else %}
+                                            <button class="btn btn-sm btn-outline-danger rounded-3 py-1.5 px-2.5" disabled title="Cannot delete yourself">
+                                                <i class="bi bi-trash-fill"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
