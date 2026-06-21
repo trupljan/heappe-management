@@ -420,7 +420,10 @@
                                 <div class="form-check form-switch d-flex align-items-center justify-content-between p-0">
                                     <div>
                                         <label for="otel-toggle-switch" class="fw-bold text-dark mb-0" style="cursor: pointer;">Enable Request Monitoring (OpenTelemetry)</label>
-                                        <div class="text-muted small mt-1">This launches Jaeger APM and Otel-Collector containers to enable trace recording for RestApi and DataStagingAPI.</div>
+                                        <div class="text-muted small mt-1">
+                                            This launches Jaeger APM and Otel-Collector containers to enable trace recording for <code>heappe</code> and <code>datastaging</code>.
+                                            <span class="text-warning fw-semibold d-block mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Enabling or disabling this feature automatically restarts HEAppE API services, causing temporary downtime.</span>
+                                        </div>
                                     </div>
                                     <div class="position-relative" style="margin-left: 20px;">
                                         <input class="form-check-input ms-0" type="checkbox" id="otel-toggle-switch" style="width: 2.8em; height: 1.5em; cursor: pointer;" {% if not otel_disabled %}checked{% endif %}>
@@ -780,7 +783,7 @@ $(document).ready(function() {
         // Show loading overlay
         showLoading(
             isChecked ? "Enabling OpenTelemetry..." : "Disabling OpenTelemetry...",
-            "Restarting RestApi and DataStagingAPI services..."
+            "Restarting heappe and datastaging services..."
         );
 
         $.ajax({

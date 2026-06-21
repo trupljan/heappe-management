@@ -1310,7 +1310,7 @@ def toggle_telemetry_view(request, instance_name):
             "docker", "compose",
             "--profile", "telemetry",
             "-p", instance_name,
-            "up", "-d", "--force-recreate", "RestApi", "DataStagingAPI", "otel-collector", "jaeger"
+            "up", "-d", "--force-recreate", "heappe", "datastaging", "otel-collector", "jaeger"
         ]
         result = execute_docker_compose(cmd, compose_dir)
         if result.returncode == 0:
@@ -1352,7 +1352,7 @@ def toggle_telemetry_view(request, instance_name):
         recreate_cmd = [
             "docker", "compose",
             "-p", instance_name,
-            "up", "-d", "--force-recreate", "RestApi", "DataStagingAPI"
+            "up", "-d", "--force-recreate", "heappe", "datastaging"
         ]
         result = execute_docker_compose(recreate_cmd, compose_dir)
         if result.returncode == 0:
