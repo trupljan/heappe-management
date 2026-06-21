@@ -683,22 +683,49 @@ import subprocess
 
 def get_remote_tags(repo_url: str) -> list[str]:
     try:
-        result = subprocess.run(
+        # Fetch tags
+        result_tags = subprocess.run(
             ["git", "ls-remote", "--tags", repo_url],
             capture_output=True, text=True, check=True
         )
+        tags = []
+        for line in result_tags.stdout.splitlines():
+            if "refs/tags/" in line and not line.endswith("^{}"):
+                parts = line.split("refs/tags/")
+                if len(parts) > 1:
+                    tags.append(parts[1])
 
-        tags = [
-            line.split("refs/tags/")[1]
-            for line in result.stdout.splitlines()
-            if "refs/tags/" in line and not line.endswith("^{}")
-        ]
+        # Keep version >= v6.0.0, and sort them
+        version_tags = [t for t in tags if t.lower() >= "v6.0.0"]
+        try:
+            version_tags.sort(key=lambda t: [int(n) for n in t.lower().lstrip('v').split('.') if n.isdigit()], reverse=True)
+        except Exception:
+            version_tags.sort(reverse=True)
 
-        tags = [t for t in tags if t.lower() >= "v6.0.0"]
+        # Fetch branches (heads)
+        result_heads = subprocess.run(
+            ["git", "ls-remote", "--heads", repo_url],
+            capture_output=True, text=True, check=True
+        )
+        branches = []
+        for line in result_heads.stdout.splitlines():
+            if "refs/heads/" in line:
+                parts = line.split("refs/heads/")
+                if len(parts) > 1:
+                    branches.append(parts[1])
+        branches.sort()
 
-        tags.sort(key=lambda t: [int(n) for n in t.lower().lstrip('v').split('.') if n.isdigit()], reverse=True)
-
-        return tags
+        # Combine: version tags first, then branches, then any other tags
+        all_refs = version_tags + branches + [t for t in tags if t not in version_tags]
+        
+        # De-duplicate while preserving order
+        seen = set()
+        unique_refs = []
+        for r in all_refs:
+            if r not in seen:
+                seen.add(r)
+                unique_refs.append(r)
+        return unique_refs
 
     except Exception:
         return []

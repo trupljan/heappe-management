@@ -9,58 +9,64 @@
 
 {% block content %}
 <div class="container py-4">
-    <div class="row justify-content-center">
-        <div class="col-lg-8 col-xl-6">
-            <div class="card border-0 shadow-sm rounded-3 bg-white">
+    {% if user.is_authenticated %}
+    <div class="row g-4">
+        <!-- Profile Info Card (Left Column) -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
                 <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
                     <i class="bi bi-person-badge text-primary fs-5"></i>
                     <h5 class="h6 mb-0 fw-bold text-dark">User Profile Details</h5>
                 </div>
-                <div class="card-body p-4">
-                    {% if user.is_authenticated %}
-                        <div class="d-flex flex-column gap-3 mb-4">
-                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
-                                <span class="text-muted small fw-semibold"><i class="bi bi-person me-1.5 text-secondary"></i>Username</span>
-                                <span class="fw-bold text-dark">{{ user.username }}</span>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
-                                <span class="text-muted small fw-semibold"><i class="bi bi-link-45deg me-1.5 text-secondary"></i>HEAppE Host</span>
-                                <code class="small font-monospace text-dark bg-light px-2 py-0.5 rounded border border-light-subtle">{{ request.session.heappe_host }}</code>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 flex-wrap gap-2">
-                                <span class="text-muted small fw-semibold"><i class="bi bi-key me-1.5 text-secondary"></i>Session Code</span>
-                                <div class="d-flex align-items-center gap-2">
-                                    <span id="session-code-container" {% if request.session.heappe_session_code %}style="display:none;"{% endif %}>
-                                        <span class="text-muted small">None (API Key auth)</span>
-                                    </span>
-                                    <span id="session-code" class="font-monospace small bg-light border border-light-subtle px-2 py-0.5 rounded text-dark" style="display:none;">{{ request.session.heappe_session_code|default:"" }}</span>
-                                    
-                                    <button id="toggle-session" class="btn btn-xs btn-outline-secondary py-1" style="font-size: 0.7rem; {% if not request.session.heappe_session_code %}display:none;{% endif %}">
-                                        <i class="bi bi-eye-slash me-1"></i>Show
-                                    </button>
-                                    <button id="btn-generate-session" class="btn btn-xs btn-warning fw-semibold text-dark py-1" style="font-size: 0.75rem;">
-                                        {% if request.session.heappe_session_code %}
-                                            <i class="bi bi-arrow-clockwise me-1"></i>Regenerate
-                                        {% else %}
-                                            <i class="bi bi-key-fill me-1"></i>Get Code
-                                        {% endif %}
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="text-muted small fw-semibold"><i class="bi bi-clock me-1.5 text-secondary"></i>Last Authenticated</span>
-                                <span class="small text-secondary fw-medium">
-                                    {% if last_auth %}
-                                        <i class="bi bi-calendar-check me-1"></i>{{ last_auth | date:"d.m.Y H:i:s" }} UTC
-                                    {% else %}
-                                        <span class="text-muted">Never</span>
-                                    {% endif %}
+                <div class="card-body p-4 d-flex flex-column justify-content-between">
+                    <div class="d-flex flex-column gap-3 mb-4">
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                            <span class="text-muted small fw-semibold"><i class="bi bi-person me-1.5 text-secondary"></i>Username</span>
+                            <span class="fw-bold text-dark">{{ user.username }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                            <span class="text-muted small fw-semibold"><i class="bi bi-envelope me-1.5 text-secondary"></i>Email Address</span>
+                            <span class="small text-dark font-monospace">{{ user.email|default:"- No Email -" }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2">
+                            <span class="text-muted small fw-semibold"><i class="bi bi-link-45deg me-1.5 text-secondary"></i>HEAppE Host</span>
+                            <code class="small font-monospace text-dark bg-light px-2 py-0.5 rounded border border-light-subtle">{{ request.session.heappe_host }}</code>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center border-bottom pb-2 flex-wrap gap-2">
+                            <span class="text-muted small fw-semibold"><i class="bi bi-key me-1.5 text-secondary"></i>Session Code</span>
+                            <div class="d-flex align-items-center gap-2">
+                                <span id="session-code-container" {% if request.session.heappe_session_code %}style="display:none;"{% endif %}>
+                                    <span class="text-muted small">None (API Key auth)</span>
                                 </span>
+                                <span id="session-code" class="font-monospace small bg-light border border-light-subtle px-2 py-0.5 rounded text-dark" style="display:none;">{{ request.session.heappe_session_code|default:"" }}</span>
+                                
+                                <button id="toggle-session" class="btn btn-xs btn-outline-secondary py-1" style="font-size: 0.7rem; {% if not request.session.heappe_session_code %}display:none;{% endif %}">
+                                    <i class="bi bi-eye-slash me-1"></i>Show
+                                </button>
+                                <button id="btn-generate-session" class="btn btn-xs btn-warning fw-semibold text-dark py-1" style="font-size: 0.75rem;">
+                                    {% if request.session.heappe_session_code %}
+                                        <i class="bi bi-arrow-clockwise me-1"></i>Regenerate
+                                    {% else %}
+                                        <i class="bi bi-key-fill me-1"></i>Get Code
+                                    {% endif %}
+                                </button>
                             </div>
                         </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="text-muted small fw-semibold"><i class="bi bi-clock me-1.5 text-secondary"></i>Last Authenticated</span>
+                            <span class="small text-secondary fw-medium">
+                                {% if last_auth %}
+                                    <i class="bi bi-calendar-check me-1"></i>{{ last_auth | date:"d.m.Y H:i:s" }} UTC
+                                {% else %}
+                                    <span class="text-muted">Never</span>
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
 
+                    <div>
                         {% if user.is_superuser %}
-                            <div class="mt-4 p-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded-3 mb-4">
+                            <div class="p-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded-3 mb-4">
                                 <h6 class="text-danger fw-bold mb-2 small text-uppercase tracking-wider"><i class="bi bi-shield-lock me-1"></i>Server Maintenance (Admin Only)</h6>
                                 <p class="text-secondary small mb-3">Initiate a system-wide codebase update and service reload.</p>
                                 <button type="button" data-bs-toggle="modal" data-bs-target="#updateModal" class="btn btn-sm btn-danger w-100 fw-bold shadow-sm">
@@ -69,25 +75,90 @@
                             </div>
                         {% endif %}
 
-                        <div class="pt-2">
-                            <form method="post" action="{% url 'logout' %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-danger w-100 py-2 fw-semibold">
-                                    <i class="bi bi-box-arrow-right me-1"></i>Logout Profile
-                                </button>
-                            </form>
+                        <form method="post" action="{% url 'logout' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger w-100 py-2 fw-semibold">
+                                <i class="bi bi-box-arrow-right me-1"></i>Logout Profile
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Profile Card (Right Column) -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi bi-pencil-square text-primary fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold text-dark">Update Profile Details</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post" class="needs-validation" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="update_profile" value="1">
+                        
+                        <div class="mb-3">
+                            <label for="username" class="form-label small fw-bold text-secondary">Username</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-secondary border-end-0"><i class="bi bi-person"></i></span>
+                                <input type="text" class="form-control ps-2" id="username" name="username" value="{{ user.username }}" required>
+                            </div>
+                            <div class="form-text small text-muted">Change your display name / login username.</div>
                         </div>
-                    {% else %}
-                        <div class="text-center py-4">
-                            <i class="bi bi-shield-slash text-danger fs-1 mb-2 d-block"></i>
-                            <p class="text-danger fw-semibold mb-3">You are not logged in.</p>
-                            <a href="{% url 'login' %}" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm">Login now</a>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label small fw-bold text-secondary">Email Address</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-secondary border-end-0"><i class="bi bi-envelope"></i></span>
+                                <input type="email" class="form-control ps-2" id="email" name="email" value="{{ user.email }}">
+                            </div>
+                            <div class="form-text small text-muted">Optional. Used for administration references.</div>
                         </div>
-                    {% endif %}
+
+                        <hr class="my-4 text-muted">
+
+                        <h6 class="fw-bold text-dark mb-3 small text-uppercase"><i class="bi bi-key me-1"></i>Change Password</h6>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label small fw-bold text-secondary">New Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-secondary border-end-0"><i class="bi bi-lock"></i></span>
+                                <input type="password" class="form-control ps-2" id="password" name="password" placeholder="Leave blank to keep current password">
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="confirm_password" class="form-label small fw-bold text-secondary">Confirm New Password</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light text-secondary border-end-0"><i class="bi bi-lock-fill"></i></span>
+                                <input type="password" class="form-control ps-2" id="confirm_password" name="confirm_password" placeholder="Leave blank to keep current password">
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-center justify-content-end gap-2">
+                            <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm d-flex align-items-center gap-1.5">
+                                <i class="bi bi-save-fill"></i>Save Changes
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
+    {% else %}
+    <div class="row justify-content-center">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm rounded-3 bg-white">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-shield-slash text-danger fs-1 mb-2 d-block"></i>
+                    <p class="text-danger fw-semibold mb-3">You are not logged in.</p>
+                    <a href="{% url 'login' %}" class="btn btn-primary btn-sm px-4 fw-bold shadow-sm">Login now</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <script>

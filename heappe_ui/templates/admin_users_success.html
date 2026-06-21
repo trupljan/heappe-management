@@ -46,7 +46,6 @@
                         </div>
                     </div>
 
-                    <!-- Plaintext Email Tab -->
                     <div class="mb-4">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <label class="form-label fw-bold text-dark mb-0"><i class="bi bi-envelope me-1"></i>Plaintext Email Draft (English)</label>
@@ -54,7 +53,7 @@
                                 <i class="bi bi-copy me-1"></i>Copy Plaintext Draft
                             </button>
                         </div>
-                        <textarea class="form-control font-monospace small bg-light text-dark" id="emailPlaintext" rows="12" readonly>Subject: Your HEAppE Admin Panel Access Credentials
+                        <textarea class="form-control font-monospace small bg-light text-dark" id="emailPlaintext" rows="16" readonly>Subject: Your HEAppE Admin Panel Access Credentials
 
 Hello,
 
@@ -69,6 +68,10 @@ Password: {{ password }}
 
 [IMPORTANT - SECURITY NOTICE]
 For security reasons, your login credentials must be kept strictly confidential. 
+If you received this message in an encrypted format, you can decrypt it using our standalone decryption tool at:
+Decryption Page: {{ decryption_url }}
+using the passphrase shared with you separately (e.g., via SMS or Signal).
+
 It is highly recommended that you:
 1. Log in immediately and change your password in the Profile section.
 2. Do not share these credentials with anyone.
@@ -85,7 +88,7 @@ HEAppE Management Team</textarea>
                         <h6 class="fw-bold text-primary mb-2 d-flex align-items-center gap-1.5">
                             <i class="bi bi-shield-lock-fill"></i>Secure / Encrypted Sharing
                         </h6>
-                        <p class="text-secondary small mb-3">Since we do not have an active email server, you can encrypt this email draft locally in your browser and send the encrypted block via email, and the passphrase via SMS or Signal.</p>
+                        <p class="text-secondary small mb-3">You can encrypt this email draft locally in your browser and send the encrypted block via email, and the passphrase via SMS or Signal.</p>
                         
                         <div class="row g-2 align-items-end mb-3">
                             <div class="col-sm-8">
@@ -206,7 +209,7 @@ HEAppE Management Team</textarea>
         }
         
         const plaintext = document.getElementById("emailPlaintext").value;
-        const decryptUrl = window.location.origin + "{% url 'decrypt_credentials_view' %}";
+        const decryptUrl = "{{ decryption_url }}";
         
         encryptText(plaintext, passphrase).then(ciphertext => {
             const encryptedBody = 

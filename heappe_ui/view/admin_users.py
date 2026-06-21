@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, HttpResponseForbidden
+from django.urls import reverse
 
 def superuser_required(view_func):
     @login_required
@@ -51,7 +52,8 @@ def admin_users_create(request):
         messages.success(request, f"User '{username}' created successfully.")
         
         # Calculate absolute URL for login
-        admin_panel_url = request.build_absolute_uri('/')
+        admin_panel_url = request.build_absolute_uri(reverse('login'))
+        decryption_url = request.build_absolute_uri(reverse('decrypt_credentials_view'))
         
         return render(request, "admin_users_success.html", {
             "username": username,
@@ -60,6 +62,7 @@ def admin_users_create(request):
             "is_superuser": is_superuser,
             "is_staff": is_staff,
             "admin_panel_url": admin_panel_url,
+            "decryption_url": decryption_url,
             "type": "create"
         })
 
@@ -122,7 +125,8 @@ def admin_users_password(request, user_id):
         messages.success(request, f"Password for user '{user.username}' updated successfully.")
         
         # Calculate absolute URL for login
-        admin_panel_url = request.build_absolute_uri('/')
+        admin_panel_url = request.build_absolute_uri(reverse('login'))
+        decryption_url = request.build_absolute_uri(reverse('decrypt_credentials_view'))
         
         return render(request, "admin_users_success.html", {
             "username": user.username,
@@ -131,6 +135,7 @@ def admin_users_password(request, user_id):
             "is_superuser": user.is_superuser,
             "is_staff": user.is_staff,
             "admin_panel_url": admin_panel_url,
+            "decryption_url": decryption_url,
             "type": "password"
         })
 

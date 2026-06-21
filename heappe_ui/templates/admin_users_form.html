@@ -73,7 +73,7 @@
                         <div class="mb-3">
                             <div class="form-check form-switch py-1">
                                 <input class="form-check-input" type="checkbox" role="switch" id="id_is_staff" name="is_staff" 
-                                       {% if action == 'edit' and edit_user.is_staff %}checked{% endif %}
+                                       {% if action == 'create' %}checked{% elif action == 'edit' and edit_user.is_staff %}checked{% endif %}
                                        {% if action == 'edit' and edit_user.is_superuser %}disabled{% endif %}>
                                 <label class="form-check-label fw-semibold text-dark" for="id_is_staff">Is Staff (Access Admin Panel)</label>
                                 <div class="form-text small">Designates whether the user can log into the HEAppE Management admin panel.</div>

@@ -507,10 +507,10 @@
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Current Configuration Tag</label>
-                                    <input type="text" class="form-control bg-light font-monospace fw-bold text-dark" value="{{ repo_branch }}" readonly>
+                                    <input type="text" class="form-control bg-light font-monospace fw-bold text-dark" value="{% if deployed_version %}V{{ deployed_version }}{% else %}{{ repo_branch }}{% endif %}" readonly>
                                 </div>
                                 <input type="hidden" name="Repository" value="{{ repo_url }}">
-                                <input type="hidden" name="RepositoryBranch" value="{{ repo_branch }}">
+                                <input type="hidden" name="RepositoryBranch" value="{% if deployed_version %}V{{ deployed_version }}{% else %}{{ repo_branch }}{% endif %}">
                                 <input type="hidden" name="action" value="regenerate_configs">
                                 <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger-emphasis p-3 rounded-3 mb-4 small d-flex align-items-start gap-2.5">
                                     <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>

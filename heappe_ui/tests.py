@@ -1313,7 +1313,7 @@ class AdminUsersViewTests(TestCase):
 
         response = admin_users_list(request)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Django Admin Accounts", response.content)
+        self.assertIn(b"Admin Accounts", response.content)
 
     def test_create_user_success(self):
         from heappe_ui.view.admin_users import admin_users_create
@@ -1332,11 +1332,41 @@ class AdminUsersViewTests(TestCase):
         self.assertIn(b"Administrator Account Created", response.content)
         self.assertIn(b"newadmin", response.content)
         self.assertIn(b"strongpassword123", response.content)
+        self.assertIn(b"Decryption Page", response.content)
+        self.assertIn(b"/decrypt/", response.content)
 
         # Check in DB
         new_user = User.objects.get(username="newadmin")
         self.assertTrue(new_user.is_superuser)
         self.assertTrue(new_user.is_staff)
+
+    def test_change_password_get(self):
+        from heappe_ui.view.admin_users import admin_users_password
+        target_user = User.objects.create_user(username="pwtarget", password="oldpassword")
+        request = self.factory.get(f"/admin-users/{target_user.id}/password/")
+        request.user = self.superuser
+        self._setup_request_messages(request)
+
+        response = admin_users_password(request, user_id=target_user.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Change Password", response.content)
+
+    def test_change_password_post_success(self):
+        from heappe_ui.view.admin_users import admin_users_password
+        target_user = User.objects.create_user(username="pwtarget2", password="oldpassword")
+        request = self.factory.post(f"/admin-users/{target_user.id}/password/", {
+            "password": "newsuperpassword123"
+        })
+        request.user = self.superuser
+        self._setup_request_messages(request)
+
+        response = admin_users_password(request, user_id=target_user.id)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Password Updated", response.content)
+        self.assertIn(b"pwtarget2", response.content)
+        self.assertIn(b"newsuperpassword123", response.content)
+        self.assertIn(b"Decryption Page", response.content)
+        self.assertIn(b"/decrypt/", response.content)
 
     def test_create_user_generated_password(self):
         from heappe_ui.view.admin_users import admin_users_create
@@ -1415,4 +1445,115 @@ class AdminUsersViewTests(TestCase):
         response = decrypt_credentials_view(request)
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Decrypt HEAppE Credentials", response.content)
+
+
+class UserProfileViewTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="profileuser", email="profile@test.com", password="oldpassword123")
+        self.other_user = User.objects.create_user(username="takenname", password="password")
+
+    def _setup_request_messages(self, request):
+        from unittest import mock
+        request._messages = mock.MagicMock()
+        session = mock.MagicMock()
+        session.get.return_value = None
+        request.session = session
+
+    def test_profile_view_get(self):
+        from heappe_ui.views import profile_view
+        request = self.factory.get("/profile/")
+        request.user = self.user
+        self._setup_request_messages(request)
+
+        response = profile_view(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"User Profile Details", response.content)
+        self.assertIn(b"profileuser", response.content)
+        self.assertIn(b"Update Profile Details", response.content)
+
+    def test_profile_view_post_success(self):
+        from heappe_ui.views import profile_view
+        request = self.factory.post("/profile/", {
+            "update_profile": "1",
+            "username": "newprofileuser",
+            "email": "newprofile@test.com",
+            "password": "newpassword123",
+            "confirm_password": "newpassword123"
+        })
+        request.user = self.user
+        self._setup_request_messages(request)
+
+        response = profile_view(request)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/profile/")
+
+        # Check DB updates
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, "newprofileuser")
+        self.assertEqual(self.user.email, "newprofile@test.com")
+        self.assertTrue(self.user.check_password("newpassword123"))
+
+    def test_profile_view_post_empty_password_kept(self):
+        from heappe_ui.views import profile_view
+        request = self.factory.post("/profile/", {
+            "update_profile": "1",
+            "username": "profileuser",
+            "email": "profile@test.com",
+            "password": "",
+            "confirm_password": ""
+        })
+        request.user = self.user
+        self._setup_request_messages(request)
+
+        response = profile_view(request)
+        self.assertEqual(response.status_code, 302)
+
+        # Check password is still old one
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("oldpassword123"))
+
+    def test_profile_view_post_mismatch_password(self):
+        from heappe_ui.views import profile_view
+        request = self.factory.post("/profile/", {
+            "update_profile": "1",
+            "username": "profileuser",
+            "email": "profile@test.com",
+            "password": "newpassword123",
+            "confirm_password": "differentpassword"
+        })
+        request.user = self.user
+        self._setup_request_messages(request)
+
+        response = profile_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        # Verify error message was added
+        request._messages.add.assert_called()
+        args, kwargs = request._messages.add.call_args
+        from django.contrib import messages
+        self.assertEqual(args[0], messages.ERROR)
+        self.assertEqual(args[1], "Passwords do not match.")
+
+    def test_profile_view_post_duplicate_username(self):
+        from heappe_ui.views import profile_view
+        request = self.factory.post("/profile/", {
+            "update_profile": "1",
+            "username": "takenname",
+            "email": "profile@test.com",
+            "password": "",
+            "confirm_password": ""
+        })
+        request.user = self.user
+        self._setup_request_messages(request)
+
+        response = profile_view(request)
+        self.assertEqual(response.status_code, 200)
+
+        # Verify error message was added
+        request._messages.add.assert_called()
+        args, kwargs = request._messages.add.call_args
+        from django.contrib import messages
+        self.assertEqual(args[0], messages.ERROR)
+        self.assertEqual(args[1], "Username 'takenname' is already taken.")
 

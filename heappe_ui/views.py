@@ -113,14 +113,43 @@ from django.conf import settings
 
 @login_required
 def profile_view(request):
-    last_auth_ts = request.session.get("heappe_last_auth")
+    from django.contrib.auth.models import User
+    from django.contrib.auth import update_session_auth_hash
 
+    user = request.user
+    if request.method == "POST" and "update_profile" in request.POST:
+        username = request.POST.get("username", "").strip()
+        email = request.POST.get("email", "").strip()
+        password = request.POST.get("password", "").strip()
+        confirm_password = request.POST.get("confirm_password", "").strip()
+
+        if not username:
+            messages.error(request, "Username cannot be empty.")
+        elif User.objects.filter(username=username).exclude(id=user.id).exists():
+            messages.error(request, f"Username '{username}' is already taken.")
+        elif password and password != confirm_password:
+            messages.error(request, "Passwords do not match.")
+        else:
+            user.username = username
+            user.email = email
+            if password:
+                user.set_password(password)
+            user.save()
+            if password:
+                update_session_auth_hash(request, user)
+            messages.success(request, "Your profile details have been updated successfully.")
+            return redirect("profile_view")
+
+    last_auth_ts = request.session.get("heappe_last_auth")
     if last_auth_ts:
-        last_auth = datetime.fromtimestamp(float(last_auth_ts))
+        try:
+            last_auth = datetime.fromtimestamp(float(last_auth_ts))
+        except (ValueError, TypeError):
+            last_auth = None
     else:
         last_auth = None
 
-    return render(request, "user_profile.html", {"user": request.user,  "last_auth": last_auth})
+    return render(request, "user_profile.html", {"user": user, "last_auth": last_auth})
 
 @login_required
 def generate_session_code_view(request):
@@ -796,6 +825,7 @@ def check_for_updates(request):
     cached_current = request.session.get("update_current_version")
     cached_latest = request.session.get("update_latest_version")
     cached_changes = request.session.get("update_changes")
+    cached_branch = request.session.get("update_current_branch", "HEAD")
 
     actual_version = "unknown"
     try:
@@ -811,7 +841,8 @@ def check_for_updates(request):
             'update_available': cached_available,
             'current_version': cached_current,
             'latest_version': cached_latest,
-            'changes': cached_changes or []
+            'changes': cached_changes or [],
+            'current_branch': cached_branch
         })
         response["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response["Pragma"] = "no-cache"
@@ -980,12 +1011,14 @@ def check_for_updates(request):
     request.session["update_current_version"] = current_version
     request.session["update_latest_version"] = latest_version
     request.session["update_changes"] = changes
+    request.session["update_current_branch"] = current_branch
 
     response = JsonResponse({
         'update_available': update_available,
         'current_version': current_version,
         'latest_version': latest_version,
-        'changes': changes
+        'changes': changes,
+        'current_branch': current_branch
     })
     response["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response["Pragma"] = "no-cache"
