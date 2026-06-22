@@ -241,7 +241,11 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
         build_command = [
             "docker", "compose",
             "--profile", "db",
+            "--profile", "heappe",
             "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
             "--profile", "staging",
             "-p", instance_name,
             "build",  "--no-cache"
@@ -260,7 +264,11 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
         up_command = [
             "docker", "compose",
             "--profile", "db",
+            "--profile", "heappe",
             "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
             "--profile", "staging",
             "-p", instance_name,
             "up", "-d"
@@ -283,7 +291,12 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
         restart_command = [
             "docker", "compose",
             "--profile", "db",
+            "--profile", "heappe",
             "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
             "-p", instance_name,
             "restart"
         ]
@@ -340,6 +353,18 @@ def handle_container_action(client, instance_name, action, container_id):
 
 def handle_global_action(compose_dir, instance_name, action):
     """Handle global actions for all containers in the project."""
+    # Read .env to check if telemetry is enabled
+    env_path = os.path.join(compose_dir, ".env")
+    otel_disabled = True
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith("OTEL_DISABLED="):
+                        otel_disabled = (line.strip().split("=", 1)[1].strip().lower() == "true")
+        except Exception:
+            pass
+
     command = [
         "docker", "compose",
         "--profile", "db",
@@ -348,9 +373,13 @@ def handle_global_action(compose_dir, instance_name, action):
         "--profile", "vault",
         "--profile", "vaultagent",
         "--profile", "sshagent",
-        "--profile", "staging",
-        "-p", instance_name
+        "--profile", "staging"
     ]
+    if not otel_disabled:
+        command.extend(["--profile", "telemetry"])
+
+    command.extend(["-p", instance_name])
+
     if action == 'start_all':
         command.extend(["up", "-d"])
         message = "All containers started successfully."
@@ -1308,6 +1337,13 @@ def toggle_telemetry_view(request, instance_name):
         # 2. Run docker compose recreate
         cmd = [
             "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
             "--profile", "telemetry",
             "-p", instance_name,
             "up", "-d", "--force-recreate", "heappe", "datastagingapi", "otel-collector", "jaeger"
@@ -1343,6 +1379,13 @@ def toggle_telemetry_view(request, instance_name):
         # 2. Run docker compose stop & recreate without telemetry
         stop_cmd = [
             "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
             "--profile", "telemetry",
             "-p", instance_name,
             "stop", "otel-collector", "jaeger"
@@ -1351,6 +1394,13 @@ def toggle_telemetry_view(request, instance_name):
 
         recreate_cmd = [
             "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
             "-p", instance_name,
             "up", "-d", "--force-recreate", "heappe", "datastagingapi"
         ]
