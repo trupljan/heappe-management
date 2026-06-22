@@ -115,6 +115,10 @@
                                     <option value="" disabled selected>Select usage type</option>
                                     <option value="1" {% if project.usage_type == 1 %}selected{% endif %}>NodeHours</option>
                                     <option value="2" {% if project.usage_type == 2 %}selected{% endif %}>CoreHours</option>
+                                    {% if is_v6_4_0_plus %}
+                                    <option value="3" {% if project.usage_type == 3 %}selected{% endif %}>Credits</option>
+                                    <option value="4" {% if project.usage_type == 4 %}selected{% endif %}>QPUSeconds</option>
+                                    {% endif %}
                                 </select>
                             </div>
 
@@ -173,11 +177,22 @@
                         <div class="row g-3">
                             <div class="col-12">
                                 <label class="form-label small text-muted fw-semibold">Select Cluster</label>
-                                <select class="form-select form-select-sm border-light-subtle bg-white" name="ClusterId" required>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" name="ClusterId" id="ClusterIdSelect" required>
                                     <option value="" disabled selected>Select a cluster...</option>
-                                    {% for cluster in not_assigned_clusters %}
-                                        <option value="{{ cluster.id }}">{{ cluster.name }}</option>
-                                    {% endfor %}
+                                    <optgroup label="Without Proxy">
+                                        {% for cluster in not_assigned_clusters %}
+                                            {% if not cluster.proxy_connection %}
+                                                <option value="{{ cluster.id }}" data-has-proxy="false">{{ cluster.name }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </optgroup>
+                                    <optgroup label="With Proxy">
+                                        {% for cluster in not_assigned_clusters %}
+                                            {% if cluster.proxy_connection %}
+                                                <option value="{{ cluster.id }}" data-has-proxy="true">{{ cluster.name }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </optgroup>
                                 </select>
                             </div>
                             <div class="col-12">
@@ -188,6 +203,24 @@
                                 <label class="form-label small text-muted fw-semibold">Project Path <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
                                 <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ProjectStoragePath" placeholder="e.g. /mnt/projects/project_123">
                             </div>
+                            {% if is_v6_4_0_plus %}
+                            <div class="col-12">
+                                <label class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" name="PreferredAuthType" id="PreferredAuthTypeSelect" required>
+                                    <option value="" disabled selected>Select preferred auth type...</option>
+                                    <optgroup label="Without Proxy" id="optgroup-no-proxy">
+                                        {% for val, name in preferred_auth_types_no_proxy %}
+                                            <option value="{{ val }}">{{ name }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    <optgroup label="With Proxy (at HEAppE Cluster)" id="optgroup-with-proxy">
+                                        {% for val, name in preferred_auth_types_with_proxy %}
+                                            <option value="{{ val }}">{{ name }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                </select>
+                            </div>
+                            {% endif %}
                             <div class="col-12 pt-2">
                                 <button type="submit" class="btn btn-sm btn-primary w-100 fw-bold shadow-sm">Assign Cluster</button>
                             </div>
@@ -215,7 +248,7 @@
                                     </button>
                                     <ul class="dropdown-menu dropdown-menu-end shadow border-0">
                                         <li>
-                                            <a class="dropdown-item py-1.5 small" href="#" onclick="openEditAssignmentModal('{{ assignment.cluster_id }}', '{{ assignment.cluster_name|escapejs }}', '{{ assignment.scratch_storage_path|escapejs }}', '{{ assignment.project_storage_path|escapejs }}')">
+                                            <a class="dropdown-item py-1.5 small" href="#" onclick="openEditAssignmentModal('{{ assignment.cluster_id }}', '{{ assignment.cluster_name|escapejs }}', '{{ assignment.scratch_storage_path|escapejs }}', '{{ assignment.project_storage_path|escapejs }}', '{{ assignment.preferred_auth_type|default:'' }}', '{{ assignment.cluster_has_proxy|yesno:'true,false' }}')">
                                                 <i class="bi bi-pencil me-1.5"></i>Edit Paths
                                             </a>
                                         </li>
@@ -243,6 +276,12 @@
                                     <div class="col-4 text-secondary">Project Path:</div>
                                     <div class="col-8 text-break text-dark">{{ assignment.project_storage_path }}</div>
                                 </div>
+                                {% if is_v6_4_0_plus %}
+                                <div class="row">
+                                    <div class="col-4 text-secondary">Preferred Auth:</div>
+                                    <div class="col-8 text-break text-dark">{{ assignment.preferred_auth_type_name }}</div>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}
@@ -726,6 +765,24 @@
             <label class="form-label small text-muted fw-semibold">Project Storage Path</label>
             <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="editProjectPath" name="ProjectStoragePath" required>
           </div>
+          {% if is_v6_4_0_plus %}
+          <div class="mb-2">
+            <label class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
+            <select class="form-select form-select-sm border-light-subtle bg-white" id="editPreferredAuthType" name="PreferredAuthType" required>
+                <option value="" disabled>Select preferred auth type...</option>
+                <optgroup label="Without Proxy" id="edit-optgroup-no-proxy">
+                    {% for val, name in preferred_auth_types_no_proxy %}
+                        <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="With Proxy (at HEAppE Cluster)" id="edit-optgroup-with-proxy">
+                    {% for val, name in preferred_auth_types_with_proxy %}
+                        <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+            </select>
+          </div>
+          {% endif %}
         </div>
         <div class="modal-footer bg-light border-top">
           <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
@@ -913,13 +970,52 @@
 </div>
 
 <script>
-function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
+function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath, preferredAuthType, clusterHasProxy) {
     document.getElementById('editClusterId').value = clusterId;
     document.getElementById('editClusterNameDisplay').innerText = clusterName;
     document.getElementById('editScratchPath').value = scratchPath;
     document.getElementById('editProjectPath').value = projectPath;
+    var prefAuthElem = document.getElementById('editPreferredAuthType');
+    if (prefAuthElem) {
+        prefAuthElem.value = preferredAuthType !== undefined && preferredAuthType !== null ? preferredAuthType : "";
+        var editPrefAuthOptgroup = document.getElementById('edit-optgroup-with-proxy');
+        if (editPrefAuthOptgroup) {
+            if (clusterHasProxy === 'true' || clusterHasProxy === true) {
+                editPrefAuthOptgroup.disabled = false;
+            } else {
+                editPrefAuthOptgroup.disabled = true;
+                if (['5', '6', '7', '8', '12'].includes(prefAuthElem.value)) {
+                    prefAuthElem.value = "";
+                }
+            }
+        }
+    }
     new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    var clusterSelect = document.getElementById('ClusterIdSelect');
+    if (clusterSelect) {
+        clusterSelect.addEventListener('change', function() {
+            var selectedOption = this.options[this.selectedIndex];
+            var hasProxy = selectedOption ? selectedOption.getAttribute('data-has-proxy') === 'true' : false;
+            var optgroupWithProxy = document.getElementById('optgroup-with-proxy');
+            var preferredAuthTypeSelect = document.getElementById('PreferredAuthTypeSelect');
+            
+            if (optgroupWithProxy) {
+                if (hasProxy) {
+                    optgroupWithProxy.disabled = false;
+                } else {
+                    optgroupWithProxy.disabled = true;
+                    if (preferredAuthTypeSelect && ['5', '6', '7', '8', '12'].includes(preferredAuthTypeSelect.value)) {
+                        preferredAuthTypeSelect.value = "";
+                    }
+                }
+            }
+        });
+        clusterSelect.dispatchEvent(new Event('change'));
+    }
+});
 
 function setUsernameInModal(username) {
     document.getElementById('modal-username-regen').value = username;

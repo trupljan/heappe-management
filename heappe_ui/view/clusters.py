@@ -301,12 +301,17 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
         else:
             custom_config_json = '{}'
 
+    from .project import PREFERRED_AUTH_TYPES_NO_PROXY, PREFERRED_AUTH_TYPES_WITH_PROXY, PREFERRED_AUTH_TYPE_CHOICES
+
     context = {
         'cluster': cluster_dict,
         'active_tab': tab,
         'proxy_connections': proxy_list,
         'custom_configuration_json': custom_config_json,
         'is_v6_4_0_plus': is_v6_4_0_plus,
+        'preferred_auth_types_no_proxy': PREFERRED_AUTH_TYPES_NO_PROXY,
+        'preferred_auth_types_with_proxy': PREFERRED_AUTH_TYPES_WITH_PROXY,
+        'preferred_auth_type_choices': PREFERRED_AUTH_TYPE_CHOICES,
     }
     context['PROTOCOL_CHOICES'] = PROTOCOL_CHOICES
     if tab == 'detail':

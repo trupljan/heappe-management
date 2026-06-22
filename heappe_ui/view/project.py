@@ -15,9 +15,34 @@ KEY_TYPE_CHOICES = {
     6: "Ed25519",
 }
 
+PREFERRED_AUTH_TYPES_NO_PROXY = [
+    (0, "Unknown"),
+    (1, "Password"),
+    (2, "Password Interactive"),
+    (3, "Password and Private Key"),
+    (4, "Private Key"),
+    (9, "Private Key in SSH Agent"),
+    (10, "Private Key in Vault and SSH Agent"),
+    (11, "SSH Certificate"),
+    (13, "Kerberos"),
+]
+
+PREFERRED_AUTH_TYPES_WITH_PROXY = [
+    (5, "Password via Proxy"),
+    (6, "Password Interactive via Proxy"),
+    (7, "Password and Private Key via Proxy"),
+    (8, "Private Key via Proxy"),
+    (12, "SSH Certificate via Proxy"),
+]
+
+PREFERRED_AUTH_TYPE_CHOICES = dict(PREFERRED_AUTH_TYPES_NO_PROXY + PREFERRED_AUTH_TYPES_WITH_PROXY)
+
+
 
 @login_required
 def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> HttpResponse:
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
     filter_type = request.GET.get("project_filter", "own")
     controller = hp.ManagementApi(request.api_instance)
     session_code = request.session_code
@@ -133,6 +158,14 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
 
         for a in project_assignments:
             a['cluster_name'] = cluster_lookup.get(a['cluster_id'], "Unknown")
+            cluster_obj = next((c for c in clusters if c['id'] == a['cluster_id']), None)
+            a['cluster_has_proxy'] = bool(cluster_obj.get('proxy_connection')) if cluster_obj else False
+            pref_auth = a.get('preferred_auth_type')
+            if pref_auth is not None:
+                try:
+                    a['preferred_auth_type_name'] = PREFERRED_AUTH_TYPE_CHOICES.get(int(pref_auth), "Unknown")
+                except (ValueError, TypeError):
+                    a['preferred_auth_type_name'] = str(pref_auth)
 
     elif tab == "commandtemplates":
         cache_key = f"command_templates_cache_{project_id}"
@@ -343,6 +376,10 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "templates_cache_age_str": templates_cache_age_str if tab == "commandtemplates" else None,
         "setup_checklist": setup_checklist,
         "setup_checklist_completed": setup_checklist_completed,
+        "is_v6_4_0_plus": is_v6_4_0_plus,
+        "preferred_auth_types_no_proxy": PREFERRED_AUTH_TYPES_NO_PROXY,
+        "preferred_auth_types_with_proxy": PREFERRED_AUTH_TYPES_WITH_PROXY,
+        "preferred_auth_type_choices": PREFERRED_AUTH_TYPE_CHOICES,
     })
 
 
@@ -834,6 +871,15 @@ def project_assign_to_cluster(request: HttpRequest) -> HttpResponse:
         "PermanentStoragePath": request.POST.get("PermanentStoragePath", ""),
         "ProjectStoragePath": request.POST.get("ProjectStoragePath", "")
     }
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    if is_v6_4_0_plus:
+        pref_auth = request.POST.get("PreferredAuthType")
+        if pref_auth is not None and pref_auth != "":
+            try:
+                payload_data["PreferredAuthType"] = int(pref_auth)
+            except ValueError:
+                pass
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
         request,
@@ -854,6 +900,15 @@ def project_assign_to_cluster_with_project_id(request: HttpRequest, project_id) 
         "PermanentStoragePath": request.POST.get("PermanentStoragePath", ""),
         "ProjectStoragePath": request.POST.get("ProjectStoragePath", "")
     }
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    if is_v6_4_0_plus:
+        pref_auth = request.POST.get("PreferredAuthType")
+        if pref_auth is not None and pref_auth != "":
+            try:
+                payload_data["PreferredAuthType"] = int(pref_auth)
+            except ValueError:
+                pass
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
         request,
@@ -875,6 +930,15 @@ def update_assignment(request: HttpRequest) -> HttpResponse:
         "PermanentStoragePath": request.POST.get("PermanentStoragePath", ""),
         "ProjectStoragePath": request.POST.get("ProjectStoragePath", "")
     }
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    if is_v6_4_0_plus:
+        pref_auth = request.POST.get("PreferredAuthType")
+        if pref_auth is not None and pref_auth != "":
+            try:
+                payload_data["PreferredAuthType"] = int(pref_auth)
+            except ValueError:
+                pass
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
         request,

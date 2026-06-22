@@ -161,6 +161,24 @@
             <label for="ProjectStoragePath" class="form-label small text-muted fw-semibold">Project Storage Path</label>
             <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="ProjectStoragePath" name="ProjectStoragePath" placeholder="/mnt/project/project...">
           </div>
+          {% if is_v6_4_0_plus %}
+          <div class="mb-3">
+            <label for="PreferredAuthType" class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
+            <select class="form-select form-select-sm border-light-subtle bg-white" id="PreferredAuthType" name="PreferredAuthType" required>
+              <option value="" disabled selected>Select preferred auth type...</option>
+              <optgroup label="Without Proxy">
+                {% for val, name in preferred_auth_types_no_proxy %}
+                  <option value="{{ val }}">{{ name }}</option>
+                {% endfor %}
+              </optgroup>
+              <optgroup label="With Proxy">
+                {% for val, name in preferred_auth_types_with_proxy %}
+                  <option value="{{ val }}">{{ name }}</option>
+                {% endfor %}
+              </optgroup>
+            </select>
+          </div>
+          {% endif %}
         </div>
         <div class="modal-footer bg-light border-top">
           <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Close</button>
@@ -333,6 +351,12 @@ function deleteProject(projectId, projectName) {
             } else if (usageType === '2') {
               usageTypeLabel.textContent = 'CoreHours';
               allocationInput.placeholder = 'Enter allocation in CoreHours';
+            } else if (usageType === '3') {
+              usageTypeLabel.textContent = 'Credits';
+              allocationInput.placeholder = 'Enter allocation in Credits';
+            } else if (usageType === '4') {
+              usageTypeLabel.textContent = 'QPUSeconds';
+              allocationInput.placeholder = 'Enter allocation in QPUSeconds';
             } else {
               usageTypeLabel.textContent = 'Select a project';
               allocationInput.placeholder = 'Enter allocation amount';
