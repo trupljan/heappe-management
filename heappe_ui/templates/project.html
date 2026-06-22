@@ -112,8 +112,8 @@
                             <div class="col-md-6">
                                 <label class="form-label small text-muted fw-semibold" for="UsageType">Usage Type</label>
                                 <select class="form-select form-select-sm border-light-subtle bg-white" id="UsageType" name="UsageType" required>
-                                    <option value="" disabled selected>Select usage type</option>
-                                    <option value="1" {% if project.usage_type == 1 %}selected{% endif %}>NodeHours</option>
+                                    <option value="" disabled {% if project %}selected{% endif %}>Select usage type</option>
+                                    <option value="1" {% if not project or project.usage_type == 1 %}selected{% endif %}>NodeHours</option>
                                     <option value="2" {% if project.usage_type == 2 %}selected{% endif %}>CoreHours</option>
                                     {% if is_v6_4_0_plus %}
                                     <option value="3" {% if project.usage_type == 3 %}selected{% endif %}>Credits</option>
@@ -207,10 +207,10 @@
                             <div class="col-12">
                                 <label class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
                                 <select class="form-select form-select-sm border-light-subtle bg-white" name="PreferredAuthType" id="PreferredAuthTypeSelect" required>
-                                    <option value="" disabled selected>Select preferred auth type...</option>
+                                    <option value="" disabled>Select preferred auth type...</option>
                                     <optgroup label="Without Proxy" id="optgroup-no-proxy">
                                         {% for val, name in preferred_auth_types_no_proxy %}
-                                            <option value="{{ val }}">{{ name }}</option>
+                                            <option value="{{ val }}" {% if val == 4 %}selected{% endif %}>{{ name }}</option>
                                         {% endfor %}
                                     </optgroup>
                                     <optgroup label="With Proxy (at HEAppE Cluster)" id="optgroup-with-proxy">
@@ -259,7 +259,7 @@
                                                 <input type="hidden" name="action" value="delete_assignment">
                                                 <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
                                                 <input type="hidden" name="redirectTo" value="project_detail">
-                                                <button type="submit" class="dropdown-item py-1.5 small text-danger fw-semibold" onclick="return confirm('Are you sure you want to remove this assignment?')">
+                                                <button type="submit" class="dropdown-item py-1.5 small text-danger fw-semibold" onclick="return confirm('Are you sure you want to remove this assignment? This will permanently delete related command templates and cluster credentials for this project.')">
                                                     <i class="bi bi-trash me-1.5"></i>Remove Assignment
                                                 </button>
                                             </form>

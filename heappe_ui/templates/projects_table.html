@@ -165,10 +165,10 @@
           <div class="mb-3">
             <label for="PreferredAuthType" class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
             <select class="form-select form-select-sm border-light-subtle bg-white" id="PreferredAuthType" name="PreferredAuthType" required>
-              <option value="" disabled selected>Select preferred auth type...</option>
+              <option value="" disabled>Select preferred auth type...</option>
               <optgroup label="Without Proxy">
                 {% for val, name in preferred_auth_types_no_proxy %}
-                  <option value="{{ val }}">{{ name }}</option>
+                  <option value="{{ val }}" {% if val == 4 %}selected{% endif %}>{{ name }}</option>
                 {% endfor %}
               </optgroup>
               <optgroup label="With Proxy">
@@ -237,7 +237,7 @@
 </form>
 <script>
 function unassignProjectFromCluster(projectId, clusterId) {
-    if (confirm('Are you sure you want to unassign this project from the cluster?')) {
+    if (confirm('Are you sure you want to unassign this project from the cluster? This will permanently delete related command templates and cluster credentials for this project.')) {
         const form = document.getElementById('singleUnassignClusterForm');
         form.action = "/projects/unassign/" + projectId;
         form.submit();
@@ -311,7 +311,7 @@ function deleteProject(projectId, projectName) {
                     <i class="bi bi-exclamation-octagon-fill text-danger fs-5 flex-shrink-0"></i>
                     <div>
                         {% if cluster.id %}
-                            <strong>Warning:</strong> This will remove cluster assignment details and related storage paths.
+                            <strong>Warning:</strong> This will remove cluster assignment details, related storage paths, command templates, and cluster credentials for these projects.
                         {% elif queue_group %}
                             <strong>Warning:</strong> This will remove the selected projects from this queue group resource allocation.
                         {% else %}
