@@ -16,7 +16,7 @@ KEY_TYPE_CHOICES = {
 }
 
 PREFERRED_AUTH_TYPES_NO_PROXY = [
-    (0, "Unknown"),
+    (0, "External Credential Management via Expirio"),
     (1, "Password"),
     (2, "Password Interactive"),
     (3, "Password and Private Key"),
