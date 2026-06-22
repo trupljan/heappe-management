@@ -52,13 +52,8 @@ class HeappeUiConfig(AppConfig):
         if ApiClient is None:
             debug_log.append("ERROR: ApiClient not found in any candidates.")
             debug_log.append("Import errors:\n" + "\n".join(import_errors))
-            # Write to /tmp/heappe_ready_debug.log
-            try:
-                with open("/tmp/heappe_ready_debug.log", "w") as f:
-                    f.write("\n".join(debug_log))
-            except Exception:
-                pass
-            raise AttributeError(f"ApiClient not found. Import attempts failed. See /tmp/heappe_ready_debug.log. Details: {import_errors}")
+            print("\n".join(debug_log))
+            raise AttributeError(f"ApiClient not found. Import attempts failed. Details: {import_errors}")
 
         # Ensure ApiClient is exposed on the hp module for other parts of the application
         if not hasattr(hp, 'ApiClient'):
