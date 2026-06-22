@@ -16,7 +16,7 @@ KEY_TYPE_CHOICES = {
 }
 
 PREFERRED_AUTH_TYPES_NO_PROXY = [
-    (0, "External Credential Management via Expirio"),
+    (0, "Unknown"),
     (1, "Password"),
     (2, "Password Interactive"),
     (3, "Password and Private Key"),
@@ -25,6 +25,7 @@ PREFERRED_AUTH_TYPES_NO_PROXY = [
     (10, "Private Key in Vault and SSH Agent"),
     (11, "SSH Certificate"),
     (13, "Kerberos"),
+    (14, "FirecRest IdP"),
 ]
 
 PREFERRED_AUTH_TYPES_WITH_PROXY = [
@@ -32,7 +33,10 @@ PREFERRED_AUTH_TYPES_WITH_PROXY = [
     (6, "Password Interactive via Proxy"),
     (7, "Password and Private Key via Proxy"),
     (8, "Private Key via Proxy"),
+    (11, "SSH Certificate via Proxy"),
     (12, "SSH Certificate via Proxy"),
+    (13, "Kerberos via Proxy"),
+    (14, "FirecRest IdP via Proxy"),
 ]
 
 PREFERRED_AUTH_TYPE_CHOICES = dict(PREFERRED_AUTH_TYPES_NO_PROXY + PREFERRED_AUTH_TYPES_WITH_PROXY)
