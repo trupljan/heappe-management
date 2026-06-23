@@ -3,6 +3,7 @@ import time
 from django.http import JsonResponse
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
+from py4heappe.heappe_v6.core import HealthApi
 
 
 KEY_TYPE_CHOICES = {
@@ -32,6 +33,12 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             return JsonResponse({"username": username, "is_initialized": is_initialized})
         except Exception as ex:
             return JsonResponse({"username": username, "is_initialized": False, "error": str(ex)}, status=500)
+    
+    def get_current_heappe_version(request: HttpRequest) -> str:
+        health_info = HealthApi(request.api_instance).heappe_health_get()
+        return health_info.version.lstrip("vV")
+
+    is_v640plus = get_current_heappe_version(request) >= "6.4.0"
 
     if _tab is not None:
         tab = _tab
@@ -65,12 +72,16 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         if action == "regenerate_ssh_key": return regenerate_ssh_key(request)
         if action == "rename_hpc_account": return rename_hpc_account(request)
         if action == "delete_hpc_account": return delete_hpc_account(request)
+        if action == "create_credential": return create_credential(request, project_id)
+        if action == "modify_credential": return modify_credential(request, project_id)
+        if action == "delete_credential": return delete_credential(request, project_id)
 
     # Initialize context variables with defaults
     clusters = []
     not_assigned_clusters = []
     project_assignments = []
     command_templates = []
+    project_creds = []
     project_accounts = []
     node_types = []
     adaptor_users = []
@@ -170,11 +181,22 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         node_types = list(dict_ntypes.values())
 
     elif tab == "accounts":
-        project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
-            ProjectId=project_id, SessionCode=session_code
-        )]
-        for pa in project_accounts:
-            pa['key_type_name'] = KEY_TYPE_CHOICES.get(pa.get('key_type'), 'Unknown')
+        if is_v640plus:
+            #cred_ctrl = hp.CredentialsApi(request.api_instance)
+            #project_creds = [pc.to_dict() for pc in cred_ctrl.heappe_credentials_get_credentials_get(
+            #    ProjectId=project_id, SessionCode=session_code
+            #)]
+            project_creds = [
+                {"adaptor_user": "user1", "username": "username1", "auth_type": "auth1", "details": "details1"},
+                {"adaptor_user": "user2", "username": "username2", "auth_type": "auth2", "details": "details2"},
+                {"adaptor_user": "user3", "username": "username3", "auth_type": "auth3", "details": "details3"},
+            ]
+        else:
+            project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
+                ProjectId=project_id, SessionCode=session_code
+            )]
+            for pa in project_accounts:
+                pa['key_type_name'] = KEY_TYPE_CHOICES.get(pa.get('key_type'), 'Unknown')
 
     elif tab == "adaptor_users" and has_adaptor_users:
         try:
@@ -204,6 +226,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "project_assignments": project_assignments,
         "active_tab": tab,
         "command_templates": command_templates,
+        "project_creds": project_creds,
         "project_accounts": project_accounts,
         "node_types": node_types,
         "adaptor_users": adaptor_users,
@@ -737,3 +760,78 @@ def job_live_details_partial(request: HttpRequest, job_id: int) -> HttpResponse:
             "job_id": job_id,
             "error": str(e)
         })
+
+@login_required
+def create_credential(request: HttpRequest, project_id: int) -> HttpResponse:
+    controller = hp.CredentialsApi(request.api_instance)
+    #project_id = int(request.POST.get("ProjectId"))
+
+    payload_data = {
+        "ProjectId": project_id,
+        "SessionCode": request.session_code,
+        "AdaptorUserId": request.POST.get("AdaptorUserId"),
+        "Username": request.POST.get("username"),
+        "AuthType": request.POST.get("AuthType"),
+        "GenerateNewKey": request.POST.get("GenerateNewKey"),
+        "ProvidedPrivateKey": request.POST.get("ProvidedPrivateKey"),
+        "Passphrase": request.POST.get("Passphrase"),
+        "Password": request.POST.get("password")
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_credentials_create_credential_post(**payload),
+        "HPC account credential created successfully!",
+        "Failed to create HPC account credential"
+    )
+    reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
+    return redirect(reload_url)
+
+
+@login_required
+def modify_credential(request: HttpRequest, project_id: int) -> HttpResponse:
+    controller = hp.CredentialsApi(request.api_instance)
+    #project_id = int(request.POST.get("ProjectId"))
+
+    #TODO: not all fields - check #issue
+    payload_data = {
+        "ProjectId": project_id,
+        "SessionCode": request.session_code,
+        "AdaptorUserId": request.POST.get("AdaptorUserId"),
+        "Username": request.POST.get("username"),
+        "AuthType": request.POST.get("AuthType"),
+        "GenerateNewKey": request.POST.get("GenerateNewKey"),
+        "ProvidedPrivateKey": request.POST.get("ProvidedPrivateKey"),
+        "Passphrase": request.POST.get("Passphrase"),
+        "Password": request.POST.get("password")
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_credentials_modify_credential_put(**payload),
+        "HPC account credential modifications saved!",
+        "Failed to modify HPC account credential"
+    )
+    reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
+    return redirect(reload_url)
+
+
+@login_required
+def delete_credential(request: HttpRequest, project_id: int) -> HttpResponse:
+    controller = hp.CredentialsApi(request.api_instance)
+    #project_id = int(request.POST.get("ProjectId"))
+
+    payload_data = {
+        "ProjectId": project_id,
+        "SessionCode": request.session_code,
+        "CredentialId": request.POST.get("CredentialId"),
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_credentials_remove_credential_delete(**payload),
+        "HPC account credential deleted!",
+        "Failed to delete HPC account credential"
+    )
+    reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
+    return redirect(reload_url)
