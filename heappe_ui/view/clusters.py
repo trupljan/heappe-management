@@ -105,6 +105,9 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                         idp_url = custom_config_parsed.get("IdpUrl", "").strip()
                         if not expirio_secret and not idp_url:
                             raise ValueError("For FirecREST scheduler, either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration) must be specified.")
+                        home_dir = custom_config_parsed.get("HomeDirectoryTemplate", "").strip()
+                        if not home_dir:
+                            raise ValueError("For FirecREST scheduler, HomeDirectoryTemplate must be specified.")
 
                     custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
                     payload_data["CustomConfiguration"] = custom_configuration
@@ -133,7 +136,7 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                     })
             else:
                 if payload_data.get("SchedulerType") == 16:
-                    messages.error(request, "Validation Error: For FirecREST scheduler, either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration) must be specified.")
+                    messages.error(request, "Validation Error: For FirecREST scheduler, IdpUrl/ExpirioSecretName and HomeDirectoryTemplate must be specified.")
                     return render(request, "cluster_detail.html", {
                         'PROTOCOL_CHOICES': PROTOCOL_CHOICES,
                         'SCHEDULER_CHOICES': SCHEDULER_CHOICES,
@@ -245,6 +248,9 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                         idp_url = custom_config_parsed.get("IdpUrl", "").strip()
                         if not expirio_secret and not idp_url:
                             raise ValueError("For FirecREST scheduler, either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration) must be specified.")
+                        home_dir = custom_config_parsed.get("HomeDirectoryTemplate", "").strip()
+                        if not home_dir:
+                            raise ValueError("For FirecREST scheduler, HomeDirectoryTemplate must be specified.")
 
                     custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
                     payload_data["CustomConfiguration"] = custom_configuration
@@ -254,7 +260,7 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                     return redirect("cluster_detail", cluster_id=cluster_id)
             else:
                 if payload_data.get("SchedulerType") == 16:
-                    messages.error(request, "Validation Error: For FirecREST scheduler, either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration) must be specified.")
+                    messages.error(request, "Validation Error: For FirecREST scheduler, IdpUrl/ExpirioSecretName and HomeDirectoryTemplate must be specified.")
                     request.session['invalid_custom_config'] = "{}"
                     return redirect("cluster_detail", cluster_id=cluster_id)
                 payload_data["CustomConfiguration"] = {}

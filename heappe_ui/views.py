@@ -1235,26 +1235,27 @@ def log_viewer_view(request):
     search_query = request.GET.get('search', '').lower()
     level_filter = request.GET.get('level', '').upper()
 
-    log_path = get_log_file_path(instance, selected_date)
+    log_paths = get_log_file_paths(instance, selected_date)
     logs = deque(maxlen=3000)
     stats = {"ERROR": 0, "WARN": 0}
 
-    if log_path and os.path.exists(log_path):
-        try:
-            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                buffer = []
-                for line in f:
-                    if re.search(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}', line):
-                        if buffer:
-                            process_log_entry(buffer, logs, stats, time_from, time_to, search_query, level_filter)
-                        buffer = [line]
-                    else:
-                        buffer.append(line)
+    for log_path in log_paths:
+        if log_path and os.path.exists(log_path):
+            try:
+                with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    buffer = []
+                    for line in f:
+                        if re.search(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}', line):
+                            if buffer:
+                                process_log_entry(buffer, logs, stats, time_from, time_to, search_query, level_filter)
+                            buffer = [line]
+                        else:
+                            buffer.append(line)
 
-                if buffer:
-                    process_log_entry(buffer, logs, stats, time_from, time_to, search_query, level_filter)
-        except Exception as e:
-            logs.append(f"<tr><td colspan='2'>Error: {str(e)}</td></tr>")
+                    if buffer:
+                        process_log_entry(buffer, logs, stats, time_from, time_to, search_query, level_filter)
+            except Exception as e:
+                logs.append(f"<tr><td colspan='2'>Error reading {os.path.basename(log_path)}: {str(e)}</td></tr>")
 
     return render(request, 'file_log_viewer.html', {
         'logs': list(logs),
@@ -1314,17 +1315,30 @@ def render_log_row(entry):
     """
 
 
-def get_log_file_path(instance, date_str):
+def get_log_file_paths(instance, date_str):
     base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
     date_formatted = date_str.replace("-", "_")
 
     if not os.path.exists(base_path):
-        return None
+        return []
 
-    files = sorted([f for f in os.listdir(base_path) if f.startswith(date_formatted) and f.endswith(".log")])
+    # Match files like YYYY_MM_DD.log or YYYY_MM_DD.log.X
+    pattern = re.compile(rf"^{re.escape(date_formatted)}\.log(?:\.\d+)?$")
+    
+    matching_files = []
+    for f in os.listdir(base_path):
+        if pattern.match(f):
+            matching_files.append(os.path.join(base_path, f))
+            
+    # Sort files chronologically by modification time (oldest first)
+    matching_files.sort(key=os.path.getmtime)
+    return matching_files
 
-    if files:
-        return os.path.join(base_path, files[-1])
+
+def get_log_file_path(instance, date_str):
+    paths = get_log_file_paths(instance, date_str)
+    if paths:
+        return paths[-1]
     return None
 
 

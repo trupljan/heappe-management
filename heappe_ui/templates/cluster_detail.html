@@ -165,6 +165,11 @@
                                                     <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-ExpirioSecretName" placeholder="e.g. firecrest-secret-key">
                                                     <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Name of the secret key in Expirio for dynamic credential downloading.</div>
                                                 </div>
+                                                <div class="col-12 mt-2">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="fc-HomeDirectoryTemplate">HomeDirectoryTemplate <span class="text-danger">*</span></label>
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-HomeDirectoryTemplate" placeholder="e.g. /users/{username}" value="/users/{username}">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Template path for user's home directory.</div>
+                                                </div>
                                             </div>
                                         </div>
 
@@ -191,13 +196,14 @@
                                         const fcSettingsSection = document.getElementById('fc-settings-section');
                                         const fcIdpUrl = document.getElementById('fc-IdpUrl');
                                         const fcExpirioSecretName = document.getElementById('fc-ExpirioSecretName');
+                                        const fcHomeDirectoryTemplate = document.getElementById('fc-HomeDirectoryTemplate');
                                         
                                         const kvContainer = document.getElementById('custom-kv-container');
                                         const btnAddParam = document.getElementById('btn-add-param');
                                         
                                         if (!customConfigTextarea || !schedulerSelect) return;
 
-                                        const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName'];
+                                        const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate'];
 
                                         function getParsedJSON() {
                                             try {
@@ -258,6 +264,7 @@
                                             
                                             fcIdpUrl.value = data['IdpUrl'] || '';
                                             fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
+                                            fcHomeDirectoryTemplate.value = data['HomeDirectoryTemplate'] || '/users/{username}';
                                             
                                             kvContainer.innerHTML = '';
                                             
@@ -284,6 +291,7 @@
                                                 if (fcExpirioSecretName.value.trim()) {
                                                     data['ExpirioSecretName'] = fcExpirioSecretName.value.trim();
                                                 }
+                                                data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
                                             }
                                             
                                             const rows = kvContainer.querySelectorAll('.row');
@@ -313,7 +321,7 @@
 
                                         schedulerSelect.addEventListener('change', toggleSchedulerSections);
                                         
-                                        const fcFields = [fcIdpUrl, fcExpirioSecretName];
+                                        const fcFields = [fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate];
                                         fcFields.forEach(input => {
                                             input.addEventListener('input', serializeToJSON);
                                         });
@@ -332,6 +340,12 @@
                                                     if (!fcIdpUrl.value.trim() && !fcExpirioSecretName.value.trim()) {
                                                         alert('For FirecREST scheduler, please specify either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration).');
                                                         fcIdpUrl.focus();
+                                                        e.preventDefault();
+                                                        return false;
+                                                    }
+                                                    if (!fcHomeDirectoryTemplate.value.trim()) {
+                                                        alert('For FirecREST scheduler, HomeDirectoryTemplate must be specified.');
+                                                        fcHomeDirectoryTemplate.focus();
                                                         e.preventDefault();
                                                         return false;
                                                     }
