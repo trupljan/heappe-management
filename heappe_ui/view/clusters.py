@@ -529,3 +529,570 @@ def delete_proxy_connection(request: HttpRequest, cluster_id: int, proxy_id: int
     return redirect(f"{reverse('cluster_detail', kwargs={'cluster_id': cluster_id})}?tab=proxy_connections")
 
 
+import threading
+from django.http import JsonResponse
+
+_slurm_setup_lock = threading.Lock()
+_slurm_setup_state = {
+    'is_running': False,
+    'success': False,
+    'error': None,
+    'container_name': None,
+    'port': None,
+}
+
+
+@login_required
+def setup_slurm_view(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return JsonResponse({'status': 'error', 'message': 'Only POST method is allowed'}, status=405)
+    
+    with _slurm_setup_lock:
+        if _slurm_setup_state['is_running']:
+            return JsonResponse({'status': 'error', 'message': 'Slurm setup is already running.'}, status=400)
+        
+        # Reset state
+        _slurm_setup_state['is_running'] = True
+        _slurm_setup_state['success'] = False
+        _slurm_setup_state['error'] = None
+        _slurm_setup_state['container_name'] = None
+        _slurm_setup_state['port'] = None
+
+    import uuid
+    uid = str(uuid.uuid4())[:8]
+    
+    # Find free port starting at 2222
+    import socket
+    def find_free_port(start_port=2222, max_port=3000):
+        for p in range(start_port, max_port):
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind(('', p))
+                    return p
+                except OSError:
+                    continue
+        # Fallback to random free port
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('', 0))
+            return s.getsockname()[1]
+            
+    port = find_free_port()
+    container_name = f"slurm-simulator-{uid}"
+    _slurm_setup_state['container_name'] = container_name
+    _slurm_setup_state['port'] = port
+    
+    host = request.session.get("heappe_host")
+    session_code = request.session_code
+    
+    thread = threading.Thread(
+        target=_run_slurm_setup_thread,
+        args=(host, session_code, uid, port, container_name),
+        daemon=True
+    )
+    thread.start()
+    
+    return JsonResponse({
+        'status': 'success',
+        'message': 'Slurm setup initiated.',
+        'container_name': container_name,
+        'port': port
+    })
+
+
+@login_required
+def setup_slurm_status_view(request: HttpRequest) -> HttpResponse:
+    import os
+    from django.conf import settings
+    
+    log_file_path = os.path.join(settings.BASE_DIR, "slurm_setup.log")
+    logs = ""
+    if os.path.exists(log_file_path):
+        try:
+            with open(log_file_path, "r", encoding="utf-8") as f:
+                logs = f.read()
+        except Exception as e:
+            logs = f"Error reading logs: {e}"
+            
+    with _slurm_setup_lock:
+        state = _slurm_setup_state.copy()
+        
+    return JsonResponse({
+        'status': 'success',
+        'is_running': state['is_running'],
+        'success': state['success'],
+        'error': state['error'],
+        'container_name': state['container_name'],
+        'port': state['port'],
+        'logs': logs
+    })
+
+
+def _run_slurm_setup_thread(host, session_code, uid, port, container_name):
+    import os
+    import time
+    import shutil
+    import subprocess
+    from datetime import datetime, timedelta
+    from django.conf import settings
+    import py4heappe.heappe_v6.core as hp
+    from heappe_ui.auth_backend import patch_api_client
+    
+    log_file_path = os.path.join(settings.BASE_DIR, "slurm_setup.log")
+    
+    def log(message):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted = f"[{timestamp}] {message}\n"
+        print(message)
+        with open(log_file_path, "a", encoding="utf-8") as f:
+            f.write(formatted)
+            
+    # Clean previous log file
+    try:
+        with open(log_file_path, "w", encoding="utf-8") as f:
+            f.write("")
+    except Exception:
+        pass
+        
+    log("=== STARTING AUTOMATED SLURM SIMULATOR SETUP ===")
+    log(f"Unique Build Identifier: {uid}")
+    log(f"Dynamic Port Allocation: {port}")
+    log(f"Docker Container Name: {container_name}")
+    
+    temp_dir = os.path.join(settings.BASE_DIR, f"slurm-temp-{uid}")
+    
+    try:
+        # Step 1: Create temp directory and files
+        log("Creating workspace directory for building Docker image...")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # 1.1 slurm.conf
+        slurm_conf_content = f"""ClusterName=simulator
+SlurmctldHost=localhost
+SlurmUser=slurm
+SlurmdUser=root
+FastSchedule=1
+ProctrackType=proctrack/pgid
+TaskPlugin=task/none
+SlurmctldPidFile=/var/run/slurm/slurmctld.pid
+SlurmdPidFile=/var/run/slurm/slurmd.pid
+StateSaveLocation=/var/spool/slurmctld
+SlurmdSpoolDir=/var/spool/slurmd
+SlurmctldDebug=info
+SlurmctldLogFile=/var/log/slurm/slurmctld.log
+SlurmdDebug=info
+SlurmdLogFile=/var/log/slurm/slurmd.log
+JobAcctGatherType=jobacct_gather/linux
+AccountingStorageType=accounting_storage/slurmdbd
+AccountingStorageHost=localhost
+AccountingStoragePort=6819
+AccountingStorageEnforce=associations,limits
+SelectType=select/cons_tres
+SelectTypeParameters=CR_Core_Memory
+GresTypes=gpu
+NodeName=localhost NodeAddr=127.0.0.1 State=UNKNOWN CoresPerSocket=2 ThreadsPerCore=1 RealMemory=2000 Gres=gpu:2
+PartitionName=test Nodes=localhost Default=YES MaxTime=INFINITE State=UP
+"""
+        with open(os.path.join(temp_dir, "slurm.conf"), "w") as f:
+            f.write(slurm_conf_content)
+            
+        # 1.2 slurmdbd.conf
+        slurmdbd_conf_content = """AuthType=auth/munge
+DbdHost=localhost
+DbdPort=6819
+SlurmUser=slurm
+StorageType=accounting_storage/mysql
+StorageHost=localhost
+StoragePort=3306
+StorageUser=slurm
+StoragePass=password
+StorageLoc=slurm_acct_db
+LogFile=/var/log/slurm/slurmdbd.log
+PidFile=/var/run/slurm/slurmdbd.pid
+"""
+        with open(os.path.join(temp_dir, "slurmdbd.conf"), "w") as f:
+            f.write(slurmdbd_conf_content)
+            
+        # 1.3 gres.conf
+        gres_conf_content = """Name=gpu File=/var/tmp/gpu0,/var/tmp/gpu1
+"""
+        with open(os.path.join(temp_dir, "gres.conf"), "w") as f:
+            f.write(gres_conf_content)
+            
+        # 1.4 entrypoint.sh
+        entrypoint_content = """#!/bin/bash
+set -e
+
+ssh-keygen -A
+mkdir -p /var/run/sshd
+
+mkdir -p /var/run/munge /var/log/munge /etc/munge
+if [ ! -f /etc/munge/munge.key ]; then
+    dd if=/dev/urandom of=/etc/munge/munge.key bs=1 count=1024
+fi
+chown -R munge:munge /etc/munge /var/run/munge /var/log/munge
+chmod 700 /etc/munge
+chmod 755 /var/run/munge
+chmod 755 /var/log/munge
+chmod 400 /etc/munge/munge.key
+
+echo "Starting Munge..."
+sudo -u munge munged --force
+sleep 2
+
+mkdir -p /var/run/mysqld
+chown mysql:mysql /var/run/mysqld
+if [ ! -d "/var/lib/mysql/mysql" ]; then
+    mysql_install_db --user=mysql --datadir=/var/lib/mysql
+fi
+/usr/bin/mysqld_safe --user=mysql &
+
+echo "Waiting for MariaDB to start..."
+until mysqladmin ping >/dev/null 2>&1; do
+    sleep 1
+done
+
+mysql -e "CREATE DATABASE IF NOT EXISTS slurm_acct_db;"
+mysql -e "CREATE USER IF NOT EXISTS 'slurm'@'localhost' IDENTIFIED BY 'password';"
+mysql -e "GRANT ALL PRIVILEGES ON slurm_acct_db.* TO 'slurm'@'localhost';"
+mysql -e "FLUSH PRIVILEGES;"
+
+touch /var/tmp/gpu0 /var/tmp/gpu1
+chmod 666 /var/tmp/gpu0 /var/tmp/gpu1
+
+mkdir -p /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
+chown -R slurm:slurm /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
+
+chown slurm:slurm /etc/slurm/slurmdbd.conf
+chmod 600 /etc/slurm/slurmdbd.conf
+chown slurm:slurm /etc/slurm/slurm.conf
+chmod 644 /etc/slurm/slurm.conf
+chown slurm:slurm /etc/slurm/gres.conf
+chmod 644 /etc/slurm/gres.conf
+
+echo "Starting SlurmDBD..."
+sudo -u slurm slurmdbd
+sleep 3
+
+echo "Configuring Slurm accounts..."
+sacctmgr -i add cluster simulator || true
+sacctmgr -i add account test Description="Test Project Account" Organization="HEAppE" || true
+sacctmgr -i add user heappeslurm Account=test DefaultAccount=test || true
+
+echo "Starting Slurmctld & Slurmd..."
+sudo -u slurm slurmctld
+sleep 2
+slurmd -N localhost
+sleep 1
+
+scontrol update nodename=localhost state=idle || true
+
+if [ ! -d "/home/heappeslurm/.local_hpc_scripts" ]; then
+    echo "Deploying local HPC helper scripts..."
+    git clone --single-branch -b master --quiet https://github.com/It4innovations/HEAppE-scripts.git /tmp/heappe-scripts
+    mkdir -p /home/heappeslurm/.local_hpc_scripts
+    cp -rf /tmp/heappe-scripts/LocalHPC/.local_hpc_scripts/* /home/heappeslurm/.local_hpc_scripts/
+    chown -R heappeslurm:heappeslurm /home/heappeslurm/.local_hpc_scripts
+    chmod -R 755 /home/heappeslurm/.local_hpc_scripts
+    rm -rf /tmp/heappe-scripts
+fi
+
+echo "Starting HEAppE key scripts watchdog..."
+(
+while true; do
+    if [ -d "/home/heappeslurm/.HEAppE" ]; then
+        find /home/heappeslurm/.HEAppE -type d -name ".key_scripts" 2>/dev/null | while read -r dir; do
+            if [ ! -f "$dir/run_background_command.sh" ]; then
+                echo "Watchdog: Injecting missing run_background_command.sh into $dir"
+                cat << 'BG_EOF' > "$dir/run_background_command.sh"
+#!/bin/bash
+_evalBg() {
+    eval "$@" &>/dev/null & disown;
+}
+BASE64_TEXT=$1
+COMMAND=$(echo "${BASE64_TEXT}" | base64 -d)
+_evalBg "${COMMAND}";
+BG_EOF
+                chmod 755 "$dir/run_background_command.sh"
+                chown heappeslurm:heappeslurm "$dir/run_background_command.sh"
+            fi
+        done
+    fi
+    sleep 1
+done
+) &
+
+echo "Starting SSH daemon..."
+exec /usr/sbin/sshd -D
+"""
+        with open(os.path.join(temp_dir, "entrypoint.sh"), "w") as f:
+            f.write(entrypoint_content)
+            
+        # 1.5 Dockerfile
+        dockerfile_content = """FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y \
+    openssh-server \
+    sudo \
+    munge \
+    slurm-wlm \
+    slurmdbd \
+    mariadb-server \
+    mariadb-client \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+RUN useradd -m -s /bin/bash heappeslurm && \
+    echo "heappeslurm:pass" | chpasswd && \
+    echo "heappeslurm ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
+COPY slurm.conf /etc/slurm/slurm.conf
+COPY slurmdbd.conf /etc/slurm/slurmdbd.conf
+COPY gres.conf /etc/slurm/gres.conf
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+EXPOSE 22
+ENTRYPOINT ["/entrypoint.sh"]
+"""
+        with open(os.path.join(temp_dir, "Dockerfile"), "w") as f:
+            f.write(dockerfile_content)
+
+        # Step 2: Build Docker Image
+        log("Building Docker image 'slurm-simulator-img:latest' (this might take a few moments)...")
+        build_cmd = ["docker", "build", "-t", "slurm-simulator-img:latest", "."]
+        
+        proc_build = subprocess.run(
+            build_cmd,
+            cwd=temp_dir,
+            capture_output=True,
+            text=True
+        )
+        if proc_build.returncode != 0:
+            log("Build output:")
+            log(proc_build.stdout)
+            log("Build errors:")
+            log(proc_build.stderr)
+            raise RuntimeError(f"Docker build failed: {proc_build.stderr}")
+        log("Docker image built successfully.")
+
+        # Step 3: Run Docker Container
+        log(f"Spinning up Docker container '{container_name}' mapping host port {port} -> container port 22...")
+        run_cmd = [
+            "docker", "run", "-d",
+            "--name", container_name,
+            "--restart", "unless-stopped",
+            "-p", f"{port}:22",
+            "slurm-simulator-img:latest"
+        ]
+        proc_run = subprocess.run(
+            run_cmd,
+            cwd=temp_dir,
+            capture_output=True,
+            text=True
+        )
+        if proc_run.returncode != 0:
+            raise RuntimeError(f"Docker run failed: {proc_run.stderr}")
+        log(f"Docker container '{container_name}' started successfully.")
+
+        # Step 4: Wait for services inside container to initialize
+        log("Waiting 10 seconds for services inside container (SSH, MariaDB, Slurm) to initialize...")
+        time.sleep(10)
+        
+        # Step 5: Configure HEAppE
+        log("Connecting to HEAppE API to register the cluster infrastructure...")
+        config = hp.Configuration()
+        host_url = 'http://' + host if not host.startswith('http') else host
+        config.host = host_url
+        config.verify_ssl = True
+        
+        api_client = hp.ApiClient(config)
+        patch_api_client(api_client)
+        
+        controller = hp.ManagementApi(api_client)
+        
+        # 5.1 Create Cluster
+        log("Creating Cluster in HEAppE...")
+        cluster_payload = {
+            "Name": f"Slurm Cluster {uid}",
+            "Description": "Automatically generated test Slurm cluster",
+            "MasterNodeName": "host.docker.internal",
+            "SchedulerType": 4, # Slurm
+            "ConnectionProtocol": 2, # SSH
+            "TimeZone": "Central Europe Standard Time",
+            "Port": port,
+            "UpdateJobStateByServiceAccount": False,
+            "DomainName": "",
+            "ProxyConnectionId": None,
+            "SessionCode": session_code
+        }
+        cluster_resp = controller.heappe_management_cluster_post(body=cluster_payload)
+        cluster_dict = cluster_resp.to_dict() if hasattr(cluster_resp, 'to_dict') else cluster_resp
+        cluster_id = cluster_dict.get('id') or cluster_dict.get('Id')
+        log(f"Cluster created successfully (ID: {cluster_id}).")
+        
+        # 5.2 Create File Transfer Method
+        log("Creating File Transfer Method (SFTP/SCP) in HEAppE...")
+        ftm_payload = {
+            "ClusterId": cluster_id,
+            "ServerHostname": "host.docker.internal",
+            "Protocol": 2, # SFTP/SCP
+            "Port": port,
+            "SessionCode": session_code
+        }
+        ftm_resp = controller.heappe_management_file_transfer_method_post(body=ftm_payload)
+        ftm_dict = ftm_resp.to_dict() if hasattr(ftm_resp, 'to_dict') else ftm_resp
+        ftm_id = ftm_dict.get('id') or ftm_dict.get('Id')
+        log(f"File Transfer Method created successfully (ID: {ftm_id}).")
+
+        # 5.3 Create Queue Group (ClusterNodeTypeAggregation)
+        log("Creating Queue Group (Node Type Aggregation) in HEAppE...")
+        now = datetime.now()
+        now_aware = now - timedelta(minutes=5)
+        valid_to = now + timedelta(days=365)
+        
+        group_payload = {
+            "Name": f"Slurm Group {uid}",
+            "Description": "Automatically generated Slurm Queue Group",
+            "AllocationType": "NodeHour",
+            "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "SessionCode": session_code
+        }
+        group_resp = controller.heappe_management_cluster_node_type_aggregation_post(body=group_payload)
+        group_dict = group_resp.to_dict() if hasattr(group_resp, 'to_dict') else group_resp
+        group_id = group_dict.get('id') or group_dict.get('Id')
+        log(f"Queue Group created successfully (ID: {group_id}).")
+
+        # 5.4 Create Accounting Formula
+        log("Creating Accounting Formula in HEAppE...")
+        accounting_payload = {
+            "Formula": "1",
+            "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "SessionCode": session_code
+        }
+        accounting_resp = controller.heappe_management_accounting_post(body=accounting_payload)
+        accounting_dict = accounting_resp.to_dict() if hasattr(accounting_resp, 'to_dict') else accounting_resp
+        accounting_id = accounting_dict.get('id') or accounting_dict.get('Id')
+        log(f"Accounting Formula created successfully (ID: {accounting_id}).")
+
+        # 5.5 Map Accounting Formula to Queue Group
+        log("Mapping Accounting Formula to Queue Group...")
+        mapping_payload = {
+            "ClusterNodeTypeAggregationId": group_id,
+            "AccountingId": accounting_id,
+            "SessionCode": session_code
+        }
+        controller.heappe_management_cluster_node_type_aggregation_accounting_post(body=mapping_payload)
+        log("Accounting Formula mapped successfully.")
+
+        # 5.6 Create Queue (ClusterNodeType)
+        log("Creating Queue (Node Type 'test') in HEAppE...")
+        queue_payload = {
+            "Name": "test",
+            "Description": "Slurm test partition",
+            "NumberOfNodes": 1,
+            "CoresPerNode": 2,
+            "Queue": "test",
+            "QualityOfService": None,
+            "MaxWalltime": 999999,
+            "ClusterAllocationName": "test",
+            "ClusterId": cluster_id,
+            "FileTransferMethodId": ftm_id,
+            "ClusterNodeTypeAggregationId": group_id,
+            "SessionCode": session_code
+        }
+        queue_resp = controller.heappe_management_cluster_node_type_post(body=queue_payload)
+        queue_dict = queue_resp.to_dict() if hasattr(queue_resp, 'to_dict') else queue_resp
+        queue_id = queue_dict.get('id') or queue_dict.get('Id')
+        log(f"Queue 'test' created successfully (ID: {queue_id}).")
+
+        # 5.7 Create Project
+        log("Creating Project in HEAppE...")
+        project_payload = {
+            "Name": f"Slurm Project {uid}",
+            "Description": "Automatically generated Slurm test project",
+            "AccountingString": "test",
+            "StartDate": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "EndDate": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "UsageType": 1,
+            "UseAccountingStringForScheduler": True,
+            "IsOneToOneMapping": False,
+            "PIEmail": "",
+            "SessionCode": session_code
+        }
+        project_resp = controller.heappe_management_project_post(body=project_payload)
+        project_dict = project_resp.to_dict() if hasattr(project_resp, 'to_dict') else project_resp
+        project_id = project_dict.get('id') or project_dict.get('Id')
+        log(f"Project created successfully (ID: {project_id}).")
+
+        # 5.8 Assign Project to Cluster
+        log("Assigning Project to Cluster...")
+        assign_cluster_payload = {
+            "ProjectId": project_id,
+            "ClusterId": cluster_id,
+            "ScratchStoragePath": "",
+            "PermanentStoragePath": "",
+            "ProjectStoragePath": "",
+            "SessionCode": session_code
+        }
+        controller.heappe_management_project_assignment_to_cluster_post(body=assign_cluster_payload)
+        log("Project assigned to Cluster successfully.")
+
+        # 5.9 Assign Project to Queue Group
+        log("Assigning Project to Queue Group...")
+        assign_group_payload = {
+            "ProjectId": project_id,
+            "ClusterNodeTypeAggregationId": group_id,
+            "AllocationAmount": 10000,
+            "SessionCode": session_code
+        }
+        controller.heappe_management_project_cluster_node_type_aggregation_post(body=assign_group_payload)
+        log("Project assigned to Queue Group successfully.")
+
+        # 5.10 Create Cluster Authentication Credential (SSH Key / Account)
+        log("Creating SSH Authentication Credentials for 'heappeslurm'...")
+        cred_payload = {
+            "Credentials": [
+                {
+                    "Username": "heappeslurm",
+                    "Password": "pass"
+                }
+            ],
+            "ProjectId": project_id,
+            "SessionCode": session_code
+        }
+        controller.heappe_management_generate_secure_shell_key_post(body=cred_payload)
+        log("SSH Key authentication credentials generated.")
+
+        # 5.11 Initialize the HPC Account
+        log("Initializing the HPC Account (deploying key script directories)...")
+        init_payload = {
+            "ProjectId": project_id,
+            "Username": "heappeslurm",
+            "OverwriteExistingProjectRootDirectory": True,
+            "SessionCode": session_code
+        }
+        controller.heappe_management_initialize_cluster_script_directory_post(body=init_payload)
+        log("HPC Account initialized successfully.")
+
+        log("SUCCESS: Automated Slurm Simulator setup completed successfully!")
+        
+        with _slurm_setup_lock:
+            _slurm_setup_state['is_running'] = False
+            _slurm_setup_state['success'] = True
+            
+    except Exception as ex:
+        log(f"EXCEPTION: Setup failed: {str(ex)}")
+        with _slurm_setup_lock:
+            _slurm_setup_state['is_running'] = False
+            _slurm_setup_state['error'] = str(ex)
+            
+    finally:
+        # Clean up temp build folder
+        try:
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+        except Exception as e:
+            log(f"Could not clean up temporary build directory: {e}")
+
+

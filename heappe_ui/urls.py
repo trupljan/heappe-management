@@ -27,6 +27,8 @@ urlpatterns = [
     path('clusters/<int:cluster_id>/<int:tab>', views.cluster_detail, name='cluster_detail'),
     path('clusters/<int:cluster_id>/delete/', views.cluster_delete, name='cluster_delete'),
     path('clusters/new/', views.cluster_create, name='cluster_create'),
+    path('clusters/setup-slurm/', views.setup_slurm_view, name='setup_slurm'),
+    path('clusters/setup-slurm-status/', views.setup_slurm_status_view, name='setup_slurm_status'),
 
     # Queues
     path('queues/', views.queues_view, name='queues_view'),

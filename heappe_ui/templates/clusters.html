@@ -23,6 +23,9 @@
                 <button type="button" class="btn btn-sm btn-danger fw-semibold d-none" id="bulkDeleteBtn" data-bs-toggle="modal" data-bs-target="#bulkDeleteModal">
                     <i class="bi bi-trash me-1"></i>Delete Selected (<span id="selectCount">0</span>)
                 </button>
+                <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" id="spinUpSlurmBtn">
+                    <i class="bi bi-rocket me-1"></i>Spin up Test Slurm
+                </button>
                 <a href="{% url 'cluster_create' %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
                     <i class="bi bi-plus-lg me-1"></i>Add New Cluster
                 </a>
@@ -163,9 +166,14 @@
                     <i class="bi bi-server fs-1 mb-3 d-block text-secondary"></i>
                     <p class="mb-1 fw-semibold">No clusters available</p>
                     <p class="small text-secondary mb-3">Add your first cluster to start managing HEAppE infrastructure.</p>
-                    <a href="{% url 'cluster_create' %}" class="btn btn-sm btn-primary mt-1 fw-bold shadow-sm">
-                        <i class="bi bi-plus-lg me-1"></i>Add Cluster Now
-                    </a>
+                    <div class="d-flex justify-content-center gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" id="spinUpSlurmBtnEmpty">
+                            <i class="bi bi-rocket me-1"></i>Spin up Test Slurm
+                        </button>
+                        <a href="{% url 'cluster_create' %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
+                            <i class="bi bi-plus-lg me-1"></i>Add Cluster Now
+                        </a>
+                    </div>
                 </div>
             {% endif %}
         </div>
@@ -257,6 +265,144 @@
             confirmBulkDeleteBtn.addEventListener('click', function () {
                 bulkDeleteForm.submit();
             });
+        }
+    });
+</script>
+
+<!-- Slurm Setup Modal -->
+<div class="modal fade" id="slurmSetupModal" tabindex="-1" aria-labelledby="slurmSetupLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="slurmSetupLabel">
+                    <i class="bi bi-rocket"></i>
+                    <span>Spinning up Slurm Test Cluster</span>
+                </h5>
+            </div>
+            <div class="modal-body p-4">
+                <div class="text-center mb-3" id="slurm-setup-spinner">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <p class="text-muted mt-2 small">Building Docker image, starting container, and configuring HEAppE...</p>
+                </div>
+                <div id="slurm-setup-success-alert" class="alert alert-success border-0 rounded-3 small mb-3 d-none">
+                    <h6 class="alert-heading fw-bold d-flex align-items-center gap-1.5"><i class="bi bi-check-circle-fill"></i>Setup Successful!</h6>
+                    <p class="mb-2">Your test Slurm cluster has been successfully created and configured in HEAppE.</p>
+                    <div class="bg-white p-3 rounded border border-success-subtle font-monospace text-dark mt-2">
+                        <strong class="d-block mb-1">SSH Connection Details:</strong>
+                        ssh heappeslurm@localhost -p <span id="slurm-ssh-port">2222</span> (password: <strong>pass</strong>)
+                    </div>
+                </div>
+                <div id="slurm-setup-error-alert" class="alert alert-danger border-0 rounded-3 small mb-3 d-none">
+                    <h6 class="alert-heading fw-bold d-flex align-items-center gap-1.5"><i class="bi bi-exclamation-octagon-fill"></i>Setup Failed</h6>
+                    <div id="slurm-setup-error-text"></div>
+                </div>
+                <label class="form-label fw-bold text-secondary mb-2 small"><i class="bi bi-journal-text me-1"></i>Setup logs:</label>
+                <pre id="slurm-setup-logs" class="p-3 mb-0 rounded text-light bg-dark font-monospace" style="height: 300px; overflow-y: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap; border: 1px solid #343a40;"></pre>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2" id="slurm-setup-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2 d-none" id="slurmSetupCloseBtn" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const spinUpBtn = document.getElementById('spinUpSlurmBtn');
+        const spinUpBtnEmpty = document.getElementById('spinUpSlurmBtnEmpty');
+        
+        const slurmSetupModal = new bootstrap.Modal(document.getElementById('slurmSetupModal'));
+        const logElement = document.getElementById('slurm-setup-logs');
+        const spinner = document.getElementById('slurm-setup-spinner');
+        const successAlert = document.getElementById('slurm-setup-success-alert');
+        const errorAlert = document.getElementById('slurm-setup-error-alert');
+        const errorText = document.getElementById('slurm-setup-error-text');
+        const sshPortSpan = document.getElementById('slurm-ssh-port');
+        const closeBtn = document.getElementById('slurmSetupCloseBtn');
+        
+        let pollInterval = null;
+
+        function startSlurmSetup() {
+            // Reset modal UI
+            logElement.textContent = 'Initializing setup...';
+            spinner.classList.remove('d-none');
+            successAlert.classList.add('d-none');
+            errorAlert.classList.add('d-none');
+            closeBtn.classList.add('d-none');
+            
+            slurmSetupModal.show();
+            
+            // Call POST to setup-slurm/
+            fetch("{% url 'setup_slurm' %}", {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Start polling
+                    pollSlurmStatus();
+                } else {
+                    showError(data.message || 'Failed to initiate Slurm setup.');
+                }
+            })
+            .catch(err => {
+                showError(err.message || 'Network error.');
+            });
+        }
+
+        function pollSlurmStatus() {
+            if (pollInterval) clearInterval(pollInterval);
+            
+            pollInterval = setInterval(() => {
+                fetch("{% url 'setup_slurm_status' %}")
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Update logs
+                        logElement.textContent = data.logs || 'No logs yet...';
+                        logElement.scrollTop = logElement.scrollHeight;
+                        
+                        if (!data.is_running) {
+                            clearInterval(pollInterval);
+                            spinner.classList.add('d-none');
+                            closeBtn.classList.remove('d-none');
+                            
+                            if (data.success) {
+                                successAlert.classList.remove('d-none');
+                                sshPortSpan.textContent = data.port || '2222';
+                                // Enable page reload when closed
+                                document.getElementById('slurmSetupModal').addEventListener('hidden.bs.modal', function () {
+                                    location.reload();
+                                }, { once: true });
+                            } else {
+                                showError(data.error || 'Setup completed with errors.');
+                            }
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('Error polling Slurm status:', err);
+                });
+            }, 1500);
+        }
+
+        function showError(msg) {
+            if (pollInterval) clearInterval(pollInterval);
+            spinner.classList.add('d-none');
+            errorAlert.classList.remove('d-none');
+            errorText.textContent = msg;
+            closeBtn.classList.remove('d-none');
+        }
+
+        if (spinUpBtn) {
+            spinUpBtn.addEventListener('click', startSlurmSetup);
+        }
+        if (spinUpBtnEmpty) {
+            spinUpBtnEmpty.addEventListener('click', startSlurmSetup);
         }
     });
 </script>

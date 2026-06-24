@@ -10,6 +10,19 @@
 {% load custom_filters %}
 
 <div class="container py-4">
+    {% if clusters|length == 0 %}
+        <div class="alert alert-primary border-primary shadow-sm d-flex align-items-center justify-content-between p-3 mb-4 animate-fade-in">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-rocket fs-4 text-primary me-2"></i>
+                <div>
+                    <strong class="text-primary-emphasis">Quick Start Slurm Simulator:</strong> No clusters are configured yet. Spin up a test Slurm cluster dynamically and configure everything inside HEAppE automatically with a single click.
+                </div>
+            </div>
+            <a href="{% url 'cluster_list' %}" class="btn btn-primary btn-sm fw-bold shadow-sm">
+                <i class="bi bi-rocket me-1"></i>Spin up Slurm Now
+            </a>
+        </div>
+    {% endif %}
     {% if middleware_update_available and request.session.chosen_instance %}
         <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between p-3 mb-4 animate-fade-in">
             <div class="d-flex align-items-center gap-2">
