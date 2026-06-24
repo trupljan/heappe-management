@@ -59,24 +59,24 @@
 
     {% if instance_name %}
     <!-- Tabbed Navigation -->
-    <ul class="nav nav-pills nav-fill mb-4 shadow-sm p-1.5 bg-white rounded-3 gap-1" id="deployTabs" role="tablist" style="border: 1px solid #dee2e6;">
+    <ul class="nav nav-pills nav-fill mb-4 shadow-sm p-1.5 bg-white rounded-3 gap-1 flex-nowrap overflow-x-auto" id="deployTabs" role="tablist" style="border: 1px solid #dee2e6;">
         <li class="nav-item" role="presentation">
-            <button class="nav-link active fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2" id="containers-tab" data-bs-toggle="tab" data-bs-target="#containers-pane" type="button" role="tab" aria-controls="containers-pane" aria-selected="true">
+            <button class="nav-link active fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="containers-tab" data-bs-toggle="tab" data-bs-target="#containers-pane" type="button" role="tab" aria-controls="containers-pane" aria-selected="true">
                 <i class="bi bi-cpu fs-5"></i>Containers &amp; Services
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2" id="configs-tab" data-bs-toggle="tab" data-bs-target="#configs-pane" type="button" role="tab" aria-controls="configs-pane" aria-selected="false">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="configs-tab" data-bs-toggle="tab" data-bs-target="#configs-pane" type="button" role="tab" aria-controls="configs-pane" aria-selected="false">
                 <i class="bi bi-folder2-open fs-5"></i>Configuration &amp; Files
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2" id="telemetry-tab" data-bs-toggle="tab" data-bs-target="#telemetry-pane" type="button" role="tab" aria-controls="telemetry-pane" aria-selected="false">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="telemetry-tab" data-bs-toggle="tab" data-bs-target="#telemetry-pane" type="button" role="tab" aria-controls="telemetry-pane" aria-selected="false">
                 <i class="bi bi-activity fs-5"></i>OpenTelemetry &amp; Tracing
             </button>
         </li>
         <li class="nav-item" role="presentation">
-            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance-pane" type="button" role="tab" aria-controls="maintenance-pane" aria-selected="false">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance-pane" type="button" role="tab" aria-controls="maintenance-pane" aria-selected="false">
                 <i class="bi bi-gear fs-5"></i>Maintenance &amp; Setup
             </button>
         </li>
