@@ -1095,55 +1095,7 @@ ENTRYPOINT ["/entrypoint.sh"]
         project_id = project_dict.get('id') or project_dict.get('Id')
         log(f"Project created successfully (ID: {project_id}).")
  
-        # 5.7.1 Assign ManagementAdmin role for project to the user
-        # Since HEAppE auto-assigns the project creator to the project,
-        # we must first inspect the current assignment and clean up default assignments
-        # to allow assigning the required ManagementAdmin role (Role ID: 6).
-        try:
-            users_in_proj = controller.heappe_management_adaptor_users_in_project_get(
-                SessionCode=session_code, ProjectId=project_id
-            )
-            log(f"Debug: Users currently assigned to project '{project_id}':")
-            for u in users_in_proj:
-                u_dict = u.to_dict() if hasattr(u, 'to_dict') else u
-                u_name = u_dict.get('username') or u_dict.get('Username')
-                log(f"  User '{u_name}':")
-                groups = u_dict.get('adaptor_user_groups') or u_dict.get('AdaptorUserGroups') or []
-                for g in groups:
-                    g_name = g.get('name') or g.get('Name')
-                    g_id = g.get('id') or g.get('Id')
-                    g_roles = g.get('roles') or g.get('Roles')
-                    log(f"    Group '{g_name}' (ID: {g_id}), Roles: {g_roles}")
-        except Exception as debug_ex:
-            log(f"Debug: Could not fetch users in project: {debug_ex}")
 
-        log(f"Cleaning up any existing roles for '{username}' on project '{project_id}' to allow upgrade...")
-        for role_to_remove in [1, 2, 3, 4, 5, 7]:
-            try:
-                remove_payload = {
-                    "Username": username,
-                    "ProjectId": project_id,
-                    "Role": role_to_remove,
-                    "SessionCode": session_code
-                }
-                controller.heappe_management_remove_adaptor_user_from_project_delete(body=remove_payload)
-                log(f"Removed role ID {role_to_remove} assignment (if it existed).")
-            except Exception as e:
-                log(f"Note: Could not remove role ID {role_to_remove}: {e}")
-
-        log(f"Assigning ManagementAdmin role (ID: 6) on project '{project_id}' to '{username}'...")
-        assign_role_payload = {
-            "Username": username,
-            "ProjectId": project_id,
-            "Role": 6, # ManagementAdmin
-            "SessionCode": session_code
-        }
-        try:
-            controller.heappe_management_assign_adaptor_user_to_project_post(body=assign_role_payload)
-            log("ManagementAdmin role assigned successfully.")
-        except Exception as e:
-            log(f"Warning: Could not assign ManagementAdmin role to '{username}': {e}. Skipping as the user is likely already assigned to the project.")
- 
         # 5.8 Assign Project to Cluster
         log("Assigning Project to Cluster...")
         assign_cluster_payload = {
