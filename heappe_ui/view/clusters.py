@@ -584,13 +584,14 @@ def setup_slurm_view(request: HttpRequest) -> HttpResponse:
     
     host = request.session.get("heappe_host")
     session_code = request.session_code
+    instance_name = request.session.get("chosen_instance")
     use_api_key = request.session.get("heappe_use_api_key", False)
     username = request.session.get("heappe_username")
     password = request.session.get("heappe_password")
     
     thread = threading.Thread(
         target=_run_slurm_setup_thread,
-        args=(host, session_code, uid, port, container_name, use_api_key, username, password),
+        args=(host, session_code, uid, port, container_name, use_api_key, username, password, instance_name),
         daemon=True
     )
     thread.start()
@@ -631,7 +632,7 @@ def setup_slurm_status_view(request: HttpRequest) -> HttpResponse:
     })
 
 
-def _run_slurm_setup_thread(host, session_code, uid, port, container_name, use_api_key=False, username=None, password=None):
+def _run_slurm_setup_thread(host, session_code, uid, port, container_name, use_api_key=False, username=None, password=None, instance_name=None):
     import os
     import time
     import shutil
@@ -885,10 +886,13 @@ ENTRYPOINT ["/entrypoint.sh"]
 
         # Step 3: Run Docker Container
         log(f"Spinning up Docker container '{container_name}' mapping host port {port} -> container port 22...")
+        project_label = instance_name or "test"
         run_cmd = [
             "docker", "run", "-d",
             "--name", container_name,
             "--restart", "unless-stopped",
+            "--label", f"com.docker.compose.project={project_label}",
+            "--label", "com.docker.compose.service=slurm-simulator",
             "-p", f"{port}:22",
             "slurm-simulator-img:latest"
         ]
