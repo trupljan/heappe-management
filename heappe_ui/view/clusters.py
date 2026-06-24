@@ -584,10 +584,13 @@ def setup_slurm_view(request: HttpRequest) -> HttpResponse:
     
     host = request.session.get("heappe_host")
     session_code = request.session_code
+    use_api_key = request.session.get("heappe_use_api_key", False)
+    username = request.session.get("heappe_username")
+    password = request.session.get("heappe_password")
     
     thread = threading.Thread(
         target=_run_slurm_setup_thread,
-        args=(host, session_code, uid, port, container_name),
+        args=(host, session_code, uid, port, container_name, use_api_key, username, password),
         daemon=True
     )
     thread.start()
@@ -628,7 +631,7 @@ def setup_slurm_status_view(request: HttpRequest) -> HttpResponse:
     })
 
 
-def _run_slurm_setup_thread(host, session_code, uid, port, container_name):
+def _run_slurm_setup_thread(host, session_code, uid, port, container_name, use_api_key=False, username=None, password=None):
     import os
     import time
     import shutil
@@ -910,7 +913,13 @@ ENTRYPOINT ["/entrypoint.sh"]
         config.host = host_url
         config.verify_ssl = True
         
-        api_client = hp.ApiClient(config)
+        if use_api_key and username and password:
+            config.api_key['X-API-Key'] = f"{username}:{password}"
+            api_client = hp.ApiClient(config)
+            api_client.set_default_header("X-API-Key", f"{username}:{password}")
+        else:
+            api_client = hp.ApiClient(config)
+            
         patch_api_client(api_client)
         
         controller = hp.ManagementApi(api_client)
