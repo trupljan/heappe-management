@@ -1083,7 +1083,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "Queue": "test",
             "QualityOfService": None,
             "MaxWalltime": 999999,
-            "ClusterAllocationName": acct_name,
+            "ClusterAllocationName": "simulator",  # Must match ClusterName in slurm.conf / sacctmgr cluster name
             "ClusterId": cluster_id,
             "FileTransferMethodId": ftm_id,
             "ClusterNodeTypeAggregationId": cpu_group_id,
@@ -1102,7 +1102,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "Queue": "test",
             "QualityOfService": None,
             "MaxWalltime": 999999,
-            "ClusterAllocationName": acct_name,
+            "ClusterAllocationName": "simulator",  # Must match ClusterName in slurm.conf / sacctmgr cluster name
             "ClusterId": cluster_id,
             "FileTransferMethodId": ftm_id,
             "ClusterNodeTypeAggregationId": gpu_group_id,

@@ -390,11 +390,23 @@
                     <p class="text-muted mt-2 small">Building Docker image, starting container, and configuring HEAppE...</p>
                 </div>
                 <div id="slurm-setup-success-alert" class="alert alert-success border-0 rounded-3 small mb-3 d-none">
-                    <h6 class="alert-heading fw-bold d-flex align-items-center gap-1.5"><i class="bi bi-check-circle-fill"></i>Setup Successful!</h6>
+                    <h6 class="alert-heading fw-bold d-flex align-items-center gap-2"><i class="bi bi-check-circle-fill"></i>Setup Successful!</h6>
                     <p class="mb-2">Your test Slurm cluster has been successfully created and configured in HEAppE.</p>
-                    <div class="bg-white p-3 rounded border border-success-subtle font-monospace text-dark mt-2">
+                    <div class="bg-white p-3 rounded border border-success-subtle font-monospace text-dark mt-2 mb-3">
                         <strong class="d-block mb-1">SSH Connection Details:</strong>
                         ssh heappeslurm@localhost -p <span id="slurm-ssh-port">2222</span> (password: <strong>pass</strong>)
+                    </div>
+                    <div class="bg-white border border-success-subtle rounded-3 p-3 d-flex align-items-start gap-3">
+                        <div class="bg-success bg-opacity-10 text-success rounded p-2 d-inline-flex flex-shrink-0">
+                            <i class="bi bi-arrow-right-circle-fill fs-5"></i>
+                        </div>
+                        <div>
+                            <p class="mb-1 fw-semibold text-dark" style="font-size: 0.85rem;">What's next?</p>
+                            <p class="mb-2 text-secondary" style="font-size: 0.8rem; line-height: 1.4;">Head over to <strong>Projects</strong> to configure your first Command Template and submit a test job to the Slurm cluster.</p>
+                            <a href="{% url 'project_list' %}" class="btn btn-success btn-sm fw-bold rounded-3 shadow-sm px-3" id="slurmGoToProjectsInlineBtn">
+                                <i class="bi bi-folder2-open me-1"></i>Go to Projects
+                            </a>
+                        </div>
                     </div>
                 </div>
                 <div id="slurm-setup-error-alert" class="alert alert-danger border-0 rounded-3 small mb-3 d-none">
@@ -406,6 +418,9 @@
             </div>
             <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2" id="slurm-setup-footer">
                 <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2 d-none" id="slurmSetupCloseBtn" data-bs-dismiss="modal">Close</button>
+                <a href="{% url 'project_list' %}" class="btn btn-success btn-sm fw-bold rounded-3 shadow-sm px-3 py-2 d-none" id="slurmGoToProjectsBtn">
+                    <i class="bi bi-folder2-open me-1"></i>Go to Projects &rarr;
+                </a>
             </div>
         </div>
     </div>
@@ -482,7 +497,10 @@
                             if (data.success) {
                                 successAlert.classList.remove('d-none');
                                 sshPortSpan.textContent = data.port || '2222';
-                                // Enable page reload when closed
+                                // Show the "Go to Projects" footer button
+                                const goToProjectsBtn = document.getElementById('slurmGoToProjectsBtn');
+                                if (goToProjectsBtn) goToProjectsBtn.classList.remove('d-none');
+                                // Enable page reload when closed (if user clicks Close instead)
                                 document.getElementById('slurmSetupModal').addEventListener('hidden.bs.modal', function () {
                                     location.reload();
                                 }, { once: true });
