@@ -1096,7 +1096,22 @@ ENTRYPOINT ["/entrypoint.sh"]
         log(f"Project created successfully (ID: {project_id}).")
  
         # 5.7.1 Assign ManagementAdmin role for project to the user
-        log(f"Assigning ManagementAdmin role for project to '{username}'...")
+        # Since HEAppE auto-assigns the project creator to the project with the Manager role (Role ID: 7),
+        # we must first remove the default Manager assignment so we can assign the required ManagementAdmin role (Role ID: 6).
+        log(f"Removing default Manager role (ID: 7) on project '{project_id}' for '{username}' to allow upgrade...")
+        try:
+            remove_payload = {
+                "Username": username,
+                "ProjectId": project_id,
+                "Role": 7, # Default Manager role assigned during creation
+                "SessionCode": session_code
+            }
+            controller.heappe_management_remove_adaptor_user_from_project_delete(body=remove_payload)
+            log("Default Manager role removed successfully.")
+        except Exception as e:
+            log(f"Warning: Could not remove default Manager role: {e}")
+
+        log(f"Assigning ManagementAdmin role (ID: 6) on project '{project_id}' to '{username}'...")
         assign_role_payload = {
             "Username": username,
             "ProjectId": project_id,
