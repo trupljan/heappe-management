@@ -276,16 +276,16 @@
             <div class="modal-header bg-primary text-white border-0 py-3 px-4" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%) !important;">
                 <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="slurmConfirmLabel">
                     <i class="bi bi-rocket-takeoff-fill"></i>
-                    <span>Spustit testovací Slurm simulátor?</span>
+                    <span>Spin up Slurm Test Simulator?</span>
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
                 <p class="text-secondary mb-4">
-                    Tato akce automaticky sestaví a spustí kompletní testovací Slurm cluster v izolovaném Docker kontejneru a plně jej zaregistruje a nakonfiguruje ve vybrané instanci HEAppE.
+                    This action will automatically build and start a complete test Slurm cluster inside an isolated Docker container, and fully register and configure it in the selected HEAppE instance.
                 </p>
 
-                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-info-circle text-primary me-2"></i>Co přesně tento proces provede:</h6>
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-info-circle text-primary me-2"></i>What exactly does this process do:</h6>
 
                 <div class="row g-3 mb-4">
                     <!-- Step 1 -->
@@ -296,9 +296,9 @@
                                     <i class="bi bi-box-seam fs-5"></i>
                                 </div>
                                 <div>
-                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">1. Sestavení Docker obrazu</h6>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">1. Build Docker Image</h6>
                                     <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
-                                        Lokálně sestaví Docker image <code>slurm-simulator-img:latest</code> (založený na Ubuntu 22.04) se Slurmctld, Slurmd, Slurmdbd, Munge a MariaDB.
+                                        Locally builds a Docker image <code>slurm-simulator-img:latest</code> (based on Ubuntu 22.04) containing Slurmctld, Slurmd, Slurmdbd, Munge, and MariaDB.
                                     </p>
                                 </div>
                             </div>
@@ -313,9 +313,9 @@
                                     <i class="bi bi-play-circle fs-5"></i>
                                 </div>
                                 <div>
-                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">2. Spuštění kontejneru</h6>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">2. Start Container</h6>
                                     <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
-                                        Spustí kontejner <code>slurm-simulator-{id}</code> na pozadí a namapuje jeho SSH port 22 na náhodný volný port hostitele (např. 2222).
+                                        Runs a <code>slurm-simulator-{id}</code> container in the background, mapping its internal SSH port 22 to a random free host port (e.g., 2222).
                                     </p>
                                 </div>
                             </div>
@@ -330,9 +330,9 @@
                                     <i class="bi bi-server fs-5"></i>
                                 </div>
                                 <div>
-                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">3. Registrace v HEAppE</h6>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">3. Register in HEAppE</h6>
                                     <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
-                                        Vytvoří v HEAppE nový Cluster, metodu přenosu souborů (SFTP/SCP), CPU/GPU fronty (Queues) a queue grupy (Node Type Aggregations) včetně účtovacích vzorců.
+                                        Creates a new Cluster, File Transfer Method (SFTP/SCP), CPU/GPU Queue Groups (Node Type Aggregations) with accounting formulas, and CPU/GPU Queues (Node Types) in HEAppE.
                                     </p>
                                 </div>
                             </div>
@@ -347,9 +347,9 @@
                                     <i class="bi bi-key fs-5"></i>
                                 </div>
                                 <div>
-                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">4. Vytvoření přístupů</h6>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">4. Create SSH Credentials</h6>
                                     <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
-                                        Vytvoří testovací projekt, přiřadí ho ke clusteru, vygeneruje přihlašovací údaje (SSH klíče) pro simulovaného uživatele a inicializuje adresáře.
+                                        Creates a test Project, assigns it to the cluster/queue groups, generates SSH keys for the simulator user, and initializes script root directories.
                                     </p>
                                 </div>
                             </div>
@@ -360,14 +360,14 @@
                 <div class="alert alert-warning border-0 rounded-3 small mb-0 d-flex gap-3 text-start">
                     <i class="bi bi-exclamation-triangle-fill text-warning fs-4 flex-shrink-0"></i>
                     <div>
-                        <strong>Důležité upozornění:</strong> Ujistěte se, že máte na svém počítači spuštěný <strong>Docker</strong> daemon. První sestavení může trvat 15–30 sekund v závislosti na rychlosti stahování balíčků. Kontejner budete moci následně pohodlně sledovat nebo zastavit ze sekce <strong>Deployments</strong>.
+                        <strong>Important Note:</strong> Make sure the <strong>Docker</strong> daemon is running on your machine. The first build can take 15–30 seconds depending on package download speeds. You can easily monitor or stop the running container later in the <strong>Deployments</strong> tab.
                     </div>
                 </div>
             </div>
             <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Zrušit</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="confirmSpinUpSlurmBtn">
-                    <i class="bi bi-rocket-takeoff-fill me-1"></i>Pokračovat a spustit
+                    <i class="bi bi-rocket-takeoff-fill me-1"></i>Continue and Run
                 </button>
             </div>
         </div>
