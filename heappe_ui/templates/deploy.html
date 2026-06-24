@@ -240,9 +240,68 @@
 
             <!-- Infrastructure & Security (Vault) -->
             <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-shield-lock text-info"></i>Infrastructure &amp; Security (Vault)</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-4">
+                {% for item in containers %}
+                {% if 'heappe' not in item.container.name.lower and 'datastaging' not in item.container.name.lower and 'mssql' not in item.container.name.lower and 'db' not in item.container.name.lower and 'otel' not in item.container.name.lower and 'jaeger' not in item.container.name.lower %}
+                {% with container=item.container ports=item.ports %}
+                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
+                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
+                                {% if container.status == 'running' %}
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% else %}
+                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                                {% endif %}
+                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
+                                <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3">
+                            <div class="btn-group w-100 shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- Telemetry & APM (Jaeger, OpenTelemetry) -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-activity text-info"></i>Telemetry &amp; APM (Jaeger, OpenTelemetry)</h5>
             <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-5">
                 {% for item in containers %}
-                {% if 'heappe' not in item.container.name.lower and 'datastaging' not in item.container.name.lower and 'mssql' not in item.container.name.lower and 'db' not in item.container.name.lower %}
+                {% if 'otel' in item.container.name.lower or 'jaeger' in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
                 <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
                     <div class="card h-100 shadow-sm border-0">

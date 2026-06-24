@@ -1,5 +1,6 @@
 from .imports import *
 from django.urls import reverse
+from django.views.decorators.clickjacking import xframe_options_exempt
 from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, SCHEDULER_CHOICES, CONNECTION_PROTOCOL_CHOICES, login_view, login_required, clean_ver
 
 @login_required
@@ -948,53 +949,85 @@ ENTRYPOINT ["/entrypoint.sh"]
         ftm_id = ftm_dict.get('id') or ftm_dict.get('Id')
         log(f"File Transfer Method created successfully (ID: {ftm_id}).")
 
-        # 5.3 Create Queue Group (ClusterNodeTypeAggregation)
-        log("Creating Queue Group (Node Type Aggregation) in HEAppE...")
+        # 5.3 Create Queue Groups (ClusterNodeTypeAggregation)
+        log("Creating CPU and GPU Queue Groups (Node Type Aggregations) in HEAppE...")
         now = datetime.now()
         now_aware = now - timedelta(minutes=5)
         valid_to = now + timedelta(days=365)
         
-        group_payload = {
-            "Name": f"Slurm Group {uid}",
-            "Description": "Automatically generated Slurm Queue Group",
-            "AllocationType": "NodeHour",
+        cpu_group_payload = {
+            "Name": f"Slurm CPU Group {uid}",
+            "Description": "Automatically generated Slurm CPU Queue Group",
+            "AllocationType": "CN",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "SessionCode": session_code
         }
-        group_resp = controller.heappe_management_cluster_node_type_aggregation_post(body=group_payload)
-        group_dict = group_resp.to_dict() if hasattr(group_resp, 'to_dict') else group_resp
-        group_id = group_dict.get('id') or group_dict.get('Id')
-        log(f"Queue Group created successfully (ID: {group_id}).")
+        cpu_group_resp = controller.heappe_management_cluster_node_type_aggregation_post(body=cpu_group_payload)
+        cpu_group_dict = cpu_group_resp.to_dict() if hasattr(cpu_group_resp, 'to_dict') else cpu_group_resp
+        cpu_group_id = cpu_group_dict.get('id') or cpu_group_dict.get('Id')
+        log(f"CPU Queue Group created successfully (ID: {cpu_group_id}).")
 
-        # 5.4 Create Accounting Formula
-        log("Creating Accounting Formula in HEAppE...")
-        accounting_payload = {
-            "Formula": "1",
+        gpu_group_payload = {
+            "Name": f"Slurm GPU Group {uid}",
+            "Description": "Automatically generated Slurm GPU Queue Group",
+            "AllocationType": "ACN",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "SessionCode": session_code
         }
-        accounting_resp = controller.heappe_management_accounting_post(body=accounting_payload)
-        accounting_dict = accounting_resp.to_dict() if hasattr(accounting_resp, 'to_dict') else accounting_resp
-        accounting_id = accounting_dict.get('id') or accounting_dict.get('Id')
-        log(f"Accounting Formula created successfully (ID: {accounting_id}).")
+        gpu_group_resp = controller.heappe_management_cluster_node_type_aggregation_post(body=gpu_group_payload)
+        gpu_group_dict = gpu_group_resp.to_dict() if hasattr(gpu_group_resp, 'to_dict') else gpu_group_resp
+        gpu_group_id = gpu_group_dict.get('id') or gpu_group_dict.get('Id')
+        log(f"GPU Queue Group created successfully (ID: {gpu_group_id}).")
 
-        # 5.5 Map Accounting Formula to Queue Group
-        log("Mapping Accounting Formula to Queue Group...")
-        mapping_payload = {
-            "ClusterNodeTypeAggregationId": group_id,
-            "AccountingId": accounting_id,
+        # 5.4 Create Accounting Formulas
+        log("Creating CPU Accounting Formula in HEAppE...")
+        cpu_accounting_payload = {
+            "Formula": "NumCPUs * RunTime",
+            "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "SessionCode": session_code
         }
-        controller.heappe_management_cluster_node_type_aggregation_accounting_post(body=mapping_payload)
-        log("Accounting Formula mapped successfully.")
+        cpu_accounting_resp = controller.heappe_management_accounting_post(body=cpu_accounting_payload)
+        cpu_accounting_dict = cpu_accounting_resp.to_dict() if hasattr(cpu_accounting_resp, 'to_dict') else cpu_accounting_resp
+        cpu_accounting_id = cpu_accounting_dict.get('id') or cpu_accounting_dict.get('Id')
+        log(f"CPU Accounting Formula created successfully (ID: {cpu_accounting_id}).")
 
-        # 5.6 Create Queue (ClusterNodeType)
-        log("Creating Queue (Node Type 'test') in HEAppE...")
-        queue_payload = {
-            "Name": "test",
-            "Description": "Slurm test partition",
+        log("Creating GPU Accounting Formula in HEAppE...")
+        gpu_accounting_payload = {
+            "Formula": "NumNodes * RunTime * 5",
+            "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "SessionCode": session_code
+        }
+        gpu_accounting_resp = controller.heappe_management_accounting_post(body=gpu_accounting_payload)
+        gpu_accounting_dict = gpu_accounting_resp.to_dict() if hasattr(gpu_accounting_resp, 'to_dict') else gpu_accounting_resp
+        gpu_accounting_id = gpu_accounting_dict.get('id') or gpu_accounting_dict.get('Id')
+        log(f"GPU Accounting Formula created successfully (ID: {gpu_accounting_id}).")
+
+        # 5.5 Map Accounting Formulas to Queue Groups
+        log("Mapping Accounting Formulas to CPU and GPU Queue Groups...")
+        cpu_mapping_payload = {
+            "ClusterNodeTypeAggregationId": cpu_group_id,
+            "AccountingId": cpu_accounting_id,
+            "SessionCode": session_code
+        }
+        controller.heappe_management_cluster_node_type_aggregation_accounting_post(body=cpu_mapping_payload)
+        
+        gpu_mapping_payload = {
+            "ClusterNodeTypeAggregationId": gpu_group_id,
+            "AccountingId": gpu_accounting_id,
+            "SessionCode": session_code
+        }
+        controller.heappe_management_cluster_node_type_aggregation_accounting_post(body=gpu_mapping_payload)
+        log("Accounting Formulas mapped successfully to their respective groups.")
+
+        # 5.6 Create Queues (ClusterNodeType)
+        log("Creating CPU and GPU Queues (Node Types) in HEAppE...")
+        cpu_queue_payload = {
+            "Name": "cpu",
+            "Description": "Slurm CPU partition",
             "NumberOfNodes": 1,
             "CoresPerNode": 2,
             "Queue": "test",
@@ -1003,13 +1036,32 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ClusterAllocationName": acct_name,
             "ClusterId": cluster_id,
             "FileTransferMethodId": ftm_id,
-            "ClusterNodeTypeAggregationId": group_id,
+            "ClusterNodeTypeAggregationId": cpu_group_id,
             "SessionCode": session_code
         }
-        queue_resp = controller.heappe_management_cluster_node_type_post(body=queue_payload)
-        queue_dict = queue_resp.to_dict() if hasattr(queue_resp, 'to_dict') else queue_resp
-        queue_id = queue_dict.get('id') or queue_dict.get('Id')
-        log(f"Queue 'test' created successfully (ID: {queue_id}).")
+        cpu_queue_resp = controller.heappe_management_cluster_node_type_post(body=cpu_queue_payload)
+        cpu_queue_dict = cpu_queue_resp.to_dict() if hasattr(cpu_queue_resp, 'to_dict') else cpu_queue_resp
+        cpu_queue_id = cpu_queue_dict.get('id') or cpu_queue_dict.get('Id')
+        log(f"CPU Queue created successfully (ID: {cpu_queue_id}).")
+
+        gpu_queue_payload = {
+            "Name": "gpu",
+            "Description": "Slurm GPU partition",
+            "NumberOfNodes": 1,
+            "CoresPerNode": 2,
+            "Queue": "test",
+            "QualityOfService": None,
+            "MaxWalltime": 999999,
+            "ClusterAllocationName": acct_name,
+            "ClusterId": cluster_id,
+            "FileTransferMethodId": ftm_id,
+            "ClusterNodeTypeAggregationId": gpu_group_id,
+            "SessionCode": session_code
+        }
+        gpu_queue_resp = controller.heappe_management_cluster_node_type_post(body=gpu_queue_payload)
+        gpu_queue_dict = gpu_queue_resp.to_dict() if hasattr(gpu_queue_resp, 'to_dict') else gpu_queue_resp
+        gpu_queue_id = gpu_queue_dict.get('id') or gpu_queue_dict.get('Id')
+        log(f"GPU Queue created successfully (ID: {gpu_queue_id}).")
 
         # 5.7 Create Project
         log("Creating Project in HEAppE...")
@@ -1043,16 +1095,24 @@ ENTRYPOINT ["/entrypoint.sh"]
         controller.heappe_management_project_assignment_to_cluster_post(body=assign_cluster_payload)
         log("Project assigned to Cluster successfully.")
 
-        # 5.9 Assign Project to Queue Group
-        log("Assigning Project to Queue Group...")
-        assign_group_payload = {
+        # 5.9 Assign Project to Queue Groups
+        log("Assigning Project to CPU and GPU Queue Groups...")
+        assign_cpu_group_payload = {
             "ProjectId": project_id,
-            "ClusterNodeTypeAggregationId": group_id,
+            "ClusterNodeTypeAggregationId": cpu_group_id,
             "AllocationAmount": 10000,
             "SessionCode": session_code
         }
-        controller.heappe_management_project_cluster_node_type_aggregation_post(body=assign_group_payload)
-        log("Project assigned to Queue Group successfully.")
+        controller.heappe_management_project_cluster_node_type_aggregation_post(body=assign_cpu_group_payload)
+        
+        assign_gpu_group_payload = {
+            "ProjectId": project_id,
+            "ClusterNodeTypeAggregationId": gpu_group_id,
+            "AllocationAmount": 10000,
+            "SessionCode": session_code
+        }
+        controller.heappe_management_project_cluster_node_type_aggregation_post(body=assign_gpu_group_payload)
+        log("Project assigned to CPU and GPU Queue Groups successfully.")
 
         # 5.10 Create Cluster Authentication Credential (SSH Key / Account)
         log(f"Creating SSH Authentication Credentials for '{username}'...")
@@ -1101,6 +1161,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             log(f"Could not clean up temporary build directory: {e}")
 
 
+@xframe_options_exempt
 @login_required
 def jaeger_page(request: HttpRequest) -> HttpResponse:
     from heappe_ui.context_processors import get_instance_jaeger_url
@@ -1131,6 +1192,7 @@ def jaeger_page(request: HttpRequest) -> HttpResponse:
     return render(request, "jaeger.html", {"iframe_src": iframe_src})
 
 
+@xframe_options_exempt
 @login_required
 def jaeger_proxy(request: HttpRequest, path: str = "") -> HttpResponse:
     from heappe_ui.context_processors import get_instance_jaeger_url
@@ -1181,12 +1243,15 @@ def jaeger_proxy(request: HttpRequest, path: str = "") -> HttpResponse:
                     is_decoded = False
                     
             if is_decoded:
-                text = text.replace('"/static/', '"/jaeger-proxy/static/')
-                text = text.replace('\'/static/', '\'/jaeger-proxy/static/')
-                text = text.replace('"/api/', '"/jaeger-proxy/api/')
-                text = text.replace('\'/api/', '\'/jaeger-proxy/api/')
-                text = text.replace('"/ui/', '"/jaeger-proxy/ui/')
-                text = text.replace('\'/ui/', '\'/jaeger-proxy/ui/')
+                script_name = request.META.get('SCRIPT_NAME', '') or ''
+                prefix = f"{script_name.rstrip('/')}/jaeger-proxy"
+                
+                text = text.replace('"/static/', f'"{prefix}/static/')
+                text = text.replace('\'/static/', f"\'{prefix}/static/")
+                text = text.replace('"/api/', f'"{prefix}/api/')
+                text = text.replace('\'/api/', f"\'{prefix}/api/")
+                text = text.replace('"/ui/', f'"{prefix}/ui/')
+                text = text.replace('\'/ui/', f"\'{prefix}/ui/")
                 content = text.encode('utf-8')
                 
             django_response = HttpResponse(content, status=response.status_code, content_type=content_type)
@@ -1194,7 +1259,7 @@ def jaeger_proxy(request: HttpRequest, path: str = "") -> HttpResponse:
             django_response = HttpResponse(response.raw, status=response.status_code, content_type=content_type)
             
         for h, v in response.headers.items():
-            if h.lower() not in ['transfer-encoding', 'content-length', 'content-encoding']:
+            if h.lower() not in ['transfer-encoding', 'content-length', 'content-encoding', 'x-frame-options', 'content-security-policy']:
                 django_response[h] = v
                 
         return django_response
