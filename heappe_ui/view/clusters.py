@@ -665,7 +665,7 @@ def _run_slurm_setup_thread(host, session_code, uid, port, container_name, use_a
     
     temp_dir = os.path.join(settings.BASE_DIR, f"slurm-temp-{uid}")
     acct_name = f"a{uid}"
-    username = f"u{uid}"
+    slurm_username = f"u{uid}"
     
     try:
         # Step 1: Create temp directory and files
@@ -832,7 +832,7 @@ echo "Starting SSH daemon..."
 exec /usr/sbin/sshd -D
 """
         entrypoint_content = entrypoint_content.replace("add account test", f"add account {acct_name}").replace("Account=test DefaultAccount=test", f"Account={acct_name} DefaultAccount={acct_name}")
-        entrypoint_content = entrypoint_content.replace("heappeslurm", username)
+        entrypoint_content = entrypoint_content.replace("heappeslurm", slurm_username)
         with open(os.path.join(temp_dir, "entrypoint.sh"), "w") as f:
             f.write(entrypoint_content)
             
@@ -862,7 +862,7 @@ RUN chmod +x /entrypoint.sh
 EXPOSE 22
 ENTRYPOINT ["/entrypoint.sh"]
 """
-        dockerfile_content = dockerfile_content.replace("heappeslurm", username)
+        dockerfile_content = dockerfile_content.replace("heappeslurm", slurm_username)
         with open(os.path.join(temp_dir, "Dockerfile"), "w") as f:
             f.write(dockerfile_content)
 
@@ -1129,11 +1129,11 @@ ENTRYPOINT ["/entrypoint.sh"]
         log("Project assigned to CPU and GPU Queue Groups successfully.")
  
         # 5.10 Create Cluster Authentication Credential (SSH Key / Account)
-        log(f"Creating SSH Authentication Credentials for '{username}'...")
+        log(f"Creating SSH Authentication Credentials for '{slurm_username}'...")
         cred_payload = {
             "Credentials": [
                 {
-                    "Username": username,
+                    "Username": slurm_username,
                     "Password": "pass"
                 }
             ],
@@ -1147,7 +1147,7 @@ ENTRYPOINT ["/entrypoint.sh"]
         log("Initializing the HPC Account (deploying key script directories)...")
         init_payload = {
             "ProjectId": project_id,
-            "Username": username,
+            "Username": slurm_username,
             "OverwriteExistingProjectRootDirectory": True,
             "SessionCode": admin_session_code
         }
