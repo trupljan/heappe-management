@@ -1138,9 +1138,9 @@ ENTRYPOINT ["/entrypoint.sh"]
         assign_cluster_payload = {
             "ProjectId": project_id,
             "ClusterId": cluster_id,
-            "ScratchStoragePath": "",
-            "PermanentStoragePath": "",
-            "ProjectStoragePath": "",
+            "ScratchStoragePath": f"/home/{slurm_username}",
+            "PermanentStoragePath": f"/home/{slurm_username}",
+            "ProjectStoragePath": f"/home/{slurm_username}",
             "SessionCode": session_code
         }
         controller.heappe_management_project_assignment_to_cluster_post(body=assign_cluster_payload)
