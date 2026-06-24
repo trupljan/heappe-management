@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Jaeger APM Tracing{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Jaeger APM Tracing</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0" style="margin-top: -1.5rem; margin-bottom: -3.5rem; margin-left: -1.5rem; margin-right: -1.5rem; height: calc(100vh - 56px - 53px);">
+    <iframe src="{{ iframe_src|default:'/jaeger-proxy/' }}" style="width: 100%; height: 100%; border: none;" allowfullscreen></iframe>
+</div>
+{% endblock %}

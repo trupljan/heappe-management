@@ -501,9 +501,9 @@
     scanAndRenderJaegerTraces();
 
     function scanAndRenderJaegerTraces() {
-        const jaegerBaseUrl = "{{ jaeger_url }}";
+        const jaegerPageUrl = "{% url 'jaeger_page' %}";
         const otelDisabled = {{ otel_disabled|yesno:"true,false" }};
-        if (!jaegerBaseUrl || otelDisabled) return;
+        if (otelDisabled) return;
 
         const traceIdRegex = /\b([a-fA-F0-9]{32})\b/g;
 
@@ -534,7 +534,7 @@
 
             if (foundTraceId) {
                 const actionCell = row.find('td:last-child');
-                const jaegerLink = `${jaegerBaseUrl}/trace/${foundTraceId}`;
+                const jaegerLink = `${jaegerPageUrl}?path=trace/${foundTraceId}`;
                 const jaegerBtnHtml = `
                     <a href="${jaegerLink}" target="_blank" class="btn btn-sm btn-outline-info fw-bold rounded-3 shadow-sm px-2.5 py-1 ms-1 d-inline-flex align-items-center gap-1" style="font-size: 0.75rem;" title="View Distributed Trace in Jaeger APM">
                         <i class="bi bi-activity"></i> Jaeger
@@ -715,7 +715,7 @@
                     }
 
                     let logsHtml = '';
-                    const jaegerBaseUrl = "{{ jaeger_url }}";
+                    const jaegerPageUrl = "{% url 'jaeger_page' %}";
                     const otelDisabled = {{ otel_disabled|yesno:"true,false" }};
                     const traceIdRegex = /\b([a-fA-F0-9]{32})\b/g;
 
@@ -743,8 +743,8 @@
                         }
 
                         let msgHtml = log.Message;
-                        if (foundTraceId && jaegerBaseUrl && !otelDisabled) {
-                            const jaegerLink = `${jaegerBaseUrl}/trace/${foundTraceId}`;
+                        if (foundTraceId && !otelDisabled) {
+                            const jaegerLink = `${jaegerPageUrl}?path=trace/${foundTraceId}`;
                             const highlightBadge = `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace px-1.5 py-0.5 rounded" style="font-size: 0.75rem; cursor: pointer;" onclick="window.open('${jaegerLink}', '_blank'); event.stopPropagation();"><i class="bi bi-activity me-1"></i>$1</span>`;
                             traceIdRegex.lastIndex = 0;
                             msgHtml = msgHtml.replace(traceIdRegex, highlightBadge);
@@ -752,8 +752,8 @@
 
                         if (log.Exception && log.Exception !== '-' && log.Exception !== '') {
                             let excHtml = log.Exception;
-                            if (foundTraceId && jaegerBaseUrl && !otelDisabled) {
-                                const jaegerLink = `${jaegerBaseUrl}/trace/${foundTraceId}`;
+                            if (foundTraceId && !otelDisabled) {
+                                const jaegerLink = `${jaegerPageUrl}?path=trace/${foundTraceId}`;
                                 const highlightBadge = `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace px-1.5 py-0.5 rounded" style="font-size: 0.75rem; cursor: pointer;" onclick="window.open('${jaegerLink}', '_blank'); event.stopPropagation();"><i class="bi bi-activity me-1"></i>$1</span>`;
                                 traceIdRegex.lastIndex = 0;
                                 excHtml = excHtml.replace(traceIdRegex, highlightBadge);

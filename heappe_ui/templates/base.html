@@ -168,6 +168,13 @@
                             <i class="bi bi-file-earmark-text fs-5"></i><span>Instance Logs</span>
                         </a>
                     </li>
+                    {% if request.session.chosen_instance and not otel_disabled %}
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'jaeger' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'jaeger_page' %}">
+                            <i class="bi bi-activity fs-5"></i><span>Jaeger Tracing</span>
+                        </a>
+                    </li>
+                    {% endif %}
                     
                     <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem; letter-spacing: 0.05em;">Deployment</li>
                     <li class="nav-item">
@@ -308,6 +315,13 @@
                                 <i class="bi bi-file-earmark-text fs-5"></i><span>Instance Logs</span>
                             </a>
                         </li>
+                        {% if request.session.chosen_instance and not otel_disabled %}
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'jaeger' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'jaeger_page' %}">
+                                <i class="bi bi-activity fs-5"></i><span>Jaeger Tracing</span>
+                            </a>
+                        </li>
+                        {% endif %}
                         
                         <li class="nav-header text-uppercase text-muted fw-bold mt-3 mb-1 px-3" style="font-size: 0.65rem;">Deployment</li>
                         <li class="nav-item" data-bs-dismiss="offcanvas">

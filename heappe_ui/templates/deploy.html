@@ -437,8 +437,8 @@
                                 <p class="text-muted small">
                                     The Jaeger APM UI allows visual timeline queries, trace dependency graphs, and span inspection for analyzed HEAppE operations.
                                 </p>
-                                <a href="{{ jaeger_url }}" target="_blank" id="jaeger-link-btn" class="btn btn-outline-primary fw-bold px-4 py-2 mt-2 shadow-sm rounded-3">
-                                    <i class="bi bi-box-arrow-up-right me-2"></i>Open Jaeger APM Dashboard
+                                <a href="{% url 'jaeger_page' %}" id="jaeger-link-btn" class="btn btn-outline-primary fw-bold px-4 py-2 mt-2 shadow-sm rounded-3">
+                                    <i class="bi bi-display me-2"></i>Open Jaeger APM Dashboard
                                 </a>
                                 <div class="form-text small mt-2">
                                     Port map: <code id="otel-jaeger-port-display">{{ jaeger_port }}</code>. Active Jaeger console URL: <a href="{{ jaeger_url }}" target="_blank" class="font-monospace text-decoration-none" id="jaeger-raw-link">{{ jaeger_url }}</a>
@@ -811,7 +811,7 @@ $(document).ready(function() {
                             // Update jaeger URL dynamically
                             const currentHost = window.location.hostname;
                             const newJaegerUrl = `http://${currentHost}:${response.otel_jaeger_port}`;
-                            $('#jaeger-link-btn').attr('href', newJaegerUrl);
+                            $('#jaeger-link-btn').attr('href', "{% url 'jaeger_page' %}");
                             $('#jaeger-raw-link').attr('href', newJaegerUrl).text(newJaegerUrl);
                         }
                     } else {

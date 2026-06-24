@@ -917,7 +917,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "MasterNodeName": "host.docker.internal",
             "SchedulerType": 4, # Slurm
             "ConnectionProtocol": 2, # SSH
-            "TimeZone": "Central Europe Standard Time",
+            "TimeZone": "CET",
             "Port": port,
             "UpdateJobStateByServiceAccount": False,
             "DomainName": "",
@@ -1094,5 +1094,107 @@ ENTRYPOINT ["/entrypoint.sh"]
                 shutil.rmtree(temp_dir)
         except Exception as e:
             log(f"Could not clean up temporary build directory: {e}")
+
+
+@login_required
+def jaeger_page(request: HttpRequest) -> HttpResponse:
+    from heappe_ui.context_processors import get_instance_jaeger_url
+    from django.urls import reverse
+    instance_name = request.session.get("chosen_instance")
+    if not instance_name:
+        messages.error(request, "Please choose a HEAppE instance first.")
+        return redirect("instance_credentials_list")
+        
+    jaeger_url, _, otel_disabled = get_instance_jaeger_url(instance_name)
+    if otel_disabled:
+        messages.warning(request, "Telemetry / Jaeger is not enabled for this instance.")
+        return redirect("dashboard_view")
+        
+    path = request.GET.get('path', '')
+    if path:
+        iframe_src = reverse('jaeger_proxy', args=[path])
+    else:
+        iframe_src = reverse('jaeger_proxy_root')
+        
+    # Forward all other query parameters
+    query_params = request.GET.copy()
+    if 'path' in query_params:
+        del query_params['path']
+    if query_params:
+        iframe_src += f"?{query_params.urlencode()}"
+        
+    return render(request, "jaeger.html", {"iframe_src": iframe_src})
+
+
+@login_required
+def jaeger_proxy(request: HttpRequest, path: str = "") -> HttpResponse:
+    from heappe_ui.context_processors import get_instance_jaeger_url
+    instance_name = request.session.get("chosen_instance")
+    if not instance_name:
+        return HttpResponse("No instance chosen.", status=400)
+        
+    jaeger_url, _, otel_disabled = get_instance_jaeger_url(instance_name)
+    if not jaeger_url:
+        return HttpResponse("Jaeger service is not configured.", status=404)
+        
+    import requests
+    url = f"{jaeger_url.rstrip('/')}/{path}"
+    if request.META.get('QUERY_STRING'):
+        url += f"?{request.META['QUERY_STRING']}"
+        
+    try:
+        headers = {}
+        for h in ['Accept', 'Accept-Encoding', 'Accept-Language', 'User-Agent', 'Content-Type']:
+            meta_name = f"HTTP_{h.upper().replace('-', '_')}"
+            if meta_name in request.META:
+                headers[h] = request.META[meta_name]
+            elif h == 'Content-Type' and 'CONTENT_TYPE' in request.META:
+                headers[h] = request.META['CONTENT_TYPE']
+                
+        response = requests.request(
+            method=request.method,
+            url=url,
+            headers=headers,
+            data=request.body,
+            stream=True,
+            timeout=10
+        )
+        
+        content_type = response.headers.get('Content-Type', '')
+        rewrite_content_types = ['text/html', 'application/javascript', 'text/javascript', 'application/json', 'text/css']
+        
+        if any(ct in content_type.lower() for ct in rewrite_content_types):
+            content = response.content
+            try:
+                text = content.decode('utf-8')
+                is_decoded = True
+            except UnicodeDecodeError:
+                try:
+                    text = content.decode('latin-1')
+                    is_decoded = True
+                except Exception:
+                    is_decoded = False
+                    
+            if is_decoded:
+                text = text.replace('"/static/', '"/jaeger-proxy/static/')
+                text = text.replace('\'/static/', '\'/jaeger-proxy/static/')
+                text = text.replace('"/api/', '"/jaeger-proxy/api/')
+                text = text.replace('\'/api/', '\'/jaeger-proxy/api/')
+                text = text.replace('"/ui/', '"/jaeger-proxy/ui/')
+                text = text.replace('\'/ui/', '\'/jaeger-proxy/ui/')
+                content = text.encode('utf-8')
+                
+            django_response = HttpResponse(content, status=response.status_code, content_type=content_type)
+        else:
+            django_response = HttpResponse(response.raw, status=response.status_code, content_type=content_type)
+            
+        for h, v in response.headers.items():
+            if h.lower() not in ['transfer-encoding', 'content-length', 'content-encoding']:
+                django_response[h] = v
+                
+        return django_response
+        
+    except requests.exceptions.RequestException as e:
+        return HttpResponse(f"Error connecting to Jaeger service: {e}", status=502)
 
 

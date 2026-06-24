@@ -257,9 +257,9 @@
 
 <script>
 (function() {
-    const jaegerBaseUrl = "{{ jaeger_url }}";
+    const jaegerPageUrl = "{% url 'jaeger_page' %}";
     const otelDisabled = {{ otel_disabled|yesno:"true,false" }};
-    if (!jaegerBaseUrl || otelDisabled) return;
+    if (otelDisabled) return;
 
     const traceIdRegex = /\b([a-fA-F0-9]{32})\b/g;
 
@@ -273,7 +273,7 @@
         if (matches) {
             el.classList.add('trace-processed');
             const traceId = matches[1];
-            const jaegerLink = `${jaegerBaseUrl}/trace/${traceId}`;
+            const jaegerLink = `${jaegerPageUrl}?path=trace/${traceId}`;
             
             // Wrap the trace ID in a clickable highlighted badge
             const highlightBadge = `<span class="badge bg-info-subtle text-info-emphasis border border-info-subtle font-monospace px-1.5 py-0.5 rounded" style="font-size: 0.75rem; cursor: pointer; display: inline-flex; align-items: center; gap: 1px;" onclick="window.open('${jaegerLink}', '_blank'); event.stopPropagation();"><i class="bi bi-activity"></i> ${traceId}</span>`;

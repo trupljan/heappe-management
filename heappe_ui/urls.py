@@ -104,4 +104,9 @@ urlpatterns = [
     path('admin-users/<int:user_id>/password/', views.admin_users_password, name='admin_users_password'),
     path('admin-users/<int:user_id>/delete/', views.admin_users_delete, name='admin_users_delete'),
     path('decrypt/', views.decrypt_credentials_view, name='decrypt_credentials_view'),
+
+    # Jaeger Tracing Natively
+    path('jaeger/', views.jaeger_page, name='jaeger_page'),
+    path('jaeger-proxy/', views.jaeger_proxy, name='jaeger_proxy_root'),
+    path('jaeger-proxy/<path:path>', views.jaeger_proxy, name='jaeger_proxy'),
 ]
