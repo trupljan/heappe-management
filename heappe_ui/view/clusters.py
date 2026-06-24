@@ -912,7 +912,6 @@ ENTRYPOINT ["/entrypoint.sh"]
         
         # Step 5: Configure HEAppE
         log("Connecting to HEAppE API to register the cluster infrastructure...")
-        admin_session_code = None if use_api_key else session_code
         config = hp.Configuration()
         host_url = 'http://' + host if not host.startswith('http') else host
         config.host = host_url
@@ -942,7 +941,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "UpdateJobStateByServiceAccount": False,
             "DomainName": "",
             "ProxyConnectionId": None,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         cluster_resp = controller.heappe_management_cluster_post(body=cluster_payload)
         cluster_dict = cluster_resp.to_dict() if hasattr(cluster_resp, 'to_dict') else cluster_resp
@@ -956,7 +955,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ServerHostname": "host.docker.internal",
             "Protocol": 2, # SFTP/SCP
             "Port": port,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         ftm_resp = controller.heappe_management_file_transfer_method_post(body=ftm_payload)
         ftm_dict = ftm_resp.to_dict() if hasattr(ftm_resp, 'to_dict') else ftm_resp
@@ -975,7 +974,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "AllocationType": "CN",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         cpu_group_resp = controller.heappe_management_cluster_node_type_aggregation_post(body=cpu_group_payload)
         cpu_group_dict = cpu_group_resp.to_dict() if hasattr(cpu_group_resp, 'to_dict') else cpu_group_resp
@@ -988,7 +987,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "AllocationType": "ACN",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         gpu_group_resp = controller.heappe_management_cluster_node_type_aggregation_post(body=gpu_group_payload)
         gpu_group_dict = gpu_group_resp.to_dict() if hasattr(gpu_group_resp, 'to_dict') else gpu_group_resp
@@ -1001,7 +1000,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "Formula": "NumCPUs * RunTime",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         cpu_accounting_resp = controller.heappe_management_accounting_post(body=cpu_accounting_payload)
         cpu_accounting_dict = cpu_accounting_resp.to_dict() if hasattr(cpu_accounting_resp, 'to_dict') else cpu_accounting_resp
@@ -1013,7 +1012,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "Formula": "NumNodes * RunTime * 5",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         gpu_accounting_resp = controller.heappe_management_accounting_post(body=gpu_accounting_payload)
         gpu_accounting_dict = gpu_accounting_resp.to_dict() if hasattr(gpu_accounting_resp, 'to_dict') else gpu_accounting_resp
@@ -1025,14 +1024,14 @@ ENTRYPOINT ["/entrypoint.sh"]
         cpu_mapping_payload = {
             "ClusterNodeTypeAggregationId": cpu_group_id,
             "AccountingId": cpu_accounting_id,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         controller.heappe_management_cluster_node_type_aggregation_accounting_post(body=cpu_mapping_payload)
         
         gpu_mapping_payload = {
             "ClusterNodeTypeAggregationId": gpu_group_id,
             "AccountingId": gpu_accounting_id,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         controller.heappe_management_cluster_node_type_aggregation_accounting_post(body=gpu_mapping_payload)
         log("Accounting Formulas mapped successfully to their respective groups.")
@@ -1051,7 +1050,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ClusterId": cluster_id,
             "FileTransferMethodId": ftm_id,
             "ClusterNodeTypeAggregationId": cpu_group_id,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         cpu_queue_resp = controller.heappe_management_cluster_node_type_post(body=cpu_queue_payload)
         cpu_queue_dict = cpu_queue_resp.to_dict() if hasattr(cpu_queue_resp, 'to_dict') else cpu_queue_resp
@@ -1070,7 +1069,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ClusterId": cluster_id,
             "FileTransferMethodId": ftm_id,
             "ClusterNodeTypeAggregationId": gpu_group_id,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         gpu_queue_resp = controller.heappe_management_cluster_node_type_post(body=gpu_queue_payload)
         gpu_queue_dict = gpu_queue_resp.to_dict() if hasattr(gpu_queue_resp, 'to_dict') else gpu_queue_resp
@@ -1096,6 +1095,17 @@ ENTRYPOINT ["/entrypoint.sh"]
         project_id = project_dict.get('id') or project_dict.get('Id')
         log(f"Project created successfully (ID: {project_id}).")
  
+        # 5.7.1 Assign ManagementAdmin role for project to the user
+        log(f"Assigning ManagementAdmin role for project to '{username}'...")
+        assign_role_payload = {
+            "Username": username,
+            "ProjectId": project_id,
+            "Role": 6, # ManagementAdmin
+            "SessionCode": session_code
+        }
+        controller.heappe_management_assign_adaptor_user_to_project_post(body=assign_role_payload)
+        log("ManagementAdmin role assigned successfully.")
+ 
         # 5.8 Assign Project to Cluster
         log("Assigning Project to Cluster...")
         assign_cluster_payload = {
@@ -1104,7 +1114,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ScratchStoragePath": "",
             "PermanentStoragePath": "",
             "ProjectStoragePath": "",
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         controller.heappe_management_project_assignment_to_cluster_post(body=assign_cluster_payload)
         log("Project assigned to Cluster successfully.")
@@ -1115,7 +1125,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ProjectId": project_id,
             "ClusterNodeTypeAggregationId": cpu_group_id,
             "AllocationAmount": 10000,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         controller.heappe_management_project_cluster_node_type_aggregation_post(body=assign_cpu_group_payload)
         
@@ -1123,7 +1133,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ProjectId": project_id,
             "ClusterNodeTypeAggregationId": gpu_group_id,
             "AllocationAmount": 10000,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         controller.heappe_management_project_cluster_node_type_aggregation_post(body=assign_gpu_group_payload)
         log("Project assigned to CPU and GPU Queue Groups successfully.")
@@ -1138,7 +1148,7 @@ ENTRYPOINT ["/entrypoint.sh"]
                 }
             ],
             "ProjectId": project_id,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         controller.heappe_management_generate_secure_shell_key_post(body=cred_payload)
         log("SSH Key authentication credentials generated.")
@@ -1149,7 +1159,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ProjectId": project_id,
             "Username": slurm_username,
             "OverwriteExistingProjectRootDirectory": True,
-            "SessionCode": admin_session_code
+            "SessionCode": session_code
         }
         controller.heappe_management_initialize_cluster_script_directory_post(body=init_payload)
         log("HPC Account initialized successfully.")
