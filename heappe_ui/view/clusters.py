@@ -1247,6 +1247,8 @@ def jaeger_proxy(request: HttpRequest, path: str = "") -> HttpResponse:
                 script_name = getattr(settings, 'FORCE_SCRIPT_NAME', None) or request.META.get('SCRIPT_NAME', '') or ''
                 prefix = f"{script_name.rstrip('/')}/jaeger-proxy"
                 
+                text = text.replace('<base href="/"', f'<base href="{prefix}/"')
+                text = text.replace('<base href=\'/\'', f'<base href=\'{prefix}/\'')
                 text = text.replace('"/static/', f'"{prefix}/static/')
                 text = text.replace('\'/static/', f"\'{prefix}/static/")
                 text = text.replace('"/api/', f'"{prefix}/api/')
