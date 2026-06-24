@@ -659,6 +659,7 @@ def _run_slurm_setup_thread(host, session_code, uid, port, container_name):
     log(f"Docker Container Name: {container_name}")
     
     temp_dir = os.path.join(settings.BASE_DIR, f"slurm-temp-{uid}")
+    acct_name = f"a{uid}"
     
     try:
         # Step 1: Create temp directory and files
@@ -824,6 +825,7 @@ done
 echo "Starting SSH daemon..."
 exec /usr/sbin/sshd -D
 """
+        entrypoint_content = entrypoint_content.replace("add account test", f"add account {acct_name}").replace("Account=test DefaultAccount=test", f"Account={acct_name} DefaultAccount={acct_name}")
         with open(os.path.join(temp_dir, "entrypoint.sh"), "w") as f:
             f.write(entrypoint_content)
             
@@ -995,7 +997,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "Queue": "test",
             "QualityOfService": None,
             "MaxWalltime": 999999,
-            "ClusterAllocationName": "test",
+            "ClusterAllocationName": acct_name,
             "ClusterId": cluster_id,
             "FileTransferMethodId": ftm_id,
             "ClusterNodeTypeAggregationId": group_id,
@@ -1011,7 +1013,7 @@ ENTRYPOINT ["/entrypoint.sh"]
         project_payload = {
             "Name": f"Slurm Project {uid}",
             "Description": "Automatically generated Slurm test project",
-            "AccountingString": "test",
+            "AccountingString": acct_name,
             "StartDate": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "EndDate": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "UsageType": 1,
