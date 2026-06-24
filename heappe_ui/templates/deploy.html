@@ -776,6 +776,7 @@ function startUpdatePolling(actionType = 'update') {
 
 $(document).ready(function() {
     // --- OPENTELEMETRY TOGGLE SWITCH LOGIC ---
+    {% if instance_name %}
     $('#otel-toggle-switch').on('change', function() {
         const isChecked = $(this).is(':checked');
         const action = isChecked ? 'enable' : 'disable';
@@ -861,6 +862,7 @@ $(document).ready(function() {
             }
         });
     });
+    {% endif %}
 
     // --- UI HELPERS ---
     window.showLoading = function(title = "Operation in progress...", subtext = "Page will refresh automatically when done.") {
