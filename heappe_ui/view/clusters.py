@@ -1103,8 +1103,11 @@ ENTRYPOINT ["/entrypoint.sh"]
             "Role": 6, # ManagementAdmin
             "SessionCode": session_code
         }
-        controller.heappe_management_assign_adaptor_user_to_project_post(body=assign_role_payload)
-        log("ManagementAdmin role assigned successfully.")
+        try:
+            controller.heappe_management_assign_adaptor_user_to_project_post(body=assign_role_payload)
+            log("ManagementAdmin role assigned successfully.")
+        except Exception as e:
+            log(f"Warning: Could not assign ManagementAdmin role to '{username}': {e}. Skipping as the user is likely already assigned to the project.")
  
         # 5.8 Assign Project to Cluster
         log("Assigning Project to Cluster...")
