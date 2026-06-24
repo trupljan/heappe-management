@@ -912,6 +912,7 @@ ENTRYPOINT ["/entrypoint.sh"]
         
         # Step 5: Configure HEAppE
         log("Connecting to HEAppE API to register the cluster infrastructure...")
+        admin_session_code = None if use_api_key else session_code
         config = hp.Configuration()
         host_url = 'http://' + host if not host.startswith('http') else host
         config.host = host_url
@@ -941,7 +942,7 @@ ENTRYPOINT ["/entrypoint.sh"]
             "UpdateJobStateByServiceAccount": False,
             "DomainName": "",
             "ProxyConnectionId": None,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         cluster_resp = controller.heappe_management_cluster_post(body=cluster_payload)
         cluster_dict = cluster_resp.to_dict() if hasattr(cluster_resp, 'to_dict') else cluster_resp
@@ -955,13 +956,13 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ServerHostname": "host.docker.internal",
             "Protocol": 2, # SFTP/SCP
             "Port": port,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         ftm_resp = controller.heappe_management_file_transfer_method_post(body=ftm_payload)
         ftm_dict = ftm_resp.to_dict() if hasattr(ftm_resp, 'to_dict') else ftm_resp
         ftm_id = ftm_dict.get('id') or ftm_dict.get('Id')
         log(f"File Transfer Method created successfully (ID: {ftm_id}).")
-
+ 
         # 5.3 Create Queue Groups (ClusterNodeTypeAggregation)
         log("Creating CPU and GPU Queue Groups (Node Type Aggregations) in HEAppE...")
         now = datetime.now()
@@ -974,68 +975,68 @@ ENTRYPOINT ["/entrypoint.sh"]
             "AllocationType": "CN",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         cpu_group_resp = controller.heappe_management_cluster_node_type_aggregation_post(body=cpu_group_payload)
         cpu_group_dict = cpu_group_resp.to_dict() if hasattr(cpu_group_resp, 'to_dict') else cpu_group_resp
         cpu_group_id = cpu_group_dict.get('id') or cpu_group_dict.get('Id')
         log(f"CPU Queue Group created successfully (ID: {cpu_group_id}).")
-
+ 
         gpu_group_payload = {
             "Name": f"Slurm GPU Group {uid}",
             "Description": "Automatically generated Slurm GPU Queue Group",
             "AllocationType": "ACN",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         gpu_group_resp = controller.heappe_management_cluster_node_type_aggregation_post(body=gpu_group_payload)
         gpu_group_dict = gpu_group_resp.to_dict() if hasattr(gpu_group_resp, 'to_dict') else gpu_group_resp
         gpu_group_id = gpu_group_dict.get('id') or gpu_group_dict.get('Id')
         log(f"GPU Queue Group created successfully (ID: {gpu_group_id}).")
-
+ 
         # 5.4 Create Accounting Formulas
         log("Creating CPU Accounting Formula in HEAppE...")
         cpu_accounting_payload = {
             "Formula": "NumCPUs * RunTime",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         cpu_accounting_resp = controller.heappe_management_accounting_post(body=cpu_accounting_payload)
         cpu_accounting_dict = cpu_accounting_resp.to_dict() if hasattr(cpu_accounting_resp, 'to_dict') else cpu_accounting_resp
         cpu_accounting_id = cpu_accounting_dict.get('id') or cpu_accounting_dict.get('Id')
         log(f"CPU Accounting Formula created successfully (ID: {cpu_accounting_id}).")
-
+ 
         log("Creating GPU Accounting Formula in HEAppE...")
         gpu_accounting_payload = {
             "Formula": "NumNodes * RunTime * 5",
             "ValidityFrom": now_aware.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "ValidityTo": valid_to.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         gpu_accounting_resp = controller.heappe_management_accounting_post(body=gpu_accounting_payload)
         gpu_accounting_dict = gpu_accounting_resp.to_dict() if hasattr(gpu_accounting_resp, 'to_dict') else gpu_accounting_resp
         gpu_accounting_id = gpu_accounting_dict.get('id') or gpu_accounting_dict.get('Id')
         log(f"GPU Accounting Formula created successfully (ID: {gpu_accounting_id}).")
-
+ 
         # 5.5 Map Accounting Formulas to Queue Groups
         log("Mapping Accounting Formulas to CPU and GPU Queue Groups...")
         cpu_mapping_payload = {
             "ClusterNodeTypeAggregationId": cpu_group_id,
             "AccountingId": cpu_accounting_id,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         controller.heappe_management_cluster_node_type_aggregation_accounting_post(body=cpu_mapping_payload)
         
         gpu_mapping_payload = {
             "ClusterNodeTypeAggregationId": gpu_group_id,
             "AccountingId": gpu_accounting_id,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         controller.heappe_management_cluster_node_type_aggregation_accounting_post(body=gpu_mapping_payload)
         log("Accounting Formulas mapped successfully to their respective groups.")
-
+ 
         # 5.6 Create Queues (ClusterNodeType)
         log("Creating CPU and GPU Queues (Node Types) in HEAppE...")
         cpu_queue_payload = {
@@ -1050,13 +1051,13 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ClusterId": cluster_id,
             "FileTransferMethodId": ftm_id,
             "ClusterNodeTypeAggregationId": cpu_group_id,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         cpu_queue_resp = controller.heappe_management_cluster_node_type_post(body=cpu_queue_payload)
         cpu_queue_dict = cpu_queue_resp.to_dict() if hasattr(cpu_queue_resp, 'to_dict') else cpu_queue_resp
         cpu_queue_id = cpu_queue_dict.get('id') or cpu_queue_dict.get('Id')
         log(f"CPU Queue created successfully (ID: {cpu_queue_id}).")
-
+ 
         gpu_queue_payload = {
             "Name": "gpu",
             "Description": "Slurm GPU partition",
@@ -1069,13 +1070,13 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ClusterId": cluster_id,
             "FileTransferMethodId": ftm_id,
             "ClusterNodeTypeAggregationId": gpu_group_id,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         gpu_queue_resp = controller.heappe_management_cluster_node_type_post(body=gpu_queue_payload)
         gpu_queue_dict = gpu_queue_resp.to_dict() if hasattr(gpu_queue_resp, 'to_dict') else gpu_queue_resp
         gpu_queue_id = gpu_queue_dict.get('id') or gpu_queue_dict.get('Id')
         log(f"GPU Queue created successfully (ID: {gpu_queue_id}).")
-
+ 
         # 5.7 Create Project
         log("Creating Project in HEAppE...")
         project_payload = {
@@ -1094,7 +1095,7 @@ ENTRYPOINT ["/entrypoint.sh"]
         project_dict = project_resp.to_dict() if hasattr(project_resp, 'to_dict') else project_resp
         project_id = project_dict.get('id') or project_dict.get('Id')
         log(f"Project created successfully (ID: {project_id}).")
-
+ 
         # 5.8 Assign Project to Cluster
         log("Assigning Project to Cluster...")
         assign_cluster_payload = {
@@ -1103,18 +1104,18 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ScratchStoragePath": "",
             "PermanentStoragePath": "",
             "ProjectStoragePath": "",
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         controller.heappe_management_project_assignment_to_cluster_post(body=assign_cluster_payload)
         log("Project assigned to Cluster successfully.")
-
+ 
         # 5.9 Assign Project to Queue Groups
         log("Assigning Project to CPU and GPU Queue Groups...")
         assign_cpu_group_payload = {
             "ProjectId": project_id,
             "ClusterNodeTypeAggregationId": cpu_group_id,
             "AllocationAmount": 10000,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         controller.heappe_management_project_cluster_node_type_aggregation_post(body=assign_cpu_group_payload)
         
@@ -1122,11 +1123,11 @@ ENTRYPOINT ["/entrypoint.sh"]
             "ProjectId": project_id,
             "ClusterNodeTypeAggregationId": gpu_group_id,
             "AllocationAmount": 10000,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         controller.heappe_management_project_cluster_node_type_aggregation_post(body=assign_gpu_group_payload)
         log("Project assigned to CPU and GPU Queue Groups successfully.")
-
+ 
         # 5.10 Create Cluster Authentication Credential (SSH Key / Account)
         log(f"Creating SSH Authentication Credentials for '{username}'...")
         cred_payload = {
@@ -1137,22 +1138,22 @@ ENTRYPOINT ["/entrypoint.sh"]
                 }
             ],
             "ProjectId": project_id,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         controller.heappe_management_generate_secure_shell_key_post(body=cred_payload)
         log("SSH Key authentication credentials generated.")
-
+ 
         # 5.11 Initialize the HPC Account
         log("Initializing the HPC Account (deploying key script directories)...")
         init_payload = {
             "ProjectId": project_id,
             "Username": username,
             "OverwriteExistingProjectRootDirectory": True,
-            "SessionCode": session_code
+            "SessionCode": admin_session_code
         }
         controller.heappe_management_initialize_cluster_script_directory_post(body=init_payload)
         log("HPC Account initialized successfully.")
-
+ 
         log("SUCCESS: Automated Slurm Simulator setup completed successfully!")
         
         with _slurm_setup_lock:

@@ -269,6 +269,111 @@
     });
 </script>
 
+<!-- Slurm Confirmation Modal -->
+<div class="modal fade" id="slurmConfirmModal" tabindex="-1" aria-labelledby="slurmConfirmLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%) !important;">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="slurmConfirmLabel">
+                    <i class="bi bi-rocket-takeoff-fill"></i>
+                    <span>Spustit testovací Slurm simulátor?</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-secondary mb-4">
+                    Tato akce automaticky sestaví a spustí kompletní testovací Slurm cluster v izolovaném Docker kontejneru a plně jej zaregistruje a nakonfiguruje ve vybrané instanci HEAppE.
+                </p>
+
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-info-circle text-primary me-2"></i>Co přesně tento proces provede:</h6>
+
+                <div class="row g-3 mb-4">
+                    <!-- Step 1 -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="bg-primary bg-opacity-10 text-primary rounded p-2 d-inline-flex">
+                                    <i class="bi bi-box-seam fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">1. Sestavení Docker obrazu</h6>
+                                    <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
+                                        Lokálně sestaví Docker image <code>slurm-simulator-img:latest</code> (založený na Ubuntu 22.04) se Slurmctld, Slurmd, Slurmdbd, Munge a MariaDB.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 2 -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="bg-success bg-opacity-10 text-success rounded p-2 d-inline-flex">
+                                    <i class="bi bi-play-circle fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">2. Spuštění kontejneru</h6>
+                                    <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
+                                        Spustí kontejner <code>slurm-simulator-{id}</code> na pozadí a namapuje jeho SSH port 22 na náhodný volný port hostitele (např. 2222).
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="bg-info bg-opacity-10 text-info rounded p-2 d-inline-flex">
+                                    <i class="bi bi-server fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">3. Registrace v HEAppE</h6>
+                                    <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
+                                        Vytvoří v HEAppE nový Cluster, metodu přenosu souborů (SFTP/SCP), CPU/GPU fronty (Queues) a queue grupy (Node Type Aggregations) včetně účtovacích vzorců.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4 -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="bg-warning bg-opacity-10 text-warning-emphasis rounded p-2 d-inline-flex">
+                                    <i class="bi bi-key fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">4. Vytvoření přístupů</h6>
+                                    <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
+                                        Vytvoří testovací projekt, přiřadí ho ke clusteru, vygeneruje přihlašovací údaje (SSH klíče) pro simulovaného uživatele a inicializuje adresáře.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning border-0 rounded-3 small mb-0 d-flex gap-3 text-start">
+                    <i class="bi bi-exclamation-triangle-fill text-warning fs-4 flex-shrink-0"></i>
+                    <div>
+                        <strong>Důležité upozornění:</strong> Ujistěte se, že máte na svém počítači spuštěný <strong>Docker</strong> daemon. První sestavení může trvat 15–30 sekund v závislosti na rychlosti stahování balíčků. Kontejner budete moci následně pohodlně sledovat nebo zastavit ze sekce <strong>Deployments</strong>.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Zrušit</button>
+                <button type="button" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="confirmSpinUpSlurmBtn">
+                    <i class="bi bi-rocket-takeoff-fill me-1"></i>Pokračovat a spustit
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Slurm Setup Modal -->
 <div class="modal fade" id="slurmSetupModal" tabindex="-1" aria-labelledby="slurmSetupLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -310,6 +415,9 @@
     document.addEventListener('DOMContentLoaded', function () {
         const spinUpBtn = document.getElementById('spinUpSlurmBtn');
         const spinUpBtnEmpty = document.getElementById('spinUpSlurmBtnEmpty');
+        
+        const slurmConfirmModal = new bootstrap.Modal(document.getElementById('slurmConfirmModal'));
+        const confirmSpinUpSlurmBtn = document.getElementById('confirmSpinUpSlurmBtn');
         
         const slurmSetupModal = new bootstrap.Modal(document.getElementById('slurmSetupModal'));
         const logElement = document.getElementById('slurm-setup-logs');
@@ -399,10 +507,28 @@
         }
 
         if (spinUpBtn) {
-            spinUpBtn.addEventListener('click', startSlurmSetup);
+            spinUpBtn.addEventListener('click', function() {
+                slurmConfirmModal.show();
+            });
         }
         if (spinUpBtnEmpty) {
-            spinUpBtnEmpty.addEventListener('click', startSlurmSetup);
+            spinUpBtnEmpty.addEventListener('click', function() {
+                slurmConfirmModal.show();
+            });
+        }
+        if (confirmSpinUpSlurmBtn) {
+            confirmSpinUpSlurmBtn.addEventListener('click', function() {
+                slurmConfirmModal.hide();
+                startSlurmSetup();
+            });
+        }
+
+        // Handle auto-trigger if url parameter is set
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('action') === 'spin-slurm') {
+            slurmConfirmModal.show();
+            // clean up the URL parameters so it doesn't prompt again on refresh
+            window.history.replaceState({}, document.title, window.location.pathname);
         }
     });
 </script>
