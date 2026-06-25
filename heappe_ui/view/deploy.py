@@ -983,7 +983,7 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 action_message = "Configuration regeneration started in the background."
                 action_status = 'info'
 
-            elif action in ['start', 'stop', 'restart']:
+            elif action in ['start', 'stop', 'restart', 'delete']:
                 action_message, action_status = handle_container_action(
                     client, instance_name, action, request.POST.get('container_id')
                 )
