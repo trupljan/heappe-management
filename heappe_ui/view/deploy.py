@@ -1010,6 +1010,8 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                         elif 'unseal' in name:
                             return 7
                         return 4
+                    elif 'sshagent' in name or 'ssh-agent' in name:
+                        return 8
                     return 100
                 updated_containers.sort(key=get_sort_weight)
                 return JsonResponse({
@@ -1043,6 +1045,8 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     elif 'unseal' in name:
                         return 7
                     return 4
+                elif 'sshagent' in name or 'ssh-agent' in name:
+                    return 8
                 return 100
             containers.sort(key=get_sort_weight)
 

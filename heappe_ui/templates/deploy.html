@@ -238,11 +238,12 @@
                 {% endfor %}
             </div>
 
-            <!-- Infrastructure & Security (Vault) -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-shield-lock text-info"></i>Infrastructure &amp; Security (Vault)</h5>
+            <!-- Infrastructure & Security (Vault, SSH Agent) -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-shield-lock text-info"></i>Infrastructure &amp; Security (Vault, SSH Agent)</h5>
             <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
                 {% for item in containers %}
-                {% if 'heappe' not in item.container.name.lower and 'datastaging' not in item.container.name.lower and 'mssql' not in item.container.name.lower and 'db' not in item.container.name.lower and 'otel' not in item.container.name.lower and 'jaeger' not in item.container.name.lower and 'slurm' not in item.container.name.lower and 'sshagent' not in item.container.name.lower and 'ssh-agent' not in item.container.name.lower %}
+                {% if 'heappe' not in item.container.name.lower and 'datastaging' not in item.container.name.lower and 'mssql' not in item.container.name.lower and 'db' not in item.container.name.lower and 'otel' not in item.container.name.lower and 'jaeger' not in item.container.name.lower and 'slurm' not in item.container.name.lower %}
+                {% if 'sshagent' not in item.container.name.lower and 'ssh-agent' not in item.container.name.lower or instance_name|add:"_" in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
                 <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
                     <div class="card h-100 shadow-sm border-0">
@@ -293,6 +294,7 @@
                     </div>
                 </div>
                 {% endwith %}
+                {% endif %}
                 {% endif %}
                 {% endfor %}
             </div>
@@ -361,6 +363,7 @@
             <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-5">
                 {% for item in containers %}
                 {% if 'slurm' in item.container.name.lower or 'sshagent' in item.container.name.lower or 'ssh-agent' in item.container.name.lower %}
+                {% if 'slurm' in item.container.name.lower or instance_name|add:"_" not in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
                 <div class="col">
                     <div class="card h-100 shadow-sm border-0">
@@ -411,6 +414,7 @@
                     </div>
                 </div>
                 {% endwith %}
+                {% endif %}
                 {% endif %}
                 {% endfor %}
             </div>
