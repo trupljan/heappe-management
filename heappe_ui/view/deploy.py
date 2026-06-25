@@ -99,14 +99,22 @@ def execute_docker_compose(command, compose_dir, timeout=300):
 
 def get_container_details(container):
     """Extract detailed information from a Docker container."""
-    port_mappings = container.attrs['NetworkSettings']['Ports']
+    port_mappings = container.attrs.get('NetworkSettings', {}).get('Ports') or {}
     ports_info = []
+    mapped = []
+    unmapped = []
     for container_port, host_ports in port_mappings.items():
         if host_ports:
             for host_port in host_ports:
-                ports_info.append(f"{host_port['HostIp']}:{host_port['HostPort']} -> {container_port}")
+                ip = host_port.get('HostIp', '')
+                port = host_port.get('HostPort', '')
+                if ip in ('0.0.0.0', '::', ''):
+                    mapped.append(f"{port}->{container_port}")
+                else:
+                    mapped.append(f"{ip}:{port}->{container_port}")
         else:
-            ports_info.append(f"{container_port} (no host mapping)")
+            unmapped.append(f"{container_port}")
+    ports_info = mapped + unmapped
     try:
         image_tags = ', '.join(container.image.tags) if container.image.tags else 'N/A'
     except docker.errors.ImageNotFound:
