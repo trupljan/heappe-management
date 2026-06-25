@@ -140,35 +140,35 @@
                                 <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
                             </ul>
                         </div>
-                        <div class="card-footer bg-white border-top-0 pb-3">
-                            <div class="btn-group w-100 shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
+                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
+                            <div class="btn-group shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
                                 </form>
-                                <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
+                                <form id="stop-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
                                 </form>
-                                <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
+                                <form id="restart-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
                                 </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-dark w-100 open-fm-tab-btn" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-dark open-fm-tab-btn" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
                                 {% if 'heappe' in container.name.lower %}
-                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings.json" class="btn btn-sm btn-outline-primary w-100 d-flex align-items-center justify-content-center" title="Configure (appsettings.json)"><i class="bi bi-gear"></i></a>
+                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings.json" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center" title="Configure (appsettings.json)"><i class="bi bi-gear"></i></a>
                                 {% elif 'datastaging' in container.name.lower %}
-                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings-data.json" class="btn btn-sm btn-outline-primary w-100 d-flex align-items-center justify-content-center" title="Configure (appsettings-data.json)"><i class="bi bi-gear"></i></a>
+                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings-data.json" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center" title="Configure (appsettings-data.json)"><i class="bi bi-gear"></i></a>
                                 {% endif %}
                             </div>
                         </div>
@@ -205,30 +205,30 @@
                                 <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
                             </ul>
                         </div>
-                        <div class="card-footer bg-white border-top-0 pb-3">
-                            <div class="btn-group w-100 shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
+                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
+                            <div class="btn-group shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
                                 </form>
-                                <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
+                                <form id="stop-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
                                 </form>
-                                <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
+                                <form id="restart-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
                                 </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
                             </div>
                         </div>
                     </div>
@@ -264,30 +264,30 @@
                                 <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
                             </ul>
                         </div>
-                        <div class="card-footer bg-white border-top-0 pb-3">
-                            <div class="btn-group w-100 shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
+                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
+                            <div class="btn-group shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
                                 </form>
-                                <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
+                                <form id="stop-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
                                 </form>
-                                <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
+                                <form id="restart-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
                                 </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
                             </div>
                         </div>
                     </div>
@@ -323,30 +323,30 @@
                                 <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
                             </ul>
                         </div>
-                        <div class="card-footer bg-white border-top-0 pb-3">
-                            <div class="btn-group w-100 shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
+                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
+                            <div class="btn-group shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
                                 </form>
-                                <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
+                                <form id="stop-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
                                 </form>
-                                <form id="restart-form-{{ container.id }}" class="w-100 container-control-form">
+                                <form id="restart-form-{{ container.id }}" class="container-control-form">
                                     {% csrf_token %}
                                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                                     <input type="hidden" name="container_id" value="{{ container.id }}">
                                     <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info h-100 w-100" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
                                 </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
                             </div>
                         </div>
                     </div>
