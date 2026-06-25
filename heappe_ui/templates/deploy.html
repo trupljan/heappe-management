@@ -409,6 +409,13 @@
                                     <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
                                 </form>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <form id="delete-form-{{ container.id }}" class="container-control-form" onsubmit="return confirm('Are you sure you want to delete container {{ container.name }}?');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="delete">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Container"><i class="bi bi-trash"></i></button>
+                                </form>
                             </div>
                         </div>
                     </div>

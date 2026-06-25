@@ -354,6 +354,9 @@ def handle_container_action(client, instance_name, action, container_id):
         elif action == 'restart':
             container.restart()
             return f"Container {container.name} restarted successfully.", 'success'
+        elif action == 'delete':
+            container.remove(force=True)
+            return f"Container {container.name} deleted successfully.", 'success'
     except docker.errors.NotFound:
         return f"Container {container_id} not found.", 'danger'
     except docker.errors.APIError as e:
