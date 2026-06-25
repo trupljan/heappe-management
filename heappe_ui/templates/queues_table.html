@@ -87,41 +87,6 @@
                                             data-bs-target="#deleteQueueModal{{ queue.id }}">
                                         <i class="bi bi-trash"></i>
                                     </button>
-
-                                    <!-- Delete Confirmation Modal -->
-                                    <div class="modal fade" id="deleteQueueModal{{ queue.id }}" tabindex="-1" aria-labelledby="deleteQueueLabel{{ queue.id }}" aria-hidden="true" data-bs-backdrop="static">
-                                        <div class="modal-dialog modal-dialog-centered text-start">
-                                            <div class="modal-content border-0 shadow-lg rounded-3">
-                                                <div class="modal-header bg-danger text-white border-0 py-3 px-4">
-                                                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="deleteQueueLabel{{ queue.id }}">
-                                                        <i class="bi bi-exclamation-triangle-fill"></i>
-                                                        <span>Delete Queue</span>
-                                                    </h5>
-                                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                </div>
-                                                <div class="modal-body p-4 text-center">
-                                                    <p class="text-secondary small mb-2">You are about to permanently delete the queue:</p>
-                                                    <h5 class="fw-bold text-dark my-3 font-monospace">{{ queue.name }}</h5>
-                                                    <div class="alert alert-danger border-0 rounded-3 small mb-0 d-flex gap-2 text-start">
-                                                        <i class="bi bi-exclamation-octagon-fill text-danger fs-5 flex-shrink-0"></i>
-                                                        <div><strong>Warning:</strong> This action cannot be undone. Jobs will no longer be scheduled to this queue.</div>
-                                                    </div>
-                                                </div>
-                                                <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
-                                                    <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
-                                                    <form action="{% url 'queue_delete' queue.id %}" method="post" class="d-inline m-0">
-                                                        {% csrf_token %}
-                                                        {% if cluster.id %}
-                                                        <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
-                                                        {% endif %}
-                                                        <button type="submit" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
-                                                            <i class="bi bi-trash me-1"></i>Delete Queue
-                                                        </button>
-                                                    </form>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -130,6 +95,43 @@
                 </table>
             </div>
         </form>
+
+        <!-- Delete Confirmation Modals -->
+        {% for queue in queues %}
+        <div class="modal fade" id="deleteQueueModal{{ queue.id }}" tabindex="-1" aria-labelledby="deleteQueueLabel{{ queue.id }}" aria-hidden="true" data-bs-backdrop="static">
+            <div class="modal-dialog modal-dialog-centered text-start">
+                <div class="modal-content border-0 shadow-lg rounded-3">
+                    <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                        <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="deleteQueueLabel{{ queue.id }}">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <span>Delete Queue</span>
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4 text-center">
+                        <p class="text-secondary small mb-2">You are about to permanently delete the queue:</p>
+                        <h5 class="fw-bold text-dark my-3 font-monospace">{{ queue.name }}</h5>
+                        <div class="alert alert-danger border-0 rounded-3 small mb-0 d-flex gap-2 text-start">
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5 flex-shrink-0"></i>
+                            <div><strong>Warning:</strong> This action cannot be undone. Jobs will no longer be scheduled to this queue.</div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                        <form action="{% url 'queue_delete' queue.id %}" method="post" class="d-inline m-0">
+                            {% csrf_token %}
+                            {% if cluster.id %}
+                            <input type="hidden" name="ClusterId" value="{{ cluster.id }}">
+                            {% endif %}
+                            <button type="submit" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                                <i class="bi bi-trash me-1"></i>Delete Queue
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
 
         <!-- Queue Bulk Delete Modal -->
         <div class="modal fade" id="queueBulkDeleteModal" tabindex="-1" aria-labelledby="queueBulkDeleteLabel" aria-hidden="true" data-bs-backdrop="static">
