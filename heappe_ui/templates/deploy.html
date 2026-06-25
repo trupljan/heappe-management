@@ -116,7 +116,7 @@
 
             <!-- API Services -->
             <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-2"><i class="bi bi-cpu text-primary"></i>API Services</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-4">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
                 {% for item in containers %}
                 {% if 'heappe' in item.container.name.lower or 'datastaging' in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
@@ -181,7 +181,7 @@
 
             <!-- Database Services -->
             <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-database text-info"></i>Database Services</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-4">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
                 {% for item in containers %}
                 {% if 'mssql' in item.container.name.lower or 'db' in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
@@ -240,7 +240,7 @@
 
             <!-- Infrastructure & Security (Vault) -->
             <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-shield-lock text-info"></i>Infrastructure &amp; Security (Vault)</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-4">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
                 {% for item in containers %}
                 {% if 'heappe' not in item.container.name.lower and 'datastaging' not in item.container.name.lower and 'mssql' not in item.container.name.lower and 'db' not in item.container.name.lower and 'otel' not in item.container.name.lower and 'jaeger' not in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
@@ -299,7 +299,7 @@
 
             <!-- Telemetry & APM (Jaeger, OpenTelemetry) -->
             <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-activity text-info"></i>Telemetry &amp; APM (Jaeger, OpenTelemetry)</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-5">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-5">
                 {% for item in containers %}
                 {% if 'otel' in item.container.name.lower or 'jaeger' in item.container.name.lower %}
                 {% with container=item.container ports=item.ports %}
