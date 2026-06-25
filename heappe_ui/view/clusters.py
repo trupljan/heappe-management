@@ -904,8 +904,35 @@ ENTRYPOINT ["/entrypoint.sh"]
         log(f"Docker container '{container_name}' started successfully.")
 
         # Step 4: Wait for services inside container to initialize
-        log("Waiting 10 seconds for services inside container (SSH, MariaDB, Slurm) to initialize...")
-        time.sleep(10)
+        import socket
+        log(f"Waiting for SSH daemon inside container to start on port {port} (timeout 90s)...")
+        start_time = time.time()
+        ssh_ready = False
+        timeout = 90
+        while time.time() - start_time < timeout:
+            s = None
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.settimeout(2)
+                s.connect(("127.0.0.1", port))
+                banner = s.recv(1024)
+                if banner and b"SSH-" in banner:
+                    ssh_ready = True
+                    break
+            except Exception:
+                pass
+            finally:
+                if s:
+                    try:
+                        s.close()
+                    except Exception:
+                        pass
+            time.sleep(1)
+
+        if not ssh_ready:
+            raise RuntimeError(f"SSH daemon on port {port} did not become ready within {timeout} seconds.")
+        log("SSH daemon is ready and responding with SSH banner. Waiting an additional 2 seconds to settle...")
+        time.sleep(2)
         
         # Step 5: Configure HEAppE
         # Load credentials from DB exactly like HeappeAuthBackend / middleware do.
