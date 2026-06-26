@@ -64,6 +64,7 @@
     .terminal-console-body {
         background-color: #121214 !important;
         overflow-y: auto;
+        overflow-x: auto;
         height: calc(100% - 48px);
         padding: 0 !important;
     }
@@ -106,6 +107,7 @@
         margin-bottom: 0;
         border-collapse: collapse;
         width: 100%;
+        table-layout: fixed;
     }
 
     .log-row {
@@ -314,7 +316,14 @@
                     <i class="bi bi-terminal text-secondary fs-6"></i>
                     <span class="fw-bold small text-uppercase text-light-emphasis font-monospace" style="font-size: 0.72rem; letter-spacing: 0.05em; color: #a1a1aa !important;">Console Output</span>
                 </div>
-                <div class="d-flex gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <!-- Live Tail toggle inside header -->
+                    <div class="d-flex align-items-center gap-1.5 me-2 border border-secondary rounded-pill py-0.5 px-2 bg-dark bg-opacity-20" style="border-color: #3f3f46 !important; height: 26px;">
+                        <div class="form-check form-switch mb-0 d-flex align-items-center">
+                            <input class="form-check-input" type="checkbox" id="headerLiveStreamToggle" style="cursor: pointer; width: 1.8em; height: 0.9em; margin-top: 0;">
+                        </div>
+                        <span id="headerLiveStatus" class="font-monospace text-muted" style="font-size: 0.65rem; min-width: 45px; user-select: none;">Live: Off</span>
+                    </div>
                     <button class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace text-light-emphasis border-secondary" style="font-size: 0.7rem; border-color: #3f3f46 !important;" onclick="scrollToBottom()">Scroll to Bottom</button>
                     <button id="fullscreenToggleBtn" class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace text-light-emphasis border-secondary" style="font-size: 0.7rem; border-color: #3f3f46 !important;" title="Toggle Fullscreen">
                         <i class="bi bi-fullscreen text-secondary"></i>
@@ -343,7 +352,9 @@
     const logWindow = document.getElementById('logWindow');
     const tableBody = document.getElementById('logTableBody');
     const liveToggle = document.getElementById('liveStreamToggle');
+    const headerLiveToggle = document.getElementById('headerLiveStreamToggle');
     const liveStatus = document.getElementById('liveStatus');
+    const headerLiveStatus = document.getElementById('headerLiveStatus');
     const entryCountDisplay = document.getElementById('entryCount');
 
     function scrollToBottom() { logWindow.scrollTop = logWindow.scrollHeight; }
@@ -365,22 +376,57 @@
         } catch (e) { console.error(e); }
     }
 
-    liveToggle.addEventListener('change', function() {
-        if (this.checked) {
+    function updateLiveState(checked) {
+        if (liveToggle) liveToggle.checked = checked;
+        if (headerLiveToggle) headerLiveToggle.checked = checked;
+
+        if (checked) {
             const baseUrl = "{% url 'fetch_new_logs' %}";
             const levelVal = document.querySelector('select[name="level"]').value;
             fetch(`${baseUrl}?offset=-1&level=${levelVal}`).then(r => r.json()).then(data => {
                 logOffset = data.offset;
-                liveStatus.innerHTML = '<span class="pulse-dot"></span>Active';
-                liveStatus.className = "small d-flex align-items-center gap-1.5 live-status-active";
-                liveInterval = setInterval(pullLogs, 2000);
+                
+                const activeHtml = '<span class="pulse-dot"></span>Active';
+                if (liveStatus) {
+                    liveStatus.innerHTML = activeHtml;
+                    liveStatus.className = "small d-flex align-items-center gap-1.5 live-status-active";
+                }
+                if (headerLiveStatus) {
+                    headerLiveStatus.innerHTML = 'Live: Active';
+                    headerLiveStatus.className = "font-monospace small live-status-active text-success";
+                }
+                
+                if (!liveInterval) {
+                    liveInterval = setInterval(pullLogs, 2000);
+                }
             });
         } else {
-            if (liveInterval) clearInterval(liveInterval);
-            liveStatus.innerHTML = 'Off';
-            liveStatus.className = "small text-muted d-flex align-items-center gap-1.5 fst-italic";
+            if (liveInterval) {
+                clearInterval(liveInterval);
+                liveInterval = null;
+            }
+            if (liveStatus) {
+                liveStatus.innerHTML = 'Off';
+                liveStatus.className = "small text-muted d-flex align-items-center gap-1.5 fst-italic";
+            }
+            if (headerLiveStatus) {
+                headerLiveStatus.innerHTML = 'Live: Off';
+                headerLiveStatus.className = "font-monospace small text-muted";
+            }
         }
-    });
+    }
+
+    if (liveToggle) {
+        liveToggle.addEventListener('change', function() {
+            updateLiveState(this.checked);
+        });
+    }
+
+    if (headerLiveToggle) {
+        headerLiveToggle.addEventListener('change', function() {
+            updateLiveState(this.checked);
+        });
+    }
 
     // Fullscreen toggle logic
     const terminalCard = document.getElementById('terminalCard');
