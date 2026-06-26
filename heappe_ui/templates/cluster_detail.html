@@ -79,9 +79,11 @@
                                 <div class="col-md-6">
                                     <label class="form-label small text-muted fw-semibold">Scheduler Type</label>
                                     <select class="form-select form-select-sm border-light-subtle" name="SchedulerType">
-                                        <option value="1" {% if cluster.scheduler_type == 1 %}selected{% endif %}>LinuxLocal</option>
+                                        {% if cluster.scheduler_type == 1 %}
+                                        <option value="1" selected>LinuxLocal</option>
+                                        {% endif %}
                                         <option value="2" {% if cluster.scheduler_type == 2 %}selected{% endif %}>PbsPro</option>
-                                        <option value="4" {% if cluster.scheduler_type == 4 %}selected{% endif %}>Slurm</option>
+                                        <option value="4" {% if not cluster.scheduler_type or cluster.scheduler_type == 4 %}selected{% endif %}>Slurm</option>
                                         <option value="8" {% if cluster.scheduler_type == 8 %}selected{% endif %}>HyperQueue</option>
                                         {% if is_v6_4_0_plus %}
                                         <option value="16" {% if cluster.scheduler_type == 16 %}selected{% endif %}>FirecREST (Slurm)</option>
@@ -490,8 +492,10 @@
                                 <label class="form-label small text-muted fw-semibold">Protocol</label>
                                 <select class="form-select form-select-sm border-light-subtle bg-white" name="Protocol" required>
                                     {% for pid, pname in PROTOCOL_CHOICES %}
-                                        {% if is_v6_4_0_plus or pid < 8 %}
-                                            <option value="{{ pid }}">{{ pname }}</option>
+                                        {% if pid != 1 and pid != 4 %}
+                                            {% if is_v6_4_0_plus or pid < 8 %}
+                                                <option value="{{ pid }}" {% if pid == 2 %}selected{% endif %}>{{ pname }}</option>
+                                            {% endif %}
                                         {% endif %}
                                     {% endfor %}
                                 </select>
@@ -531,8 +535,10 @@
                                 <label class="form-label small text-muted fw-semibold">Protocol</label>
                                 <select class="form-select form-select-sm border-light-subtle bg-white" name="Protocol" id="editProtocol" required>
                                     {% for pid, pname in PROTOCOL_CHOICES %}
-                                        {% if is_v6_4_0_plus or pid < 8 %}
-                                            <option value="{{ pid }}">{{ pname }}</option>
+                                        {% if pid != 1 and pid != 4 %}
+                                            {% if is_v6_4_0_plus or pid < 8 %}
+                                                <option value="{{ pid }}">{{ pname }}</option>
+                                            {% endif %}
                                         {% endif %}
                                     {% endfor %}
                                 </select>
@@ -553,10 +559,32 @@
                 if (editModal) {
                     editModal.addEventListener('show.bs.modal', function (event) {
                         var button = event.relatedTarget
+                        var protoId = button.getAttribute('data-protocol-id')
+                        var editProtocolSelect = document.getElementById('editProtocol')
+                        
+                        // First, remove any dynamically added local options (value 1 and 4)
+                        var option1 = editProtocolSelect.querySelector('option[value="1"]');
+                        if (option1) option1.remove();
+                        var option4 = editProtocolSelect.querySelector('option[value="4"]');
+                        if (option4) option4.remove();
+                        
+                        // If the current protocol is one of the local ones, add it back so it can be selected/shown
+                        if (protoId === "1") {
+                            var opt = document.createElement('option');
+                            opt.value = "1";
+                            opt.textContent = "Network Share";
+                            editProtocolSelect.appendChild(opt);
+                        } else if (protoId === "4") {
+                            var opt = document.createElement('option');
+                            opt.value = "4";
+                            opt.textContent = "Local SFTP/SCP";
+                            editProtocolSelect.appendChild(opt);
+                        }
+                        
                         document.getElementById('editFileTransferId').value = button.getAttribute('data-id')
                         document.getElementById('editServerHostname').value = button.getAttribute('data-hostname')
                         document.getElementById('editPort').value = button.getAttribute('data-port') || ''
-                        document.getElementById('editProtocol').value = button.getAttribute('data-protocol-id')
+                        editProtocolSelect.value = protoId
                     });
                 }
             });

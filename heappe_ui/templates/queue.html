@@ -153,8 +153,10 @@
             <label for="Protocol" class="form-label small text-muted fw-semibold">Protocol</label>
             <select class="form-select form-select-sm border-light-subtle bg-white" id="Protocol" name="Protocol" required>
               {% for pid, pname in PROTOCOL_CHOICES %}
-                {% if is_v6_4_0_plus or pid < 8 %}
-                  <option value="{{ pid }}">{{ pname }}</option>
+                {% if pid != 1 and pid != 4 %}
+                  {% if is_v6_4_0_plus or pid < 8 %}
+                    <option value="{{ pid }}" {% if pid == 2 %}selected{% endif %}>{{ pname }}</option>
+                  {% endif %}
                 {% endif %}
               {% endfor %}
             </select>

@@ -12,84 +12,72 @@
 
   vars:
     # --- APPLICATION CONFIGURATION ---
+    service_name: "adminpanel"
     app_dir: "/opt/heappe/heappe-admin-app"
     app_port: 8000
     app_bind: "0.0.0.0:{{ app_port }}"
-    service_file: "/etc/systemd/system/adminpanel.service"
+    service_file: "/etc/systemd/system/{{ service_name }}.service"
 
     # --- GIT CONFIGURATION ---
     git_repo: "opencode.it4i.eu/heappe-middleware/heappe-management.git"
     git_branch: "main"
 
     # --- PYTHON CONFIGURATION ---
-    build_dir: "{{ app_dir }}/build"
-    python_version_major: 3
-    python_version_minor: 12
-    python_version_patch: 12
-    python_exe: "python{{ python_version_major }}.{{ python_version_minor }}"
-    python_version: "{{ python_version_major }}.{{ python_version_minor }}.{{ python_version_patch }}"
-    python_src_dir: "{{ build_dir }}/python"
-    python_prefix: "{{ app_dir }}/python"
+    python_exe: "python3.12"
+    python_bin_path: "/usr/bin/{{ python_exe }}"
     venv_dir: "{{ app_dir }}/branches/.venv-{{ git_branch }}"
 
   tasks:
     # -------------------------------------------------------------------------
     # 1. PREREQUISITES & DOCKER
     # -------------------------------------------------------------------------
-    - name: Install required base packages for building Python (Ubuntu / Debian)
+    - name: Install Python and required base packages (Ubuntu / Debian)
       ansible.builtin.apt:
         name:
-          - wget
-          - curl
-          - build-essential
-          - xz-utils
-          - tk-dev
-          - zlib1g-dev
-          - libncurses-dev
-          - libgdbm-dev
-          - libnss3-dev
-          - libssl-dev
-          - libreadline-dev
-          - libffi-dev
-          - libbz2-dev
-          - libsqlite3-dev
-          - liblzma-dev
-          - libc6-dev
-        state: present
-      when: ansible_os_family == 'Debian'
-
-    - name: Install required base packages for building Python (CentOS / RHEL)
-      ansible.builtin.dnf:
-        name:
-          - git
-          - gcc
-          - make
-          - bzip2
-          - bzip2-devel
-          - xz-devel
-          - zlib-devel
-          - libffi-devel
-          - wget
-          - curl
-          - unixODBC
-          - yum-utils
-          - dnf-plugins-core
-          - openssl-devel
-          - readline-devel
-          - sqlite-devel
-        state: present
-      when: ansible_os_family == 'RedHat'
-
-    - name: Install required base packages (Ubuntu / Debian)
-      ansible.builtin.apt:
-        name:
+          - "{{ python_exe }}"
+          - "{{ python_exe }}-venv"
+          - python3-pip
           - apt-transport-https
           - ca-certificates
           - curl
           - gnupg-agent
           - libodbc2
         state: present
+        update_cache: true
       when: ansible_os_family == 'Debian'
+
+    - name: Install base packages (CentOS / RHEL)
+      ansible.builtin.dnf:
+        name:
+          - git
+          - wget
+          - curl
+          - unixODBC
+          - dnf-plugins-core
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install Python packages (CentOS / RHEL)
+      ansible.builtin.dnf:
+        name:
+          - "{{ python_exe }}"
+          - "{{ python_exe }}-devel"
+          - "{{ python_exe }}-pip"
+        state: present
+      when:
+        - ansible_os_family == 'RedHat'
+        - python_exe != 'python3'
+
+    - name: Install default Python packages if python_exe is python3 (CentOS / RHEL)
+      ansible.builtin.dnf:
+        name:
+          - python3
+          - python3-devel
+          - python3-pip
+        state: present
+      when:
+        - ansible_os_family == 'RedHat'
+        - python_exe == 'python3'
 
     - name: Add Docker repository (Ubuntu / Debian)
       ansible.builtin.deb822_repository:
@@ -162,55 +150,7 @@
         value: "{{ app_dir }}/branches/{{ git_branch }}"
 
     # -------------------------------------------------------------------------
-    # 3. PYTHON COMPILATION
-    # -------------------------------------------------------------------------
-    - name: Create Python source directory
-      ansible.builtin.file:
-        path: "{{ python_src_dir }}"
-        state: directory
-        mode: '0755'
-
-    - name: Download Python source
-      ansible.builtin.get_url:
-        url: "https://www.python.org/ftp/python/{{ python_version }}/Python-{{ python_version }}.tgz"
-        dest: "{{ python_src_dir }}/Python-{{ python_version }}.tgz"
-        mode: '0644'
-
-    - name: Extract Python source
-      ansible.builtin.unarchive:
-        src: "{{ python_src_dir }}/Python-{{ python_version }}.tgz"
-        dest: "{{ python_src_dir }}"
-        remote_src: true
-
-    - name: Delete extracted .tgz file
-      ansible.builtin.shell: |
-        rm -f {{ python_src_dir }}/Python-{{ python_version }}.tgz
-      changed_when: true
-
-    - name: Create Python installation directory (prefix)
-      ansible.builtin.file:
-        path: "{{ python_prefix }}"
-        state: directory
-        mode: '0755'
-
-    - name: Compile and install Python from source
-      ansible.builtin.shell: |
-        cd {{ python_src_dir }}/Python-{{ python_version }}
-        ./configure --enable-optimizations --with-ensurepip=install --prefix={{ python_prefix }}
-        make -j $(nproc)
-        make altinstall
-      args:
-        creates: "{{ python_prefix }}/bin/{{ python_exe }}"
-
-    - name: Some cleanup
-      ansible.builtin.shell: |
-        rm -rf {{ python_src_dir }}/Python-{{ python_version }}
-        test -n "$(ls -A "{{ python_src_dir }}")" || rmdir "{{ python_src_dir }}"
-        test -n "$(ls -A "{{ build_dir }}")" || rmdir "{{ build_dir }}"
-      changed_when: true
-
-    # -------------------------------------------------------------------------
-    # 4. SERVICE SETUP & DEPLOY
+    # 3. SERVICE SETUP & DEPLOY
     # -------------------------------------------------------------------------
     - name: Create systemd service
       ansible.builtin.copy:
@@ -226,7 +166,7 @@
           Group=root
           WorkingDirectory={{ app_dir }}/branches/{{ git_branch }}
           # Create venv if missing
-          ExecStartPre=/bin/bash -c '[[ -d {{ venv_dir }} ]] || {{ python_prefix }}/bin/{{ python_exe }} -m venv {{ venv_dir }}'
+          ExecStartPre=/bin/bash -c '[[ -d {{ venv_dir }} ]] || {{ python_bin_path }} -m venv {{ venv_dir }}'
           # Install dependencies
           ExecStartPre={{ venv_dir }}/bin/pip install --upgrade pip
           ExecStartPre={{ venv_dir }}/bin/pip install -r {{ app_dir }}/branches/{{ git_branch }}/requirements.txt
@@ -258,7 +198,7 @@
 
     - name: Enable and restart adminpanel service
       ansible.builtin.systemd:
-        name: adminpanel
+        name: "{{ service_name }}"
         enabled: true
         daemon_reload: true
         state: restarted
