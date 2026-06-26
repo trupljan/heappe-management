@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.urls import reverse
+from django.http import JsonResponse
 
 from .imports import *
 from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_view, login_required, ACCOUNTING_OPERATORS, ACCOUNTING_TIMES, ACCOUNTING_NUMBERS, _parse_datetime_local
@@ -351,6 +352,38 @@ def queue_group_create(request: HttpRequest) -> HttpResponse:
             "ValidityTo": _parse_datetime_local(request.POST.get("ValidityTo")),
         }
         payload = _create_payload(request.session_code, payload_data)
+        
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('format') == 'json'
+        
+        if is_ajax:
+            try:
+                result_obj = controller.heappe_management_cluster_node_type_aggregation_post(**payload)
+                result = result_obj.to_dict() if hasattr(result_obj, "to_dict") else result_obj
+                
+                if isinstance(result, str):
+                    import json
+                    try:
+                        result = json.loads(result)
+                    except Exception:
+                        pass
+                
+                new_id = None
+                if isinstance(result, dict):
+                    new_id = result.get('Id') or result.get('id')
+                elif hasattr(result_obj, 'Id'):
+                    new_id = result_obj.Id
+                elif hasattr(result_obj, 'id'):
+                    new_id = result_obj.id
+                else:
+                    new_id = result
+                
+                if new_id:
+                    return JsonResponse({"status": "success", "id": new_id, "name": payload_data["Name"]})
+                    
+                return JsonResponse({"status": "error", "message": "Failed to retrieve new Queue Group ID."}, status=400)
+            except Exception as e:
+                return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
         result =  _handle_api_call(
             request,
             lambda: controller.heappe_management_cluster_node_type_aggregation_post(**payload),

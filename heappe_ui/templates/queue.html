@@ -105,12 +105,17 @@
                     <!-- Queue Group Selection -->
                     <div class="col-md-6">
                         <label for="groupId" class="form-label small text-muted fw-semibold">Queue Group</label>
-                        <select id="groupId" name="ClusterNodeTypeAggregationId" class="form-select form-select-sm border-light-subtle bg-white" required>
-                            <option value="" {% if not node_type.cluster_node_type_aggregation.id %}selected{% endif %} disabled>Select Queue Group</option>
-                            {% for group in queue_groups %}
-                                <option value="{{ group.id }}" {% if node_type.cluster_node_type_aggregation.id == group.id %}selected{% endif %}>{{ group.name }}</option>
-                            {% endfor %}
-                        </select>
+                        <div class="input-group input-group-sm">
+                            <select id="groupId" name="ClusterNodeTypeAggregationId" class="form-select border-light-subtle bg-white" required>
+                                <option value="" {% if not node_type.cluster_node_type_aggregation.id %}selected{% endif %} disabled>Select Queue Group</option>
+                                {% for group in queue_groups %}
+                                    <option value="{{ group.id }}" {% if node_type.cluster_node_type_aggregation.id == group.id %}selected{% endif %}>{{ group.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#createQueueGroupModal" title="Create New Queue Group">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -174,4 +179,177 @@
     </div>
   </div>
 </div>
+
+<!-- Modal for Creating Queue Group -->
+<div class="modal fade" id="createQueueGroupModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form id="ajaxCreateQueueGroupForm">
+        {% csrf_token %}
+        <div class="modal-header bg-light py-3">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-plus-lg me-1 text-primary"></i>Create Queue Group</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body p-4">
+          <div class="alert alert-danger d-none" id="queueGroupModalError" role="alert"></div>
+          
+          <div class="mb-3">
+            <label for="GroupName" class="form-label small text-muted fw-semibold">Name</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="GroupName" name="Name" required placeholder="e.g. barbora-aggregations">
+          </div>
+          
+          <div class="mb-3">
+            <label for="GroupDescription" class="form-label small text-muted fw-semibold">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+            <textarea class="form-control form-control-sm border-light-subtle bg-white" id="GroupDescription" name="Description" rows="2" placeholder="e.g. Aggregation group for Barbora cluster queues"></textarea>
+          </div>
+          
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label for="groupAllocationTypeSelect" class="form-label small text-muted fw-semibold">Allocation Type</label>
+              <select class="form-select form-select-sm border-light-subtle bg-white" id="groupAllocationTypeSelect" name="AllocationType" required>
+                <option value="" disabled selected>Select Allocation Type...</option>
+                <option value="CN">CN</option>
+                <option value="ACN">ACN</option>
+                <option value="FAT">FAT</option>
+                <option value="optional">Optional (Custom)</option>
+              </select>
+            </div>
+            
+            <div class="col-md-6" id="groupCustomAllocationDiv" style="display: none;">
+              <label for="groupCustomAllocationInput" class="form-label small text-muted fw-semibold">Custom Allocation Type</label>
+              <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="AllocationTypeCustom" id="groupCustomAllocationInput" placeholder="e.g. GPU">
+            </div>
+          </div>
+          
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="GroupValidityFrom" class="form-label small text-muted fw-semibold">Validity From</label>
+              <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" id="GroupValidityFrom" name="ValidityFrom" required>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="GroupValidityTo" class="form-label small text-muted fw-semibold">Validity To <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+              <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" id="GroupValidityTo" name="ValidityTo">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer bg-light border-top">
+          <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-success fw-bold px-3" id="btnSubmitQueueGroup">Create Group</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const groupSelect = document.getElementById('groupAllocationTypeSelect');
+    const customDiv = document.getElementById('groupCustomAllocationDiv');
+    const customInput = document.getElementById('groupCustomAllocationInput');
+
+    if (groupSelect) {
+        groupSelect.addEventListener('change', function() {
+            if (groupSelect.value === 'optional') {
+                customDiv.style.display = 'block';
+                customInput.required = true;
+            } else {
+                customDiv.style.display = 'none';
+                customInput.value = '';
+                customInput.required = false;
+            }
+        });
+    }
+
+    // Initialize Validity From to current time when modal opens
+    const modalElement = document.getElementById('createQueueGroupModal');
+    if (modalElement) {
+        modalElement.addEventListener('show.bs.modal', function () {
+            const now = new Date();
+            // Format now as YYYY-MM-DDTHH:MM
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            
+            const localDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
+            document.getElementById('GroupValidityFrom').value = localDateTime;
+            
+            // Clear errors and inputs
+            document.getElementById('queueGroupModalError').classList.add('d-none');
+            document.getElementById('queueGroupModalError').innerText = '';
+            document.getElementById('ajaxCreateQueueGroupForm').reset();
+            if (customDiv) customDiv.style.display = 'none';
+            if (customInput) customInput.required = false;
+        });
+    }
+
+    // Handle AJAX form submit
+    const ajaxForm = document.getElementById('ajaxCreateQueueGroupForm');
+    if (ajaxForm) {
+        ajaxForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('btnSubmitQueueGroup');
+            const errorDiv = document.getElementById('queueGroupModalError');
+            
+            // Disable button and show spinner/loading text
+            submitBtn.disabled = true;
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Creating...';
+            errorDiv.classList.add('d-none');
+            errorDiv.innerText = '';
+            
+            const formData = new FormData(ajaxForm);
+            
+            fetch("{% url 'queue_group_create' %}", {
+                method: "POST",
+                body: formData,
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(errData => {
+                        throw new Error(errData.message || "Failed to create queue group.");
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status === "success") {
+                    // Success! Add to select
+                    const mainGroupSelect = document.getElementById('groupId');
+                    const newOption = document.createElement('option');
+                    newOption.value = data.id;
+                    newOption.text = data.name;
+                    newOption.selected = true;
+                    mainGroupSelect.add(newOption);
+                    
+                    // Close Modal
+                    const modalInstance = bootstrap.Modal.getInstance(modalElement);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    } else {
+                        // Fallback close
+                        const closeBtn = modalElement.querySelector('[data-bs-dismiss="modal"]');
+                        if (closeBtn) closeBtn.click();
+                    }
+                } else {
+                    throw new Error(data.message || "An unknown error occurred.");
+                }
+            })
+            .catch(error => {
+                errorDiv.innerText = error.message;
+                errorDiv.classList.remove('d-none');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            });
+        });
+    }
+});
+</script>
 {% endblock %}

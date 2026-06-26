@@ -68,6 +68,23 @@
         padding: 0 !important;
     }
 
+    /* Fullscreen styling for terminal */
+    .terminal-card:fullscreen,
+    .terminal-card:-webkit-full-screen {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    .terminal-card:fullscreen .terminal-console-body,
+    .terminal-card:-webkit-full-screen .terminal-console-body {
+        flex-grow: 1 !important;
+        height: auto !important;
+    }
+
     /* Custom scrollbar for dark console */
     .terminal-console-body::-webkit-scrollbar {
         width: 8px;
@@ -290,14 +307,19 @@
 
     <!-- Log window pane -->
     <div class="col-12">
-        <div class="card terminal-card" style="height: 72vh;">
+        <div class="card terminal-card" style="height: 72vh;" id="terminalCard">
             <!-- Dark Terminal Header -->
             <div class="card-header terminal-header d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-terminal text-secondary fs-6"></i>
                     <span class="fw-bold small text-uppercase text-light-emphasis font-monospace" style="font-size: 0.72rem; letter-spacing: 0.05em; color: #a1a1aa !important;">Console Output</span>
                 </div>
-                <button class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace text-light-emphasis border-secondary" style="font-size: 0.7rem; border-color: #3f3f46 !important;" onclick="scrollToBottom()">Scroll to Bottom</button>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace text-light-emphasis border-secondary" style="font-size: 0.7rem; border-color: #3f3f46 !important;" onclick="scrollToBottom()">Scroll to Bottom</button>
+                    <button id="fullscreenToggleBtn" class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace text-light-emphasis border-secondary" style="font-size: 0.7rem; border-color: #3f3f46 !important;" title="Toggle Fullscreen">
+                        <i class="bi bi-fullscreen text-secondary"></i>
+                    </button>
+                </div>
             </div>
             <!-- Dark Console Body -->
             <div class="card-body terminal-console-body" id="logWindow">
@@ -359,5 +381,43 @@
             liveStatus.className = "small text-muted d-flex align-items-center gap-1.5 fst-italic";
         }
     });
+
+    // Fullscreen toggle logic
+    const terminalCard = document.getElementById('terminalCard');
+    const fullscreenToggleBtn = document.getElementById('fullscreenToggleBtn');
+    
+    if (fullscreenToggleBtn && terminalCard) {
+        fullscreenToggleBtn.addEventListener('click', function() {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (terminalCard.requestFullscreen) {
+                    terminalCard.requestFullscreen();
+                } else if (terminalCard.webkitRequestFullscreen) {
+                    terminalCard.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        });
+    }
+    
+    function handleFullscreenChange() {
+        const icon = document.querySelector('#fullscreenToggleBtn i');
+        const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+        if (icon) {
+            if (isFullscreen) {
+                icon.className = 'bi bi-fullscreen-exit text-secondary';
+                fullscreenToggleBtn.setAttribute('title', 'Exit Fullscreen');
+            } else {
+                icon.className = 'bi bi-fullscreen text-secondary';
+                fullscreenToggleBtn.setAttribute('title', 'Toggle Fullscreen');
+            }
+        }
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
 </script>
 {% endblock %}
