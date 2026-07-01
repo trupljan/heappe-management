@@ -11,10 +11,16 @@ urlpatterns = [
     path('profile/', views.profile_view, name='profile_view'),
     path('profile/generate-session-code/', views.generate_session_code_view, name='generate_session_code_view'),
     path('dashboard/', views.dashboard_view, name='dashboard_view'),
+    path('dashboard/health-partial/', views.dashboard_health_partial, name='dashboard_health_partial'),
+    path('dashboard/metrics-partial/', views.dashboard_metrics_partial, name='dashboard_metrics_partial'),
+    path('dashboard/jobs-distribution-partial/', views.dashboard_jobs_distribution_partial, name='dashboard_jobs_distribution_partial'),
+    path('dashboard/jobs-history-partial/', views.dashboard_jobs_history_partial, name='dashboard_jobs_history_partial'),
 
     path("deploy/", views.deploy_view, name="deploy_view"),
     path("deploy/<str:instance_name>/", views.deploy_view, name="deploy_view"),
+    path("deploy/<str:instance_name>/config/", views.instance_config_view, name="instance_config_view"),
     path("deploy/<str:instance_name>/update-status/", views.update_status_view, name="update_status"),
+    path("deploy/<str:instance_name>/telemetry/toggle/", views.toggle_telemetry_view, name="toggle_telemetry"),
     path('chose-instance/', views.chose_instance_view, name='chose_instance_view'),
     path('reconnect/', views.reconnect_view, name='reconnect_view'),
     path('container/<str:container_id>/file/<str:action>/', views.handle_file_action, name='container_file_action'),
@@ -25,6 +31,8 @@ urlpatterns = [
     path('clusters/<int:cluster_id>/<int:tab>', views.cluster_detail, name='cluster_detail'),
     path('clusters/<int:cluster_id>/delete/', views.cluster_delete, name='cluster_delete'),
     path('clusters/new/', views.cluster_create, name='cluster_create'),
+    path('clusters/setup-slurm/', views.setup_slurm_view, name='setup_slurm'),
+    path('clusters/setup-slurm-status/', views.setup_slurm_status_view, name='setup_slurm_status'),
 
     # Queues
     path('queues/', views.queues_view, name='queues_view'),
@@ -51,6 +59,8 @@ urlpatterns = [
     path('projects/', views.project_list, name='project_list'),
     path('submit-test-job/<int:command_template_id>', views.submit_job_view, name="submit_job_view"),
     path('job-status/<int:job_id>', views.job_status_view, name="job_status_view"),
+    path('job-status/<int:job_id>/partial/', views.job_status_partial_view, name="job_status_partial"),
+    path('job-status/<int:job_id>/file/', views.download_job_file_view, name="download_job_file"),
     path('job-live-details/<int:job_id>/', views.job_live_details_partial, name='job_live_details_partial'),
 
     # Command Templates
@@ -65,6 +75,7 @@ urlpatterns = [
     path('instances/create/', views.instance_credentials_create, name='instance_credentials_create'),
     path('instances/<int:pk>/edit/', views.instance_credentials_edit, name='instance_credentials_edit'),
     path('instances/<int:pk>/delete/', views.instance_credentials_delete, name='instance_credentials_delete'),
+
     path('instances/choose/', views.chose_instance_view, name='chose_instance_view'),
 
     path('api/deploy-direct/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
@@ -88,4 +99,23 @@ urlpatterns = [
     path('manage-external-users/<int:project_id>/', views.manage_project_adaptor_users,
          name='manage_project_adaptor_users'),
     path('api/invalidate-cache/', views.invalidate_cache_api, name='invalidate_cache_api'),
+    path('database-backups/', views.database_backups, name='database_backups'),
+    path('migration-package/', views.migration_package_view, name='migration_package'),
+    path('migration-package/export/', views.export_migration_package, name='export_migration_package'),
+    path('migration-package/import/', views.import_migration_package, name='import_migration_package'),
+    path('report-error/', views.report_error_view, name='report_error_view'),
+    path('interactive-docs/', views.interactive_docs_view, name='interactive_docs_view'),
+
+    # Admin Users Management & Decrypt view
+    path('admin-users/', views.admin_users_list, name='admin_users_list'),
+    path('admin-users/create/', views.admin_users_create, name='admin_users_create'),
+    path('admin-users/<int:user_id>/edit/', views.admin_users_edit, name='admin_users_edit'),
+    path('admin-users/<int:user_id>/password/', views.admin_users_password, name='admin_users_password'),
+    path('admin-users/<int:user_id>/delete/', views.admin_users_delete, name='admin_users_delete'),
+    path('decrypt/', views.decrypt_credentials_view, name='decrypt_credentials_view'),
+
+    # Jaeger Tracing Natively
+    path('jaeger/', views.jaeger_page, name='jaeger_page'),
+    path('jaeger-proxy/', views.jaeger_proxy, name='jaeger_proxy_root'),
+    path('jaeger-proxy/<path:path>', views.jaeger_proxy, name='jaeger_proxy'),
 ]

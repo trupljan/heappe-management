@@ -2,7 +2,8 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 from django.http import JsonResponse
 from .imports import *
-from .utils import _create_payload, _handle_api_call, login_view, login_required
+from .utils import _create_payload, _handle_api_call, login_view, login_required, _parse_datetime_local, clean_ver
+from .command_template import COMMAND_TEMPLATE_PRESETS
 
 
 KEY_TYPE_CHOICES = {
@@ -14,9 +15,42 @@ KEY_TYPE_CHOICES = {
     6: "Ed25519",
 }
 
+PREFERRED_AUTH_TYPES_NO_PROXY = [
+    (0, "Unknown"),
+    (1, "Password"),
+    (2, "Password Interactive"),
+    (3, "Password and Private Key"),
+    (4, "Private Key"),
+    (9, "Private Key in SSH Agent"),
+    (10, "Private Key in Vault and SSH Agent"),
+    (11, "SSH Certificate"),
+    (13, "Kerberos"),
+    (14, "FirecRest IdP"),
+]
+
+PREFERRED_AUTH_TYPES_WITH_PROXY = [
+    (5, "Password via Proxy"),
+    (6, "Password Interactive via Proxy"),
+    (7, "Password and Private Key via Proxy"),
+    (8, "Private Key via Proxy"),
+    (11, "SSH Certificate via Proxy"),
+    (12, "SSH Certificate via Proxy"),
+    (13, "Kerberos via Proxy"),
+    (14, "FirecRest IdP via Proxy"),
+]
+
+PREFERRED_AUTH_TYPE_NO_PROXY_DICT = dict(PREFERRED_AUTH_TYPES_NO_PROXY)
+PREFERRED_AUTH_TYPE_WITH_PROXY_DICT = dict(PREFERRED_AUTH_TYPES_WITH_PROXY)
+# Merged dict for backwards compatibility – note: shared keys (e.g. 13) resolve to the with-proxy label.
+# Use PREFERRED_AUTH_TYPE_NO_PROXY_DICT / PREFERRED_AUTH_TYPE_WITH_PROXY_DICT for context-aware lookups.
+PREFERRED_AUTH_TYPE_CHOICES = dict(PREFERRED_AUTH_TYPES_NO_PROXY + PREFERRED_AUTH_TYPES_WITH_PROXY)
+
+
 
 @login_required
 def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> HttpResponse:
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
     filter_type = request.GET.get("project_filter", "own")
     controller = hp.ManagementApi(request.api_instance)
     session_code = request.session_code
@@ -44,6 +78,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
     # Check global metadata modification file to invalidate cache across different users' sessions
     import os
     from django.conf import settings
+    disable_cache = getattr(settings, 'DISABLE_CACHE', False)
     timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
     last_global_mod = 0.0
     if os.path.exists(timestamp_file):
@@ -55,7 +90,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
 
     if request.method == "POST":
         action = request.POST.get("action")
-        if action == "update_project": return project_update(request, project_id)
+        if action in ("update_project", "project_update"): return project_update(request, project_id)
         if action == "project_assign_to_cluster": return project_assign_to_cluster_with_project_id(request, project_id)
         if action == "delete_assignment": return delete_assignment(request, project_id)
         if action == "update_assignment": return update_assignment(request)
@@ -65,6 +100,8 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         if action == "regenerate_ssh_key": return regenerate_ssh_key(request)
         if action == "rename_hpc_account": return rename_hpc_account(request)
         if action == "delete_hpc_account": return delete_hpc_account(request)
+        if action == "bulk_delete_command_templates": return bulk_delete_command_templates(request, project_id)
+        if action == "create_preset_template": return _create_preset_template(request, project_id, controller, session_code)
 
     # Initialize context variables with defaults
     clusters = []
@@ -111,7 +148,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
     def get_cached_clusters():
         clusters_cache = request.session.get("clusters_cache")
         clusters_time = request.session.get("clusters_cache_time", 0)
-        if force_refresh or not clusters_cache or (time.time() - clusters_time > 300) or (clusters_time < last_global_mod):
+        if disable_cache or force_refresh or not clusters_cache or (time.time() - clusters_time > 300) or (clusters_time < last_global_mod):
             clusters_raw = controller.heappe_management_clusters_get(SessionCode=session_code)
             clusters_cache = [c.to_dict() for c in clusters_raw]
             request.session["clusters_cache"] = clusters_cache
@@ -131,6 +168,21 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
 
         for a in project_assignments:
             a['cluster_name'] = cluster_lookup.get(a['cluster_id'], "Unknown")
+            cluster_obj = next((c for c in clusters if c['id'] == a['cluster_id']), None)
+            a['cluster_has_proxy'] = bool(cluster_obj.get('proxy_connection')) if cluster_obj else False
+            pref_auth = a.get('preferred_auth_type')
+            if pref_auth is not None:
+                try:
+                    auth_int = int(pref_auth)
+                    # Use proxy-aware lookup so that e.g. value 13 shows "Kerberos" (no proxy)
+                    # or "Kerberos via Proxy" (with proxy) rather than always the with-proxy label.
+                    if a['cluster_has_proxy']:
+                        primary, fallback = PREFERRED_AUTH_TYPE_WITH_PROXY_DICT, PREFERRED_AUTH_TYPE_NO_PROXY_DICT
+                    else:
+                        primary, fallback = PREFERRED_AUTH_TYPE_NO_PROXY_DICT, PREFERRED_AUTH_TYPE_WITH_PROXY_DICT
+                    a['preferred_auth_type_name'] = primary.get(auth_int) or fallback.get(auth_int, "Unknown")
+                except (ValueError, TypeError):
+                    a['preferred_auth_type_name'] = str(pref_auth)
 
     elif tab == "commandtemplates":
         cache_key = f"command_templates_cache_{project_id}"
@@ -140,7 +192,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         all_templates_time = request.session.get(cache_time_key, 0)
 
         is_from_cache = False
-        if not force_refresh and all_templates and (time.time() - all_templates_time <= 300) and (all_templates_time >= last_global_mod):
+        if not disable_cache and not force_refresh and all_templates and (time.time() - all_templates_time <= 300) and (all_templates_time >= last_global_mod):
             is_from_cache = True
         else:
             try:
@@ -174,7 +226,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         # Fetch/Cache node types and clusters to map cluster names to queues with 5-minute (300s) TTL
         node_types_cache = request.session.get("node_types_cache")
         node_types_time = request.session.get("node_types_cache_time", 0)
-        if force_refresh or not node_types_cache or (time.time() - node_types_time > 300) or (node_types_time < last_global_mod):
+        if disable_cache or force_refresh or not node_types_cache or (time.time() - node_types_time > 300) or (node_types_time < last_global_mod):
             all_node_types_raw = controller.heappe_management_cluster_node_types_get(SessionCode=session_code)
             node_types_cache = [nt.to_dict() for nt in all_node_types_raw]
             request.session["node_types_cache"] = node_types_cache
@@ -195,6 +247,19 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
                 dict_ntypes[nt_id] = node_type_map[nt_id]
         node_types = list(dict_ntypes.values())
 
+        # Build all available cluster node types for preset template modal
+        project_assignments_for_presets = controller.heappe_management_project_assignment_to_clusters_get(
+            ProjectId=project_id, SessionCode=session_code
+        )
+        assigned_cluster_ids_for_presets = {a.cluster_id for a in project_assignments_for_presets}
+        all_cluster_node_types = []
+        for c_obj in clusters_cache:
+            if c_obj['id'] in assigned_cluster_ids_for_presets:
+                for nt in c_obj.get('node_types', []):
+                    nt_copy = nt.copy() if isinstance(nt, dict) else nt
+                    nt_copy['cluster_name'] = c_obj['name']
+                    all_cluster_node_types.append(nt_copy)
+
     elif tab == "accounts":
         project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
             ProjectId=project_id, SessionCode=session_code
@@ -211,7 +276,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             # Cache all adaptor users
             all_adaptor_users_cache = request.session.get("all_adaptor_users_cache")
             all_adaptor_users_time = request.session.get("all_adaptor_users_cache_time", 0)
-            if force_refresh or not all_adaptor_users_cache or (time.time() - all_adaptor_users_time > 300) or (all_adaptor_users_time < last_global_mod):
+            if disable_cache or force_refresh or not all_adaptor_users_cache or (time.time() - all_adaptor_users_time > 300) or (all_adaptor_users_time < last_global_mod):
                 all_adaptor_users_raw = controller.heappe_management_adaptor_users_get(SessionCode=session_code)
                 all_adaptor_users_cache = [u.to_dict() for u in all_adaptor_users_raw]
                 request.session["all_adaptor_users_cache"] = all_adaptor_users_cache
@@ -223,6 +288,94 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         except Exception:
             pass
 
+    # Calculate project-specific setup checklist
+    setup_checklist = {
+        "clusters_exist": False,
+        "project_cluster_linked": False,
+        "queue_groups_exist": False,
+        "project_group_linked": False,
+        "formulas_exist_and_mapped": False,
+        "queues_exist": False,
+        "command_template_exists": False,
+        "ssh_account_active": False,
+    }
+
+    try:
+        # 1. Clusters check
+        all_clusters = get_cached_clusters() or []
+        setup_checklist["clusters_exist"] = len(all_clusters) > 0
+        
+        # 2. Project Cluster link and Queues check
+        project_assignments_all = controller.heappe_management_project_assignment_to_clusters_get(
+            ProjectId=project_id, SessionCode=session_code
+        ) or []
+        setup_checklist["project_cluster_linked"] = len(project_assignments_all) > 0
+        
+        # Check if the clusters that the project is assigned to have any queues
+        assigned_cluster_ids = {a.cluster_id for a in project_assignments_all}
+        queues_count = 0
+        for cluster in all_clusters:
+            if cluster.get("id") in assigned_cluster_ids:
+                queues_count += len(cluster.get("node_types", []))
+        setup_checklist["queues_exist"] = queues_count > 0
+
+        # 3. Queue Groups and Project Group assignment check
+        all_groups = controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=session_code) or []
+        setup_checklist["queue_groups_exist"] = len(all_groups) > 0
+
+        project_aggregations = controller.heappe_management_project_cluster_node_type_aggregations_get(
+            SessionCode=session_code
+        ) or []
+        
+        assigned_group_ids = {g.cluster_node_type_aggregation_id for g in project_aggregations if g.project_id == project_id}
+        setup_checklist["project_group_linked"] = len(assigned_group_ids) > 0
+
+        # 4. Accounting Formula check
+        if assigned_group_ids:
+            group_formula_mappings = controller.heappe_management_cluster_node_type_aggregation_accountings_get(
+                SessionCode=session_code
+            ) or []
+            for mapping in group_formula_mappings:
+                if mapping.cluster_node_type_aggregation_id in assigned_group_ids:
+                    setup_checklist["formulas_exist_and_mapped"] = True
+                    break
+
+        # 5. Command Template check
+        project_templates = controller.heappe_management_command_templates_get(
+            SessionCode=session_code, ProjectId=project_id
+        ) or []
+        # Filter for own templates (not shared templates)
+        own_templates = [t for t in project_templates if t.project_id == project_id]
+        setup_checklist["command_template_exists"] = len(own_templates) > 0
+
+        # 6. SSH Account active check
+        ssh_keys = controller.heappe_management_secure_shell_keys_get(
+            ProjectId=project_id, SessionCode=session_code
+        ) or []
+        for key in ssh_keys:
+            try:
+                status_results = controller.heappe_management_cluster_account_status_get(
+                    ProjectId=project_id, Username=key.username, SessionCode=session_code
+                ) or []
+                init_ok = sum(1 for s in status_results if s.is_initialized)
+                if len(status_results) > 0 and init_ok == len(status_results):
+                    setup_checklist["ssh_account_active"] = True
+                    break
+            except Exception:
+                pass
+    except Exception as ex:
+        print(f"Error computing project checklist: {ex}")
+
+    setup_checklist_completed = sum(1 for k in [
+        "clusters_exist",
+        "project_cluster_linked",
+        "queues_exist",
+        "project_group_linked",
+        "formulas_exist_and_mapped",
+        "command_template_exists",
+        "ssh_account_active"
+    ] if setup_checklist.get(k))
+
     return render(request, "project.html", {
         "project": project_data,
         "clusters": clusters,
@@ -232,10 +385,18 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "command_templates": command_templates,
         "project_accounts": project_accounts,
         "node_types": node_types,
+        "all_cluster_node_types": all_cluster_node_types if tab == "commandtemplates" else [],
+        "preset_templates": COMMAND_TEMPLATE_PRESETS if tab == "commandtemplates" else {},
         "adaptor_users": adaptor_users,
         "adaptor_users_not_in_project": adaptor_users_not_in_project,
         "ui_features": ui_features,
         "templates_cache_age_str": templates_cache_age_str if tab == "commandtemplates" else None,
+        "setup_checklist": setup_checklist,
+        "setup_checklist_completed": setup_checklist_completed,
+        "is_v6_4_0_plus": is_v6_4_0_plus,
+        "preferred_auth_types_no_proxy": PREFERRED_AUTH_TYPES_NO_PROXY,
+        "preferred_auth_types_with_proxy": PREFERRED_AUTH_TYPES_WITH_PROXY,
+        "preferred_auth_type_choices": PREFERRED_AUTH_TYPE_CHOICES,
     })
 
 
@@ -264,21 +425,28 @@ def submit_job_view(request, command_template_id:int):
         Id=node_type['cluster_id'], SessionCode=request.session_code
     ).to_dict()
 
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+
     if request.method == "POST":
         if request.POST.get("action") == "submit_job":
             # Job-level data
             job_name = request.POST.get("JobName")
             project_id = request.POST.get("ProjectId")
             cluster_id = request.POST.get("ClusterId")
-            notify_email = request.POST.get("NotificationEmail")
-            notify_start = request.POST.get("NotifyOnStart") == "true"
-            notify_finish = request.POST.get("NotifyOnFinish") == "true"
-            notify_abort = request.POST.get("NotifyOnAbort") == "true"
+            notify_email = request.POST.get("NotificationEmail", "").strip()
+            if not notify_email:
+                notify_email = ""
+                notify_start = False
+                notify_finish = False
+                notify_abort = False
+            else:
+                notify_start = request.POST.get("NotifyOnStart") == "true"
+                notify_finish = request.POST.get("NotifyOnFinish") == "true"
+                notify_abort = request.POST.get("NotifyOnAbort") == "true"
 
             # Task-level data
             task_name = request.POST.get("TaskName")
-            min_cores = int(request.POST.get("MinCores") or 1)
-            max_cores = int(request.POST.get("MaxCores") or 1)
             walltime = int(request.POST.get("WalltimeLimit") or 600)
             node_type_id = request.POST.get("ClusterNodeTypeId")
             command_template_id = request.POST.get("CommandTemplateId")
@@ -297,6 +465,82 @@ def submit_job_view(request, command_template_id:int):
                             "ParameterValue": value
                         })
 
+            task_spec = {
+                "Name": task_name,
+                "WalltimeLimit": walltime,
+                "StandardOutputFile": "stdout",
+                "StandardErrorFile": "stderr",
+                "ProgressFile": "stdprog",
+                "LogFile": "log.txt",
+                "ClusterNodeTypeId": int(node_type_id) if node_type_id else 0,
+                "CommandTemplateId": int(command_template_id) if command_template_id else 0,
+                "IsExclusive": is_exclusive,
+                "IsRerunnable": is_rerunnable,
+                "TemplateParameterValues": template_parameters
+            }
+
+            max_cores_val = request.POST.get("MaxCores")
+            if not is_v6_4_0_plus:
+                task_spec["MinCores"] = int(request.POST.get("MinCores") or 1)
+                task_spec["MaxCores"] = int(max_cores_val or 1)
+            else:
+                if max_cores_val and max_cores_val.strip():
+                    task_spec["MaxCores"] = int(max_cores_val)
+                    min_cores_val = request.POST.get("MinCores")
+                    task_spec["MinCores"] = int(min_cores_val) if (min_cores_val and min_cores_val.strip()) else 1
+
+            if is_v6_4_0_plus:
+                gpu_cores = request.POST.get("GpuCores")
+                if gpu_cores and gpu_cores.strip():
+                    task_spec["GpuCores"] = int(gpu_cores)
+                gpu_nodes = request.POST.get("GpuNodes")
+                if gpu_nodes and gpu_nodes.strip():
+                    task_spec["GpuNodes"] = int(gpu_nodes)
+                required_nodes = request.POST.get("RequiredNodes")
+                if required_nodes and required_nodes.strip():
+                    task_spec["RequiredNodes"] = [n.strip() for n in required_nodes.split(",") if n.strip()]
+                memory = request.POST.get("Memory")
+                if memory and memory.strip():
+                    task_spec["Memory"] = int(memory)
+                memory_per_cpu = request.POST.get("MemoryPerCpu")
+                if memory_per_cpu and memory_per_cpu.strip():
+                    task_spec["MemoryPerCPU"] = int(memory_per_cpu)
+                memory_per_gpu = request.POST.get("MemoryPerGpu")
+                if memory_per_gpu and memory_per_gpu.strip():
+                    task_spec["MemoryPerGPU"] = int(memory_per_gpu)
+
+            # Authentication settings
+            auth_method = request.POST.get("AuthMethod", "default")
+            auth_credential = request.POST.get("AuthCredential", "").strip()
+
+            submit_api_instance = request.api_instance
+            submit_session_code = request.session_code
+
+            if auth_method != "default" and auth_credential:
+                user_config = hp.Configuration()
+                user_config.api_key = {}
+                user_config.api_key_prefix = {}
+                host = request.session.get("heappe_host")
+                user_config.host = 'http://' + host if not host.startswith('http') else host
+                user_config.verify_ssl = True
+
+                submit_api_instance = hp.ApiClient(user_config)
+                submit_api_instance.custom_auth = True
+
+                if auth_method == "jwt":
+                    user_config.api_key = {'Authorization': auth_credential}
+                    user_config.api_key_prefix = {'Authorization': 'Bearer'}
+                    submit_api_instance.set_default_header("Authorization", f"Bearer {auth_credential}")
+                elif auth_method == "apikey":
+                    user_config.api_key = {'X-API-Key': auth_credential}
+                    user_config.api_key_prefix = {}
+                    submit_api_instance.set_default_header("X-API-Key", auth_credential)
+
+                from heappe_ui.auth_backend import patch_api_client
+                submit_api_instance._request = request
+                patch_api_client(submit_api_instance)
+                submit_session_code = None
+
             # Build JSON payload
             payload_data = {
                 "JobSpecification": {
@@ -308,29 +552,13 @@ def submit_job_view(request, command_template_id:int):
                     "NotifyOnAbort": notify_abort,
                     "ClusterId": int(cluster_id),
                     "FileTransferMethodId": node_type['file_transfer_method_id'],
-                    "Tasks": [
-                        {
-                            "Name": task_name,
-                            "MinCores": min_cores,
-                            "MaxCores": max_cores,
-                            "WalltimeLimit": walltime,
-                            "StandardOutputFile": "stdout",
-                            "StandardErrorFile": "stderr",
-                            "ProgressFile": "stdprog",
-                            "LogFile": "log.txt",
-                            "ClusterNodeTypeId": int(node_type_id) if node_type_id else 0,
-                            "CommandTemplateId": int(command_template_id) if command_template_id else 0,
-                            "IsExclusive": is_exclusive,
-                            "IsRerunnable": is_rerunnable,
-                            "TemplateParameterValues": template_parameters
-                        }
-                    ],
+                    "Tasks": [task_spec],
                     "ProjectId": project['id']
                 }
             }
 
-            controller = hp.JobManagementApi(request.api_instance)
-            payload = _create_payload(request.session_code, payload_data)
+            controller = hp.JobManagementApi(submit_api_instance)
+            payload = _create_payload(submit_session_code, payload_data)
             result = _handle_api_call(
                 request,
                 lambda: controller.heappe_job_management_create_job_post(**payload),
@@ -341,7 +569,7 @@ def submit_job_view(request, command_template_id:int):
                 payload_data = {
                       "CreatedJobInfoId": result['Id']
                     }
-                payload = _create_payload(request.session_code, payload_data)
+                payload = _create_payload(submit_session_code, payload_data)
                 result = _handle_api_call(
                     request,
                     lambda: controller.heappe_job_management_submit_job_put(**payload),
@@ -356,6 +584,7 @@ def submit_job_view(request, command_template_id:int):
         "cluster": cluster,
         "node_type": node_type,
         "command_template": command_template,
+        "is_v6_4_0_plus": is_v6_4_0_plus,
     }
     return render(request, "submit_test_job.html", context)
 
@@ -371,11 +600,166 @@ def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
         "FAIL"
     )
 
+    project = None
+    if result:
+        tasks = None
+        if isinstance(result, dict):
+            tasks = result.get('tasks')
+        elif hasattr(result, 'tasks'):
+            tasks = result.tasks
+
+        if tasks and len(tasks) > 0:
+            first_task = tasks[0]
+            node_type = None
+            if isinstance(first_task, dict):
+                node_type = first_task.get('node_type')
+            elif hasattr(first_task, 'node_type'):
+                node_type = first_task.node_type
+
+            if node_type:
+                proj = None
+                if isinstance(node_type, dict):
+                    proj = node_type.get('project')
+                elif hasattr(node_type, 'project'):
+                    proj = node_type.project
+
+                if proj:
+                    project = proj
+
     context = {
-        "job": result
+        "job": result,
+        "project": project,
+        "changed_files": []
     }
+
+    # Fetch changed files list from cluster
+    try:
+        file_transfer_controller = hp.FileTransferApi(request.api_instance)
+        changed_files_res = file_transfer_controller.heappe_file_transfer_list_changed_files_for_job_get(
+            SessionCode=request.session_code,
+            SubmittedJobInfoId=job_id
+        )
+        if changed_files_res:
+            context["changed_files"] = changed_files_res
+    except Exception as e:
+        print(f"Error fetching changed files for job {job_id}: {e}")
+
     return render(request, "job_status.html", context)
 
+
+@login_required
+def download_job_file_view(request: HttpRequest, job_id: int) -> HttpResponse:
+    file_path = request.GET.get("file_path")
+    action = request.GET.get("action", "download") # "download" or "view"
+
+    if not file_path:
+        return HttpResponse("Missing file_path parameter", status=400)
+
+    controller = hp.FileTransferApi(request.api_instance)
+
+    from py4heappe.heappe_v6.core import DownloadFileFromClusterModel
+    body = DownloadFileFromClusterModel(
+        session_code=request.session_code,
+        submitted_job_info_id=job_id,
+        relative_file_path=file_path
+    )
+
+    try:
+        import base64
+        b64_content = controller.heappe_file_transfer_download_file_from_cluster_post(body=body)
+
+        if not b64_content:
+            if action == "view":
+                return JsonResponse({"content": ""})
+            return HttpResponse("File is empty or could not be retrieved.", status=404)
+
+        file_bytes = base64.b64decode(b64_content)
+
+        if action == "view":
+            try:
+                text_content = file_bytes.decode("utf-8")
+            except Exception:
+                text_content = file_bytes.decode("latin-1", errors="replace")
+            
+            # Sanitize control characters (including null bytes) to prevent Safari DOMException 
+            # (DOMException 12: The string did not match the expected pattern)
+            control_chars = {i: 0xFFFD for i in range(32) if i not in (9, 10, 13)}
+            control_chars[127] = 0xFFFD
+            for i in range(128, 160):
+                control_chars[i] = 0xFFFD
+            text_content = text_content.translate(control_chars)
+            
+            return JsonResponse({"content": text_content})
+
+        # Default: download
+        import os
+        filename = os.path.basename(file_path) or "download"
+        response = HttpResponse(file_bytes, content_type="application/octet-stream")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+    except Exception as e:
+        if action == "view":
+            return JsonResponse({"error": str(e)}, status=500)
+        messages.error(request, f"Failed to retrieve file: {str(e)}")
+        return redirect("job_status_view", job_id=job_id)
+
+
+@login_required
+def job_status_partial_view(request: HttpRequest, job_id: int) -> HttpResponse:
+    controller = hp.JobManagementApi(request.api_instance)
+
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_job_management_current_info_for_job_get(SubmittedJobInfoId=job_id, SessionCode=request.session_code),
+        None,
+        None,
+        silent=True
+    )
+
+    project = None
+    if result:
+        tasks = None
+        if isinstance(result, dict):
+            tasks = result.get('tasks')
+        elif hasattr(result, 'tasks'):
+            tasks = result.tasks
+
+        if tasks and len(tasks) > 0:
+            first_task = tasks[0]
+            node_type = None
+            if isinstance(first_task, dict):
+                node_type = first_task.get('node_type')
+            elif hasattr(first_task, 'node_type'):
+                node_type = first_task.node_type
+
+            if node_type:
+                proj = None
+                if isinstance(node_type, dict):
+                    proj = node_type.get('project')
+                elif hasattr(node_type, 'project'):
+                    proj = node_type.project
+
+                if proj:
+                    project = proj
+
+    changed_files = []
+    try:
+        file_transfer_controller = hp.FileTransferApi(request.api_instance)
+        changed_files_res = file_transfer_controller.heappe_file_transfer_list_changed_files_for_job_get(
+            SessionCode=request.session_code,
+            SubmittedJobInfoId=job_id
+        )
+        if changed_files_res:
+            changed_files = changed_files_res
+    except Exception:
+        pass
+
+    context = {
+        "job": result,
+        "project": project,
+        "changed_files": changed_files
+    }
+    return render(request, "job_status_content.html", context)
 
 
 @login_required
@@ -390,12 +774,12 @@ def project_create(request: HttpRequest) -> HttpResponse:
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),
             "AccountingString": request.POST.get("AccountingString"),
-            "StartDate": request.POST.get("StartDate"),
-            "EndDate": request.POST.get("EndDate"),
+            "StartDate": _parse_datetime_local(request.POST.get("StartDate")),
+            "EndDate": _parse_datetime_local(request.POST.get("EndDate")),
             "UsageType": int(request.POST.get("UsageType")),
             "UseAccountingStringForScheduler": request.POST.get("UseAccountingStringForScheduler") == "on",
             "IsOneToOneMapping": request.POST.get("IsOneToOneMapping") == "on",
-            "PIEmail": request.POST.get("PIEmail"),
+            "PIEmail": request.POST.get("PIEmail") or "",
         }
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
@@ -457,6 +841,21 @@ def project_list(request: HttpRequest) -> HttpResponse:
                 "Failed to delete Project"
             )
             return redirect("project_list")
+        elif action == "bulk_delete":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for pid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {"Id": int(pid)})
+                    controller.heappe_management_project_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error deleting project {pid}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully deleted {success_count} project(s).")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to delete {len(selected_ids) - success_count} project(s).")
+            return redirect("project_list")
 
     return render(request, "projects.html", {
         "projects": projects
@@ -469,8 +868,8 @@ def project_update(request: HttpRequest, project_id: int) -> HttpResponse:
         "Id": project_id,
         "Name": request.POST.get("Name"),
         "Description": request.POST.get("Description"),
-        "StartDate": request.POST.get("StartDate"),
-        "EndDate": request.POST.get("EndDate"),
+        "StartDate": _parse_datetime_local(request.POST.get("StartDate")),
+        "EndDate": _parse_datetime_local(request.POST.get("EndDate")),
         "UsageType": int(request.POST.get("UsageType")),
         "UseAccountingStringForScheduler": request.POST.get("UseAccountingStringForScheduler") == "on",
         "IsOneToOneMapping": request.POST.get("IsOneToOneMapping") == "on",
@@ -498,6 +897,15 @@ def project_assign_to_cluster(request: HttpRequest) -> HttpResponse:
         "PermanentStoragePath": request.POST.get("PermanentStoragePath", ""),
         "ProjectStoragePath": request.POST.get("ProjectStoragePath", "")
     }
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    if is_v6_4_0_plus:
+        pref_auth = request.POST.get("PreferredAuthType")
+        if pref_auth is not None and pref_auth != "":
+            try:
+                payload_data["PreferredAuthType"] = int(pref_auth)
+            except ValueError:
+                pass
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
         request,
@@ -518,6 +926,15 @@ def project_assign_to_cluster_with_project_id(request: HttpRequest, project_id) 
         "PermanentStoragePath": request.POST.get("PermanentStoragePath", ""),
         "ProjectStoragePath": request.POST.get("ProjectStoragePath", "")
     }
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    if is_v6_4_0_plus:
+        pref_auth = request.POST.get("PreferredAuthType")
+        if pref_auth is not None and pref_auth != "":
+            try:
+                payload_data["PreferredAuthType"] = int(pref_auth)
+            except ValueError:
+                pass
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
         request,
@@ -539,6 +956,15 @@ def update_assignment(request: HttpRequest) -> HttpResponse:
         "PermanentStoragePath": request.POST.get("PermanentStoragePath", ""),
         "ProjectStoragePath": request.POST.get("ProjectStoragePath", "")
     }
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    if is_v6_4_0_plus:
+        pref_auth = request.POST.get("PreferredAuthType")
+        if pref_auth is not None and pref_auth != "":
+            try:
+                payload_data["PreferredAuthType"] = int(pref_auth)
+            except ValueError:
+                pass
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(
         request,
@@ -818,6 +1244,135 @@ def delete_hpc_account(request: HttpRequest) -> HttpResponse:
     )
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
+
+
+@login_required
+def bulk_delete_command_templates(request: HttpRequest, project_id: int) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    selected_ids = request.POST.getlist("selected_ids")
+    success_count = 0
+    for template_id in selected_ids:
+        try:
+            payload_data = {"CommandTemplateId": int(template_id)}
+            payload = _create_payload(request.session_code, payload_data)
+            controller.heappe_management_remove_command_template_delete(**payload)
+            success_count += 1
+        except Exception as e:
+            print(f"Error deleting command template {template_id}: {e}")
+            
+    if success_count > 0:
+        messages.success(request, f"Successfully deleted {success_count} command template(s).")
+    if len(selected_ids) > success_count:
+        messages.error(request, f"Failed to delete {len(selected_ids) - success_count} command template(s).")
+        
+    reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=commandtemplates")
+    if "?tab=" not in reload_url:
+        if "?" in reload_url:
+            reload_url += "&tab=commandtemplates"
+        else:
+            reload_url += "?tab=commandtemplates"
+    return redirect(reload_url)
+
+
+def _create_preset_template(request: HttpRequest, project_id: int, controller: hp.ManagementApi, session_code: str) -> HttpResponse:
+    preset_name = request.POST.get("preset_name")
+    cluster_node_type_id_str = request.POST.get("ClusterNodeTypeId")
+
+    if not preset_name or preset_name not in COMMAND_TEMPLATE_PRESETS:
+        messages.error(request, f"Preset '{preset_name}' is not recognized.")
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    if not cluster_node_type_id_str:
+        messages.error(request, "Cluster Node Type must be selected.")
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    try:
+        cluster_node_type_id = int(cluster_node_type_id_str)
+    except ValueError:
+        messages.error(request, "Invalid Cluster Node Type selected.")
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    try:
+        project_data = controller.heappe_management_project_get(Id=project_id, SessionCode=session_code).to_dict()
+    except Exception as e:
+        messages.error(request, f"Failed to retrieve project info: {e}")
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    preset = COMMAND_TEMPLATE_PRESETS[preset_name]
+    key_scripts_dir = project_data.get('key_scripts_directory_path') or ''
+    suffix = preset['executable_file_suffix']
+    if key_scripts_dir and not key_scripts_dir.endswith('/'):
+        executable_file = f"{key_scripts_dir}/{suffix}"
+    else:
+        executable_file = f"{key_scripts_dir}{suffix}"
+
+    # Step 1: Create template
+    payload_data = {
+        "ProjectId": project_id,
+        "Name": preset["name"],
+        "Description": preset["description"],
+        "ExtendedAllocationCommand": "",
+        "ExecutableFile": executable_file,
+        "PreparationScript": "",
+        "ClusterNodeTypeId": cluster_node_type_id,
+        "IsEnabled": True,
+        "TemplateParameters": []
+    }
+
+    payload = _create_payload(session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_command_template_post(**payload),
+        None,  # Do not display a generic success message
+        "Failed to create Command Template"
+    )
+
+    if not result or not result.get('Id'):
+        response = redirect("project_detail", project_id=project_id)
+        response['Location'] += "?tab=commandtemplates"
+        return response
+
+    # Step 2: Create parameters
+    template_id = result['Id']
+    params_ok = True
+    for param in preset.get("parameters", []):
+        try:
+            param_payload_data = {
+                "CommandTemplateId": template_id,
+                "Identifier": param["Identifier"],
+                "Query": param.get("Query"),
+                "Description": param.get("Description")
+            }
+            param_payload = _create_payload(session_code, param_payload_data)
+            controller.heappe_management_command_template_parameter_post(**param_payload)
+        except Exception as e:
+            params_ok = False
+            messages.warning(request, f"Failed to add template parameter {param['Identifier']}: {e}")
+
+    # Invalidate command templates session cache
+    cache_key = f"command_templates_cache_{project_id}"
+    cache_time_key = f"command_templates_cache_{project_id}_time"
+    if cache_key in request.session:
+        del request.session[cache_key]
+    if cache_time_key in request.session:
+        del request.session[cache_time_key]
+
+    if params_ok:
+        messages.success(request, f"Quick Preset Template '{preset['name']}' created successfully with parameters!")
+    else:
+        messages.success(request, f"Quick Preset Template '{preset['name']}' created, but some parameters failed to add.")
+
+    response = redirect("project_detail", project_id=project_id)
+    response['Location'] += "?tab=commandtemplates"
+    return response
 
 
 @login_required

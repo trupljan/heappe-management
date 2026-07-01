@@ -8,12 +8,60 @@ class HeappeSessionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        request.heappe_api_logs = []
+
+        def process_response(resp):
+            if resp is None:
+                return resp
+            
+            logs = getattr(request, 'heappe_api_logs', [])
+            if logs:
+                import json
+                
+                # If JSON response, inject _heappe_logs directly into the body
+                if resp.status_code == 200 and 'application/json' in resp.get('Content-Type', ''):
+                    try:
+                        content_str = resp.content.decode('utf-8')
+                        data = json.loads(content_str)
+                        if isinstance(data, dict):
+                            data['_heappe_logs'] = logs
+                            resp.content = json.dumps(data).encode('utf-8')
+                    except Exception as e_json:
+                        print(f"[middleware] Failed to inject logs into JsonResponse: {e_json}")
+
+                # If HTML response, inject script tag before </body>
+                elif resp.status_code == 200 and 'text/html' in resp.get('Content-Type', ''):
+                    try:
+                        logs_json = json.dumps(logs)
+                        logs_json_escaped = logs_json.replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+                        script_tag = f"""
+<script>
+(function() {{
+    var logs = {logs_json_escaped};
+    if (logs && window.printHEAppELogs) {{
+        window.printHEAppELogs(logs);
+    }}
+}})();
+</script>
+"""
+                        content = resp.content
+                        if isinstance(content, bytes):
+                            content_str = content.decode('utf-8')
+                            if '</body>' in content_str:
+                                content_str = content_str.replace('</body>', f"{script_tag}</body>", 1)
+                            else:
+                                content_str += script_tag
+                            resp.content = content_str.encode('utf-8')
+                    except Exception as e_inject:
+                        print(f"[middleware] Failed to inject logs script: {e_inject}")
+            return resp
+
         path = request.path
         if any(p in path for p in ["/instances/", "/logout/", "/login/", "/reconnect/"]):
-            return self.get_response(request)
+            return process_response(self.get_response(request))
 
         if not hasattr(request, 'user') or not request.user.is_authenticated:
-            return self.get_response(request)
+            return process_response(self.get_response(request))
 
         try:
             now = time.time()
@@ -57,6 +105,8 @@ class HeappeSessionMiddleware:
                     request.session["force_reauth"] = False
 
             user_config = hp.Configuration()
+            user_config.api_key = {}
+            user_config.api_key_prefix = {}
             host = request.session.get("heappe_host")
 
             if host:
@@ -66,7 +116,7 @@ class HeappeSessionMiddleware:
                 if use_api_key:
                     username = request.session.get("heappe_username")
                     password = request.session.get("heappe_password")
-                    user_config.api_key['X-API-Key'] = f"{username}:{password}"
+                    user_config.api_key = {'X-API-Key': f"{username}:{password}"}
                     api_instance = hp.ApiClient(user_config)
                     api_instance.set_default_header("X-API-Key", f"{username}:{password}")
                 else:
@@ -93,12 +143,7 @@ class HeappeSessionMiddleware:
                 "accountings_cache",
                 "queue_groups_cache",
                 "mappings_cache",
-                "projects_list_cache",
-                "last_middleware_check_time",
-                "last_middleware_checked_instance",
-                "middleware_update_available",
-                "middleware_deployed_version",
-                "middleware_latest_version"
+                "projects_list_cache"
             ]
             for key in cache_keys:
                 request.session.pop(key, None)
@@ -110,13 +155,20 @@ class HeappeSessionMiddleware:
                     request.session.pop(key, None)
                     request.session.pop(f"{key}_time", None)
             
+            # Also clear the cached middleware version and update-check info
+            request.session.pop("last_middleware_check_time", None)
+            request.session.pop("last_middleware_checked_instance", None)
+            request.session.pop("middleware_update_available", None)
+            request.session.pop("middleware_deployed_version", None)
+            request.session.pop("middleware_latest_version", None)
+            
             from django.http import HttpResponseRedirect
             query_params = request.GET.copy()
             query_params.pop('refresh', None)
             redirect_path = request.path
             if query_params:
                 redirect_path += '?' + query_params.urlencode()
-            return HttpResponseRedirect(redirect_path)
+            return process_response(HttpResponseRedirect(redirect_path))
 
         # Check if this is a mutating request that should invalidate the metadata cache globally
         if request.method in ["POST", "PUT", "DELETE"]:
@@ -131,7 +183,7 @@ class HeappeSessionMiddleware:
                 except Exception as ex:
                     print(f"[middleware] Error updating metadata timestamp: {ex}")
 
-        return self.get_response(request)
+        return process_response(self.get_response(request))
 
 
 class HeappeExceptionMiddleware:
@@ -148,10 +200,6 @@ class HeappeExceptionMiddleware:
         from django.shortcuts import render
         import traceback
 
-        # If in debug mode, let Django raise the standard traceback screen
-        if settings.DEBUG:
-            return None
-
         # Do not catch Django's internal control exceptions
         if isinstance(exception, (
             django.http.Http404,
@@ -161,14 +209,27 @@ class HeappeExceptionMiddleware:
         )):
             return None
 
+        error_type = exception.__class__.__name__
+        error_message = str(exception)
+        error_status = getattr(exception, 'status', None)
+
+        is_heappe_error = False
+        if error_status:
+            is_heappe_error = True
+        else:
+            exc_lower = error_type.lower() + " " + error_message.lower()
+            if any(term in exc_lower for term in ["timeout", "conn", "unreachable", "refused", "maxretry", "apiexception"]):
+                is_heappe_error = True
+
+        # If in debug mode, let Django raise the standard traceback screen unless it's a HEAppE error
+        if settings.DEBUG and not is_heappe_error:
+            return None
+
         # Log the exception for tracing in server logs
         print(f"[HeappeExceptionMiddleware] Caught unhandled exception: {exception}")
         traceback.print_exc()
         tb_str = traceback.format_exc()
 
-        error_type = exception.__class__.__name__
-        error_message = str(exception)
-        error_status = getattr(exception, 'status', None)
         error_body = getattr(exception, 'body', None)
 
         if error_body and isinstance(error_body, str):
@@ -256,6 +317,8 @@ class HeappeExceptionMiddleware:
             "error_desc": error_desc,
             "error_icon": error_icon,
             "error_theme": error_theme,
+            "traceback": tb_str,
+            "debug_mode": settings.DEBUG,
         }
 
         # Render custom elegant error page

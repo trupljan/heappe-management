@@ -1,0 +1,252 @@
+{% load custom_filters %}
+
+                <!-- High-Density Table -->
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="submittedJobsTable">
+                            <thead class="table-light">
+                                <tr style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em;">
+                                    <th class="ps-4 text-secondary py-3" style="width: 32%;">Job Name &amp; ID</th>
+                                    <th class="text-secondary py-3" style="width: 18%;">State</th>
+                                    <th class="text-secondary py-3" style="width: 25%;">Submitter &amp; Time</th>
+                                    <th class="text-secondary py-3" style="width: 15%;">Tasks</th>
+                                    <th class="text-end pe-4 text-secondary py-3" style="width: 10%;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for job_item in job_details %}
+                                <tr>
+                                    <!-- Job Name & ID Combined -->
+                                    <td class="ps-4">
+                                        <div class="fw-bold text-dark" style="font-size: 0.9rem;">{{ job_item.name }}</div>
+                                        <div class="text-secondary mt-1.5 font-monospace small d-inline-flex align-items-center gap-1 bg-light border border-light-subtle rounded px-2 py-0.5" style="font-size: 0.72rem;">
+                                            <i class="bi bi-hash text-muted"></i>{{ job_item.id }}
+                                        </div>
+                                    </td>
+                                    
+                                    <!-- State Soft badge -->
+                                    <td>
+                                        {% if job_item.state == 1 %}
+                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1">Configuring</span>
+                                        {% elif job_item.state == 2 %}
+                                            <span class="badge rounded-pill bg-info-subtle text-info border border-info-subtle px-2.5 py-1">Submitted</span>
+                                        {% elif job_item.state == 4 %}
+                                            <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1">Queued</span>
+                                        {% elif job_item.state == 8 %}
+                                            <span class="badge rounded-pill bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2.5 py-1">Running</span>
+                                        {% elif job_item.state == 16 %}
+                                            <span class="badge rounded-pill bg-success-subtle text-success border border-success-subtle px-2.5 py-1">Finished</span>
+                                        {% elif job_item.state == 32 %}
+                                            <span class="badge rounded-pill bg-danger-subtle text-danger border border-danger-subtle px-2.5 py-1">Failed</span>
+                                        {% elif job_item.state == 64 %}
+                                            <span class="badge rounded-pill bg-dark-subtle text-dark border border-dark-subtle px-2.5 py-1">Canceled</span>
+                                        {% elif job_item.state == 128 %}
+                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1">Waiting</span>
+                                        {% elif job_item.state == 256 %}
+                                            <span class="badge rounded-pill bg-secondary-subtle text-secondary border border-secondary-subtle px-2.5 py-1">Deleted</span>
+                                        {% endif %}
+                                    </td>
+                                    
+                                    <!-- Submitter & Submit Time Combined -->
+                                    <td>
+                                        <div class="text-dark fw-semibold small d-flex align-items-center gap-1.5">
+                                            <span class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 20px; height: 20px; font-size: 0.65rem;">
+                                                <i class="bi bi-person"></i>
+                                            </span>
+                                            {{ job_item.submitter|default:"N/A" }}
+                                        </div>
+                                        <div class="text-muted mt-1.5" style="font-size: 0.72rem;">
+                                            <i class="bi bi-calendar-event me-1.5 text-secondary"></i>{{ job_item.submit_time|format_datetime|default:"Not submitted" }}
+                                        </div>
+                                    </td>
+                                    
+                                    <!-- Tasks Count Badge -->
+                                    <td>
+                                        <span class="badge bg-light text-secondary border border-light-subtle rounded-3 px-2.5 py-1.5 fw-semibold" style="font-size: 0.78rem;">
+                                            <i class="bi bi-cpu text-muted me-1"></i>{{ job_item.tasks|length }} tasks
+                                        </span>
+                                    </td>
+                                    
+                                    <!-- Actions -->
+                                    <td class="text-end pe-4">
+                                        <div class="d-flex gap-1.5 justify-content-end">
+                                            <button type="button" class="btn btn-sm btn-light border border-light-subtle text-secondary px-2.5 py-1.5 rounded-3 d-inline-flex align-items-center justify-content-center" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}" title="View details">
+                                                <i class="bi bi-eye"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-outline-primary px-2.5 py-1.5 rounded-3 d-inline-flex align-items-center justify-content-center btn-trigger-live" data-job-id="{{ job_item.id }}" title="Live scheduler status">
+                                                <i class="bi bi-cpu"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Job Detail Modal (Redesigned) -->
+                                <div class="modal fade" id="jobModal{{ job_item.id }}" tabindex="-1" aria-labelledby="jobModalLabel{{ job_item.id }}" aria-hidden="true">
+                                    <div class="modal-dialog modal-lg modal-dialog-centered">
+                                        <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+                                            <div class="modal-header bg-white border-bottom py-3 px-4">
+                                                <h5 class="modal-title fw-bold text-dark d-flex align-items-center" id="jobModalLabel{{ job_item.id }}">
+                                                    <i class="bi bi-info-circle text-primary me-2 fs-5"></i>
+                                                    Job Details
+                                                    <span class="text-muted font-monospace small ms-2 bg-light border px-2 py-0.5 rounded">#{{ job_item.id }}</span>
+                                                </h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body p-4">
+                                                <!-- Metadata Grid -->
+                                                <div class="bg-light p-3 rounded border border-light-subtle mb-4">
+                                                    <div class="row g-3">
+                                                        <div class="col-md-6 d-flex flex-column gap-2.5">
+                                                            <div class="d-flex justify-content-between border-bottom border-white pb-1.5 align-items-center">
+                                                                <span class="text-muted small fw-medium">Job Name:</span>
+                                                                <span class="fw-bold text-dark text-break text-end" style="max-width: 60%;">{{ job_item.name }}</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between border-bottom border-white pb-1.5 align-items-center">
+                                                                <span class="text-muted small fw-medium">Status State:</span>
+                                                                <div>
+                                                                    {% if job_item.state == 1 %}
+                                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Configuring</span>
+                                                                    {% elif job_item.state == 2 %}
+                                                                        <span class="badge bg-info-subtle text-info border border-info-subtle">Submitted</span>
+                                                                    {% elif job_item.state == 4 %}
+                                                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Queued</span>
+                                                                    {% elif job_item.state == 8 %}
+                                                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Running</span>
+                                                                    {% elif job_item.state == 16 %}
+                                                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Finished</span>
+                                                                    {% elif job_item.state == 32 %}
+                                                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Failed</span>
+                                                                    {% elif job_item.state == 64 %}
+                                                                        <span class="badge bg-dark-subtle text-dark border border-dark-subtle">Canceled</span>
+                                                                    {% elif job_item.state == 128 %}
+                                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Waiting</span>
+                                                                    {% elif job_item.state == 256 %}
+                                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Deleted</span>
+                                                                    {% endif %}
+                                                                </div>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between border-bottom border-white pb-1.5 align-items-center">
+                                                                <span class="text-muted small fw-medium">Submitter:</span>
+                                                                <span class="fw-semibold text-dark text-break text-end font-monospace" style="font-size: 0.8rem; max-width: 65%; word-break: break-all;">{{ job_item.submitter|default:"N/A" }}</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between align-items-center">
+                                                                <span class="text-muted small fw-medium">Creation Time:</span>
+                                                                <span class="text-dark small text-end" style="max-width: 60%;">{{ job_item.creation_time|format_datetime|default:"N/A" }}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="col-md-6 d-flex flex-column gap-2.5">
+                                                            <div class="d-flex justify-content-between border-bottom border-white pb-1.5 align-items-center">
+                                                                <span class="text-muted small fw-medium">Submit Time:</span>
+                                                                <span class="text-dark small text-end" style="max-width: 60%;">{{ job_item.submit_time|format_datetime|default:"N/A" }}</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between border-bottom border-white pb-1.5 align-items-center">
+                                                                <span class="text-muted small fw-medium">Start Time:</span>
+                                                                <span class="text-dark small text-end" style="max-width: 60%;">{{ job_item.start_time|format_datetime|default:"N/A" }}</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between border-bottom border-white pb-1.5 align-items-center">
+                                                                <span class="text-muted small fw-medium">End Time:</span>
+                                                                <span class="text-dark small text-end" style="max-width: 60%;">{{ job_item.end_time|format_datetime|default:"N/A" }}</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between align-items-center">
+                                                                <span class="text-muted small fw-medium">Total Tasks:</span>
+                                                                <span class="badge bg-light text-secondary border fw-bold">{{ job_item.tasks|length }}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-cpu text-primary me-1"></i>Tasks Checklist</h6>
+                                                <div class="list-group">
+                                                    {% for task in job_item.tasks %}
+                                                    <div class="list-group-item mb-2 border border-light-subtle rounded p-3 bg-white shadow-sm">
+                                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                                            <div>
+                                                                <strong class="text-dark">{{ task.name }}</strong>
+                                                                <span class="text-muted font-monospace small ms-2 bg-light border px-1.5 py-0.5 rounded" style="font-size: 0.75rem;">ID: {{ task.id }}</span>
+                                                            </div>
+                                                            <div>
+                                                                {% if task.state == 1 %}
+                                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Configuring</span>
+                                                                {% elif task.state == 2 %}
+                                                                    <span class="badge bg-info-subtle text-info border border-info-subtle">Submitted</span>
+                                                                {% elif task.state == 4 %}
+                                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Queued</span>
+                                                                {% elif task.state == 8 %}
+                                                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Running</span>
+                                                                {% elif task.state == 16 %}
+                                                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Finished</span>
+                                                                {% elif task.state == 32 %}
+                                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle">Failed</span>
+                                                                {% elif task.state == 64 %}
+                                                                    <span class="badge bg-dark-subtle text-dark border border-dark-subtle">Canceled</span>
+                                                                {% elif task.state == 128 %}
+                                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Waiting</span>
+                                                                {% elif task.state == 256 %}
+                                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Deleted</span>
+                                                                {% else %}
+                                                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">{{ task.state }}</span>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
+                                                        <div class="text-muted small d-flex flex-wrap gap-3 mt-1 border-top border-light pt-2" style="font-size: 0.8rem;">
+                                                            <span class="me-2"><i class="bi bi-play-fill text-success me-1"></i>Start: <strong>{{ task.start_time|format_datetime|default:"N/A" }}</strong></span>
+                                                            <span class="me-2"><i class="bi bi-stop-fill text-danger me-1"></i>End: <strong>{{ task.end_time|format_datetime|default:"N/A" }}</strong></span>
+                                                            <span><i class="bi bi-speedometer2 text-secondary me-1"></i>Usage: <strong>{{ task.usage|default:"N/A" }}</strong></span>
+                                                        </div>
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer bg-light border-top">
+                                                <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Close</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-5 text-muted">
+                                        <i class="bi bi-info-circle fs-3 mb-2 d-block text-secondary"></i>
+                                        No jobs available in the selected time window.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if page_obj.paginator.num_pages > 1 %}
+                    <nav aria-label="Page navigation" class="py-3 mt-0 border-top">
+                        <ul class="pagination justify-content-center mb-0">
+                            {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link shadow-none border-light-subtle btn-sm" onclick="loadJobsHistory({{ page_obj.previous_page_number }})"><i class="bi bi-chevron-left"></i></a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link border-light-subtle btn-sm"><i class="bi bi-chevron-left"></i></span></li>
+                            {% endif %}
+
+                            {% for num in page_obj.paginator.page_range %}
+                                {% if num == 1 or num == page_obj.paginator.num_pages or num >= page_obj.number|add:-2 and num <= page_obj.number|add:2 %}
+                                    <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                                        <a class="page-link shadow-none border-light-subtle btn-sm" onclick="loadJobsHistory({{ num }})">{{ num }}</a>
+                                    </li>
+                                {% elif num == 2 and page_obj.number > 4 %}
+                                    <li class="page-item disabled"><span class="page-link border-light-subtle btn-sm">…</span></li>
+                                {% elif num == page_obj.paginator.num_pages|add:-1 and page_obj.number < page_obj.paginator.num_pages|add:-3 %}
+                                    <li class="page-item disabled"><span class="page-link border-light-subtle btn-sm">…</span></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link shadow-none border-light-subtle btn-sm" onclick="loadJobsHistory({{ page_obj.next_page_number }})"><i class="bi bi-chevron-right"></i></a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link border-light-subtle btn-sm"><i class="bi bi-chevron-right"></i></span></li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>

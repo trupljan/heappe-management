@@ -1,16 +1,30 @@
 {% extends "base.html" %}
+
+{% block title %}Choose Active Instance Context{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active" aria-current="page">Choose Active Instance</li>
+{% endblock %}
+
 {% block content %}
-<div class="container mt-5">
+<div class="container py-5">
     <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card p-4 shadow-sm">
-                <h4 class="mb-4">Choose Instance</h4>
+        <div class="col-md-6 col-lg-5">
+            <div class="card border-0 shadow-lg p-4 bg-white rounded-3">
+                <div class="text-center mb-4">
+                    <div class="bg-primary bg-gradient rounded-circle p-3 text-white d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
+                        <i class="bi bi-hdd-stack fs-4 text-white"></i>
+                    </div>
+                    <h4 class="fw-bold text-dark mb-1">Choose Instance Context</h4>
+                    <p class="text-secondary small">Select an active HEAppE middleware instance context to manage</p>
+                </div>
+
                 <form method="post">
                     {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="instance_id" class="form-label">Select Instance</label>
-                        <select class="form-select" id="instance_id" name="InstanceName" required>
-                            <option value="">-- Choose an instance --</option>
+                    <div class="mb-4">
+                        <label for="instance_id" class="form-label small fw-bold text-secondary text-uppercase mb-2">Available Instances</label>
+                        <select class="form-select border-secondary-subtle py-2.5 rounded-3 font-monospace" id="instance_id" name="InstanceName" required>
+                            <option value="" disabled selected>-- Choose active context instance --</option>
                             {% for inst in instances %}
                                 <option value="{{ inst.instance_name }}">
                                     {{ inst.instance_name }} ({{ inst.heappe_host }})
@@ -18,7 +32,9 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100">Save</button>
+                    <button type="submit" class="btn btn-primary fw-bold w-100 py-2.5 rounded-3 shadow-sm">
+                        <i class="bi bi-check2-circle me-1.5"></i>Confirm Active Instance
+                    </button>
                 </form>
             </div>
         </div>

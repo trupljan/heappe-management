@@ -41,9 +41,14 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
         if action == "adaptor_user_assign_to_user_group":
             return adaptor_user_assign_to_user_group(request, adaptor_user_username)
 
+    new_apikey = request.session.pop("new_adaptor_user_apikey", None)
+    new_apikey_username = request.session.pop("new_adaptor_user_username", None)
+
     return render(request, "adaptor_user.html", {
         "adaptor_user": adaptor_user,
         "projects": all_projects,
+        "new_apikey": new_apikey,
+        "new_apikey_username": new_apikey_username,
     })
 
 
@@ -65,10 +70,8 @@ def adaptor_user_create(request: HttpRequest) -> HttpResponse:
             "Failed to create Service account"
         )
         if result and result.get("ApiKey"):
-            messages.info(request, 
-                          f'APIKEY/Password: {result.get("ApiKey")}',
-                          extra_tags=f"adaptor-user-api-key"
-                          )
+            request.session["new_adaptor_user_apikey"] = result.get("ApiKey")
+            request.session["new_adaptor_user_username"] = result.get("Username")
         if result:
             return redirect("adaptor_user_detail", adaptor_user_username=result['Username'])
         else:
@@ -93,10 +96,8 @@ def adaptor_user_update(request: HttpRequest, adaptor_user_username: str) -> Htt
             "Failed to update Service account"
         )
         if result and result.get("ApiKey"):
-            messages.info(request, 
-                          f'APIKEY/Password: {result.get("ApiKey")}',
-                          extra_tags=f"adaptor-user-api-key"
-                          )
+            request.session["new_adaptor_user_apikey"] = result.get("ApiKey")
+            request.session["new_adaptor_user_username"] = result.get("Username")
         if result:
             return redirect("adaptor_user_detail", adaptor_user_username=result['Username'])
         else:

@@ -1,7 +1,12 @@
 {% extends "base.html" %}
 
+{% block title %}Queues{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Queues</li>
+{% endblock %}
+
 {% block content %}
-
-      {% include "queues_table.html" %}
-
+    {% include "queues_table.html" %}
 {% endblock %}

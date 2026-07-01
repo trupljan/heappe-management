@@ -1,298 +1,814 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 
 {% block title %}{{ cluster.name }}{% endblock %}
 
-{% block content %}
-
-{% if cluster %}
-<!-- Navbar -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light mb-4 shadow-sm">
-  <div class="container justify-content-center">
-    <ul class="nav nav-pills">
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Cluster Detail</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'queues' %}active{% endif %}" href="?tab=queues">Queues</a>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link {% if active_tab == 'projects' %}active{% endif %}" href="?tab=projects">Projects</a>
-      </li>
-    </ul>
-  </div>
-</nav>
-{% endif %}
-
-<h1 class="mb-4 text-center">{{ cluster.name }}</h1>
-
-<div class="container">
-  {% if active_tab == 'detail' %}
-    <!-- Cluster Detail Form -->
-    <div class="card mb-4 w-75 mx-auto shadow-sm">
-      <div class="card-header d-flex align-items-center">
-          <strong>Cluster Information</strong>
-          <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
-      </div>
-      <div class="card-body">
-          <form method="post">
-              {% csrf_token %}
-              <div class="row g-3">
-                  <div class="col-md-3">
-                      <label class="form-label">Id</label>
-                      <input type="number" class="form-control" name="Id" value="{{ cluster.id }}" readonly disabled>
-                  </div>
-
-                  <div class="col-md-9">
-                      <label class="form-label">Name</label>
-                      <input type="text" class="form-control" name="Name" value="{{ cluster.name }}">
-                  </div>
-
-                  <div class="col-md-6">
-                      <label class="form-label">Description</label>
-                      <input type="text" class="form-control" name="Description" value="{{ cluster.description }}">
-                  </div>
-
-                  <div class="col-md-6">
-                      <label class="form-label">Master Node Name</label>
-                      <input type="text" class="form-control" name="MasterNodeName" value="{{ cluster.master_node_name }}">
-                  </div>
-
-                  <div class="col-md-6">
-                      <label class="form-label">Scheduler Type</label>
-                      <select class="form-select" name="SchedulerType">
-                          <option value="1" {% if cluster.scheduler_type == 1 %}selected{% endif %}>LinuxLocal</option>
-                          <option value="2" {% if cluster.scheduler_type == 2 %}selected{% endif %}>PbsPro</option>
-                          <option value="4" {% if cluster.scheduler_type == 4 %}selected{% endif %}>Slurm</option>
-                          <option value="8" {% if cluster.scheduler_type == 8 %}selected{% endif %}>HyperQueue</option>
-                      </select>
-                  </div>
-
-                  <div class="col-md-6">
-                      <label class="form-label">Connection Protocol</label>
-                      <select class="form-select" name="ConnectionProtocol">
-                          <option value="1" {% if cluster.connection_protocol == 1 %}selected{% endif %}>MicrosoftHpcApi</option>
-                          <option value="2" {% if cluster.connection_protocol == 2 %}selected{% endif %}>Ssh</option>
-                          <option value="4" {% if cluster.connection_protocol == 4 %}selected{% endif %}>SshInteractive</option>
-                      </select>
-                  </div>
-
-                  <div class="col-md-4">
-                      <label class="form-label">Time Zone</label>
-                      <input type="text" class="form-control" name="TimeZone" value="{{ cluster.time_zone }}">
-                  </div>
-
-                  <div class="col-md-4">
-                      <label class="form-label">Port</label>
-                      <input type="number" class="form-control" name="Port" value="{{ cluster.port }}">
-                  </div>
-
-                  <div class="col-md-4 d-flex align-items-center">
-                      <div class="form-check mt-2">
-                          <input class="form-check-input" type="checkbox" name="UpdateJobStateByServiceAccount" {% if cluster.update_job_state_by_service_account %}checked{% endif %}>
-                          <label class="form-check-label">Update Job State By Service Account</label>
-                      </div>
-                  </div>
-
-                  <div class="col-md-6">
-                      <label class="form-label">Domain Name</label>
-                      <input type="text" class="form-control" name="DomainName" value="{{ cluster.domain_name }}">
-                  </div>
-
-                  <div class="col-md-6">
-                      <label class="form-label">Proxy Connection Id</label>
-                      <input type="number" class="form-control" name="ProxyConnectionId" value="{{ cluster.proxy_connection }}">
-                  </div>
-              </div>
-
-              <div class="mt-4 d-flex justify-content-between">
-                  <button type="submit" class="btn btn-primary">Save</button>
-                  <a href="{% url 'cluster_list' %}" class="btn btn-secondary">Back</a>
-              </div>
-          </form>
-      </div>
-
-
-    </div>
-
-      {% if cluster %}
-      <div class="card-body">
-  <div class="card mb-4 w-75 mx-auto shadow-sm">
-    <div class="card-header d-flex align-items-center">
-      <strong>File Transfer Methods</strong>
-      <button class="btn btn-outline-secondary ms-auto" onclick="location.reload();">Reload</button>
-    </div>
-    <div class="card-body">
-      {% if filetransfer_methods %}
-        <table class="table table-striped table-hover">
-          <thead>
-            <tr>
-              <th scope="col">Id</th>
-              <th scope="col">Server Hostname</th>
-                <th scope="col">Port</th>
-              <th scope="col">Protocol</th>
-              <th scope="col">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for ftm in filetransfer_methods %}
-              <tr>
-                <td>{{ ftm.id }}</td>
-                <td>{{ ftm.server_hostname }}</td>
-                  <td>{{ ftm.port }}</td>
-                <td>{{ ftm.protocol_name }}</td>
-                <td>
-                  <!-- Edit button -->
-                  <button class="btn btn-sm btn-primary"
-                        data-bs-toggle="modal"
-                        data-bs-target="#editFileTransferModal"
-                        data-id="{{ ftm.id }}"
-                        data-hostname="{{ ftm.server_hostname }}"
-                        data-protocol-id="{{ ftm.protocol }}"
-                        data-port="{{ ftm.port }}"
-                    >
-                  Edit
-                </button>
-
-                  <!-- Delete button -->
-                        <form method="post" onsubmit="return confirm('Are you sure you want to delete this File Transfer Method?');">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="delete_filetransfer">
-                            <input type="hidden" name="Id" value="{{ ftm.id }}">
-                            <button class="btn btn-sm btn-danger">
-                                Delete
-                            </button>
-                        </form>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p class="text-muted">No file transfer methods found.</p>
-      {% endif %}
-
-      <div class="mt-3">
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addFileTransferModal">
-          Add New Method
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Add Modal -->
-<div class="modal fade" id="addFileTransferModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="add_filetransfer">
-        <div class="modal-header">
-          <h5 class="modal-title">Add File Transfer Method</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Server Hostname</label>
-            <input type="text" class="form-control" name="ServerHostname" required>
-          </div>
-        <div class="mb-3">
-            <label class="form-label">Port</label>
-            <input type="number" class="form-control" name="Port" id="Port" optional>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Protocol</label>
-            <select class="form-select" name="Protocol" required>
-              {% for pid, pname in PROTOCOL_CHOICES %}
-                <option value="{{ pid }}">{{ pname }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Save</button>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<!-- Edit Modal -->
-<div class="modal fade" id="editFileTransferModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <form method="post">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="edit_filetransfer">
-        <input type="hidden" name="Id" id="editFileTransferId">
-        <div class="modal-header">
-          <h5 class="modal-title">Edit File Transfer Method</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Server Hostname</label>
-            <input type="text" class="form-control" name="ServerHostname" id="editServerHostname" required>
-          </div>
-            <div class="mb-3">
-            <label class="form-label">Port</label>
-            <input type="number" class="form-control" name="Port" id="editPort" optional>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Protocol</label>
-            <select class="form-select" name="Protocol" id="editProtocol" required>
-              {% for pid, pname in PROTOCOL_CHOICES %}
-                <option value="{{ pid }}">{{ pname }}</option>
-              {% endfor %}
-            </select>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Save Changes</button>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<script>
-  // Fill edit modal with data
-  var editModal = document.getElementById('editFileTransferModal')
-  editModal.addEventListener('show.bs.modal', function (event) {
-    var button = event.relatedTarget
-    document.getElementById('editFileTransferId').value = button.getAttribute('data-id')
-    document.getElementById('editServerHostname').value = button.getAttribute('data-hostname')
-      document.getElementById('editPort').value = button.getAttribute('data-port')
-
-    // nastavení selectu podle protokolu (předaný jako číslo)
-    var protocolValue = button.getAttribute('data-protocol-id')
-    document.getElementById('editProtocol').value = protocolValue
-  })
-</script>
-{% endif %}
-
-  {% elif active_tab == 'queues' %}
-    <!-- Queues Content -->
-    {% include "queues_table.html" %}
-
-
-  {% elif active_tab == 'projects' %}
-
-    {% if queues %}
-              {% include "projects_table.html" %}
-        {% else %}
-                <div class="d-flex justify-content-center">
-                  <div class="alert alert-warning text-center w-75" role="alert">
-                    You need to add a queue before managing projects.
-                  </div>
-                </div>
-
-         {% endif %}
-    {% endif %}
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'cluster_list' %}" class="text-decoration-none text-secondary">Clusters</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{{ cluster.name }}</li>
 {% endblock %}
 
+{% block content %}
+<div class="container-fluid py-2">
+    {% if cluster %}
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs border-bottom mb-4 flex-nowrap overflow-x-auto">
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'detail' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=detail">
+                <i class="bi bi-info-circle me-1.5"></i>Cluster Detail
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'queues' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=queues">
+                <i class="bi bi-list-columns-reverse me-1.5"></i>Queues
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'projects' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=projects">
+                <i class="bi bi-people me-1.5"></i>Projects
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'proxy_connections' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=proxy_connections">
+                <i class="bi bi-hdd-network me-1.5"></i>Proxy Connections
+            </a>
+        </li>
+    </ul>
+    {% endif %}
 
+    {% if active_tab == 'detail' %}
+        <div class="row g-4">
+            <!-- Left Side: Cluster Info Form -->
+            <div class="col-lg-7">
+                <div class="card border-0 shadow-sm bg-white mb-4">
+                    <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-gear text-primary fs-5"></i>
+                            <h5 class="h6 mb-0 fw-bold text-dark">Cluster Configuration</h5>
+                        </div>
+                        <button class="btn btn-xs btn-outline-secondary" onclick="location.reload();" title="Reload settings">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                    <div class="card-body p-4">
+                        <form method="post">
+                            {% csrf_token %}
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label small text-muted fw-semibold">Cluster ID</label>
+                                    <input type="number" class="form-control form-control-sm bg-light font-monospace" name="Id" value="{{ cluster.id }}" readonly disabled>
+                                    <div class="form-text text-muted"><i class="bi bi-lock me-1"></i>System-assigned ID.</div>
+                                </div>
+                                <div class="col-md-9">
+                                    <label class="form-label small text-muted fw-semibold">Cluster Name</label>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="Name" value="{{ cluster.name }}" required placeholder="e.g. Barbora">
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label small text-muted fw-semibold">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="Description" value="{{ cluster.description }}" placeholder="e.g. Primary compute cluster at IT4I">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted fw-semibold">Master Node Name</label>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="MasterNodeName" value="{{ cluster.master_node_name }}" required placeholder="e.g. master.barbora.it4i.cz">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted fw-semibold">Domain Name <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <input type="text" class="form-control form-control-sm border-light-subtle" name="DomainName" value="{{ cluster.domain_name }}" placeholder="e.g. barbora.it4i.cz">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted fw-semibold">Scheduler Type</label>
+                                    <select class="form-select form-select-sm border-light-subtle" name="SchedulerType">
+                                        {% if cluster.scheduler_type == 1 %}
+                                        <option value="1" selected>LinuxLocal</option>
+                                        {% endif %}
+                                        <option value="2" {% if cluster.scheduler_type == 2 %}selected{% endif %}>PbsPro</option>
+                                        <option value="4" {% if not cluster.scheduler_type or cluster.scheduler_type == 4 %}selected{% endif %}>Slurm</option>
+                                        <option value="8" {% if cluster.scheduler_type == 8 %}selected{% endif %}>HyperQueue</option>
+                                        {% if is_v6_4_0_plus %}
+                                        <option value="16" {% if cluster.scheduler_type == 16 %}selected{% endif %}>FirecREST (Slurm)</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted fw-semibold">Connection Protocol</label>
+                                    <select class="form-select form-select-sm border-light-subtle" name="ConnectionProtocol">
+                                        {% if cluster.connection_protocol == 1 %}
+                                        <option value="1" selected>microsofthpcapi</option>
+                                        {% endif %}
+                                        <option value="2" {% if cluster.connection_protocol == 2 %}selected{% endif %}>ssh</option>
+                                        {% if cluster.connection_protocol == 3 %}
+                                        <option value="3" selected>ssh interactive (legacy)</option>
+                                        {% endif %}
+                                        {% if cluster.connection_protocol == 4 %}
+                                        <option value="4" selected>ssh interactive</option>
+                                        {% endif %}
+                                        {% if is_v6_4_0_plus %}
+                                        <option value="8" {% if cluster.connection_protocol == 8 %}selected{% endif %}>http</option>
+                                        <option value="16" {% if cluster.connection_protocol == 16 %}selected{% endif %}>https</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold">Time Zone</label>
+                                    <select class="form-select form-select-sm border-light-subtle bg-white" name="TimeZone" required>
+                                        <option value="" disabled {% if not cluster.time_zone %}selected{% endif %}>Select Time Zone...</option>
+                                        <option value="CET" {% if cluster.time_zone == "CET" %}selected{% endif %}>CET (Central European Time)</option>
+                                        <option value="CEST" {% if cluster.time_zone == "CEST" %}selected{% endif %}>CEST (Central European Summer Time)</option>
+                                        <option value="UTC" {% if cluster.time_zone == "UTC" %}selected{% endif %}>UTC (Coordinated Universal Time)</option>
+                                        <option value="GMT" {% if cluster.time_zone == "GMT" %}selected{% endif %}>GMT (Greenwich Mean Time)</option>
+                                        <option value="EET" {% if cluster.time_zone == "EET" %}selected{% endif %}>EET (Eastern European Time)</option>
+                                        <option value="WET" {% if cluster.time_zone == "WET" %}selected{% endif %}>WET (Western European Time)</option>
+                                        {% if cluster.time_zone and cluster.time_zone != "CET" and cluster.time_zone != "CEST" and cluster.time_zone != "UTC" and cluster.time_zone != "GMT" and cluster.time_zone != "EET" and cluster.time_zone != "WET" %}
+                                            <option value="{{ cluster.time_zone }}" selected>{{ cluster.time_zone }}</option>
+                                        {% endif %}
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold">Port <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <input type="number" class="form-control form-control-sm border-light-subtle" name="Port" value="{{ cluster.port }}" placeholder="e.g. 22">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold">Proxy Connection <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                    <select class="form-select form-select-sm border-light-subtle bg-white" name="ProxyConnectionId">
+                                        <option value="">None (Direct Connection)</option>
+                                        {% for pc in proxy_connections %}
+                                            <option value="{{ pc.id }}" {% if cluster.proxy_connection == pc.id or cluster.proxy_connection.id == pc.id %}selected{% endif %}>
+                                                #{{ pc.id }} - {% if pc.username %}{{ pc.username }}@{% endif %}{{ pc.host }}:{{ pc.port }} ({{ pc.type_name }})
+                                            </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-12 py-2">
+                                    <div class="form-check">
+                                        <input class="form-check-input border-light-subtle shadow-none" type="checkbox" name="UpdateJobStateByServiceAccount" id="UpdateJobStateByServiceAccount" {% if cluster.update_job_state_by_service_account %}checked{% endif %}>
+                                        <label class="form-check-label small text-dark fw-medium" for="UpdateJobStateByServiceAccount">
+                                            Update Job State By Service Account
+                                        </label>
+                                    </div>
+                                </div>
+                                {% if is_v6_4_0_plus %}
+                                <!-- Hidden textarea where the serialized JSON config is sent to backend -->
+                                <textarea name="CustomConfiguration" style="display: none;">{{ custom_configuration_json }}</textarea>
 
+                                <div class="col-12 py-2">
+                                    <div class="card border border-light-subtle bg-light bg-opacity-25 shadow-xs p-3">
+                                        <div class="card-title d-flex align-items-center gap-2 mb-3 border-bottom pb-2">
+                                            <i class="bi bi-sliders text-primary"></i>
+                                            <h6 class="h6 mb-0 fw-bold text-dark">Custom Configuration</h6>
+                                        </div>
 
+                                        <!-- FirecREST Specific Settings (Visible only when FirecREST scheduler type is selected) -->
+                                        <div id="fc-settings-section" class="mb-3" style="display: none;">
+                                            <div class="fw-bold small text-primary mb-2">
+                                                <i class="bi bi-shield-lock-fill me-1"></i> FirecREST Settings
+                                            </div>
+                                            <div class="row g-2 mb-3 bg-white p-3 rounded border border-light-subtle">
+                                                <div class="col-12">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="fc-IdpUrl">IdpUrl <span class="text-danger">*</span></label>
+                                                    <input type="url" class="form-control form-control-sm border-light-subtle bg-white" id="fc-IdpUrl" placeholder="e.g. https://keycloak.example.cz/auth/realms/it4i/protocol/openid-connect/token">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>URL address of the Keycloak token endpoint for Direct Authentication.</div>
+                                                </div>
+                                                <div class="col-12 mt-2">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="fc-ExpirioSecretName">ExpirioSecretName <span class="text-danger">*</span></label>
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-ExpirioSecretName" placeholder="e.g. firecrest-secret-key">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Name of the secret key in Expirio for dynamic credential downloading.</div>
+                                                </div>
+                                                <div class="col-12 mt-2">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="fc-HomeDirectoryTemplate">HomeDirectoryTemplate <span class="text-danger">*</span></label>
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="fc-HomeDirectoryTemplate" placeholder="e.g. /users/{username}" value="/users/{username}">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Template path for user's home directory.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- General Custom Parameters (Key-Value Dynamic Table) -->
+                                        <div>
+                                            <div class="fw-bold small text-secondary mb-2">
+                                                <i class="bi bi-list-nested me-1"></i> Parameters
+                                            </div>
+                                            <div id="custom-kv-container">
+                                                <!-- Dynamic rows will be inserted here by JavaScript -->
+                                            </div>
+                                            <button type="button" id="btn-add-param" class="btn btn-xs btn-outline-primary fw-bold mt-2">
+                                                <i class="bi bi-plus-lg me-1"></i>Add Parameter
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <script>
+                                    document.addEventListener('DOMContentLoaded', function() {
+                                        const schedulerSelect = document.querySelector('select[name="SchedulerType"]');
+                                        const customConfigTextarea = document.querySelector('textarea[name="CustomConfiguration"]');
+                                        
+                                        const fcSettingsSection = document.getElementById('fc-settings-section');
+                                        const fcIdpUrl = document.getElementById('fc-IdpUrl');
+                                        const fcExpirioSecretName = document.getElementById('fc-ExpirioSecretName');
+                                        const fcHomeDirectoryTemplate = document.getElementById('fc-HomeDirectoryTemplate');
+                                        
+                                        const kvContainer = document.getElementById('custom-kv-container');
+                                        const btnAddParam = document.getElementById('btn-add-param');
+                                        
+                                        if (!customConfigTextarea || !schedulerSelect) return;
+
+                                        const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate'];
+
+                                        function getParsedJSON() {
+                                            try {
+                                                const raw = customConfigTextarea.value.trim();
+                                                if (!raw) return {};
+                                                const parsed = JSON.parse(raw);
+                                                return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+                                            } catch (e) {
+                                                return {};
+                                            }
+                                        }
+
+                                        function addParameterRow(key = '', value = '') {
+                                            const rowId = 'kv-row-' + Math.random().toString(36).substr(2, 9);
+                                            const rowDiv = document.createElement('div');
+                                            rowDiv.className = 'row g-2 mb-2 align-items-center';
+                                            rowDiv.id = rowId;
+                                            
+                                            rowDiv.innerHTML = `
+                                                <div class="col-5">
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-key" placeholder="Key" value="${escapeHtml(key)}">
+                                                </div>
+                                                <div class="col-6">
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-value" placeholder="Value" value="${escapeHtml(value)}">
+                                                </div>
+                                                <div class="col-1 text-end">
+                                                    <button type="button" class="btn btn-xs btn-outline-danger btn-remove-row p-1" title="Remove parameter">
+                                                        <i class="bi bi-dash-lg"></i>
+                                                    </button>
+                                                </div>
+                                            `;
+                                            
+                                            const keyInput = rowDiv.querySelector('.kv-key');
+                                            const valInput = rowDiv.querySelector('.kv-value');
+                                            const btnRemove = rowDiv.querySelector('.btn-remove-row');
+                                            
+                                            keyInput.addEventListener('input', serializeToJSON);
+                                            valInput.addEventListener('input', serializeToJSON);
+                                            btnRemove.addEventListener('click', function() {
+                                                rowDiv.remove();
+                                                serializeToJSON();
+                                            });
+                                            
+                                            kvContainer.appendChild(rowDiv);
+                                            return rowDiv;
+                                        }
+
+                                        function escapeHtml(str) {
+                                            return str.replace(/&/g, "&amp;")
+                                                      .replace(/</g, "&lt;")
+                                                      .replace(/>/g, "&gt;")
+                                                      .replace(/"/g, "&quot;")
+                                                      .replace(/'/g, "&#039;");
+                                        }
+
+                                        function populateUIFromJSON() {
+                                            const data = getParsedJSON();
+                                            
+                                            fcIdpUrl.value = data['IdpUrl'] || '';
+                                            fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
+                                            fcHomeDirectoryTemplate.value = data['HomeDirectoryTemplate'] || '/users/{username}';
+                                            
+                                            kvContainer.innerHTML = '';
+                                            
+                                            let hasGeneral = false;
+                                            for (const [k, v] of Object.entries(data)) {
+                                                if (!RESERVED_FC_KEYS.includes(k)) {
+                                                    addParameterRow(k, v);
+                                                    hasGeneral = true;
+                                                }
+                                            }
+                                            
+                                            if (!hasGeneral) {
+                                                addParameterRow('', '');
+                                            }
+                                        }
+
+                                        function serializeToJSON() {
+                                            const data = {};
+                                            
+                                            if (schedulerSelect.value === '16') {
+                                                if (fcIdpUrl.value.trim()) {
+                                                    data['IdpUrl'] = fcIdpUrl.value.trim();
+                                                }
+                                                if (fcExpirioSecretName.value.trim()) {
+                                                    data['ExpirioSecretName'] = fcExpirioSecretName.value.trim();
+                                                }
+                                                data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
+                                            }
+                                            
+                                            const rows = kvContainer.querySelectorAll('.row');
+                                            rows.forEach(row => {
+                                                const key = row.querySelector('.kv-key').value.trim();
+                                                const value = row.querySelector('.kv-value').value.trim();
+                                                
+                                                if (key) {
+                                                    if (schedulerSelect.value === '16' && RESERVED_FC_KEYS.includes(key)) {
+                                                        return;
+                                                    }
+                                                    data[key] = value;
+                                                }
+                                            });
+                                            
+                                            customConfigTextarea.value = JSON.stringify(data, null, 4);
+                                        }
+
+                                        function toggleSchedulerSections() {
+                                            if (schedulerSelect.value === '16') {
+                                                fcSettingsSection.style.display = 'block';
+                                            } else {
+                                                fcSettingsSection.style.display = 'none';
+                                            }
+                                            serializeToJSON();
+                                        }
+
+                                        schedulerSelect.addEventListener('change', toggleSchedulerSections);
+                                        
+                                        const fcFields = [fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate];
+                                        fcFields.forEach(input => {
+                                            input.addEventListener('input', serializeToJSON);
+                                        });
+
+                                        btnAddParam.addEventListener('click', function() {
+                                            addParameterRow('', '');
+                                        });
+
+                                        populateUIFromJSON();
+                                        toggleSchedulerSections();
+
+                                        const form = customConfigTextarea.closest('form');
+                                        if (form) {
+                                            form.addEventListener('submit', function(e) {
+                                                if (schedulerSelect.value === '16') {
+                                                    if (!fcIdpUrl.value.trim() && !fcExpirioSecretName.value.trim()) {
+                                                        alert('For FirecREST scheduler, please specify either IdpUrl (for Direct Authentication) or ExpirioSecretName (for Expirio Integration).');
+                                                        fcIdpUrl.focus();
+                                                        e.preventDefault();
+                                                        return false;
+                                                    }
+                                                    if (!fcHomeDirectoryTemplate.value.trim()) {
+                                                        alert('For FirecREST scheduler, HomeDirectoryTemplate must be specified.');
+                                                        fcHomeDirectoryTemplate.focus();
+                                                        e.preventDefault();
+                                                        return false;
+                                                    }
+                                                }
+                                                
+                                                const keys = [];
+                                                let hasDuplicates = false;
+                                                const rows = kvContainer.querySelectorAll('.row');
+                                                rows.forEach(row => {
+                                                    const keyInput = row.querySelector('.kv-key');
+                                                    const k = keyInput.value.trim();
+                                                    if (k) {
+                                                        if (keys.includes(k)) {
+                                                            alert('Duplicate custom configuration key: "' + k + '". Keys must be unique.');
+                                                            keyInput.focus();
+                                                            hasDuplicates = true;
+                                                        } else {
+                                                            keys.push(k);
+                                                        }
+                                                    }
+                                                });
+                                                
+                                                if (hasDuplicates) {
+                                                    e.preventDefault();
+                                                    return false;
+                                                }
+                                            });
+                                        }
+                                    });
+                                </script>
+                                {% endif %}
+                            </div>
+                            <div class="mt-4 pt-3 border-top d-flex justify-content-between">
+                                <a href="{% url 'cluster_list' %}" class="btn btn-sm btn-outline-secondary fw-semibold px-3">
+                                    <i class="bi bi-arrow-left me-1"></i>Back
+                                </a>
+                                <button type="submit" class="btn btn-sm btn-primary fw-bold px-4 shadow-sm">
+                                    <i class="bi bi-check-lg me-1"></i>Save Configuration
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Side: File Transfer Methods -->
+            <div class="col-lg-5">
+                {% if cluster %}
+                <div class="card border-0 shadow-sm bg-white">
+                    <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-2">
+                            <i class="bi bi-arrow-left-right text-primary fs-5"></i>
+                            <h5 class="h6 mb-0 fw-bold text-dark">File Transfer Methods</h5>
+                        </div>
+                        <button class="btn btn-xs btn-outline-primary fw-bold" data-bs-toggle="modal" data-bs-target="#addFileTransferModal">
+                            <i class="bi bi-plus-lg me-1"></i>Add Method
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if filetransfer_methods %}
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-3" style="width: 15%;">ID</th>
+                                            <th style="width: 50%;">Server Hostname</th>
+                                            <th style="width: 20%;">Protocol</th>
+                                            <th class="text-end pe-3" style="width: 15%;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for ftm in filetransfer_methods %}
+                                        <tr>
+                                            <td class="ps-3 font-monospace text-secondary" style="font-size: 0.8rem;">#{{ ftm.id }}</td>
+                                            <td>
+                                                <div class="fw-semibold text-dark small">{{ ftm.server_hostname }}</div>
+                                                <div class="text-muted small font-monospace" style="font-size: 0.7rem;">Port {{ ftm.port|default:"default" }}</div>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-light text-secondary border font-monospace px-2 py-1">{{ ftm.protocol_name }}</span>
+                                            </td>
+                                            <td class="text-end pe-3">
+                                                <div class="d-flex gap-1.5 justify-content-end">
+                                                    <button class="btn btn-xs btn-outline-primary px-2"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#editFileTransferModal"
+                                                            data-id="{{ ftm.id }}"
+                                                            data-hostname="{{ ftm.server_hostname }}"
+                                                            data-protocol-id="{{ ftm.protocol }}"
+                                                            data-port="{{ ftm.port }}"
+                                                            title="Edit method">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                    <form method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this File Transfer Method?');">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="action" value="delete_filetransfer">
+                                                        <input type="hidden" name="Id" value="{{ ftm.id }}">
+                                                        <button class="btn btn-xs btn-outline-danger px-2" title="Delete method">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% else %}
+                            <div class="text-center py-5 text-muted">
+                                <i class="bi bi-arrow-left-right fs-1 mb-2 d-block text-secondary"></i>
+                                <p class="small mb-0">No file transfer methods found.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Add File Transfer Modal -->
+        <div class="modal fade" id="addFileTransferModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="add_filetransfer">
+                        <div class="modal-header bg-light py-3">
+                            <h5 class="modal-title fw-bold text-dark"><i class="bi bi-plus-lg me-1 text-primary"></i>Add File Transfer Method</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Server Hostname / API URL</label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ServerHostname" required placeholder="e.g. storage.it4i.cz or firecrest.it4i.cz/api">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Port (Optional)</label>
+                                <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="Port" placeholder="e.g. 22">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small text-muted fw-semibold">Protocol</label>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" name="Protocol" required>
+                                    {% for pid, pname in PROTOCOL_CHOICES %}
+                                        {% if pid != 1 and pid != 4 %}
+                                            {% if is_v6_4_0_plus or pid < 8 %}
+                                                <option value="{{ pid }}" {% if pid == 2 %}selected{% endif %}>{{ pname }}</option>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light border-top">
+                            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Add Method</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit File Transfer Modal -->
+        <div class="modal fade" id="editFileTransferModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="edit_filetransfer">
+                        <input type="hidden" name="Id" id="editFileTransferId">
+                        <div class="modal-header bg-light py-3">
+                            <h5 class="modal-title fw-bold text-dark"><i class="bi bi-pencil me-1 text-primary"></i>Edit File Transfer Method</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Server Hostname / API URL</label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ServerHostname" id="editServerHostname" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Port (Optional)</label>
+                                <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="Port" id="editPort">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small text-muted fw-semibold">Protocol</label>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" name="Protocol" id="editProtocol" required>
+                                    {% for pid, pname in PROTOCOL_CHOICES %}
+                                        {% if pid != 1 and pid != 4 %}
+                                            {% if is_v6_4_0_plus or pid < 8 %}
+                                                <option value="{{ pid }}">{{ pname }}</option>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light border-top">
+                            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                var editModal = document.getElementById('editFileTransferModal')
+                if (editModal) {
+                    editModal.addEventListener('show.bs.modal', function (event) {
+                        var button = event.relatedTarget
+                        var protoId = button.getAttribute('data-protocol-id')
+                        var editProtocolSelect = document.getElementById('editProtocol')
+                        
+                        // First, remove any dynamically added local options (value 1 and 4)
+                        var option1 = editProtocolSelect.querySelector('option[value="1"]');
+                        if (option1) option1.remove();
+                        var option4 = editProtocolSelect.querySelector('option[value="4"]');
+                        if (option4) option4.remove();
+                        
+                        // If the current protocol is one of the local ones, add it back so it can be selected/shown
+                        if (protoId === "1") {
+                            var opt = document.createElement('option');
+                            opt.value = "1";
+                            opt.textContent = "network share";
+                            editProtocolSelect.appendChild(opt);
+                        } else if (protoId === "4") {
+                            var opt = document.createElement('option');
+                            opt.value = "4";
+                            opt.textContent = "local sftp/scp";
+                            editProtocolSelect.appendChild(opt);
+                        }
+                        
+                        document.getElementById('editFileTransferId').value = button.getAttribute('data-id')
+                        document.getElementById('editServerHostname').value = button.getAttribute('data-hostname')
+                        document.getElementById('editPort').value = button.getAttribute('data-port') || ''
+                        editProtocolSelect.value = protoId
+                    });
+                }
+            });
+        </script>
+    {% endif %}
+
+    {% if active_tab == 'queues' %}
+        <!-- Queues List Tab -->
+        {% include "queues_table.html" %}
+    {% endif %}
+
+    {% if active_tab == 'projects' %}
+        <!-- Projects List Tab -->
+        {% if queues %}
+            {% include "projects_table.html" %}
+        {% else %}
+            <div class="text-center py-5 bg-white rounded-3 shadow-sm border">
+                <i class="bi bi-exclamation-triangle text-warning fs-1 mb-3 d-block"></i>
+                <h5 class="fw-bold text-dark mb-2">No active queues defined</h5>
+                <p class="text-muted small px-3">You need to add a queue configuration to this cluster before managing projects.</p>
+                <a href="?tab=queues" class="btn btn-sm btn-primary mt-2 fw-semibold px-3"><i class="bi-plus-lg me-1"></i>Configure Queues</a>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    {% if active_tab == 'proxy_connections' %}
+        <!-- Proxy Connections List Tab -->
+        <div class="card border-0 shadow-sm bg-white">
+            <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-hdd-network text-primary fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold text-dark">Proxy Connections</h5>
+                </div>
+                <button class="btn btn-sm btn-outline-primary fw-bold px-3 py-1.5 rounded-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#addProxyModal">
+                    <i class="bi bi-plus-lg me-1.5"></i>Add Proxy Connection
+                </button>
+            </div>
+            <div class="card-body p-0">
+                {% if proxy_connections %}
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+                            <thead class="table-light text-secondary fw-semibold">
+                                <tr>
+                                    <th class="ps-4 py-3" style="width: 10%;">ID</th>
+                                    <th class="py-3" style="width: 35%;">Host & Port</th>
+                                    <th class="py-3" style="width: 20%;">Type</th>
+                                    <th class="py-3" style="width: 20%;">User Credentials</th>
+                                    <th class="pe-4 py-3 text-end" style="width: 15%;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pc in proxy_connections %}
+                                <tr>
+                                    <td class="ps-4 py-3 font-monospace text-secondary">#{{ pc.id }}</td>
+                                    <td class="py-3 fw-medium text-dark">
+                                        <i class="bi bi-globe me-2 text-secondary"></i>{{ pc.host }}:{{ pc.port }}
+                                    </td>
+                                    <td class="py-3">
+                                        <span class="badge bg-light text-secondary border font-monospace px-2.5 py-1.5 rounded-pill">{{ pc.type_name }}</span>
+                                    </td>
+                                    <td class="py-3 text-secondary">
+                                        {% if pc.username %}
+                                            <span class="d-flex align-items-center gap-1.5">
+                                                <i class="bi bi-person text-secondary"></i>
+                                                {{ pc.username }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted small">None</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="pe-4 py-3 text-end">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <button class="btn btn-xs btn-outline-primary fw-semibold px-2.5 py-1 rounded-2"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#editProxyModal"
+                                                    data-id="{{ pc.id }}"
+                                                    data-host="{{ pc.host }}"
+                                                    data-port="{{ pc.port }}"
+                                                    data-type="{{ pc.type }}"
+                                                    data-username="{{ pc.username|default:'' }}"
+                                                    data-password="{{ pc.password|default:'' }}"
+                                                    title="Edit proxy connection">
+                                                <i class="bi bi-pencil me-1"></i>Edit
+                                            </button>
+                                            <form method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this Proxy Connection?');">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="delete_proxy_connection">
+                                                <input type="hidden" name="Id" value="{{ pc.id }}">
+                                                <button class="btn btn-xs btn-outline-danger fw-semibold px-2.5 py-1 rounded-2" title="Delete proxy connection">
+                                                    <i class="bi bi-trash me-1"></i>Delete
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-hdd-network fs-1 mb-2 d-block text-secondary opacity-50"></i>
+                        <p class="mb-0 small">No proxy connections registered on the system yet.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Add Proxy Connection Modal -->
+        <div class="modal fade" id="addProxyModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow bg-white">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="add_proxy_connection">
+                        <div class="modal-header bg-light py-3">
+                            <h5 class="modal-title fw-bold text-dark"><i class="bi bi-plus-lg me-2 text-primary"></i>Add Proxy Connection</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Host / IP</label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Host" required placeholder="e.g. proxy.it4i.cz">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Port</label>
+                                <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="Port" required placeholder="e.g. 1080">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Proxy Type</label>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" name="Type" required>
+                                    <option value="1">SOCKS4</option>
+                                    <option value="2">SOCKS5</option>
+                                    <option value="3">HTTP</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Username <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Username" placeholder="e.g. proxyuser">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small text-muted fw-semibold">Password <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="password" class="form-control form-control-sm border-light-subtle bg-white" name="Password" placeholder="e.g. secretpassword">
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light border-top">
+                            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Add Proxy</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Proxy Connection Modal -->
+        <div class="modal fade" id="editProxyModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content border-0 shadow bg-white">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="edit_proxy_connection">
+                        <input type="hidden" name="Id" id="editProxyId">
+                        <div class="modal-header bg-light py-3">
+                            <h5 class="modal-title fw-bold text-dark"><i class="bi bi-pencil me-2 text-primary"></i>Edit Proxy Connection</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4">
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Host / IP</label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Host" id="editProxyHost" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Port</label>
+                                <input type="number" class="form-control form-control-sm border-light-subtle bg-white" name="Port" id="editProxyPort" required>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Proxy Type</label>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" name="Type" id="editProxyType" required>
+                                    <option value="1">SOCKS4</option>
+                                    <option value="2">SOCKS5</option>
+                                    <option value="3">HTTP</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-muted fw-semibold">Username <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Username" id="editProxyUsername">
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small text-muted fw-semibold">Password <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="password" class="form-control form-control-sm border-light-subtle bg-white" name="Password" id="editProxyPassword" placeholder="Leave blank to keep unchanged">
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light border-top">
+                            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+                            <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                var editProxyModal = document.getElementById('editProxyModal')
+                if (editProxyModal) {
+                    editProxyModal.addEventListener('show.bs.modal', function (event) {
+                        var button = event.relatedTarget
+                        document.getElementById('editProxyId').value = button.getAttribute('data-id')
+                        document.getElementById('editProxyHost').value = button.getAttribute('data-host')
+                        document.getElementById('editProxyPort').value = button.getAttribute('data-port')
+                        document.getElementById('editProxyType').value = button.getAttribute('data-type')
+                        document.getElementById('editProxyUsername').value = button.getAttribute('data-username') || ''
+                        document.getElementById('editProxyPassword').value = ''
+                    });
+                }
+            });
+        </script>
+    {% endif %}
+</div>
+{% endblock %}

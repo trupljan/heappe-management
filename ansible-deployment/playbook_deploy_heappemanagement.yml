@@ -14,12 +14,15 @@
       private: true
 
   vars:
+    ansible_python_interpreter: "/usr/bin/python3"
+
     # --- APPLICATION CONFIGURATION ---
+    service_name: "adminpanel"
     app_dir: "/opt/heappe/heappe-admin-app"
     app_port: 8000
     app_bind: "0.0.0.0:{{ app_port }}"
     app_nginx_proxypass: "http://127.0.0.1:{{ app_port }}/"
-    service_file: "/etc/systemd/system/adminpanel.service"
+    service_file: "/etc/systemd/system/{{ service_name }}.service"
 
     # --- GIT CONFIGURATION ---
     git_repo: "opencode.it4i.eu/heappe-middleware/heappe-management.git"
@@ -55,82 +58,88 @@
     heappe_datastaging_nginx_proxypass: "http://127.0.0.1:5001/"
 
 # Setup python options
-    build_dir: "{{ app_dir }}/build"
-    python_version_major: 3
-    python_version_minor: 12
-    python_version_patch: 12
-    python_exe: "python{{ python_version_major }}.{{ python_version_minor }}"
-    python_version: "{{ python_version_major }}.{{ python_version_minor }}.{{ python_version_patch }}"
-    python_src_dir: "{{ build_dir }}/python"
-    python_prefix: "{{ app_dir }}/python"
+    python_exe: "{{ 'python3' if ansible_os_family == 'Debian' else 'python3.12' }}"
+    python_bin_path: "/usr/bin/{{ python_exe }}"
     venv_dir: "{{ app_dir }}/branches/.venv-{{ git_branch }}"
 
   tasks:
-    - name: Install required base packages for building Python (Ubuntu / Debian)
+    - name: Install Python and required base packages (Ubuntu / Debian)
       ansible.builtin.apt:
         name:
-          - wget
-          - curl
-          - build-essential
-          - xz-utils
-          - tk-dev
-          - zlib1g-dev
-          - libncurses-dev
-          - libgdbm-dev
-          - libnss3-dev
-          - libssl-dev
-          - libreadline-dev
-          - libffi-dev
-          - libbz2-dev
-          - libsqlite3-dev
-          - liblzma-dev
-          - libc6-dev
-        state: present
-      when: ansible_os_family == 'Debian'
-
-    - name: Install required base packages for building Python (CentOS / RHEL)
-      ansible.builtin.dnf:
-        name:
-          - git
-          - gcc
-          - make
-          - bzip2
-          - bzip2-devel
-          - xz-devel
-          - zlib-devel
-          - libffi-devel
-          - wget
-          - curl
-          - unixODBC
-          - yum-utils
-          - dnf-plugins-core
-          - openssl-devel
-          - readline-devel
-          - sqlite-devel
-        state: present
-      when: ansible_os_family == 'RedHat'
-
-    - name: Install required base packages (Ubuntu / Debian)
-      ansible.builtin.apt:
-        name:
+          - "{{ python_exe }}"
+          - "{{ python_exe }}-venv"
+          - python3-pip
+          - python3-debian
           - apt-transport-https
           - ca-certificates
           - curl
           - gnupg-agent
           - libodbc2
+          - build-essential
+          - libffi-dev
+          - python3-dev
+          - libssl-dev
+          - unixodbc-dev
         state: present
+        update_cache: true
+      when: ansible_os_family == 'Debian'
+
+    - name: Install base packages (CentOS / RHEL)
+      ansible.builtin.dnf:
+        name:
+          - git
+          - wget
+          - curl
+          - unixODBC
+          - dnf-plugins-core
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Install Python packages (CentOS / RHEL)
+      ansible.builtin.dnf:
+        name:
+          - "{{ python_exe }}"
+          - "{{ python_exe }}-devel"
+          - "{{ python_exe }}-pip"
+        state: present
+      when:
+        - ansible_os_family == 'RedHat'
+        - python_exe != 'python3'
+
+    - name: Install default Python packages if python_exe is python3 (CentOS / RHEL)
+      ansible.builtin.dnf:
+        name:
+          - python3
+          - python3-devel
+          - python3-pip
+        state: present
+      when:
+        - ansible_os_family == 'RedHat'
+        - python_exe == 'python3'
+
+    - name: Resolve Python version for site-packages path
+      ansible.builtin.command: "{{ python_bin_path }} -c 'import sys; print(f\"python{sys.version_info.major}.{sys.version_info.minor}\")'"
+      register: python_version_resolved
+      changed_when: false
+
+    - name: Create directory for apt keyrings (Ubuntu / Debian)
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+      when: ansible_os_family == 'Debian'
+
+    - name: Download Docker GPG key (Ubuntu / Debian)
+      ansible.builtin.get_url:
+        url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+        dest: /etc/apt/keyrings/docker.asc
+        mode: '0644'
       when: ansible_os_family == 'Debian'
 
     - name: Add Docker repository (Ubuntu / Debian)
-      ansible.builtin.deb822_repository:
-        name: docker
-        types: [deb]
-        uris: "https://download.docker.com/linux/{{ ansible_distribution | lower }}"
-        signed_by: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
-        suites: ["{{ ansible_distribution_release | lower }}"]
-        components: [stable]
+      ansible.builtin.apt_repository:
+        repo: "deb [arch={{ 'amd64' if ansible_architecture == 'x86_64' else 'arm64' }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release | lower }} stable"
         state: present
-        enabled: true
       when: ansible_os_family == 'Debian'
 
     - name: Add Docker repository (CentOS / RHEL)
@@ -188,50 +197,35 @@
         name: safe.directory
         value: "{{ app_dir }}/branches/{{ git_branch }}"
 
-    - name: Create Python source directory
+    - name: Remove old virtual environment if exists
       ansible.builtin.file:
-        path: "{{ python_src_dir }}"
-        state: directory
-        mode: '0755'
+        path: "{{ venv_dir }}"
+        state: absent
 
-    - name: Download Python source
-      ansible.builtin.get_url:
-        url: "https://www.python.org/ftp/python/{{ python_version }}/Python-{{ python_version }}.tgz"
-        dest: "{{ python_src_dir }}/Python-{{ python_version }}.tgz"
-        mode: '0644'
-
-    - name: Extract Python source
-      ansible.builtin.unarchive:
-        src: "{{ python_src_dir }}/Python-{{ python_version }}.tgz"
-        dest: "{{ python_src_dir }}"
-        remote_src: true
-
-    - name: Delete extracted .tgz file
-      ansible.builtin.shell: |
-        rm -f {{ python_src_dir }}/Python-{{ python_version }}.tgz
-      changed_when: true # TODO: run this only if stuff being deleted actually exist
-
-    - name: Create Python installation directory (prefix)
-      ansible.builtin.file:
-        path: "{{ python_prefix }}"
-        state: directory
-        mode: '0755'
-
-    - name: Compile and install Python from source
-      ansible.builtin.shell: |
-        cd {{ python_src_dir }}/Python-{{ python_version }}
-        ./configure --enable-optimizations --with-ensurepip=install --prefix={{ python_prefix }}
-        make -j $(nproc)
-        make altinstall
+    - name: Create virtual environment
+      ansible.builtin.command: "{{ python_bin_path }} -m venv {{ venv_dir }}"
       args:
-        creates: "{{ python_prefix }}/bin/{{ python_exe }}"
+        creates: "{{ venv_dir }}/bin/activate"
 
-    - name: Some cleanup
-      ansible.builtin.shell: |
-        rm -rf {{ python_src_dir }}/Python-{{ python_version }}
-        test -n "$(ls -A "{{ python_src_dir }}")" || rmdir "{{ python_src_dir }}"
-        test -n "$(ls -A "{{ build_dir }}")" || rmdir "{{ build_dir }}"
-      changed_when: true # TODO: run this only if stuff being deleted actually exist
+    - name: Upgrade pip in virtual environment
+      ansible.builtin.command: "{{ venv_dir }}/bin/pip install --upgrade pip"
+      changed_when: true
+
+    - name: Install requirements in virtual environment
+      ansible.builtin.command: "{{ venv_dir }}/bin/pip install -r {{ app_dir }}/branches/{{ git_branch }}/requirements.txt"
+      environment:
+        PYO3_USE_ABI3_FORWARD_COMPATIBILITY: "1"
+      changed_when: true
+
+    - name: Run Django database migrations
+      ansible.builtin.command: "{{ venv_dir }}/bin/python {{ app_dir }}/branches/{{ git_branch }}/manage.py migrate"
+      changed_when: true
+
+    - name: Ensure admin superuser exists
+      ansible.builtin.command: >
+        {{ venv_dir }}/bin/python {{ app_dir }}/branches/{{ git_branch }}/manage.py shell -c
+        "from django.contrib.auth import get_user_model; User=get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin')"
+      changed_when: false
 
     - name: Create systemd service
       ansible.builtin.copy:
@@ -246,11 +240,6 @@
           User=root
           Group=root
           WorkingDirectory={{ app_dir }}/branches/{{ git_branch }}
-          ExecStartPre=/bin/bash -c '[[ -d {{ venv_dir }} ]] || {{ python_prefix }}/bin/{{ python_exe }} -m venv {{ venv_dir }}'
-          ExecStartPre={{ venv_dir }}/bin/pip install --upgrade pip
-          ExecStartPre={{ venv_dir }}/bin/pip install -r {{ app_dir }}/branches/{{ git_branch }}/requirements.txt
-          ExecStartPre={{ venv_dir }}/bin/python {{ app_dir }}/branches/{{ git_branch }}/manage.py migrate
-          ExecStartPre={{ venv_dir }}/bin/python {{ app_dir }}/branches/{{ git_branch }}/manage.py shell -c "from django.contrib.auth import get_user_model; User=get_user_model(); User.objects.filter(username='admin').exists() or User.objects.create_superuser('admin', 'admin@example.com', 'admin')"
           Environment="PYTHONUNBUFFERED=1"
           Environment="MANAGEMENT_PROXYPASS=true"
           ExecStart={{ venv_dir }}/bin/gunicorn adminpanel.wsgi:application --workers 1 --bind {{ app_bind }} --timeout 360
@@ -264,14 +253,9 @@
 # yamllint enable
         mode: '0644'
 
-    - name: Remove old virtual environment if exists
-      ansible.builtin.file:
-        path: "{{ venv_dir }}"
-        state: absent
-
     - name: Enable and restart adminpanel service
       ansible.builtin.systemd:
-        name: adminpanel
+        name: "{{ service_name }}"
         enabled: true
         daemon_reload: true
         state: restarted
@@ -330,7 +314,7 @@
 
     - name: Deploy application's nginx config for heappe management
       ansible.builtin.copy:
-        dest: /etc/nginx/conf.d/heappe-admin-app.conf
+        dest: "/etc/nginx/conf.d/{{ service_name }}.conf"
         owner: root
         group: root
         force: true
@@ -360,17 +344,17 @@
                   expires 30d;
                   access_log off;
                   add_header Cache-Control "public, max-age=2592000";
-                  access_log /var/log/nginx/heappe-admin-access.log;
-                  error_log /var/log/nginx/heappe-admin-error.log;
+                  access_log /var/log/nginx/{{ service_name }}-access.log;
+                  error_log /var/log/nginx/{{ service_name }}-error.log;
               }
 
               location /management/static/admin/ {
-                  alias {{ venv_dir }}/lib/{{ python_exe }}/site-packages/django/contrib/admin/static/admin/;
+                  alias {{ venv_dir }}/lib/{{ python_version_resolved.stdout }}/site-packages/django/contrib/admin/static/admin/;
                   expires 30d;
                   access_log off;
                   add_header Cache-Control "public, max-age=2592000";
-                  access_log /var/log/nginx/heappe-admin-access.log;
-                  error_log /var/log/nginx/heappe-admin-error.log;
+                  access_log /var/log/nginx/{{ service_name }}-access.log;
+                  error_log /var/log/nginx/{{ service_name }}-error.log;
               }
 
               location /management/ {
@@ -379,8 +363,8 @@
                   proxy_set_header X-Real-IP $remote_addr;
                   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
                   proxy_set_header X-Forwarded-Proto $scheme;
-                  access_log /var/log/nginx/heappe-admin-access.log;
-                  error_log /var/log/nginx/heappe-admin-error.log;
+                  access_log /var/log/nginx/{{ service_name }}-access.log;
+                  error_log /var/log/nginx/{{ service_name }}-error.log;
               }
 
               {%if heappe_nginx_location and heappe_nginx_proxypass %}
@@ -425,7 +409,7 @@
                 }
               {% endif %}
 
-              include conf.d/heappe-admin-app-*.inc;
+              include conf.d/{{ service_name }}-*.inc;
           }
 # yamllint enable
       notify: validate_and_reload_nginx

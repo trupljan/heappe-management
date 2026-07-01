@@ -588,3 +588,28 @@ def generate_appsettings_data_staging_v6_2_1(instance_name: str,
             version: str = None):
 
     return generate_appsettings_data_staging_v6_2_0(instance_name,sa_password,data_staging_token,port,version)
+
+def generate_appsettings_v6_4_0(
+        instance_name: str,
+        sa_password: str,
+        port: int = 5000,
+        automigrate: bool = True,
+        version: str = None,
+        deployed_ip: str = None):
+    appsettings = generate_appsettings_v6_2_1(instance_name, sa_password, port, automigrate, version, deployed_ip)
+    
+    if 'HPCConnectionFrameworkSettings' not in appsettings:
+        appsettings['HPCConnectionFrameworkSettings'] = {}
+    if 'ScriptsSettings' not in appsettings['HPCConnectionFrameworkSettings']:
+        appsettings['HPCConnectionFrameworkSettings']['ScriptsSettings'] = {}
+        
+    appsettings['HPCConnectionFrameworkSettings']['ScriptsSettings']['EventualConsistencyRetryCount'] = 3
+    appsettings['HPCConnectionFrameworkSettings']['ScriptsSettings']['EventualConsistencyRetryDelayMs'] = 1000
+    return appsettings
+
+def generate_appsettings_data_staging_v6_4_0(instance_name: str,
+            sa_password: str,
+            data_staging_token: str,
+            port: int = 5001,
+            version: str = None):
+    return generate_appsettings_data_staging_v6_2_1(instance_name, sa_password, data_staging_token, port, version)
