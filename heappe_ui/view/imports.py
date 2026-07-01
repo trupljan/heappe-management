@@ -20,8 +20,11 @@ def ensure_heappe_version(
     # clean v/V prefix
     version = health_info.version.lstrip("vV")
 
+    from .utils import clean_ver
+
+
     # if version is too low → stop and redirect
-    if version < min_version:
+    if clean_ver(version) < clean_ver(min_version):
         messages.error(request, error_message)
         reload_url = request.META.get("HTTP_REFERER", fallback_url)
         return redirect(reload_url)

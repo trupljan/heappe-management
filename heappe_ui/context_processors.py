@@ -2,6 +2,7 @@
 
 import subprocess
 import os
+from heappe_ui.view.utils import clean_ver
 
 def get_git_info():
     path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -30,6 +31,55 @@ def git_version_renderer(request):
         'GIT_VERSION': info['version'],
         'GIT_BRANCH': info['branch']
     }
+
+
+def get_instance_jaeger_url(instance_name):
+    from heappe_ui.models import InstanceCredentials
+    import os
+
+    try:
+        instance = InstanceCredentials.objects.filter(instance_name=instance_name).first()
+    except Exception:
+        instance = None
+
+    if not instance:
+        return "", 16686, True
+
+    # Read .env to find OTEL_JAEGER_CLIENT_PORT and OTEL_DISABLED
+    base_path = "/opt/heappe-deployment/"
+    env_path = os.path.join(base_path, instance_name, "heappe-core", ".env")
+
+    otel_jaeger_port = 16686
+    otel_disabled = True
+
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip()
+                        if k == "OTEL_JAEGER_CLIENT_PORT":
+                            try:
+                                otel_jaeger_port = int(v)
+                            except ValueError:
+                                pass
+                        elif k == "OTEL_DISABLED":
+                            otel_disabled = (v.lower() == "true")
+        except Exception as e:
+            print(f"Error reading .env for Jaeger URL: {e}")
+
+    # Extract host IP/domain only
+    host = instance.heappe_host or "localhost"
+    if "://" in host:
+        host = host.split("://", 1)[1]
+    if ":" in host:
+        host = host.split(":", 1)[0]
+
+    jaeger_url = f"http://{host}:{otel_jaeger_port}"
+    return jaeger_url, otel_jaeger_port, otel_disabled
 
 
 def middleware_update_renderer(request):
@@ -105,10 +155,7 @@ def middleware_update_renderer(request):
             if branches:
                 latest_version = branches[0].lstrip("vV")
                 
-                def clean_ver(v):
-                    res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
-                    return res if res else [0]
-                
+
                 try:
                     if clean_ver(latest_version) > clean_ver(deployed_version):
                         update_available = True
@@ -165,38 +212,80 @@ def middleware_update_renderer(request):
                 cache_keys[key] = "Template Detail"
 
     cache_status = {}
-    for key, label in cache_keys.items():
-        cache_time = request.session.get(f"{key}_time")
-        try:
-            cache_time_float = float(cache_time) if cache_time is not None else None
-        except (TypeError, ValueError):
-            cache_time_float = None
+    disable_cache = getattr(settings, 'DISABLE_CACHE', False)
+    if not disable_cache:
+        for key, label in cache_keys.items():
+            cache_time = request.session.get(f"{key}_time")
+            try:
+                cache_time_float = float(cache_time) if cache_time is not None else None
+            except (TypeError, ValueError):
+                cache_time_float = None
 
-        if cache_time_float is not None and cache_time_float >= last_global_mod:
-            age = int(now - cache_time_float)
-            remaining = max(0, 300 - age)
-            if remaining > 0:
-                cache_status[label] = {
-                    'is_live': False,
-                    'remaining': remaining,
-                    'age_str': f"{age}s" if age < 60 else f"{age // 60}m {age % 60}s"
-                }
+            if cache_time_float is not None and cache_time_float >= last_global_mod:
+                age = int(now - cache_time_float)
+                remaining = max(0, 300 - age)
+                if remaining > 0:
+                    cache_status[label] = {
+                        'is_live': False,
+                        'remaining': remaining,
+                        'age_str': f"{age}s" if age < 60 else f"{age // 60}m {age % 60}s"
+                    }
+                else:
+                    cache_status[label] = {
+                        'is_live': True,
+                        'remaining': 0,
+                        'age_str': "Live"
+                    }
             else:
                 cache_status[label] = {
                     'is_live': True,
                     'remaining': 0,
                     'age_str': "Live"
                 }
-        else:
-            cache_status[label] = {
-                'is_live': True,
-                'remaining': 0,
-                'age_str': "Live"
-            }
+
+    # Fetch API and Swagger URLs for the selected instance
+    api_links = {}
+    jaeger_url = ""
+    jaeger_port = 16686
+    otel_disabled = True
+    otel_active = False
+
+    if instance_name:
+        try:
+            from heappe_ui.view.utils import get_instance_api_links
+            api_links = get_instance_api_links(instance_name)
+        except Exception as e:
+            print(f"Error getting instance API links: {e}")
+
+        try:
+            jaeger_url, jaeger_port, otel_disabled = get_instance_jaeger_url(instance_name)
+            if not otel_disabled:
+                import docker
+                client = docker.from_env()
+                # Check if otel-collector is running
+                for c in client.containers.list(all=False):
+                    if c.labels.get('com.docker.compose.project') == instance_name:
+                        service_name = c.labels.get('com.docker.compose.service', '')
+                        if 'otel-collector' in service_name or 'otel-collector' in c.name:
+                            otel_active = True
+                            break
+        except Exception as e:
+            print(f"Error in context processor telemetry check: {e}")
+
+    is_v6_4_0_plus = False
+    if deployed_version:
+        is_v6_4_0_plus = (clean_ver(deployed_version) >= [6, 4, 0])
 
     return {
+        'caching_enabled': not disable_cache,
         'middleware_update_available': update_available,
         'middleware_deployed_version': deployed_version,
         'middleware_latest_version': latest_version,
         'cache_status': cache_status,
+        'is_v6_4_0_plus': is_v6_4_0_plus,
+        'jaeger_url': jaeger_url,
+        'jaeger_port': jaeger_port,
+        'otel_disabled': otel_disabled,
+        'otel_active': otel_active,
+        **api_links
     }

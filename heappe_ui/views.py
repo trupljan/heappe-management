@@ -9,6 +9,10 @@ from heappe_ui.view.accounting import *
 from heappe_ui.view.deploy import *
 from heappe_ui.view.command_template import *
 from heappe_ui.view.adaptor_user import *
+from heappe_ui.view.backups import *
+from heappe_ui.view.admin_users import *
+from heappe_ui.view.docs import *
+
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
 import datetime
@@ -111,14 +115,43 @@ from django.conf import settings
 
 @login_required
 def profile_view(request):
-    last_auth_ts = request.session.get("heappe_last_auth")
+    from django.contrib.auth.models import User
+    from django.contrib.auth import update_session_auth_hash
 
+    user = request.user
+    if request.method == "POST" and "update_profile" in request.POST:
+        username = request.POST.get("username", "").strip()
+        email = request.POST.get("email", "").strip()
+        password = request.POST.get("password", "").strip()
+        confirm_password = request.POST.get("confirm_password", "").strip()
+
+        if not username:
+            messages.error(request, "Username cannot be empty.")
+        elif User.objects.filter(username=username).exclude(id=user.id).exists():
+            messages.error(request, f"Username '{username}' is already taken.")
+        elif password and password != confirm_password:
+            messages.error(request, "Passwords do not match.")
+        else:
+            user.username = username
+            user.email = email
+            if password:
+                user.set_password(password)
+            user.save()
+            if password:
+                update_session_auth_hash(request, user)
+            messages.success(request, "Your profile details have been updated successfully.")
+            return redirect("profile_view")
+
+    last_auth_ts = request.session.get("heappe_last_auth")
     if last_auth_ts:
-        last_auth = datetime.fromtimestamp(float(last_auth_ts))
+        try:
+            last_auth = datetime.fromtimestamp(float(last_auth_ts))
+        except (ValueError, TypeError):
+            last_auth = None
     else:
         last_auth = None
 
-    return render(request, "user_profile.html", {"user": request.user,  "last_auth": last_auth})
+    return render(request, "user_profile.html", {"user": user, "last_auth": last_auth})
 
 @login_required
 def generate_session_code_view(request):
@@ -184,6 +217,12 @@ def chose_instance_view(request):
         if instance_name:
             request.session["chosen_instance"] = instance_name
             request.session["force_reauth"] = True
+            # Clear old instance connection variables to prevent leakage/fallback
+            request.session.pop("heappe_session_code", None)
+            request.session.pop("heappe_host", None)
+            request.session.pop("heappe_host_url", None)
+            request.session.pop("heappe_use_api_key", None)
+            request.session.pop("heappe_last_auth", None)
             return redirect("dashboard_view")
 
     instances = InstanceCredentials.objects.all()
@@ -194,7 +233,7 @@ def chose_instance_view(request):
 from django.core.paginator import Paginator
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 @login_required
 def dashboard_view(request):
@@ -202,17 +241,65 @@ def dashboard_view(request):
     if request.session.get("chosen_instance") is None:
         return redirect("instance_credentials_list")
 
-    # Initialize controller
+    # Set default time range: TimeTo=Now, TimeFrom=Now-1day (using UTC timezone-aware datetimes)
+    time_to = request.GET.get('time_to', datetime.now(dt_timezone.utc).isoformat())
+    time_from = request.GET.get('time_from', (datetime.now(dt_timezone.utc) - timedelta(days=1)).isoformat())
+
+    # Convert string dates to datetime if needed by API, ensuring they are timezone-aware in UTC
+    try:
+        time_to = datetime.fromisoformat(time_to)
+        if time_to.tzinfo is None:
+            time_to = time_to.replace(tzinfo=dt_timezone.utc)
+        time_from = datetime.fromisoformat(time_from)
+        if time_from.tzinfo is None:
+            time_from = time_from.replace(tzinfo=dt_timezone.utc)
+    except ValueError:
+        time_to = datetime.now(dt_timezone.utc)
+        time_from = datetime.now(dt_timezone.utc) - timedelta(days=1)
+
+    # Enforce maximum scope of 90 days back and maximum range of 90 days
+    now = datetime.now(dt_timezone.utc)
+    min_allowed_date = now - timedelta(days=90)
+
+    if time_to < min_allowed_date:
+        time_to = now
+    elif time_to > now + timedelta(hours=1):
+        time_to = now
+
+    if time_from < min_allowed_date:
+        time_from = min_allowed_date
+    elif time_from > time_to:
+        time_from = time_to - timedelta(days=1)
+
+    if (time_to - time_from) > timedelta(days=90):
+        time_from = time_to - timedelta(days=90)
+
+    # Store for template
+    context["time_to"] = time_to.strftime('%Y-%m-%dT%H:%M')
+    context["time_from"] = time_from.strftime('%Y-%m-%dT%H:%M')
+    context["min_date"] = min_allowed_date.strftime('%Y-%m-%dT%H:%M')
+    context["max_date"] = now.strftime('%Y-%m-%dT%H:%M')
+
+    return render(request, "dashboard.html", context)
+
+
+@login_required
+def dashboard_health_partial(request: HttpRequest) -> HttpResponse:
+    context = {}
     controller = hp.ManagementApi(request.api_instance)
-    jr_controller = hp.JobReportingApi(request.api_instance)
     health_controller = hp.HealthApi(request.api_instance)
 
     # Get HEAppE Health Info
+    deployed_version = ""
     try:
         health_info = health_controller.heappe_health_get()
-        # Převést na dict, pokud má objekt metodu to_dict()
         health = health_info.to_dict() if hasattr(health_info, "to_dict") else health_info
         context["health"] = health
+        if health_info:
+            if hasattr(health_info, "version") and health_info.version:
+                deployed_version = health_info.version.lstrip("vV")
+            elif isinstance(health_info, dict) and health_info.get("version"):
+                deployed_version = health_info["version"].lstrip("vV")
     except Exception as e:
         print(f"Error fetching health info: {e}")
         context["health"] = {
@@ -220,12 +307,83 @@ def dashboard_view(request):
             "Error": str(e)
         }
 
-    # Get version information
+    # HEAppE Middleware Banner Logic
+    instance_name = request.session.get("chosen_instance")
+    if instance_name:
+        import time
+        import os
+        now_time = time.time()
+        last_check = request.session.get("last_middleware_check_time", 0)
+        last_checked_instance = request.session.get("last_middleware_checked_instance", "")
+
+        if not deployed_version:
+            deployed_version = request.session.get("middleware_deployed_version", "")
+
+        if not deployed_version:
+            base_path = "/opt/heappe-deployment/"
+            appsettings_path = os.path.join(base_path, instance_name, "app", "confs", "appsettings.json")
+            if os.path.exists(appsettings_path):
+                try:
+                    import json
+                    with open(appsettings_path, "r", encoding="utf-8") as f:
+                        appsettings_data = json.load(f)
+                    deployed_version = appsettings_data.get("ApplicationAPISettings", {}).get("DeploymentSettings", {}).get("Version", "").lstrip("vV")
+                except Exception:
+                    pass
+
+        latest_version = request.session.get("middleware_latest_version", "")
+
+        if (now_time - last_check > 3600) or (instance_name != last_checked_instance) or not latest_version:
+            from heappe_ui.view.deploy import get_remote_tags
+            repo_url = "https://github.com/It4innovations/HEAppE"
+            branches = get_remote_tags(repo_url)
+            if branches:
+                latest_version = branches[0].lstrip("vV")
+
+        update_available = False
+        if deployed_version and isinstance(deployed_version, str) and latest_version and isinstance(latest_version, str):
+            try:
+                from heappe_ui.view.utils import clean_ver
+                if clean_ver(latest_version) > clean_ver(deployed_version):
+                    update_available = True
+            except Exception:
+                if latest_version.lower().lstrip('v') != deployed_version.lower().lstrip('v'):
+                    update_available = True
+
+        request.session["last_middleware_check_time"] = now_time
+        request.session["last_middleware_checked_instance"] = instance_name
+        request.session["middleware_update_available"] = update_available
+        request.session["middleware_deployed_version"] = deployed_version
+        request.session["middleware_latest_version"] = latest_version
+
+        context["middleware_update_available"] = update_available
+        context["middleware_deployed_version"] = deployed_version
+        context["middleware_latest_version"] = latest_version
+
     try:
         result = controller.heappe_management_version_information_get(SessionCode=request.session_code)
         context["heappe"] = result
     except Exception as e:
         print(f"Error fetching version information: {e}")
+        context["heappe"] = None
+
+    # Fetch API and Swagger URLs for the selected instance
+    if instance_name:
+        try:
+            from heappe_ui.view.utils import get_instance_api_links
+            api_links = get_instance_api_links(instance_name)
+            context.update(api_links)
+        except Exception as e:
+            print(f"Error getting instance API links: {e}")
+
+    return render(request, "partials/dashboard_health.html", context)
+
+
+@login_required
+def dashboard_metrics_partial(request: HttpRequest) -> HttpResponse:
+    context = {}
+    controller = hp.ManagementApi(request.api_instance)
+    jr_controller = hp.JobReportingApi(request.api_instance)
 
     # Get cluster information
     try:
@@ -233,6 +391,7 @@ def dashboard_view(request):
         context["clusters"] = clusters
     except Exception as e:
         print(f"Error fetching clusters: {e}")
+        context["clusters"] = []
 
     # Get project information
     try:
@@ -240,6 +399,7 @@ def dashboard_view(request):
         context["projects"] = projects
     except Exception as e:
         print(f"Error fetching projects: {e}")
+        context["projects"] = []
 
     # Get queue information
     try:
@@ -247,8 +407,30 @@ def dashboard_view(request):
         context['queues'] = queues
     except Exception as e:
         print(f"Error fetching queues: {e}")
+        context['queues'] = []
 
-    # Get job stats
+    # Get queue groups
+    try:
+        queue_groups = controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code)
+        context['queue_groups'] = queue_groups if queue_groups else []
+    except Exception as e:
+        print(f"Error fetching queue groups: {e}")
+        context['queue_groups'] = []
+
+    # Get job stats for total count
+    try:
+        job_stats = jr_controller.heappe_job_reporting_jobs_state_agregation_report_get(SessionCode=request.session_code)
+        context["total_jobs"] = sum(js.count for js in job_stats) if job_stats else 0
+    except Exception as e:
+        print(f"Error fetching job stats: {e}")
+        context["total_jobs"] = 0
+
+    return render(request, "partials/dashboard_metrics.html", context)
+
+
+@login_required
+def dashboard_jobs_distribution_partial(request: HttpRequest) -> HttpResponse:
+    jr_controller = hp.JobReportingApi(request.api_instance)
     try:
         job_stats = jr_controller.heappe_job_reporting_jobs_state_agregation_report_get(SessionCode=request.session_code)
         all_states = [
@@ -258,60 +440,59 @@ def dashboard_view(request):
         job_counts = {s: 0 for s in all_states}
         for js in job_stats:
             job_counts[js.job_state_name] = js.count
-        context["job_counts"] = job_counts
-        context["total_jobs"] = sum(job_counts.values())
+        total_jobs = sum(job_counts.values())
+        return JsonResponse({
+            "status": "success",
+            "job_counts": job_counts,
+            "total_jobs": total_jobs
+        })
     except Exception as e:
-        print(f"Error fetching job stats: {e}")
+        print(f"Error fetching job stats for distribution: {e}")
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
-    # Get detailed job report
+
+@login_required
+def dashboard_jobs_history_partial(request: HttpRequest) -> HttpResponse:
+    context = {}
+    jr_controller = hp.JobReportingApi(request.api_instance)
+
     try:
-        # Set default time range: TimeTo=Now, TimeFrom=Now-1day
-        time_to = request.GET.get('time_to', datetime.now().isoformat())
-        time_from = request.GET.get('time_from', (datetime.now() - timedelta(days=1)).isoformat())
+        # Set default time range: TimeTo=Now, TimeFrom=Now-1day (using UTC timezone-aware datetimes)
+        time_to_str = request.GET.get('time_to', datetime.now(dt_timezone.utc).isoformat())
+        time_from_str = request.GET.get('time_from', (datetime.now(dt_timezone.utc) - timedelta(days=1)).isoformat())
 
-        # Convert string dates to datetime if needed by API
+        # Convert string dates to datetime if needed by API, ensuring they are timezone-aware in UTC
         try:
-            time_to = datetime.fromisoformat(time_to)
-            time_from = datetime.fromisoformat(time_from)
+            time_to = datetime.fromisoformat(time_to_str)
+            if time_to.tzinfo is None:
+                time_to = time_to.replace(tzinfo=dt_timezone.utc)
+            time_from = datetime.fromisoformat(time_from_str)
+            if time_from.tzinfo is None:
+                time_from = time_from.replace(tzinfo=dt_timezone.utc)
         except ValueError:
-            time_to = datetime.now()
-            time_from = datetime.now() - timedelta(days=1)
+            time_to = datetime.now(dt_timezone.utc)
+            time_from = datetime.now(dt_timezone.utc) - timedelta(days=1)
 
         # Enforce maximum scope of 90 days back and maximum range of 90 days
-        now = datetime.now()
+        now = datetime.now(dt_timezone.utc)
         min_allowed_date = now - timedelta(days=90)
-        adjusted = False
 
         if time_to < min_allowed_date:
             time_to = now
-            adjusted = True
         elif time_to > now + timedelta(hours=1):
             time_to = now
-            adjusted = True
 
         if time_from < min_allowed_date:
             time_from = min_allowed_date
-            adjusted = True
         elif time_from > time_to:
             time_from = time_to - timedelta(days=1)
-            adjusted = True
 
         if (time_to - time_from) > timedelta(days=90):
             time_from = time_to - timedelta(days=90)
-            adjusted = True
-
-        if adjusted:
-            from django.contrib import messages
-            messages.warning(
-                request,
-                "The requested reporting time range was adjusted. The maximum allowed query range and scope is 90 days."
-            )
 
         # Store for template
         context["time_to"] = time_to.strftime('%Y-%m-%dT%H:%M')
         context["time_from"] = time_from.strftime('%Y-%m-%dT%H:%M')
-        context["min_date"] = min_allowed_date.strftime('%Y-%m-%dT%H:%M')
-        context["max_date"] = now.strftime('%Y-%m-%dT%H:%M')
 
         # Get job details from API with date filters
         job_details_raw = jr_controller.heappe_job_reporting_jobs_detailed_report_get(
@@ -322,28 +503,36 @@ def dashboard_view(request):
 
         all_jobs = []
         seen_job_ids = set()
-        for job in job_details_raw:
-            for cluster in job.clusters:
-                for node_type in cluster.cluster_node_types:
-                    for job_item in node_type.jobs:
-                        if job_item.id not in seen_job_ids:
-                            seen_job_ids.add(job_item.id)
-                            all_jobs.append(job_item)
+        if job_details_raw:
+            for job in job_details_raw:
+                if not job or not hasattr(job, 'clusters') or job.clusters is None:
+                    continue
+                for cluster in job.clusters:
+                    if not cluster or not hasattr(cluster, 'cluster_node_types') or cluster.cluster_node_types is None:
+                        continue
+                    for node_type in cluster.cluster_node_types:
+                        if not node_type or not hasattr(node_type, 'jobs') or node_type.jobs is None:
+                            continue
+                        for job_item in node_type.jobs:
+                            if job_item and getattr(job_item, 'id', None) is not None:
+                                if job_item.id not in seen_job_ids:
+                                    seen_job_ids.add(job_item.id)
+                                    all_jobs.append(job_item)
         all_jobs.sort(key=lambda x: x.id or 0, reverse=True)
-
-
 
         # Paginator
         paginator = Paginator(all_jobs, 10)  # 10 jobs per page
         page_number = request.GET.get('page', 1)
         page_obj = paginator.get_page(page_number)
 
-        context["job_details"] = page_obj.object_list  # teď obsahuje jen job_itemy, které se zobrazí
+        context["job_details"] = page_obj.object_list
         context["page_obj"] = page_obj
     except Exception as e:
         print(f"Error fetching job details: {e}")
+        context["job_details"] = []
+        context["page_obj"] = None
 
-    return render(request, "dashboard.html", context)
+    return render(request, "partials/dashboard_jobs_history.html", context)
 
 
 
@@ -568,11 +757,38 @@ from .forms import InstanceCredentialsForm
 
 @login_required
 def instance_credentials_list(request, pk=None):
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "bulk_delete":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for cid in selected_ids:
+                try:
+                    instance = InstanceCredentials.objects.get(pk=int(cid))
+                    if request.session.get("chosen_instance") == instance.instance_name:
+                        request.session.pop("chosen_instance", None)
+                        request.session.pop("heappe_session_code", None)
+                    instance.delete()
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error deleting credential {cid}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully deleted {success_count} instance credential(s).")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to delete {len(selected_ids) - success_count} instance credential(s).")
+            return redirect("instance_credentials_list")
+
     if pk is not None:
         instance = get_object_or_404(InstanceCredentials, pk=pk)
         if instance:
             request.session["chosen_instance"] = instance.instance_name
             request.session["force_reauth"] = True
+            # Clear old instance connection variables to prevent leakage/fallback
+            request.session.pop("heappe_session_code", None)
+            request.session.pop("heappe_host", None)
+            request.session.pop("heappe_host_url", None)
+            request.session.pop("heappe_use_api_key", None)
+            request.session.pop("heappe_last_auth", None)
             return redirect("dashboard_view")
 
     instances = InstanceCredentials.objects.all().order_by('instance_name')
@@ -692,6 +908,7 @@ def check_for_updates(request):
     cached_current = request.session.get("update_current_version")
     cached_latest = request.session.get("update_latest_version")
     cached_changes = request.session.get("update_changes")
+    cached_branch = request.session.get("update_current_branch", "HEAD")
 
     actual_version = "unknown"
     try:
@@ -707,7 +924,8 @@ def check_for_updates(request):
             'update_available': cached_available,
             'current_version': cached_current,
             'latest_version': cached_latest,
-            'changes': cached_changes or []
+            'changes': cached_changes or [],
+            'current_branch': cached_branch
         })
         response["Cache-Control"] = "no-cache, no-store, must-revalidate"
         response["Pragma"] = "no-cache"
@@ -876,12 +1094,14 @@ def check_for_updates(request):
     request.session["update_current_version"] = current_version
     request.session["update_latest_version"] = latest_version
     request.session["update_changes"] = changes
+    request.session["update_current_branch"] = current_branch
 
     response = JsonResponse({
         'update_available': update_available,
         'current_version': current_version,
         'latest_version': latest_version,
-        'changes': changes
+        'changes': changes,
+        'current_branch': current_branch
     })
     response["Cache-Control"] = "no-cache, no-store, must-revalidate"
     response["Pragma"] = "no-cache"
@@ -991,17 +1211,64 @@ from django.http import StreamingHttpResponse
 
 # --- HELPERS ---
 
+def get_lines_backwards(file_path):
+    with open(file_path, 'rb') as f:
+        f.seek(0, os.SEEK_END)
+        position = f.tell()
+        chunk_size = 65536
+        remnant = b''
+        
+        while position > 0:
+            read_size = min(chunk_size, position)
+            position -= read_size
+            f.seek(position)
+            chunk = f.read(read_size)
+            
+            if remnant:
+                chunk = chunk + remnant
+                remnant = b''
+                
+            lines = chunk.splitlines(keepends=True)
+            if position > 0 and lines:
+                remnant = lines[0]
+                lines = lines[1:]
+                
+            for line in reversed(lines):
+                yield line.decode('utf-8', errors='ignore')
+                
+        if remnant:
+            yield remnant.decode('utf-8', errors='ignore')
+
+
 def parse_log_line(line):
     timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
     timestamp_str = timestamp_match.group(1) if timestamp_match else None
 
     level = "INFO"
-    if "ERROR" in line or "Exception" in line:
-        level = "ERROR"
-    elif "WARN" in line:
-        level = "WARN"
-    elif "DEBUG" in line:
-        level = "DEBUG"
+    if timestamp_match:
+        prefix = line[:timestamp_match.start()].strip().upper()
+        if "ERROR" in prefix or "ERR" in prefix:
+            level = "ERROR"
+        elif "WARN" in prefix:
+            level = "WARN"
+        elif "DEBUG" in prefix:
+            level = "DEBUG"
+        elif "INFO" in prefix:
+            level = "INFO"
+        else:
+            if "ERROR" in line or "Exception" in line:
+                level = "ERROR"
+            elif "WARN" in line:
+                level = "WARN"
+            elif "DEBUG" in line:
+                level = "DEBUG"
+    else:
+        if "ERROR" in line or "Exception" in line:
+            level = "ERROR"
+        elif "WARN" in line:
+            level = "WARN"
+        elif "DEBUG" in line:
+            level = "DEBUG"
 
     return {
         'timestamp_str': timestamp_str,
@@ -1010,75 +1277,89 @@ def parse_log_line(line):
     }
 
 
-def render_log_row(entry):
-    border_class = "border-info"
-    text_class = "text-info"
-    if entry['level'] == "ERROR":
-        border_class = "border-danger";
-        text_class = "text-danger"
-    elif entry['level'] == "WARN":
-        border_class = "border-warning";
-        text_class = "text-warning"
-
-    formatted_content = escape(entry['content'])
-
-    formatted_content = re.sub(
-        r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
-        r'<span class="time-badge" style="background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:4px;color:#64748b;margin-right:8px;font-size:0.85em">\1</span>',
-        formatted_content
-    )
-
-    def json_repl(match):
-        try:
-            raw_json = match.group(0).replace('&quot;', '"').replace('&#x27;', "'")
-            parsed = json.loads(raw_json)
-            pretty = json.dumps(parsed, indent=2)
-            return f'<div class="json-block" style="background:#f8fafc;border-left:3px solid #0dcaf0;padding:8px;margin:8px 0;white-space:pre;font-size:0.85em;color:#1e293b;border-radius:0 4px 4px 0;">{escape(pretty)}</div>'
-        except:
-            return match.group(0)
-
-    formatted_content = re.sub(r'(\{.*?\})', json_repl, formatted_content, flags=re.DOTALL)
-
-    return f"""
-    <tr class="log-row {border_class}" style="border-left: 4px solid;">
-        <td style="width: 100px; vertical-align: top;" class="ps-3 py-2">
-            <span class="badge {text_class} bg-light border fw-bold">{entry['level']}</span>
-        </td>
-        <td class="py-2 pe-3">
-            <div class="log-content" style="font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;">{formatted_content}</div>
-        </td>
-    </tr>
-    """
-
-
-import re
-import os
-from datetime import datetime
-from collections import deque
-from django.shortcuts import render
-from django.contrib.auth.decorators import login_required
-
-
-def process_log_entry(buffer, logs, stats, time_from, time_to, search_query):
-    combined_line = "".join(buffer)
-    parsed = parse_log_line(combined_line)
-
-    show_row = True
+def matches_filters(parsed, level_filter, search_query, time_from, time_to):
+    if level_filter and parsed['level'] != level_filter:
+        return False
+        
     if parsed['timestamp_str']:
         try:
             time_part = parsed['timestamp_str'].split(' ')[1]
-            if time_from and time_part < (time_from + ":00"): show_row = False
-            if time_to and time_part > (time_to + ":59"): show_row = False
-        except:
+            if time_from and time_part < (time_from + ":00"):
+                return False
+            if time_to and time_part > (time_to + ":59"):
+                return False
+        except Exception:
             pass
+            
+    if search_query:
+        if search_query.lower() not in parsed['content'].lower():
+            return False
+            
+    return True
 
-    if search_query and search_query not in combined_line.lower():
-        show_row = False
 
-    if show_row:
-        if parsed['level'] in stats:
-            stats[parsed['level']] += 1
-        logs.append(render_log_row(parsed))
+def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, search_query=None, time_from=None, time_to=None):
+    timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+    entries_count = 0
+    
+    for log_path in reversed(log_paths):
+        if not log_path or not os.path.exists(log_path):
+            continue
+            
+        current_entry_lines = []
+        
+        for line in get_lines_backwards(log_path):
+            ts_match = timestamp_re.search(line[:30])
+            
+            if ts_match:
+                current_entry_lines.insert(0, line)
+                entry_text = "".join(current_entry_lines)
+                current_entry_lines = []
+                
+                parsed = parse_log_line(entry_text)
+                if matches_filters(parsed, level_filter, search_query, time_from, time_to):
+                    yield parsed
+                    entries_count += 1
+                    if entries_count >= max_entries:
+                        return
+            else:
+                current_entry_lines.insert(0, line)
+                
+        if current_entry_lines:
+            entry_text = "".join(current_entry_lines)
+            parsed = parse_log_line(entry_text)
+            if matches_filters(parsed, level_filter, search_query, time_from, time_to):
+                yield parsed
+                entries_count += 1
+                if entries_count >= max_entries:
+                    return
+
+
+def get_log_file_paths(instance, date_str):
+    base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
+    date_formatted = date_str.replace("-", "_")
+
+    if not os.path.exists(base_path):
+        return []
+
+    # Match files like YYYY_MM_DD.log or YYYY_MM_DD.log.X
+    pattern = re.compile(rf"^{re.escape(date_formatted)}\.log(?:\.\d+)?$")
+    
+    matching_files = []
+    for f in os.listdir(base_path):
+        if pattern.match(f):
+            matching_files.append(os.path.join(base_path, f))
+            
+    # Sort files chronologically by modification time (oldest first)
+    matching_files.sort(key=os.path.getmtime)
+    return matching_files
+
+
+def get_log_file_path(instance, date_str):
+    paths = get_log_file_paths(instance, date_str)
+    if paths:
+        return paths[-1]
+    return None
 
 
 @login_required
@@ -1089,153 +1370,39 @@ def log_viewer_view(request):
     time_from = request.GET.get('time_from', '')
     time_to = request.GET.get('time_to', '')
     search_query = request.GET.get('search', '').lower()
+    level_filter = request.GET.get('level', '').upper()
 
-    log_path = get_log_file_path(instance, selected_date)
-    logs = deque(maxlen=3000)
-    stats = {"ERROR": 0, "WARN": 0}
+    log_paths = get_log_file_paths(instance, selected_date)
+    
+    try:
+        entries = list(get_log_entries_backwards(
+            log_paths=log_paths,
+            max_entries=1000,
+            level_filter=level_filter,
+            search_query=search_query,
+            time_from=time_from,
+            time_to=time_to
+        ))
+        entries.reverse()
+    except Exception as e:
+        entries = [{
+            'timestamp_str': None,
+            'level': 'ERROR',
+            'content': f"Error reading logs: {str(e)}"
+        }]
 
-    if log_path and os.path.exists(log_path):
-        try:
-            with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-                buffer = []
-                for line in f:
-                    if re.search(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}', line):
-                        if buffer:
-                            process_log_entry(buffer, logs, stats, time_from, time_to, search_query)
-                        buffer = [line]
-                    else:
-                        buffer.append(line)
-
-                if buffer:
-                    process_log_entry(buffer, logs, stats, time_from, time_to, search_query)
-        except Exception as e:
-            logs.append(f"<tr><td colspan='2'>Error: {str(e)}</td></tr>")
+    logs_json = json.dumps(entries)
 
     return render(request, 'file_log_viewer.html', {
-        'logs': list(logs),
-        'stats': stats,
+        'logs_json': mark_safe(logs_json),
+        'logs_count': len(entries),
         'selected_date': selected_date,
         'time_from': time_from,
         'time_to': time_to,
         'search_query': search_query,
+        'level_filter': level_filter,
         'instance': instance
     })
-
-def render_log_row(entry):
-    border_class = "border-info"
-    text_class = "text-info"
-    if entry['level'] == "ERROR":
-        border_class = "border-danger";
-        text_class = "text-danger"
-    elif entry['level'] == "WARN":
-        border_class = "border-warning";
-        text_class = "text-warning"
-    elif entry['level'] == "DEBUG":
-        border_class = "border-secondary";
-        text_class = "text-muted"
-
-    formatted_content = escape(entry['content'])
-
-    # Highlight time
-    formatted_content = re.sub(r'^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})',
-                               r'<span class="time-badge" style="background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:4px;color:#64748b;margin-right:8px;font-size:0.85em">\1</span>',
-                               formatted_content)
-
-    # Format JSON if present
-    if "{" in formatted_content and "}" in formatted_content:
-        def json_repl(match):
-            try:
-                raw_json = match.group(0).replace('&quot;', '"')
-                parsed = json.loads(raw_json)
-                pretty = json.dumps(parsed, indent=2)
-                return f'<div class="json-block" style="background:#f8fafc;border-left:3px solid #cbd5e1;padding:5px;margin:5px 0;white-space:pre;font-size:0.8em;color:#334155">{escape(pretty)}</div>'
-            except:
-                return match.group(0)
-
-        formatted_content = re.sub(r'(\{.*?\})', json_repl, formatted_content)
-
-    return f"""
-    <tr class="log-row {border_class}" style="border-left: 4px solid;">
-        <td style="width: 100px; vertical-align: top;" class="ps-3 py-2">
-            <span class="badge {text_class} bg-light border fw-bold">{entry['level']}</span>
-        </td>
-        <td class="py-2 pe-3">
-            <div class="log-content" style="font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; word-break: break-all;">{formatted_content}</div>
-        </td>
-    </tr>
-    """
-
-
-def get_log_file_path(instance, date_str):
-    base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
-    date_formatted = date_str.replace("-", "_")
-
-    if not os.path.exists(base_path):
-        return None
-
-    files = sorted([f for f in os.listdir(base_path) if f.startswith(date_formatted) and f.endswith(".log")])
-
-    if files:
-        return os.path.join(base_path, files[-1])
-    return None
-
-
-# --- VIEWS ---
-
-def parse_log_line(line):
-    timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
-    timestamp_str = timestamp_match.group(1) if timestamp_match else None
-
-    level = "INFO"
-    if "ERROR" in line or "Exception" in line:
-        level = "ERROR"
-    elif "WARN" in line:
-        level = "WARN"
-    elif "DEBUG" in line:
-        level = "DEBUG"
-
-    return {
-        'timestamp_str': timestamp_str,
-        'level': level,
-        'content': line
-    }
-
-@login_required
-def stream_logs(request):
-    instance = request.session.get('chosen_instance', 'develop')
-    today = datetime.now().strftime('%Y-%m-%d')
-    log_path = get_log_file_path(instance, today)
-
-    def event_stream():
-        if not log_path or not os.path.exists(log_path):
-            yield "data: <tr><td colspan='2'>Log file not found.</td></tr>\n\n"
-            return
-
-        with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
-            f.seek(0, os.SEEK_END)
-
-            while True:
-                line = f.readline()
-                if line:
-                    parsed = parse_log_line(line)
-                    html_row = render_log_row(parsed)
-                    clean_html = html_row.replace('\n', '')
-                    yield f"data: {clean_html}\n\n"
-                else:
-                    time.sleep(0.5)
-
-    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
-    response['Cache-Control'] = 'no-cache'
-    response['X-Accel-Buffering'] = 'no'
-    return response
-
-
-import os
-import json
-from datetime import datetime
-from django.http import JsonResponse
-from django.shortcuts import render
-from django.contrib.auth.decorators import login_required
 
 
 @login_required
@@ -1243,6 +1410,8 @@ def fetch_new_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
     today = datetime.now().strftime('%Y-%m-%d')
     log_path = get_log_file_path(instance, today)
+    level_filter = request.GET.get('level', '').upper()
+    search_query = request.GET.get('search', '').lower()
 
     try:
         offset = int(request.GET.get('offset', 0))
@@ -1250,28 +1419,49 @@ def fetch_new_logs(request):
         offset = 0
 
     if not log_path or not os.path.exists(log_path):
-        return JsonResponse({'html': '', 'offset': offset})
+        return JsonResponse({'entries': [], 'offset': offset})
 
-    new_rows = []
     file_size = os.path.getsize(log_path)
 
     if offset == -1:
-        return JsonResponse({'html': '', 'offset': file_size})
+        return JsonResponse({'entries': [], 'offset': file_size})
 
     if offset > file_size:
         offset = 0
 
-    with open(log_path, 'r', encoding='utf-8', errors='ignore') as f:
+    new_entries = []
+    
+    with open(log_path, 'rb') as f:
         f.seek(offset)
-        for line in f:
-            if line.strip():
-                parsed = parse_log_line(line)
-                new_rows.append(render_log_row(parsed))
-
+        chunk = f.read()
         new_offset = f.tell()
-
+        
+    if chunk:
+        decoded = chunk.decode('utf-8', errors='ignore')
+        lines = decoded.splitlines(keepends=True)
+        
+        current_entry_lines = []
+        timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+        
+        for line in lines:
+            if timestamp_re.search(line[:30]):
+                if current_entry_lines:
+                    entry_text = "".join(current_entry_lines)
+                    parsed = parse_log_line(entry_text)
+                    if matches_filters(parsed, level_filter, search_query, None, None):
+                        new_entries.append(parsed)
+                current_entry_lines = [line]
+            else:
+                current_entry_lines.append(line)
+                
+        if current_entry_lines:
+            entry_text = "".join(current_entry_lines)
+            parsed = parse_log_line(entry_text)
+            if matches_filters(parsed, level_filter, search_query, None, None):
+                new_entries.append(parsed)
+                
     return JsonResponse({
-        'html': "".join(new_rows),
+        'entries': new_entries,
         'offset': new_offset
     })
 
@@ -1373,8 +1563,17 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
                                             controller.heappe_management_adaptor_users_in_project_get(
                                                 SessionCode=session_code, ProjectId=project_id
                                             )]
-            except Exception:
-                pass
+                for u in adaptor_users_in_project:
+                    roles = []
+                    for group in u.get("adaptor_user_groups", []):
+                        g_proj = group.get("project")
+                        if g_proj and g_proj.get("id") == project_id:
+                            for r in group.get("roles", []):
+                                if r not in roles:
+                                    roles.append(r)
+                    u["roles"] = roles
+            except Exception as e:
+                print(f"Error fetching adaptor users in project: {e}")
 
 
             all_adaptor_users = [u.to_dict() for u in
@@ -1523,3 +1722,152 @@ def logs_context_api(request):
         })
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+def report_error_view(request):
+    """Standalone form + API endpoint for sending problem reports to HEAppE support."""
+    import base64
+    import datetime
+    from django.core.mail import EmailMessage
+    from django.http import JsonResponse
+    from django.shortcuts import render
+
+    last_error = request.session.get('last_error_report', {})
+
+    # ── GET ── render standalone form page ───────────────────────────────────
+    if request.method == 'GET':
+        sent = request.GET.get('sent') == '1'
+        return render(request, 'report_error_form.html', {
+            'current_path': request.path,
+            'last_error': last_error if last_error else None,
+            'success': sent,
+        })
+
+    # ── POST ── validate, compose and send the email ─────────────────────────
+    if request.method == 'POST':
+        screenshot_data = request.POST.get('screenshot', '')
+        summary         = request.POST.get('summary', '').strip()
+        description     = request.POST.get('description', '').strip()
+        category        = request.POST.get('category', 'other')
+        affected_url    = request.POST.get('affected_url', '').strip()
+        contact_email   = request.POST.get('contact_email', '').strip()
+
+        if not contact_email:
+            return JsonResponse({'status': 'error', 'message': 'Contact email is required.'}, status=400)
+        if not summary or not description:
+            return JsonResponse({'status': 'error', 'message': 'Summary and description are required.'}, status=400)
+
+        category_labels = {
+            'ui_error':       'UI / Interface Error',
+            'heappe_error':   'HEAppE Instance Error',
+            'deployment':     'Deployment Issue',
+            'data_incorrect': 'Incorrect Data',
+            'other':          'Other',
+        }
+        category_label = category_labels.get(category, category)
+        username = request.user.username if hasattr(request, 'user') and request.user.is_authenticated else 'Anonymous'
+        timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+
+        # Get admin panel version and branch
+        try:
+            from heappe_ui.context_processors import get_git_info
+            git_info = get_git_info()
+            admin_version = git_info.get('version', 'unknown')
+            admin_branch = git_info.get('branch', 'unknown')
+        except Exception:
+            admin_version = 'unknown'
+            admin_branch = 'unknown'
+
+        # Get HEAppE middleware version
+        heappe_version = request.session.get("middleware_deployed_version", "unknown")
+
+        # Get additional debugging details
+        import sys
+        import platform
+        python_version = sys.version.split()[0]
+        server_os = platform.platform()
+        user_agent = request.META.get('HTTP_USER_AGENT', 'unknown')
+        chosen_instance = request.session.get("chosen_instance", "unknown")
+
+        subject = f"[HEAppE Support] {category_label}: {summary[:80]}"
+
+        body = f"""HEAppE Management — Problem Report
+====================================
+
+Reporter:       {username} <{contact_email}>
+Category:       {category_label}
+Affected URL:   {affected_url or 'N/A'}
+Timestamp(UTC): {timestamp}
+Chosen Instance: {chosen_instance}
+
+Environment & Versions:
+-----------------------
+HEAppE Admin Panel:  {admin_version} ({admin_branch})
+HEAppE Middleware:   {heappe_version}
+Python Version:      {python_version}
+Server OS:           {server_os}
+Browser User Agent:  {user_agent}
+
+Summary
+-------
+{summary}
+
+Description
+-----------
+{description}
+"""
+        details_only = f"""Description
+-----------
+{description}
+"""
+        # Append session HEAppE error details if available
+        if last_error:
+            body += f"""
+Attached HEAppE Error Details
+------------------------------
+Instance Name:  {last_error.get('instance_name')}
+Host URL:       {last_error.get('host_url')}
+Error Type:     {last_error.get('error_type')}
+Error Status:   {last_error.get('error_status')}
+Error Message:
+{last_error.get('error_message')}
+
+Traceback:
+{last_error.get('traceback')}
+"""
+            details_only += f"""
+Attached HEAppE Error Details
+------------------------------
+Instance Name:  {last_error.get('instance_name')}
+Host URL:       {last_error.get('host_url')}
+Error Type:     {last_error.get('error_type')}
+Error Status:   {last_error.get('error_status')}
+Error Message:
+{last_error.get('error_message')}
+
+Traceback:
+{last_error.get('traceback')}
+"""
+
+        from django.conf import settings
+        support_email = getattr(settings, 'SUPPORT_EMAIL', 'jakub.konvicka@vsb.cz')
+
+        # Clean cached error details from session as they are now compiled into the report
+        request.session.pop('last_error_report', None)
+
+        return JsonResponse({
+            'status': 'manual',
+            'to_email': support_email,
+            'subject': subject,
+            'body': body,
+            'details_only': details_only,
+            'admin_version': admin_version,
+            'admin_branch': admin_branch,
+            'heappe_version': heappe_version,
+            'python_version': python_version,
+            'server_os': server_os,
+            'user_agent': user_agent,
+            'chosen_instance': chosen_instance
+        })
+
+    return JsonResponse({'status': 'error', 'message': 'Method not allowed.'}, status=405)

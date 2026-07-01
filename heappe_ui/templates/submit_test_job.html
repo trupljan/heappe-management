@@ -1,117 +1,280 @@
 {% extends "base.html" %}
+{% load custom_filters %}
+
+{% block title %}Submit Test Job{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'project_list' %}" class="text-decoration-none text-secondary">Projects</a></li>
+    {% if project %}
+        <li class="breadcrumb-item"><a href="{% url 'project_detail' project.id %}" class="text-decoration-none text-secondary">{{ project.name }}</a></li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">Submit Test Job</li>
+{% endblock %}
 
 {% block content %}
+<div class="container-fluid py-2">
+    <div class="row">
+        <div class="col-xl-8 col-lg-10 mx-auto">
+            
+            <!-- Heading Block -->
+            <div class="d-flex align-items-center gap-2.5 mb-4">
+                <i class="bi bi-rocket-takeoff-fill text-primary fs-3"></i>
+                <div>
+                    <h4 class="mb-0 fw-bold text-dark">Submit Test Job</h4>
+                    <span class="text-muted small">Configure and submit an execution request to the HPC cluster scheduler</span>
+                </div>
+            </div>
 
-<div class="card mb-4 w-75 mx-auto shadow-sm">
-  <div class="card-header"><strong>Submit Job</strong></div>
-  <div class="card-body">
-    <form method="post">
-      {% csrf_token %}
-      <input type="hidden" name="action" value="submit_job">
+            <!-- Form Card -->
+            <div class="card border-0 shadow-sm rounded-3 bg-white mb-5">
+                <div class="card-header bg-white py-3 border-bottom">
+                    <h5 class="h6 mb-0 fw-bold text-dark">Job Specification Form</h5>
+                </div>
+                
+                <div class="card-body p-4">
+                    <form method="post" id="jobSubmitForm">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="submit_job">
 
-      <!-- Job Level Fields -->
-      <div class="mb-3">
-        <label for="job_name" class="form-label">Job Name</label>
-        <input type="text" class="form-control" id="job_name" name="JobName" placeholder="Enter job name" value="HEAppE-Management-Job" required>
-      </div>
+                        <!-- Section 1: Job Meta -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="text-uppercase text-secondary fw-bold small border-bottom pb-2 mb-3" style="letter-spacing: 0.05em;">General Settings</h6>
+                            </div>
+                            
+                            <div class="col-12">
+                                <label for="job_name" class="form-label small fw-bold text-secondary text-uppercase">Job Name</label>
+                                <input type="text" class="form-control border-secondary-subtle py-2 rounded-3" id="job_name" name="JobName" placeholder="Enter job name" value="HEAppE-Management-Job" required>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="project" class="form-label small fw-bold text-secondary text-uppercase">Project Context</label>
+                                <input type="hidden" class="form-control" id="ProjectId" name="ProjectId" value="{{ project.id }}">
+                                <input type="text" class="form-control border-secondary-subtle py-2 bg-light font-monospace" id="Project" name="Project" readonly disabled value="{{ project.name }} (ID: {{ project.id }})">
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="cluster" class="form-label small fw-bold text-secondary text-uppercase">HPC Target Cluster</label>
+                                <input type="hidden" class="form-control" id="ClusterId" name="ClusterId" value="{{ cluster.id }}">
+                                <input type="text" class="form-control border-secondary-subtle py-2 bg-light font-monospace" id="Cluster" name="Cluster" readonly disabled value="{{ cluster.name }} (ID: {{ cluster.id }})">
+                            </div>
+                        </div>
 
-      <div class="mb-3">
-        <label for="project" class="form-label">Project</label>
-        <input type="hidden" class="form-control" id="ProjectId" name="ProjectId" value="{{ project.id }}">
-        <input type="text" class="form-control" id="Project" name="Project" readonly disabled value="{{ project.name }}">
-      </div>
+                        <!-- Section 1.5: Authentication Settings -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="text-uppercase text-secondary fw-bold small border-bottom pb-2 mb-3" style="letter-spacing: 0.05em;">Authentication Settings</h6>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="auth_method" class="form-label small fw-bold text-secondary text-uppercase">Authentication Method</label>
+                                <select class="form-select border-secondary-subtle py-2 rounded-3" id="auth_method" name="AuthMethod" onchange="toggleAuthFields()">
+                                    <option value="default" selected>Currently Logged-in User</option>
+                                    <option value="jwt">JWT Token (Bearer)</option>
+                                    <option value="apikey">X-API-Key</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-6" id="auth_credential_container" style="display: none;">
+                                <label for="auth_credential" class="form-label small fw-bold text-secondary text-uppercase" id="auth_credential_label">Credential Value</label>
+                                <input type="text" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="auth_credential" name="AuthCredential" placeholder="Enter token/key">
+                            </div>
+                        </div>
 
-      <div class="mb-3">
-        <label for="cluster" class="form-label">Cluster</label>
-        <input type="hidden" class="form-control" id="ClusterId" name="ClusterId" value="{{ cluster.id }}">
-        <input type="text" class="form-control" id="Cluster" name="Cluster" readonly disabled value="{{ cluster.name }}">
-      </div>
+                        <!-- Section 2: Notifications -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="text-uppercase text-secondary fw-bold small border-bottom pb-2 mb-3" style="letter-spacing: 0.05em;">Scheduler Email Notifications</h6>
+                            </div>
+                            
+                            <div class="col-12">
+                                <label for="notify_email" class="form-label small fw-bold text-secondary text-uppercase">Notification Email Address</label>
+                                <input type="email" class="form-control border-secondary-subtle py-2 rounded-3" id="notify_email" name="NotificationEmail" placeholder="optional-notify@domain.com">
+                            </div>
 
-      <div class="mb-3">
-        <label for="notify_email" class="form-label">Notification Email</label>
-        <input type="email" class="form-control" id="notify_email" name="NotificationEmail" placeholder="Optional">
-      </div>
+                            <div class="col-12 d-flex flex-wrap gap-4 mt-3">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" value="true" id="notify_start" name="NotifyOnStart" checked>
+                                    <label class="form-check-label fw-semibold text-secondary small text-uppercase" for="notify_start">Notify On Start</label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" value="true" id="notify_finish" name="NotifyOnFinish" checked>
+                                    <label class="form-check-label fw-semibold text-secondary small text-uppercase" for="notify_finish">Notify On Finish</label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" value="true" id="notify_abort" name="NotifyOnAbort" checked>
+                                    <label class="form-check-label fw-semibold text-secondary small text-uppercase" for="notify_abort">Notify On Abort</label>
+                                </div>
+                            </div>
+                        </div>
 
-      <div class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" value="true" id="notify_start" name="NotifyOnStart" checked>
-        <label class="form-check-label" for="notify_start">Notify On Start</label>
-      </div>
-      <div class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" value="true" id="notify_finish" name="NotifyOnFinish" checked>
-        <label class="form-check-label" for="notify_finish">Notify On Finish</label>
-      </div>
-      <div class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" value="true" id="notify_abort" name="NotifyOnAbort" checked>
-        <label class="form-check-label" for="notify_abort">Notify On Abort</label>
-      </div>
+                        <!-- Section 3: Task Details -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="text-uppercase text-secondary fw-bold small border-bottom pb-2 mb-3" style="letter-spacing: 0.05em;">Resource & Task Configuration</h6>
+                            </div>
+                            
+                            <div class="col-12">
+                                <label for="task_name" class="form-label small fw-bold text-secondary text-uppercase">Task Name</label>
+                                <input type="text" class="form-control border-secondary-subtle py-2 rounded-3" id="task_name" name="TaskName" placeholder="Enter task name" value="HEAppE-Management-Task" required>
+                            </div>
+                            
+                            <input type="hidden" name="MinCores" value="1">
+                            <div class="col-md-6">
+                                <label for="max_cores" class="form-label small fw-bold text-secondary text-uppercase">
+                                    Max Cores
+                                    {% if is_v6_4_0_plus %}
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span>
+                                    {% endif %}
+                                </label>
+                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="max_cores" name="MaxCores" value="{{ node_type.cores_per_node|default:1 }}" min="1" {% if not is_v6_4_0_plus %}required{% endif %}>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="walltime" class="form-label small fw-bold text-secondary text-uppercase">Walltime limit (seconds)</label>
+                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="walltime" name="WalltimeLimit" value="600" min="1" required>
+                            </div>
 
-      <hr>
+                            <div class="col-md-6">
+                                <label for="node_type" class="form-label small fw-bold text-secondary text-uppercase">Assigned Queue (Node Type)</label>
+                                <input type="hidden" class="form-control" id="ClusterNodeTypeId" name="ClusterNodeTypeId" value="{{ node_type.id }}">
+                                <input type="text" class="form-control border-secondary-subtle py-2 bg-light font-monospace" id="ClusterNodeType" name="ClusterNodeType" readonly disabled value="{{ node_type.name }} (ID: {{ node_type.id }})">
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold text-secondary text-uppercase">Command Template Base</label>
+                                <input type="hidden" name="CommandTemplateId" value="{{ command_template.id }}">
+                                <input type="text" class="form-control border-secondary-subtle py-2 bg-light font-monospace" readonly disabled value="{{ command_template.name }} (ID: {{ command_template.id }})">
+                            </div>
+                        </div>
 
-      <!-- Task Level Fields -->
-      <h5 class="mb-3">Task</h5>
+                        <!-- Section 4: Parameters -->
+                        {% if command_template.template_parameters %}
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="text-uppercase text-secondary fw-bold small border-bottom pb-2 mb-3" style="letter-spacing: 0.05em;">Command Template Parameters</h6>
+                            </div>
+                            
+                            {% for param in command_template.template_parameters %}
+                            <div class="col-12">
+                                <label for="param_{{ param.identifier }}" class="form-label small fw-bold text-secondary text-uppercase">
+                                    {{ param.description|default:param.identifier }}
+                                </label>
+                                {% if param.query %}
+                                    <input type="text" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="param_{{ param.identifier }}" name="TemplateParameters[{{ param.identifier }}]" placeholder="Enter value (query: {{ param.query }})" required>
+                                    <div class="form-text text-muted small mt-1">Query validation filter: <code>{{ param.query }}</code></div>
+                                {% else %}
+                                    <input type="text" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="param_{{ param.identifier }}" name="TemplateParameters[{{ param.identifier }}]" placeholder="Enter value for {{ param.identifier }}" required>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
 
-      <div class="mb-3">
-        <label for="task_name" class="form-label">Task Name</label>
-        <input type="text" class="form-control" id="task_name" name="TaskName" placeholder="Enter task name" value="HEAppE-Management-Task" required>
-      </div>
+                        <!-- Section 4.5: Resource Allocation (v6.4.0+) -->
+                        {% if is_v6_4_0_plus %}
+                        <div class="row g-3 mb-4">
+                            <div class="col-12">
+                                <h6 class="text-uppercase text-secondary fw-bold small border-bottom pb-2 mb-3" style="letter-spacing: 0.05em;">Resource Allocation (v6.4.0+)</h6>
+                            </div>
+                            
+                            <div class="col-md-6">
+                                <label for="gpu_cores" class="form-label small fw-bold text-secondary text-uppercase">GPU Cores <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="gpu_cores" name="GpuCores" placeholder="e.g. 2" min="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="gpu_nodes" class="form-label small fw-bold text-secondary text-uppercase">GPU Nodes <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="gpu_nodes" name="GpuNodes" placeholder="e.g. 1" min="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="required_nodes" class="form-label small fw-bold text-secondary text-uppercase">Required Nodes <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="required_nodes" name="RequiredNodes" placeholder="e.g. 4" min="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="memory" class="form-label small fw-bold text-secondary text-uppercase">Total Memory (MB) <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="memory" name="Memory" placeholder="e.g. 8192" min="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="memory_per_cpu" class="form-label small fw-bold text-secondary text-uppercase">Memory Per CPU (MB) <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="memory_per_cpu" name="MemoryPerCpu" placeholder="e.g. 2048" min="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="memory_per_gpu" class="form-label small fw-bold text-secondary text-uppercase">Memory Per GPU (MB) <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="number" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace" id="memory_per_gpu" name="MemoryPerGpu" placeholder="e.g. 4096" min="0">
+                            </div>
+                        </div>
+                        {% endif %}
 
-      <div class="mb-3">
-        <label for="min_cores" class="form-label">Min Cores</label>
-        <input type="number" class="form-control" id="min_cores" name="MinCores" value="1" min="1" required>
-      </div>
+                        <!-- Section 5: Scheduler flags -->
+                        <div class="row g-3 mb-4">
+                            <div class="col-12 d-flex flex-wrap gap-4">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" value="true" id="exclusive" name="IsExclusive">
+                                    <label class="form-check-label fw-semibold text-secondary small text-uppercase" for="exclusive">Exclusive Allocation</label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" value="true" id="rerunnable" name="IsRerunnable" checked>
+                                    <label class="form-check-label fw-semibold text-secondary small text-uppercase" for="rerunnable">Scheduler Rerunnable</label>
+                                </div>
+                            </div>
+                        </div>
 
-      <div class="mb-3">
-        <label for="max_cores" class="form-label">Max Cores</label>
-        <input type="number" class="form-control" id="max_cores" name="MaxCores" value="1" min="1" required>
-      </div>
+                        <!-- Form Actions -->
+                        <div class="d-flex justify-content-between border-top pt-4">
+                            <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-outline-secondary fw-semibold rounded-3 px-4 py-2">Cancel</a>
+                            <button type="submit" class="btn btn-success fw-bold rounded-3 shadow-sm px-5 py-2">
+                                <i class="bi bi-rocket-takeoff me-1.5"></i>Submit Test Job
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
 
-      <div class="mb-3">
-        <label for="walltime" class="form-label">Walltime (seconds)</label>
-        <input type="number" class="form-control" id="walltime" name="WalltimeLimit" value="600" min="1">
-      </div>
-
-      <div class="mb-3">
-        <label for="node_type" class="form-label">Queue</label>
-        <input type="hidden" class="form-control" id="ClusterNodeTypeId" name="ClusterNodeTypeId" value="{{ node_type.id }}">
-        <input type="text" class="form-control" id="ClusterNodeType" name="ClusterNodeType" readonly disabled value="{{ node_type.name }}">
-      </div>
-
-      <div class="mb-3">
-        <label class="form-label">Command Template</label>
-        <input type="hidden" name="CommandTemplateId" value="{{ command_template.id }}">
-        <input type="text" class="form-control" readonly disabled value="{{ command_template.name }}">
-      </div>
-
-      <!-- Command Template Parameters -->
-      {% if command_template.template_parameters %}
-        <h6 class="mb-3">Command Template Parameters</h6>
-        {% for param in command_template.template_parameters %}
-          <div class="mb-3">
-            <label for="param_{{ param.identifier }}" class="form-label">{{ param.description|default:param.identifier }}</label>
-            {% if param.query %}
-              <!-- For now, use text input; handle query-based options (e.g., select) in the view by pre-processing options as a list -->
-              <input type="text" class="form-control" id="param_{{ param.identifier }}" name="TemplateParameters[{{ param.identifier }}]" placeholder="Enter value for {{ param.description|default:param.identifier }} (query: {{ param.query }})" required>
-              <small class="form-text text-muted">Query hint: {{ param.query }}</small>
-            {% else %}
-              <input type="text" class="form-control" id="param_{{ param.identifier }}" name="TemplateParameters[{{ param.identifier }}]" placeholder="Enter value for {{ param.description|default:param.identifier }}" required>
-            {% endif %}
-          </div>
-        {% endfor %}
-      {% endif %}
-
-      <div class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" value="true" id="exclusive" name="IsExclusive">
-        <label class="form-check-label" for="exclusive">Exclusive</label>
-      </div>
-
-      <div class="form-check mb-3">
-        <input class="form-check-input" type="checkbox" value="true" id="rerunnable" name="IsRerunnable" checked>
-        <label class="form-check-label" for="rerunnable">Rerunnable</label>
-      </div>
-
-      <button type="submit" class="btn btn-success">Submit Job</button>
-    </form>
-  </div>
+        </div>
+    </div>
 </div>
 
+<script>
+function toggleAuthFields() {
+    var method = document.getElementById("auth_method").value;
+    var container = document.getElementById("auth_credential_container");
+    var label = document.getElementById("auth_credential_label");
+    var input = document.getElementById("auth_credential");
+    
+    if (method === "default") {
+        container.style.display = "none";
+        input.removeAttribute("required");
+        input.value = "";
+    } else {
+        container.style.display = "block";
+        input.setAttribute("required", "required");
+        if (method === "jwt") {
+            label.textContent = "JWT Token (without Bearer prefix)";
+            input.placeholder = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
+        } else if (method === "apikey") {
+            label.textContent = "X-API-Key";
+            input.placeholder = "username:password or custom-key";
+        }
+    }
+}
+document.addEventListener("DOMContentLoaded", function() {
+    toggleAuthFields();
+
+    {% if is_v6_4_0_plus %}
+    var form = document.getElementById("jobSubmitForm");
+    if (form) {
+        form.addEventListener("submit", function(e) {
+            var maxCores = document.getElementById("max_cores").value.trim();
+            var gpuCores = document.getElementById("gpu_cores").value.trim();
+            var gpuNodes = document.getElementById("gpu_nodes").value.trim();
+
+            if (!maxCores && !gpuCores && !gpuNodes) {
+                e.preventDefault();
+                alert("Please specify at least one resource configuration: Max Cores, GPU Cores, or GPU Nodes.");
+            }
+        });
+    }
+    {% endif %}
+});
+</script>
 {% endblock %}

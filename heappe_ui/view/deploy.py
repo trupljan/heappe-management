@@ -1,7 +1,7 @@
 import io
 
 from .imports import *
-from .utils import _create_payload, _handle_api_call, login_view, login_required
+from .utils import _create_payload, _handle_api_call, login_view, login_required, clean_ver
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
@@ -99,14 +99,22 @@ def execute_docker_compose(command, compose_dir, timeout=300):
 
 def get_container_details(container):
     """Extract detailed information from a Docker container."""
-    port_mappings = container.attrs['NetworkSettings']['Ports']
+    port_mappings = container.attrs.get('NetworkSettings', {}).get('Ports') or {}
     ports_info = []
+    mapped = []
+    unmapped = []
     for container_port, host_ports in port_mappings.items():
         if host_ports:
             for host_port in host_ports:
-                ports_info.append(f"{host_port['HostIp']}:{host_port['HostPort']} -> {container_port}")
+                ip = host_port.get('HostIp', '')
+                port = host_port.get('HostPort', '')
+                if ip in ('0.0.0.0', '::', ''):
+                    mapped.append(f"{port}->{container_port}")
+                else:
+                    mapped.append(f"{ip}:{port}->{container_port}")
         else:
-            ports_info.append(f"{container_port} (no host mapping)")
+            unmapped.append(f"{container_port}")
+    ports_info = mapped + unmapped
     try:
         image_tags = ', '.join(container.image.tags) if container.image.tags else 'N/A'
     except docker.errors.ImageNotFound:
@@ -173,22 +181,51 @@ import secrets
 import string
 
 
-def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
+def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s6):
     """Handle the deployment process and return the result."""
+    from datetime import datetime
     service = HEAppEDeployService(config)
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
+    log_dir = os.path.join(config.base_path, instance_name, "app", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, "deploy.log")
+
+    def log_message(msg):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted = f"[{timestamp}] {msg}\n"
+        print(msg)
+        try:
+            with open(log_file_path, "a", encoding="utf-8") as f:
+                f.write(formatted)
+        except Exception as e:
+            print(f"Error writing to deploy log: {e}")
 
     try:
+        # Clear previous log
+        try:
+            with open(log_file_path, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            pass
 
-        for s in [s1, s2, s3, s4]:
-            if 's' in locals(): s.close()
+        log_message("Starting HEAppE deployment process...")
+        log_message(f"Repository URL: {config.repo_url}")
+        log_message(f"Repository branch/tag: {config.repo_branch}")
+
+        for s in [s1, s2, s3, s4, s5, s6]:
+            if 's' in locals() and s:
+                try:
+                    s.close()
+                except Exception:
+                    pass
 
         admin_password = generate_secure_password()
         vault_password = generate_secure_password()
         sa_password = generate_secure_password()
         data_staging_token = generate_secure_password()
 
-        instance_settings = service.deploy_init(
+        log_message("Initializing configuration files and directory structure...")
+        init_result = service.deploy_init(
             instance_name=instance_name,
             username="admin",
             password=admin_password,
@@ -199,56 +236,106 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4):
             overwrite_existing=True,
             deployed_ip='localhost',
             version=config.repo_branch
-        )['instance_settings']
+        )
+        if init_result.get("status") == "error":
+            raise RuntimeError(f"deploy_init failed: {init_result.get('message')}")
+
+        instance_settings = init_result['instance_settings']
+        log_message("Configuration initialized. Core settings generated.")
+
+        # Re-set updating status to True just in case deploy_init updated it
+        _set_updating_status(instance_name, True)
 
         build_command = [
             "docker", "compose",
             "--profile", "db",
+            "--profile", "heappe",
             "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
             "--profile", "staging",
             "-p", instance_name,
             "build",  "--no-cache"
         ]
+        log_message("Building docker containers (this can take a few minutes)...")
         build_result = execute_docker_compose(build_command, compose_dir)
-        print(f"Docker Compose build result done")
+        log_message(f"Docker Compose build finished with return code {build_result.returncode}")
+        if build_result.stdout:
+            log_message(f"Build stdout:\n{build_result.stdout}")
+        if build_result.stderr:
+            log_message(f"Build stderr:\n{build_result.stderr}")
+
+        if build_result.returncode != 0:
+            raise RuntimeError(f"Docker compose build failed: {build_result.stderr}")
+
         up_command = [
             "docker", "compose",
             "--profile", "db",
+            "--profile", "heappe",
             "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
             "--profile", "staging",
             "-p", instance_name,
             "up", "-d"
         ]
+        log_message("Starting containers...")
         up_result = execute_docker_compose(up_command, compose_dir)
-        print(f"Docker Compose up done: {up_result.returncode} {up_result.stdout} {up_result.stderr}")
-        #wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
-        # Initialize the database with retries
+        log_message(f"Docker Compose up finished with return code {up_result.returncode}")
+        if up_result.stdout:
+            log_message(f"Up stdout:\n{up_result.stdout}")
+        if up_result.stderr:
+            log_message(f"Up stderr:\n{up_result.stderr}")
 
-        run_with_retries(instance_name, ports, sa_password)
+        if up_result.returncode != 0:
+            raise RuntimeError(f"Docker compose up failed: {up_result.stderr}")
+
+        log_message("Running database migrations and initialization...")
+        run_with_retries(instance_name, ports, sa_password, logger=log_message)
+        log_message("Database initialization completed successfully.")
 
         restart_command = [
             "docker", "compose",
             "--profile", "db",
+            "--profile", "heappe",
             "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
             "-p", instance_name,
             "restart"
         ]
 
+        log_message("Waiting for heappe and mssql containers to be running...")
         wait_for_container_running(f"{instance_name}_heappe", timeout=300, interval=10)
         wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
 
+        log_message("Restarting services to apply database and vault configs...")
         restart_result = execute_docker_compose(restart_command, compose_dir)
-        print(f"Docker Compose restart done: {restart_result.returncode} {restart_result.stdout} {restart_result.stderr}")
-        if restart_result.returncode != 0:
-            return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
+        log_message(f"Docker Compose restart finished with return code {restart_result.returncode}")
+        if restart_result.stdout:
+            log_message(f"Restart stdout:\n{restart_result.stdout}")
+        if restart_result.stderr:
+            log_message(f"Restart stderr:\n{restart_result.stderr}")
 
-        #set the instance as deployed in the database
-        from ..models import InstanceCredentials
+        if restart_result.returncode != 0:
+            raise RuntimeError(f"Docker compose restart failed: {restart_result.stderr}")
+
+        # Write success log first
+        log_message("SUCCESS: Deployment completed successfully.")
+
+        # Set the instance as deployed in the database
         instance_settings.is_deployed = True
+        instance_settings.is_updating = False
         instance_settings.save()
+
         return restart_result, "Deployment completed successfully.", 'success'
     except Exception as e:
-        print(f"Deployment error: {str(e)}")
+        log_message(f"EXCEPTION: Deployment error: {str(e)}")
+        _set_updating_status(instance_name, False)
         return None, f"Deployment error: {str(e)}", 'danger'
 
 def handle_container_action(client, instance_name, action, container_id):
@@ -267,13 +354,43 @@ def handle_container_action(client, instance_name, action, container_id):
         elif action == 'restart':
             container.restart()
             return f"Container {container.name} restarted successfully.", 'success'
+        elif action == 'delete':
+            container.remove(force=True)
+            return f"Container {container.name} deleted successfully.", 'success'
     except docker.errors.NotFound:
         return f"Container {container_id} not found.", 'danger'
     except docker.errors.APIError as e:
         return f"Error performing {action} on container {container_id}: {(e)}", 'danger'
 
+def is_port_open(host, port, timeout=1):
+    import socket
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+
 def handle_global_action(compose_dir, instance_name, action):
     """Handle global actions for all containers in the project."""
+    # Read .env to check if telemetry is enabled
+    env_path = os.path.join(compose_dir, ".env")
+    otel_disabled = True
+    mssql_port = None
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line_strip = line.strip()
+                    if line_strip.startswith("OTEL_DISABLED="):
+                        otel_disabled = (line_strip.split("=", 1)[1].strip().lower() == "true")
+                    elif line_strip.startswith("HOST_MSSQL_PORT="):
+                        try:
+                            mssql_port = int(line_strip.split("=", 1)[1].strip())
+                        except ValueError:
+                            pass
+        except Exception:
+            pass
+
     command = [
         "docker", "compose",
         "--profile", "db",
@@ -282,15 +399,131 @@ def handle_global_action(compose_dir, instance_name, action):
         "--profile", "vault",
         "--profile", "vaultagent",
         "--profile", "sshagent",
-        "--profile", "staging",
-        "-p", instance_name
+        "--profile", "staging"
     ]
+    if not otel_disabled:
+        command.extend(["--profile", "telemetry"])
+
+    command.extend(["-p", instance_name])
+
     if action == 'start_all':
         command.extend(["up", "-d"])
         message = "All containers started successfully."
     elif action == 'restart_all':
-        command.append("restart")
-        message = "All containers restarted successfully."
+        import time
+
+        # 1. Stop all containers first to prevent connections hanging
+        stop_cmd = command + ["stop"]
+        stop_result = execute_docker_compose(stop_cmd, compose_dir)
+        if stop_result.returncode != 0:
+            return f"Failed to stop containers during restart: {stop_result.stderr}", 'danger'
+
+        # 2. Start database container only
+        db_start_cmd = [
+            "docker", "compose",
+            "--profile", "db",
+            "-p", instance_name,
+            "up", "-d"
+        ]
+        db_result = execute_docker_compose(db_start_cmd, compose_dir)
+        if db_result.returncode != 0:
+            return f"Failed to start database container during restart: {db_result.stderr}", 'danger'
+
+        # 3. Wait for the database port to be active
+        if mssql_port:
+            port_ready = False
+            for _ in range(60):
+                if is_port_open("127.0.0.1", mssql_port):
+                    port_ready = True
+                    break
+                time.sleep(1)
+            if not port_ready:
+                time.sleep(5)
+        else:
+            time.sleep(10)
+
+        # 4. Start Vault container (before HEAppE so it has time to initialise)
+        vault_start_cmd = [
+            "docker", "compose",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "-p", instance_name,
+            "up", "-d"
+        ]
+        vault_result = execute_docker_compose(vault_start_cmd, compose_dir)
+        if vault_result.returncode != 0:
+            return f"Failed to start Vault during restart: {vault_result.stderr}", 'danger'
+
+        # 5. Read Vault host port from .env (HOST_VAULT_PORT) or try common defaults.
+        #    Vault runs on port 8200 inside the container; the host port may differ.
+        vault_host_port = None
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        ls = line.strip()
+                        for key in ("HOST_VAULT_PORT=", "VAULT_PORT=", "VAULT_HOST_PORT="):
+                            if ls.startswith(key):
+                                try:
+                                    vault_host_port = int(ls.split("=", 1)[1].strip())
+                                except ValueError:
+                                    pass
+            except Exception:
+                pass
+        # Fall back to the standard Vault port if nothing found in .env
+        if not vault_host_port:
+            vault_host_port = 8200
+
+        # 6. Poll until Vault's HTTP listener is up (max 90 s)
+        vault_ready = False
+        for _ in range(90):
+            if is_port_open("127.0.0.1", vault_host_port):
+                vault_ready = True
+                break
+            time.sleep(1)
+
+        # Give Vault a couple of extra seconds to finish its internal init even
+        # after the port opens, so the unseal API call succeeds.
+        time.sleep(3)
+
+        # 7. Run the unseal one-shot container (initVault profile).
+        #    Use `up --no-deps` so we only re-create the unseal service.
+        unseal_cmd = [
+            "docker", "compose",
+            "--profile", "initVault",
+            "-p", instance_name,
+            "up", "--no-deps"
+        ]
+        unseal_result = execute_docker_compose(unseal_cmd, compose_dir, timeout=120)
+        # A non-zero exit here is treated as a warning, not a hard failure —
+        # the unseal container exits with 0 on success, but older images may
+        # return non-zero even when Vault was successfully unsealed.
+        unseal_ok = unseal_result.returncode == 0
+
+        # 8. Brief pause to let Vault propagate unsealed state to vault-agent
+        time.sleep(5)
+
+        # 9. Start remaining services (HEAppE, datastaging, sshagent, telemetry …)
+        up_cmd = command + ["up", "-d"]
+        result = execute_docker_compose(up_cmd, compose_dir)
+
+        if result.returncode != 0:
+            return f"Failed to start remaining containers after Vault unseal: {result.stderr}", 'danger'
+
+        if not vault_ready:
+            return (
+                "Containers restarted, but Vault port did not respond in time — "
+                "Vault may still be sealed. Check the Vault container logs.",
+                'warning'
+            )
+        if not unseal_ok:
+            return (
+                "Containers restarted, but the Vault unseal step returned a non-zero exit code. "
+                "Vault may still be sealed — check the initVault container logs.",
+                'warning'
+            )
+
+        return "All containers restarted successfully (DB → Vault unsealed → services).", 'success'
     elif action == 'stop_all':
         command.append("stop")
         message = "All containers stopped successfully."
@@ -480,7 +713,8 @@ def initialize_database(
         ("Error", "Error description"),
         ("Critical", "Critical description"),
         ("None", "None description"),
-    ]
+    ],
+    logger=print
 ):
     try:
         # Step 1: Create database if it doesn't exist
@@ -494,7 +728,7 @@ def initialize_database(
         ) as conn:
             cursor = conn.cursor()
             cursor.execute(f"IF DB_ID(N'{db_name}') IS NULL CREATE DATABASE [{db_name}]")
-            print(f"Database '{db_name}' created or already exists.")
+            logger(f"Database '{db_name}' created or already exists.")
 
         # Step 2: Connect to the new database for permissions, tables, and inserts
         with pymssql.connect(
@@ -515,7 +749,7 @@ def initialize_database(
 
             for grant_sql in grants:
                 cursor.execute(grant_sql)
-            print(f"Permissions granted on database '{db_name}'.")
+            logger(f"Permissions granted on database '{db_name}'.")
 
             # Create LoggingLevelType table
             cursor.execute("""
@@ -573,42 +807,42 @@ def initialize_database(
                 """, (name, name, desc))
 
             conn.commit()
-            print(f"Database '{db_name}' initialized successfully with tables and log levels.")
+            logger(f"Database '{db_name}' initialized successfully with tables and log levels.")
             return True
 
     except pymssql.Error as e:
-        print(f"Database error: {e}")
+        logger(f"Database error: {e}")
         return False
     except Exception as e:
-        print(f"Unexpected error: {e}")
+        logger(f"Unexpected error: {e}")
         return False
 
 # Retry logic
-def run_with_retries(instance_name, ports, password):
+def run_with_retries(instance_name, ports, password, logger=print):
     max_attempts = 10
     attempt = 1
     retry_delay = 5  # seconds
 
     while attempt <= max_attempts:
-        print(f"Attempt {attempt} of {max_attempts}")
+        logger(f"Attempt {attempt} of {max_attempts}")
         success = initialize_database(
             server='localhost',
             port=ports['mssql_port'],
             db_name='heappe-monitoring',
             db_user='SA',
-            db_password=password
+            db_password=password,
+            logger=logger
         )
         if success:
-            print("Database initialization succeeded!")
+            logger("Database initialization succeeded!")
             break
         else:
-            print(f"Attempt {attempt} failed. Retrying in {retry_delay} seconds...")
+            logger(f"Attempt {attempt} failed. Retrying in {retry_delay} seconds...")
             time.sleep(retry_delay)
             attempt += 1
 
     if attempt > max_attempts:
-        print("Max attempts reached. Database initialization failed.")
-        #raise Exception("Failed to initialize database after maximum retries.")
+        logger("Max attempts reached. Database initialization failed.")
 
 
 import subprocess
@@ -616,22 +850,49 @@ import subprocess
 
 def get_remote_tags(repo_url: str) -> list[str]:
     try:
-        result = subprocess.run(
+        # Fetch tags
+        result_tags = subprocess.run(
             ["git", "ls-remote", "--tags", repo_url],
             capture_output=True, text=True, check=True
         )
+        tags = []
+        for line in result_tags.stdout.splitlines():
+            if "refs/tags/" in line and not line.endswith("^{}"):
+                parts = line.split("refs/tags/")
+                if len(parts) > 1:
+                    tags.append(parts[1])
 
-        tags = [
-            line.split("refs/tags/")[1]
-            for line in result.stdout.splitlines()
-            if "refs/tags/" in line and not line.endswith("^{}")
-        ]
+        # Keep version >= v6.0.0, and sort them
+        version_tags = [t for t in tags if t.lower() >= "v6.0.0"]
+        try:
+            version_tags.sort(key=lambda t: [int(n) for n in t.lower().lstrip('v').split('.') if n.isdigit()], reverse=True)
+        except Exception:
+            version_tags.sort(reverse=True)
 
-        tags = [t for t in tags if t.lower() >= "v6.0.0"]
+        # Fetch branches (heads)
+        result_heads = subprocess.run(
+            ["git", "ls-remote", "--heads", repo_url],
+            capture_output=True, text=True, check=True
+        )
+        branches = []
+        for line in result_heads.stdout.splitlines():
+            if "refs/heads/" in line:
+                parts = line.split("refs/heads/")
+                if len(parts) > 1:
+                    branches.append(parts[1])
+        branches.sort()
 
-        tags.sort(key=lambda t: [int(n) for n in t.lower().lstrip('v').split('.') if n.isdigit()], reverse=True)
-
-        return tags
+        # Combine: version tags first, then branches, then any other tags
+        all_refs = version_tags + branches + [t for t in tags if t not in version_tags]
+        
+        # De-duplicate while preserving order
+        seen = set()
+        unique_refs = []
+        for r in all_refs:
+            if r not in seen:
+                seen.add(r)
+                unique_refs.append(r)
+        return unique_refs
 
     except Exception:
         return []
@@ -640,10 +901,10 @@ def get_remote_tags(repo_url: str) -> list[str]:
 
 import threading
 
-def deploy_background(config, instance_name, ports, s1, s2, s3, s4):
+def deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6):
     thread = threading.Thread(
         target=handle_deployment_action,
-        args=(config, instance_name, ports, s1, s2, s3, s4),
+        args=(config, instance_name, ports, s1, s2, s3, s4, s5, s6),
         daemon=True
     )
     thread.start()
@@ -651,6 +912,14 @@ def deploy_background(config, instance_name, ports, s1, s2, s3, s4):
 def update_background(config, instance_name):
     thread = threading.Thread(
         target=handle_update_action,
+        args=(config, instance_name),
+        daemon=True
+    )
+    thread.start()
+
+def regenerate_configs_background(config, instance_name):
+    thread = threading.Thread(
+        target=handle_regenerate_configs_action,
         args=(config, instance_name),
         daemon=True
     )
@@ -720,9 +989,6 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     print(f"Error reading appsettings.json: {e}")
 
         if deployed_version and latest_version:
-            def clean_ver(v):
-                res = [int(n) for n in v.lower().lstrip('v').split('.') if n.isdigit()]
-                return res if res else [0]
             try:
                 if clean_ver(latest_version) > clean_ver(deployed_version):
                     update_available = True
@@ -751,11 +1017,15 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 data_staging_port, s3 = get_port_with_fallback(start_port=5001, max_tries=100)
                 mssql_port, s1 = get_port_with_fallback(start_port=6000, max_tries=100)
                 local_port, s4 = get_port_with_fallback(start_port=49005, max_tries=100)
+                otel_grpc_port, s5 = get_port_with_fallback(start_port=4317, max_tries=100)
+                otel_jaeger_port, s6 = get_port_with_fallback(start_port=16686, max_tries=100)
                 ports = {
                     "mssql_port": mssql_port,
                     "app_port": app_port,
                     "data_staging_port": data_staging_port,
-                    "local_port": local_port
+                    "local_port": local_port,
+                    "otel_grpc_port": otel_grpc_port,
+                    "otel_jaeger_port": otel_jaeger_port
                 }
 
                 # --- START BACKGROUND DEPLOYMENT ---
@@ -769,7 +1039,34 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     target_dir="heappe-core"
                 )
 
-                deploy_background(config, instance_name, ports, s1, s2, s3, s4)
+                # Pre-create instance credentials in database to avoid race condition and mark as deploying (is_updating=True)
+                service = HEAppEDeployService(config)
+                service.save_instance_settings(
+                    instance_name=instance_name,
+                    heappe_host=ip,
+                    heappe_login="admin",
+                    heappe_password="",
+                    log_db_host=ip,
+                    heappe_port=app_port,
+                    log_db_port=str(mssql_port),
+                    log_db_user="SA",
+                    log_db_password="",
+                    log_db_database="heappe-monitoring",
+                    is_deployed=False
+                )
+                _set_updating_status(instance_name, True)
+
+                # Set in session as chosen instance
+                request.session["chosen_instance"] = instance_name
+                request.session["force_reauth"] = True
+                # Clear old instance connection variables to prevent leakage/fallback
+                request.session.pop("heappe_session_code", None)
+                request.session.pop("heappe_host", None)
+                request.session.pop("heappe_host_url", None)
+                request.session.pop("heappe_use_api_key", None)
+                request.session.pop("heappe_last_auth", None)
+
+                deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6)
 
                 action_message = "Deployment started in the background."
                 action_status = 'info'
@@ -806,10 +1103,36 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 action_message = "Update started in the background."
                 action_status = 'info'
 
-            elif action in ['start', 'stop', 'restart']:
+            elif action == "regenerate_configs":
+                config = HEAppEConfig(
+                    base_path=base_path,
+                    repo_url=input_repo,
+                    repo_branch=input_branch,
+                    default_version=input_branch,
+                    default_ip=ip,
+                    default_ports=ports,
+                    target_dir="heappe-core"
+                )
+                regenerate_configs_background(config, instance_name)
+                action_message = "Configuration regeneration started in the background."
+                action_status = 'info'
+
+            elif action in ['start', 'stop', 'restart', 'delete']:
                 action_message, action_status = handle_container_action(
                     client, instance_name, action, request.POST.get('container_id')
                 )
+
+            elif action == 'status_poll':
+                # Lightweight read-only poll: just return current container statuses as JSON
+                poll_containers = [
+                    get_container_details(c) for c in client.containers.list(all=True)
+                    if c.labels.get('com.docker.compose.project') == instance_name
+                ]
+                return JsonResponse({
+                    'status': 'ok',
+                    'instance_name': instance_name,
+                    'containers': poll_containers
+                })
 
             elif action in ['start_all', 'restart_all', 'stop_all']:
                 action_message, action_status = handle_global_action(compose_dir, instance_name, action)
@@ -820,6 +1143,26 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                     get_container_details(c) for c in client.containers.list(all=True)
                     if c.labels.get('com.docker.compose.project') == instance_name
                 ]
+                def get_sort_weight(item):
+                    name = item['name'].lower()
+                    if 'heappe' in name and 'vault' not in name:
+                        return 1
+                    elif 'datastaging' in name:
+                        return 2
+                    elif 'mssql' in name or 'db' in name:
+                        return 3
+                    elif 'vault' in name:
+                        if 'vaultagent' in name:
+                            return 5
+                        elif 'init' in name:
+                            return 6
+                        elif 'unseal' in name:
+                            return 7
+                        return 4
+                    elif 'sshagent' in name or 'ssh-agent' in name:
+                        return 8
+                    return 100
+                updated_containers.sort(key=get_sort_weight)
                 return JsonResponse({
                     'status': action_status,
                     'message': action_message,
@@ -835,6 +1178,26 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 for c in client.containers.list(all=True)
                 if c.labels.get('com.docker.compose.project') == instance_name
             ]
+            def get_sort_weight(item):
+                name = item['container'].name.lower()
+                if 'heappe' in name and 'vault' not in name:
+                    return 1
+                elif 'datastaging' in name:
+                    return 2
+                elif 'mssql' in name or 'db' in name:
+                    return 3
+                elif 'vault' in name:
+                    if 'vaultagent' in name:
+                        return 5
+                    elif 'init' in name:
+                        return 6
+                    elif 'unseal' in name:
+                        return 7
+                    return 4
+                elif 'sshagent' in name or 'ssh-agent' in name:
+                    return 8
+                return 100
+            containers.sort(key=get_sort_weight)
 
     except Exception as e:
         print(f"Error in deploy_view: {e}")
@@ -886,10 +1249,28 @@ def update_status_view(request, instance_name):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
     base_path = "/opt/heappe-deployment/"
-    log_file_path = os.path.join(base_path, instance_name, "app", "logs", "update.log")
+    log_dir = os.path.join(base_path, instance_name, "app", "logs")
+    deploy_log = os.path.join(log_dir, "deploy.log")
+    update_log = os.path.join(log_dir, "update.log")
+
+    # Always pick the most recently modified log file so we never read the wrong
+    # file when is_deployed flips mid-deployment (the old is_deployed-based logic
+    # would switch to update.log while the background thread was still writing to
+    # deploy.log, resulting in empty logs and a false "Deployment Failed" state).
+    log_file_path = None
+    best_mtime = -1.0
+    for candidate in [deploy_log, update_log]:
+        if os.path.exists(candidate):
+            try:
+                mtime = os.path.getmtime(candidate)
+                if mtime > best_mtime:
+                    best_mtime = mtime
+                    log_file_path = candidate
+            except Exception:
+                pass
 
     logs = ""
-    if os.path.exists(log_file_path):
+    if log_file_path and os.path.exists(log_file_path):
         try:
             with open(log_file_path, "r", encoding="utf-8") as f:
                 logs = f.read()
@@ -964,3 +1345,336 @@ def handle_file_action(request, container_id, action):
 
     except Exception as e:
         return JsonResponse({'status': 'danger', 'message': str(e)}, status=500)
+
+
+@login_required
+def instance_config_view(request, instance_name):
+    """Graphical tree editor and manager for appsettings.json or appsettings-data.json of the HEAppE instance."""
+    from ..models import InstanceCredentials
+    try:
+        instance_service = InstanceCredentials.objects.get(instance_name=instance_name)
+    except InstanceCredentials.DoesNotExist:
+        return HttpResponse("Instance not found.", status=404)
+
+    # Determine which configuration file is selected
+    selected_file = request.GET.get('file', 'appsettings.json')
+    if selected_file not in ['appsettings.json', 'appsettings-data.json']:
+        selected_file = 'appsettings.json'
+
+    client = docker.from_env()
+    target_container = None
+    try:
+        # 1. Try to find the exact container associated with the selected file type
+        for c in client.containers.list(all=True):
+            if c.labels.get('com.docker.compose.project') == instance_name:
+                service_name = c.labels.get('com.docker.compose.service', '')
+                if selected_file == 'appsettings-data.json':
+                    if 'datastaging' in service_name or 'datastaging' in c.name:
+                        target_container = c
+                        break
+                else:
+                    if 'heappe' in service_name or 'heappe' in c.name:
+                        target_container = c
+                        break
+        # 2. Fallback to any of the core containers if target is not found (since they mount the same volume)
+        if not target_container:
+            for c in client.containers.list(all=True):
+                if c.labels.get('com.docker.compose.project') == instance_name:
+                    service_name = c.labels.get('com.docker.compose.service', '')
+                    if 'heappe' in service_name or 'heappe' in c.name or 'datastaging' in service_name or 'datastaging' in c.name:
+                        target_container = c
+                        break
+    except Exception as e:
+        return render(request, "instance_config.html", {
+            "instance_name": instance_name,
+            "error_message": f"Could not list Docker containers: {e}",
+            "instance_service": instance_service,
+            "selected_file": selected_file,
+        })
+
+    if not target_container:
+        return render(request, "instance_config.html", {
+            "instance_name": instance_name,
+            "error_message": "Associated container (heappe/datastaging) not found or not created yet.",
+            "instance_service": instance_service,
+            "selected_file": selected_file,
+        })
+
+    config_path = f"/opt/heappe/confs/{selected_file}"
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'save':
+            content = request.POST.get('content', '')
+            write_script = f"mkdir -p $(dirname '{config_path}') && cat > '{config_path}' <<'EOF'\n{content}\nEOF\n"
+            exec_result = target_container.exec_run(['bash', '-c', write_script])
+            if exec_result.exit_code == 0:
+                return JsonResponse({'status': 'success', 'message': 'Configuration saved successfully.'})
+            else:
+                return JsonResponse({
+                    'status': 'danger', 
+                    'message': f"Failed to write configuration: {exec_result.output.decode('utf-8', errors='ignore')}"
+                }, status=500)
+                
+        elif action == 'restart':
+            base_path = "/opt/heappe-deployment/"
+            compose_dir = os.path.join(base_path, instance_name, "heappe-core")
+            # Trigger global restart
+            action_message, action_status = handle_global_action(compose_dir, instance_name, 'restart_all')
+            return JsonResponse({'status': action_status, 'message': action_message})
+
+    # GET request - read config content
+    try:
+        exec_result = target_container.exec_run(f"cat {config_path}")
+        if exec_result.exit_code == 0:
+            config_content = exec_result.output.decode('utf-8')
+        else:
+            config_content = "{}" # Fallback
+    except Exception as e:
+        config_content = "{}"
+
+    context = {
+        "instance_name": instance_name,
+        "config_content": config_content,
+        "instance_service": instance_service,
+        "container_id": target_container.id,
+        "selected_file": selected_file,
+    }
+    return render(request, "instance_config.html", context)
+
+
+@login_required
+def toggle_telemetry_view(request, instance_name):
+    """View to enable/disable OpenTelemetry for a given HEAppE instance."""
+    if request.method != "POST":
+        return JsonResponse({'status': 'danger', 'message': 'Only POST method is allowed.'}, status=405)
+
+    action = request.POST.get('action') # 'enable' or 'disable'
+    base_path = "/opt/heappe-deployment/"
+    env_path = os.path.join(base_path, instance_name, "heappe-core", ".env")
+    compose_dir = os.path.join(base_path, instance_name, "heappe-core")
+
+    if not os.path.exists(env_path):
+        return JsonResponse({'status': 'danger', 'message': f'Config directory or .env not found for instance: {instance_name}'}, status=404)
+
+    # Read env variables
+    env_lines = []
+    env_vars = {}
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                env_lines.append(line)
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#") and "=" in stripped:
+                    k, v = stripped.split("=", 1)
+                    env_vars[k.strip()] = v.strip()
+    except Exception as e:
+        return JsonResponse({'status': 'danger', 'message': f'Failed to read .env file: {str(e)}'}, status=500)
+
+    if action == 'enable':
+        # 1. Verify ports
+        otel_grpc = int(env_vars.get('OTEL_HOST_GRPC_PORT', 4317))
+        otel_jaeger = int(env_vars.get('OTEL_JAEGER_CLIENT_PORT', 16686))
+
+        # Test if ports are free, if not, allocate free ones
+        grpc_free, s_grpc = get_port_with_fallback(start_port=otel_grpc, max_tries=100)
+        jaeger_free, s_jaeger = get_port_with_fallback(start_port=otel_jaeger, max_tries=100)
+
+        try:
+            s_grpc.close()
+        except:
+            pass
+        try:
+            s_jaeger.close()
+        except:
+            pass
+
+        # Update values
+        new_env_lines = []
+        for line in env_lines:
+            stripped = line.strip()
+            if stripped.startswith("OTEL_DISABLED="):
+                new_env_lines.append("OTEL_DISABLED=false\n")
+            elif stripped.startswith("OTEL_HOST_GRPC_PORT="):
+                new_env_lines.append(f"OTEL_HOST_GRPC_PORT={grpc_free}\n")
+            elif stripped.startswith("OTEL_JAEGER_CLIENT_PORT="):
+                new_env_lines.append(f"OTEL_JAEGER_CLIENT_PORT={jaeger_free}\n")
+            else:
+                new_env_lines.append(line)
+
+        # Write back to .env
+        try:
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_env_lines)
+        except Exception as e:
+            return JsonResponse({'status': 'danger', 'message': f'Failed to write to .env file: {str(e)}'}, status=500)
+
+        # 2. Run docker compose recreate
+        cmd = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
+            "--profile", "telemetry",
+            "-p", instance_name,
+            "up", "-d", "--force-recreate", "heappe", "datastagingapi", "otel-collector", "jaeger"
+        ]
+        result = execute_docker_compose(cmd, compose_dir)
+        if result.returncode == 0:
+            return JsonResponse({
+                'status': 'success',
+                'message': 'OpenTelemetry has been successfully enabled. Containers restarted.',
+                'otel_grpc_port': grpc_free,
+                'otel_jaeger_port': jaeger_free
+            })
+        else:
+            return JsonResponse({'status': 'danger', 'message': f'Failed to restart containers: {result.stderr}'}, status=500)
+
+    elif action == 'disable':
+        # Update values
+        new_env_lines = []
+        for line in env_lines:
+            stripped = line.strip()
+            if stripped.startswith("OTEL_DISABLED="):
+                new_env_lines.append("OTEL_DISABLED=true\n")
+            else:
+                new_env_lines.append(line)
+
+        # Write back to .env
+        try:
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_env_lines)
+        except Exception as e:
+            return JsonResponse({'status': 'danger', 'message': f'Failed to write to .env file: {str(e)}'}, status=500)
+
+        # 2. Run docker compose stop & recreate without telemetry
+        stop_cmd = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
+            "--profile", "telemetry",
+            "-p", instance_name,
+            "stop", "otel-collector", "jaeger"
+        ]
+        execute_docker_compose(stop_cmd, compose_dir)
+
+        recreate_cmd = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
+            "-p", instance_name,
+            "up", "-d", "--force-recreate", "heappe", "datastagingapi"
+        ]
+        result = execute_docker_compose(recreate_cmd, compose_dir)
+        if result.returncode == 0:
+            return JsonResponse({
+                'status': 'success',
+                'message': 'OpenTelemetry has been successfully disabled. Telemetry containers stopped.'
+            })
+        else:
+            return JsonResponse({'status': 'danger', 'message': f'Failed to recreate API containers: {result.stderr}'}, status=500)
+
+    else:
+        return JsonResponse({'status': 'danger', 'message': f'Invalid action: {action}'}, status=400)
+
+
+def handle_regenerate_configs_action(config, instance_name):
+    """Regenerate configs (.env and appsettings.json) using update_init and restart all containers."""
+    from datetime import datetime
+    service = HEAppEDeployService(config)
+    compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
+    log_dir = os.path.join(config.base_path, instance_name, "app", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_file_path = os.path.join(log_dir, "update.log")  # Write to update.log so the update progress modal displays it
+
+    def log_message(msg):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        formatted = f"[{timestamp}] {msg}\n"
+        print(msg)
+        try:
+            with open(log_file_path, "a", encoding="utf-8") as f:
+                f.write(formatted)
+        except Exception as e:
+            print(f"Error writing to update log: {e}")
+
+    try:
+        # Clear previous log
+        try:
+            with open(log_file_path, "w", encoding="utf-8") as f:
+                f.write("")
+        except Exception:
+            pass
+
+        log_message("Starting configuration regeneration process...")
+        _set_updating_status(instance_name, True)
+        log_message("Database status set to updating.")
+
+        log_message("Updating configuration files (.env and appsettings.json)...")
+        service.update_init(instance_name=instance_name, version=config.repo_branch)
+        log_message("Configuration files successfully regenerated with new defaults and merged with existing values.")
+
+        log_message("Recreating and restarting containers with updated environment...")
+
+        # Read .env to check if telemetry is enabled
+        env_path = os.path.join(compose_dir, ".env")
+        otel_disabled = True
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip().startswith("OTEL_DISABLED="):
+                            otel_disabled = (line.strip().split("=", 1)[1].strip().lower() == "true")
+            except Exception:
+                pass
+
+        # Build start command with correct profiles
+        cmd = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging"
+        ]
+        if not otel_disabled:
+            cmd.extend(["--profile", "telemetry"])
+
+        cmd.extend(["-p", instance_name, "up", "-d", "--force-recreate"])
+
+        log_message(f"Executing: {' '.join(cmd)}")
+        result = execute_docker_compose(cmd, compose_dir)
+        log_message(f"Docker Compose finished with return code {result.returncode}")
+        if result.stdout:
+            log_message(f"Docker stdout:\n{result.stdout}")
+        if result.stderr:
+            log_message(f"Docker stderr:\n{result.stderr}")
+
+        if result.returncode != 0:
+            log_message("ERROR: Docker Compose recreate failed.")
+            _set_updating_status(instance_name, False)
+            return result, f"Failed to restart containers: {result.stderr}", 'danger'
+
+        log_message("SUCCESS: Configurations regenerated and containers restarted successfully.")
+        _set_updating_status(instance_name, False)
+        return result, "Configurations regenerated successfully.", 'success'
+    except Exception as e:
+        log_message(f"EXCEPTION: Regeneration error: {str(e)}")
+        _set_updating_status(instance_name, False)
+        return None, f"Regeneration error: {str(e)}", 'danger'

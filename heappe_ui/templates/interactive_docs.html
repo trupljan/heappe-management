@@ -1,0 +1,761 @@
+{% extends "base.html" %}
+
+{% block title %}Interactive Help System &mdash; HEAppE Admin{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary fw-semibold">Dashboard</a></li>
+    <li class="breadcrumb-item active fw-bold text-dark" aria-current="page">Interactive Help</li>
+{% endblock %}
+
+{% block content %}
+<style>
+    :root {
+        --accent-hue: 215;
+        --accent-color: hsl(var(--accent-hue), 90%, 50%);
+        --accent-glow: hsla(var(--accent-hue), 90%, 50%, 0.15);
+        --bg-glass: rgba(255, 255, 255, 0.7);
+        --border-glass: rgba(0, 0, 0, 0.08);
+        --dark-text: #1e293b;
+        --muted-text: #64748b;
+    }
+
+    .docs-container {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 1.5rem;
+        min-height: calc(100vh - 160px);
+    }
+
+    @media (max-width: 992px) {
+        .docs-container {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .docs-sidebar {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid var(--border-glass);
+        padding: 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        height: sticky;
+        top: 80px;
+        max-height: calc(100vh - 120px);
+        overflow-y: auto;
+    }
+
+    .docs-search-wrapper {
+        position: relative;
+    }
+
+    .docs-search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--muted-text);
+    }
+
+    .docs-search {
+        padding-left: 36px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        font-size: 0.9rem;
+        width: 100%;
+        transition: all 0.2s ease;
+    }
+
+    .docs-search:focus {
+        border-color: var(--accent-color);
+        box-shadow: 0 0 0 3px var(--accent-glow);
+        outline: none;
+    }
+
+    .docs-nav-group {
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: var(--muted-text);
+        letter-spacing: 0.05em;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .docs-nav-link {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.6rem 0.75rem;
+        border-radius: 8px;
+        color: var(--dark-text);
+        text-decoration: none;
+        font-size: 0.875rem;
+        font-weight: 500;
+        transition: all 0.15s ease-in-out;
+        border: 1px solid transparent;
+        cursor: pointer;
+    }
+
+    .docs-nav-link:hover {
+        background-color: #f1f5f9;
+        color: var(--accent-color);
+    }
+
+    .docs-nav-link.active {
+        background-color: var(--accent-glow);
+        color: var(--accent-color);
+        font-weight: 600;
+        border-color: hsla(var(--accent-hue), 90%, 50%, 0.12);
+    }
+
+    .docs-content-card {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid var(--border-glass);
+        padding: 2rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        animation: fadeIn 0.3s ease;
+    }
+
+    .tab-nav-btn {
+        font-weight: 600;
+        font-size: 0.9rem;
+        color: var(--muted-text);
+        border: none;
+        background: none;
+        padding: 0.75rem 1rem;
+        border-bottom: 2px solid transparent;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .tab-nav-btn:hover {
+        color: var(--dark-text);
+    }
+
+    .tab-nav-btn.active {
+        color: var(--accent-color);
+        border-bottom-color: var(--accent-color);
+    }
+
+    /* UI Explorer Mockup Styling */
+    .mock-ui-layout {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 1.5rem;
+        position: relative;
+        min-height: 250px;
+    }
+
+    .mock-element {
+        border: 2px dashed #cbd5e1;
+        border-radius: 6px;
+        padding: 0.75rem;
+        background: white;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        margin-bottom: 1rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .mock-element:hover {
+        border-color: var(--accent-color);
+        background: hsla(var(--accent-hue), 90%, 50%, 0.02);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+    }
+
+    .mock-element.selected {
+        border-color: var(--accent-color);
+        border-style: solid;
+        background: var(--accent-glow);
+    }
+
+    .mock-badge {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        font-size: 0.65rem;
+        background: #94a3b8;
+        color: white;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-weight: 700;
+    }
+
+    .mock-element.selected .mock-badge {
+        background: var(--accent-color);
+    }
+
+    /* Flowchart / Diagram Styling */
+    .flow-connector {
+        width: 2px;
+        height: 20px;
+        background: #cbd5e1;
+        margin: 0 auto;
+        position: relative;
+    }
+
+    .flow-connector::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: -3px;
+        width: 8px;
+        height: 8px;
+        border-right: 2px solid #cbd5e1;
+        border-bottom: 2px solid #cbd5e1;
+        transform: rotate(45deg);
+    }
+
+    .flow-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.75rem;
+        text-align: center;
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--dark-text);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+        max-width: 200px;
+        margin: 0 auto;
+    }
+
+    .flow-badge {
+        background: #e2e8f0;
+        color: #475569;
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 4px;
+        display: inline-block;
+        margin-top: 0.25rem;
+    }
+
+    /* API Inspector Snippets */
+    .api-code-block {
+        background: #1e293b;
+        color: #f8fafc;
+        font-family: 'Fira Code', 'Courier New', Courier, monospace;
+        font-size: 0.8rem;
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+        border: 1px solid #334155;
+    }
+
+    .api-param-badge {
+        font-family: monospace;
+        font-size: 0.75rem;
+        background: #f1f5f9;
+        color: #0f172a;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #e2e8f0;
+    }
+
+    /* Wizard steps animation */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .wizard-step-card {
+        background: #f8fafc;
+        border-left: 4px solid var(--accent-color);
+        padding: 1.25rem;
+        border-radius: 0 8px 8px 0;
+        animation: fadeIn 0.25s ease;
+    }
+
+    .wizard-circle {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--accent-color);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+    }
+</style>
+
+<div class="docs-container mt-2">
+    <!-- Sidebar Navigation -->
+    <aside class="docs-sidebar">
+        <div>
+            <h6 class="fw-bold mb-2 text-dark"><i class="bi bi-search me-2"></i>Search Page</h6>
+            <div class="docs-search-wrapper">
+                <i class="bi bi-search docs-search-icon"></i>
+                <input type="text" id="docsSearch" class="form-control docs-search" placeholder="Type page name..." onkeyup="filterPages()">
+            </div>
+        </div>
+
+        <div class="flex-grow-1">
+            <div id="docsNavList">
+                <!-- Group links dynamically by category via JS -->
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Panel -->
+    <section>
+        <div id="docsContentCard" class="docs-content-card d-none">
+            <!-- Header -->
+            <div class="d-flex align-items-center justify-content-between border-bottom pb-3 mb-4">
+                <div>
+                    <span class="badge bg-primary bg-opacity-10 text-primary fw-bold text-uppercase px-2.5 py-1.5 mb-2" id="docCategory" style="font-size: 0.75rem;"></span>
+                    <h3 class="fw-bold text-dark mb-1" id="docTitle"></h3>
+                    <code class="small text-secondary bg-light border px-2 py-0.5 rounded" id="docRoute"></code>
+                </div>
+                <div class="fs-1 text-primary" id="docIconWrapper">
+                    <i class="bi" id="docIcon"></i>
+                </div>
+            </div>
+
+            <!-- Tabs Navigation -->
+            <div class="nav nav-tabs border-bottom mb-4" role="tablist">
+                <button class="tab-nav-btn active" id="btnTabOverview" data-bs-toggle="tab" data-bs-target="#tabOverview" type="button" role="tab"><i class="bi bi-info-circle"></i>Overview</button>
+                <button class="tab-nav-btn" id="btnTabUI" data-bs-toggle="tab" data-bs-target="#tabUI" type="button" role="tab"><i class="bi bi-window-sidebar"></i>Interactive UI Map</button>
+                <button class="tab-nav-btn" id="btnTabWizard" data-bs-toggle="tab" data-bs-target="#tabWizard" type="button" role="tab"><i class="bi bi-magic"></i>Walkthrough Wizard</button>
+                <button class="tab-nav-btn" id="btnTabAPI" data-bs-toggle="tab" data-bs-target="#tabAPI" type="button" role="tab"><i class="bi bi-cpu"></i>API Inspector</button>
+            </div>
+
+            <!-- Tab Contents -->
+            <div class="tab-content">
+                <!-- Overview Tab -->
+                <div class="tab-pane fade show active" id="tabOverview" role="tabpanel">
+                    <div class="row">
+                        <div class="col-lg-7">
+                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-body-text me-2 text-primary"></i>What does this page do?</h5>
+                            <p class="text-secondary leading-relaxed" id="docDescription"></p>
+
+                            <h5 class="fw-bold text-dark mt-4 mb-3"><i class="bi bi-question-diamond me-2 text-primary"></i>Why does it exist in HEAppE?</h5>
+                            <p class="text-secondary leading-relaxed" id="docWhy"></p>
+                        </div>
+                        <div class="col-lg-5 border-start ps-lg-4">
+                            <h5 class="fw-bold text-dark mb-3 text-center"><i class="bi bi-diagram-3 me-2 text-primary"></i>Workflow Placement</h5>
+                            <div class="d-flex flex-column gap-2" id="flowchartContainer">
+                                <!-- Dynamic Flowchart items -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- UI Explorer Tab -->
+                <div class="tab-pane fade" id="tabUI" role="tabpanel">
+                    <div class="row">
+                        <div class="col-lg-6 mb-4 mb-lg-0">
+                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-cursor-fill me-2 text-primary"></i>Interactive UI Explorer Map</h5>
+                            <p class="text-muted small">Select any bordered component below to inspect what it represents and how it operates on this page.</p>
+                            <div class="mock-ui-layout" id="mockUiLayout">
+                                <!-- Dynamically generated interactive Mockup boxes -->
+                            </div>
+                        </div>
+                        <div class="col-lg-6 border-start ps-lg-4">
+                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-info-square me-2 text-primary"></i>Component Inspector</h5>
+                            <div id="inspectorDetails" class="alert alert-light border p-4" style="min-height: 200px;">
+                                <div class="text-center text-muted py-5" id="inspectorPlaceholder">
+                                    <i class="bi bi-hand-index fs-1 d-block mb-2"></i>
+                                    <span>Hover or click a component on the mockup to inspect it.</span>
+                                </div>
+                                <div class="d-none" id="inspectorContent">
+                                    <h6 class="fw-bold text-primary mb-2" id="inspectLabel"></h6>
+                                    <p class="text-secondary mb-0" id="inspectExplanation"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Walkthrough Wizard Tab -->
+                <div class="tab-pane fade" id="tabWizard" role="tabpanel">
+                    <div class="d-flex align-items-center justify-content-between mb-4">
+                        <h5 class="fw-bold text-dark mb-0"><i class="bi bi-list-task me-2 text-primary"></i>Guided Action Wizard</h5>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-secondary px-3" id="btnPrevStep" onclick="prevStep()"><i class="bi bi-chevron-left"></i>Prev</button>
+                            <button class="btn btn-sm btn-primary px-3" id="btnNextStep" onclick="nextStep()">Next<i class="bi bi-chevron-right ms-1"></i></button>
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex align-items-start gap-4">
+                        <div class="wizard-circle flex-shrink-0" id="wizardBadge">1</div>
+                        <div class="flex-grow-1">
+                            <span class="text-muted small fw-bold text-uppercase d-block mb-1" id="wizardProgress">STEP 1 OF 3</span>
+                            <div class="wizard-step-card">
+                                <p class="text-dark fw-semibold mb-0" id="wizardText"></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- API Inspector Tab -->
+                <div class="tab-pane fade" id="tabAPI" role="tabpanel">
+                    <h5 class="fw-bold text-dark mb-3"><i class="bi bi-braces me-2 text-primary"></i>Middleware API endpoints invoked</h5>
+                    <p class="text-muted small">The HEAppE Admin panel communicates with the middleware. These are the py4heappe wrapper API methods executed by this page:</p>
+                    
+                    <div class="table-responsive mb-4">
+                        <table class="table table-bordered table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>API Method</th>
+                                    <th>Purpose</th>
+                                </tr>
+                            </thead>
+                            <tbody id="apiEndpointsTableBody">
+                                <!-- Dynamic endpoint rows -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <h5 class="fw-bold text-dark mb-3"><i class="bi bi-code-slash me-2 text-primary"></i>Python SDK Invocation example</h5>
+                    <pre class="api-code-block"><code id="apiCodeSnippet"></code></pre>
+                </div>
+            </div>
+        </div>
+
+        <div id="noSelectionPlaceholder" class="docs-content-card text-center py-5">
+            <i class="bi bi-journal-bookmark text-primary opacity-25 d-block mb-3" style="font-size: 5rem;"></i>
+            <h4 class="fw-bold text-dark">Interactive Help System</h4>
+            <p class="text-secondary max-width-500 mx-auto">Select a page from the sidebar menu to begin interactively exploring its features, walkthrough guides, and API integration details.</p>
+        </div>
+    </section>
+</div>
+
+<!-- Raw data from backend injected as JSON -->
+{{ docs_data|json_script:"docs-data-json" }}
+<script>
+    const docsData = JSON.parse(document.getElementById('docs-data-json').textContent);
+    let activeDoc = null;
+    let activeWizardStep = 0;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        buildSidebarMenu();
+        
+        // Auto-select first doc if query parameter present
+        const urlParams = new URLSearchParams(window.location.search);
+        const pageId = urlParams.get('page');
+        if (pageId) {
+            selectPage(pageId);
+        }
+    });
+
+    function buildSidebarMenu() {
+        const listContainer = document.getElementById('docsNavList');
+        listContainer.innerHTML = '';
+
+        // Group by category
+        const categories = {};
+        docsData.forEach(doc => {
+            if (!categories[doc.category]) {
+                categories[doc.category] = [];
+            }
+            categories[doc.category].push(doc);
+        });
+
+        Object.keys(categories).forEach(cat => {
+            // Category Header
+            const header = document.createElement('div');
+            header.className = 'docs-nav-group';
+            header.innerText = cat;
+            listContainer.appendChild(header);
+
+            // Category Items
+            categories[cat].forEach(doc => {
+                const link = document.createElement('a');
+                link.className = 'docs-nav-link';
+                link.id = 'link-' + doc.id;
+                link.onclick = () => selectPage(doc.id);
+                link.innerHTML = `<i class="bi ${doc.icon} fs-6"></i><span>${doc.title}</span>`;
+                listContainer.appendChild(link);
+            });
+        });
+    }
+
+    function selectPage(id) {
+        // Find doc
+        activeDoc = docsData.find(d => d.id === id);
+        if (!activeDoc) return;
+
+        // Toggle Active Classes in Menu
+        document.querySelectorAll('.docs-nav-link').forEach(link => {
+            link.classList.remove('active');
+        });
+        const activeLink = document.getElementById('link-' + id);
+        if (activeLink) activeLink.classList.add('active');
+
+        // Show Content Card
+        document.getElementById('noSelectionPlaceholder').classList.add('d-none');
+        const card = document.getElementById('docsContentCard');
+        card.classList.remove('d-none');
+
+        // Apply Fade Animation
+        card.style.animation = 'none';
+        card.offsetHeight; /* trigger reflow */
+        card.style.animation = null;
+
+        // Reset to Overview Tab
+        bootstrap.Tab.getInstance(document.getElementById('btnTabOverview'))?.show();
+
+        // Populate Details
+        document.getElementById('docCategory').innerText = activeDoc.category;
+        document.getElementById('docTitle').innerText = activeDoc.title;
+        document.getElementById('docRoute').innerText = 'Route: ' + activeDoc.route;
+        document.getElementById('docIcon').className = 'bi ' + activeDoc.icon;
+        document.getElementById('docDescription').innerText = activeDoc.description;
+        document.getElementById('docWhy').innerText = activeDoc.why_exists;
+
+        // Build Flowchart
+        buildFlowchart(activeDoc.id);
+
+        // Build Mock UI Map
+        buildMockUiMap(activeDoc.ui_elements);
+
+        // Reset Wizard
+        activeWizardStep = 0;
+        showWizardStep();
+
+        // Build API Details
+        buildApiDetails(activeDoc.api_endpoints, activeDoc.id);
+    }
+
+    function buildFlowchart(id) {
+        const container = document.getElementById('flowchartContainer');
+        container.innerHTML = '';
+
+        let steps = [];
+        if (id === 'dashboard') {
+            steps = ["User Authentication", "Session Initialization", "Dashboard Health Query", "Active Job Stats Aggregations"];
+        } else if (id === 'projects') {
+            steps = ["Register Project Info", "Assign computing Cluster", "Bind budget Queue Groups", "Initialize HPC Accounts"];
+        } else if (id === 'hpc_accounts') {
+            steps = ["Generate SSH Keypair", "Export Public Key to Cluster", "Run SSH Connectivity Check", "Initialize directory trees"];
+        } else if (id === 'test_jobs') {
+            steps = ["Select Command Template", "Enter execution params", "Submit job to Scheduler", "Monitor live status log output"];
+        } else if (id === 'clusters') {
+            steps = ["Configure connection settings", "Register File Transfer node", "Define proxy routing paths", "Setup partitions (Queues)"];
+        } else if (id === 'queues') {
+            steps = ["Define Cluster Node Type", "Assign cores & memory bounds", "Link transfer protocol", "Enable budget limits"];
+        } else if (id === 'queue_groups') {
+            steps = ["Create node group aggregation", "Bind charging pricing formulas", "Associate budget groups to Projects"];
+        } else if (id === 'command_templates') {
+            steps = ["Create app script layout", "Configure parameters (variables)", "Bind valid compute Queues", "Submit job requests"];
+        } else if (id === 'accounting') {
+            steps = ["Allocate compute limit quota", "Track credit usage bounds", "Audit active consumption logs"];
+        } else if (id === 'user_management') {
+            steps = ["Register API account credentials", "Assign to Project permissions", "Set role clearances (Admin/User)"];
+        } else if (id === 'containers' || id === 'configuration') {
+            steps = ["Modify appsettings.json configuration", "Execute docker-compose build", "Restart microservices on background", "Check logs status"];
+        } else {
+            steps = ["Configure settings", "Run middleware execution check", "Trace logs and verify operations"];
+        }
+
+        steps.forEach((step, idx) => {
+            if (idx > 0) {
+                const conn = document.createElement('div');
+                conn.className = 'flow-connector';
+                container.appendChild(conn);
+            }
+            const el = document.createElement('div');
+            el.className = 'flow-card';
+            el.innerHTML = `<div>${step}</div><span class="flow-badge">Step ${idx + 1}</span>`;
+            container.appendChild(el);
+        });
+    }
+
+    function buildMockUiMap(uiElements) {
+        const layout = document.getElementById('mockUiLayout');
+        layout.innerHTML = '';
+        
+        // Reset Inspector Details
+        document.getElementById('inspectorPlaceholder').classList.remove('d-none');
+        document.getElementById('inspectorContent').classList.add('d-none');
+
+        if (!uiElements || uiElements.length === 0) {
+            layout.innerHTML = '<div class="text-center text-muted py-5">No UI Map defined for this page.</div>';
+            return;
+        }
+
+        uiElements.forEach((el, idx) => {
+            const box = document.createElement('div');
+            box.className = 'mock-element';
+            box.id = 'mock-el-' + idx;
+            box.innerHTML = `<span class="mock-badge">#${idx + 1}</span><strong>${el.label}</strong><div class="small text-muted text-truncate mt-1">${el.explanation}</div>`;
+            box.onclick = () => selectUiElement(idx, el);
+            layout.appendChild(box);
+        });
+    }
+
+    function selectUiElement(idx, el) {
+        // Toggle selected styling
+        document.querySelectorAll('.mock-element').forEach(box => {
+            box.classList.remove('selected');
+        });
+        document.getElementById('mock-el-' + idx).classList.add('selected');
+
+        // Populate Inspector
+        document.getElementById('inspectorPlaceholder').classList.add('d-none');
+        const content = document.getElementById('inspectorContent');
+        content.classList.remove('d-none');
+        document.getElementById('inspectLabel').innerText = el.label;
+        document.getElementById('inspectExplanation').innerText = el.explanation;
+    }
+
+    function showWizardStep() {
+        const steps = activeDoc.walkthrough;
+        const total = steps.length;
+        
+        document.getElementById('wizardBadge').innerText = activeWizardStep + 1;
+        document.getElementById('wizardProgress').innerText = `STEP ${activeWizardStep + 1} OF ${total}`;
+        document.getElementById('wizardText').innerText = steps[activeWizardStep];
+
+        // Disable buttons accordingly
+        document.getElementById('btnPrevStep').disabled = activeWizardStep === 0;
+        document.getElementById('btnNextStep').disabled = activeWizardStep === total - 1;
+    }
+
+    function nextStep() {
+        if (activeWizardStep < activeDoc.walkthrough.length - 1) {
+            activeWizardStep++;
+            showWizardStep();
+        }
+    }
+
+    function prevStep() {
+        if (activeWizardStep > 0) {
+            activeWizardStep--;
+            showWizardStep();
+        }
+    }
+
+    function buildApiDetails(endpoints, id) {
+        const tbody = document.getElementById('apiEndpointsTableBody');
+        tbody.innerHTML = '';
+
+        if (!endpoints || endpoints.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">No API endpoint calls documented for this view.</td></tr>';
+            return;
+        }
+
+        endpoints.forEach(ep => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td><span class="api-param-badge font-monospace text-primary">${ep.name}</span></td><td class="text-secondary small">${ep.description}</td>`;
+            tbody.appendChild(tr);
+        });
+
+        // Dynamic Code snippet based on page type
+        let snippet = `import py4heappe.heappe_v6.core as hp
+
+# Configure client connection settings
+config = hp.Configuration()
+config.host = "http://heappe-middleware-host/api"
+api_client = hp.ApiClient(config)
+
+# Instantiate corresponding API controllers`;
+
+        if (id === 'dashboard') {
+            snippet += `
+health_api = hp.HealthApi(api_client)
+reporting_api = hp.JobReportingApi(api_client)
+
+# Perform health query checks
+health_info = health_api.heappe_health_get()
+print(f"Healthy: {health_info.is_healthy}")
+
+# Query job status statistics
+stats = reporting_api.heappe_job_reporting_jobs_state_agregation_report_get(
+    SessionCode="your-active-session-token"
+)
+for item in stats:
+    print(f"State: {item.job_state_name}, Count: {item.count}")`;
+        } else if (id === 'projects') {
+            snippet += `
+management_api = hp.ManagementApi(api_client)
+
+# Fetch project records list
+projects = management_api.heappe_management_projects_get(
+    SessionCode="your-active-session-token"
+)
+for project in projects:
+    print(f"Project ID: {project.id}, Name: {project.name}")`;
+        } else if (id === 'hpc_accounts') {
+            snippet += `
+management_api = hp.ManagementApi(api_client)
+
+# Test connectivity access on the target cluster node
+result = management_api.heappe_management_test_cluster_authentication_credential_hpc_access_post(
+    SessionCode="your-active-session-token",
+    ProjectId=42,
+    Username="hpc_user"
+)
+print(f"Auth verification result: {result}")`;
+        } else if (id === 'test_jobs') {
+            snippet += `
+job_api = hp.JobManagementApi(api_client)
+
+# Submit task specification
+job_spec = {
+    "Name": "Simulation Task",
+    "ProjectId": 42,
+    "CommandTemplateId": 12
+}
+result = job_api.heappe_job_management_submit_job_post(
+    SessionCode="your-active-session-token",
+    body=job_spec
+)
+print(f"Submitted Job ID: {result.id}")`;
+        } else {
+            snippet += `
+management_api = hp.ManagementApi(api_client)
+
+# Perform cluster config query
+clusters = management_api.heappe_management_clusters_get(
+    SessionCode="your-active-session-token"
+)
+print(f"Active Clusters count: {len(clusters)}")`;
+        }
+
+        document.getElementById('apiCodeSnippet').innerText = snippet;
+    }
+
+    function filterPages() {
+        const query = document.getElementById('docsSearch').value.toLowerCase();
+        
+        document.querySelectorAll('.docs-nav-link').forEach(link => {
+            const text = link.innerText.toLowerCase();
+            const parentGroup = link.previousElementSibling;
+            if (text.includes(query)) {
+                link.classList.remove('d-none');
+            } else {
+                link.classList.add('d-none');
+            }
+        });
+
+        // Hide headers if all children are hidden
+        document.querySelectorAll('.docs-nav-group').forEach(group => {
+            let sibling = group.nextElementSibling;
+            let hasVisible = false;
+            while (sibling && sibling.classList.contains('docs-nav-link')) {
+                if (!sibling.classList.contains('d-none')) {
+                    hasVisible = true;
+                    break;
+                }
+                sibling = sibling.nextElementSibling;
+            }
+            if (hasVisible) {
+                group.classList.remove('d-none');
+            } else {
+                group.classList.add('d-none');
+            }
+        });
+    }
+</script>
+{% endblock %}

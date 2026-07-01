@@ -1,5 +1,6 @@
 from django import template
 import py4heappe.heappe_v6.core as hp
+from heappe_ui.view.utils import clean_ver
 
 register = template.Library()
 
@@ -17,7 +18,9 @@ def heappe_version_ok(context, min_version):
         health_info = controller.heappe_health_get()
         current_version = health_info.version.lstrip("vV")
 
-        return current_version >= str(min_version)
+
+
+        return clean_ver(current_version) >= clean_ver(str(min_version))
     except Exception:
         return False
 
@@ -25,11 +28,11 @@ def heappe_version_ok(context, min_version):
 from datetime import datetime
 
 @register.filter
-def format_datetime(value):
+def format_datetime(value, format_str='%d.%m.%Y %H:%M:%S'):
     if not value:
         return ""
     if hasattr(value, 'strftime'):
-        return value.strftime('%d.%m.%Y %H:%M:%S')
+        return value.strftime(format_str)
     
     if isinstance(value, str):
         value_clean = value.replace('T', ' ').replace('Z', '').strip()
@@ -40,18 +43,34 @@ def format_datetime(value):
             for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S'):
                 try:
                     dt = datetime.strptime(value_clean, fmt)
-                    return dt.strftime('%d.%m.%Y %H:%M:%S')
+                    return dt.strftime(format_str)
                 except ValueError:
                     pass
         else:
             for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M', '%Y-%m-%d'):
                 try:
                     dt = datetime.strptime(value_clean, fmt)
-                    return dt.strftime('%d.%m.%Y %H:%M:%S') if ':' in fmt else dt.strftime('%d.%m.%Y')
+                    if ':' in fmt:
+                        return dt.strftime(format_str)
+                    else:
+                        out_fmt = format_str if format_str != '%d.%m.%Y %H:%M:%S' else '%d.%m.%Y'
+                        return dt.strftime(out_fmt)
                 except ValueError:
                     pass
             
     return value
+
+
+@register.filter
+def instance_links(instance_name):
+    if not instance_name:
+        return {}
+    from heappe_ui.view.utils import get_instance_api_links
+    try:
+        return get_instance_api_links(instance_name)
+    except Exception:
+        return {}
+
 
 
 
