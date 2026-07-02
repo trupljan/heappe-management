@@ -562,7 +562,16 @@ def cluster_import(request: HttpRequest) -> HttpResponse:
     try:
         # Create cluster
         payload = _create_payload(request.session_code, payload_data)
-        new_cluster = controller.heappe_management_cluster_post(**payload)
+        new_cluster = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_cluster_post(**payload),
+            None,
+            "Failed to create cluster",
+            silent=True
+        )
+        if not new_cluster or new_cluster == []:
+            raise ValueError("API call failed to return cluster data.")
+            
         new_cluster_dict = new_cluster.to_dict() if hasattr(new_cluster, "to_dict") else new_cluster
         
         # Determine the new cluster ID
@@ -589,7 +598,16 @@ def cluster_import(request: HttpRequest) -> HttpResponse:
         }
         try:
             ftm_payload = _create_payload(request.session_code, ftm_payload_data)
-            new_ftm = controller.heappe_management_file_transfer_method_post(**ftm_payload)
+            new_ftm = _handle_api_call(
+                request,
+                lambda: controller.heappe_management_file_transfer_method_post(**ftm_payload),
+                None,
+                "Failed to import file transfer method",
+                silent=True
+            )
+            if not new_ftm or new_ftm == []:
+                raise ValueError("API call failed to return file transfer method data.")
+                
             new_ftm_dict = new_ftm.to_dict() if hasattr(new_ftm, "to_dict") else new_ftm
             if isinstance(new_ftm_dict, dict):
                 new_ftm_id = new_ftm_dict.get("Id") or new_ftm_dict.get("id")
@@ -640,7 +658,16 @@ def cluster_import(request: HttpRequest) -> HttpResponse:
 
         try:
             qg_payload = _create_payload(request.session_code, qg_payload_data)
-            new_qg = controller.heappe_management_cluster_node_type_aggregation_post(**qg_payload)
+            new_qg = _handle_api_call(
+                request,
+                lambda: controller.heappe_management_cluster_node_type_aggregation_post(**qg_payload),
+                None,
+                "Failed to import queue group",
+                silent=True
+            )
+            if not new_qg or new_qg == []:
+                raise ValueError("API call failed to return queue group data.")
+                
             new_qg_dict = new_qg.to_dict() if hasattr(new_qg, "to_dict") else new_qg
             if isinstance(new_qg_dict, dict):
                 new_qg_id = new_qg_dict.get("Id") or new_qg_dict.get("id")
@@ -673,7 +700,15 @@ def cluster_import(request: HttpRequest) -> HttpResponse:
         }
         try:
             q_payload = _create_payload(request.session_code, q_payload_data)
-            controller.heappe_management_cluster_node_type_post(**q_payload)
+            new_q = _handle_api_call(
+                request,
+                lambda: controller.heappe_management_cluster_node_type_post(**q_payload),
+                None,
+                "Failed to import queue",
+                silent=True
+            )
+            if not new_q or new_q == []:
+                raise ValueError("API call failed to return queue data.")
         except Exception as e:
             messages.warning(request, f"Failed to import queue '{q.get('name')}': {e}")
 
