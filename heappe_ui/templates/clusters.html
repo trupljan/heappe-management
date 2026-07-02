@@ -26,6 +26,9 @@
                 <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" id="spinUpSlurmBtn">
                     <i class="bi bi-rocket me-1"></i>Spin up Test Slurm
                 </button>
+                <button type="button" class="btn btn-sm btn-outline-success fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#importClusterModal">
+                    <i class="bi bi-upload me-1"></i>Import Cluster
+                </button>
                 <a href="{% url 'cluster_create' %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
                     <i class="bi bi-plus-lg me-1"></i>Add New Cluster
                 </a>
@@ -268,6 +271,43 @@
         }
     });
 </script>
+
+<!-- Import Cluster Modal -->
+<div class="modal fade" id="importClusterModal" tabindex="-1" aria-labelledby="importClusterLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <form method="post" action="{% url 'cluster_import' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-header bg-success text-white border-0 py-3 px-4" style="background: linear-gradient(135deg, #198754 0%, #157347 100%) !important;">
+                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="importClusterLabel">
+                        <i class="bi bi-upload"></i>
+                        <span>Import Cluster Configuration</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-secondary small mb-3">
+                        Upload a cluster configuration file (`.json`) exported from another instance.
+                    </p>
+                    <div class="mb-3">
+                        <label for="configFile" class="form-label small fw-bold text-dark">Configuration JSON File</label>
+                        <input class="form-control form-control-sm" type="file" id="configFile" name="config_file" accept=".json" required>
+                    </div>
+                    <div class="alert alert-info border-0 rounded-3 small mb-0 d-flex gap-2">
+                        <i class="bi bi-info-circle-fill text-info fs-5 flex-shrink-0"></i>
+                        <div>This will import the cluster settings, file transfer methods, queues, and queue groups. Projects will not be imported.</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                        <i class="bi bi-check-lg me-1"></i>Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <!-- Slurm Confirmation Modal -->
 <div class="modal fade" id="slurmConfirmModal" tabindex="-1" aria-labelledby="slurmConfirmLabel" aria-hidden="true" data-bs-backdrop="static">

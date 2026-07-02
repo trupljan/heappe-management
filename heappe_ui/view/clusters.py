@@ -514,6 +514,174 @@ def cluster_export(request: HttpRequest, cluster_id: int) -> HttpResponse:
 
 
 @login_required
+def cluster_import(request: HttpRequest) -> HttpResponse:
+    """Import cluster configuration from a JSON file."""
+    if request.method != "POST":
+        return redirect("cluster_list")
+
+    uploaded_file = request.FILES.get("config_file")
+    if not uploaded_file:
+        messages.error(request, "No configuration file uploaded.")
+        return redirect("cluster_list")
+
+    import json as _json
+    try:
+        data = _json.loads(uploaded_file.read().decode("utf-8"))
+    except Exception as e:
+        messages.error(request, f"Failed to parse JSON file: {e}")
+        return redirect("cluster_list")
+
+    # Basic structure validation
+    if "version" not in data or "cluster" not in data:
+        messages.error(request, "Invalid configuration file format. Missing 'version' or 'cluster' key.")
+        return redirect("cluster_list")
+
+    controller = hp.ManagementApi(request.api_instance)
+    
+    # Check version compatibility
+    deployed_version = request.session.get("middleware_deployed_version", "")
+    is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+
+    # Create the cluster
+    cluster_data = data["cluster"]
+    payload_data = {
+        "Name": cluster_data.get("name"),
+        "Description": cluster_data.get("description"),
+        "MasterNodeName": cluster_data.get("master_node_name"),
+        "SchedulerType": cluster_data.get("scheduler_type"),
+        "ConnectionProtocol": cluster_data.get("connection_protocol"),
+        "TimeZone": cluster_data.get("time_zone"),
+        "Port": cluster_data.get("port"),
+        "UpdateJobStateByServiceAccount": cluster_data.get("update_job_state_by_service_account", False),
+        "DomainName": cluster_data.get("domain_name"),
+    }
+    
+    if is_v6_4_0_plus and "custom_configuration" in cluster_data:
+        payload_data["CustomConfiguration"] = cluster_data["custom_configuration"]
+
+    try:
+        # Create cluster
+        payload = _create_payload(request.session_code, payload_data)
+        new_cluster = controller.heappe_management_cluster_post(**payload)
+        new_cluster_dict = new_cluster.to_dict() if hasattr(new_cluster, "to_dict") else new_cluster
+        
+        # Determine the new cluster ID
+        if isinstance(new_cluster_dict, dict):
+            new_cluster_id = new_cluster_dict.get("Id") or new_cluster_dict.get("id")
+        else:
+            new_cluster_id = getattr(new_cluster, "id", None) or getattr(new_cluster, "Id", None) or new_cluster
+            
+        if not new_cluster_id:
+            raise ValueError("Failed to obtain ID of the newly created cluster.")
+    except Exception as e:
+        messages.error(request, f"Failed to create cluster: {e}")
+        return redirect("cluster_list")
+
+    # ── Import File Transfer Methods ─────────────────────────────────────────
+    ftm_ref_map = {} # old _ref -> new id
+    ftms = data.get("file_transfer_methods") or []
+    for ftm in ftms:
+        ftm_payload_data = {
+            "ClusterId": new_cluster_id,
+            "ServerHostname": ftm.get("server_hostname"),
+            "Port": ftm.get("port"),
+            "Protocol": ftm.get("protocol"),
+        }
+        try:
+            ftm_payload = _create_payload(request.session_code, ftm_payload_data)
+            new_ftm = controller.heappe_management_file_transfer_method_post(**ftm_payload)
+            new_ftm_dict = new_ftm.to_dict() if hasattr(new_ftm, "to_dict") else new_ftm
+            if isinstance(new_ftm_dict, dict):
+                new_ftm_id = new_ftm_dict.get("Id") or new_ftm_dict.get("id")
+            else:
+                new_ftm_id = getattr(new_ftm, "id", None) or getattr(new_ftm, "Id", None) or new_ftm
+            
+            if new_ftm_id and "_ref" in ftm:
+                ftm_ref_map[ftm["_ref"]] = new_ftm_id
+        except Exception as e:
+            messages.warning(request, f"Failed to import file transfer method '{ftm.get('server_hostname')}': {e}")
+
+    # ── Import Queue Groups (ClusterNodeTypeAggregation) ─────────────────────
+    agg_ref_map = {} # old _ref -> new id
+    queue_groups = data.get("queue_groups") or []
+    
+    # Fetch existing aggregations to avoid duplicating by name
+    existing_aggs = {}
+    try:
+        all_existing_aggs = controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code) or []
+        for agg in all_existing_aggs:
+            agg_d = agg.to_dict() if hasattr(agg, "to_dict") else agg
+            if agg_d.get("name"):
+                existing_aggs[agg_d["name"]] = agg_d["id"]
+    except Exception:
+        pass
+
+    for qg in queue_groups:
+        qg_name = qg.get("name")
+        if qg_name in existing_aggs:
+            # Re-use existing queue group
+            agg_ref_map[qg["_ref"]] = existing_aggs[qg_name]
+            continue
+            
+        qg_payload_data = {
+            "Name": qg_name,
+            "Description": qg.get("description"),
+            "AllocationType": qg.get("allocation_type"),
+        }
+        
+        # Parse ISO datetimes
+        from .utils import _parse_datetime_local
+        validity_from = qg.get("validity_from")
+        validity_to = qg.get("validity_to")
+        if validity_from:
+            qg_payload_data["ValidityFrom"] = _parse_datetime_local(validity_from)
+        if validity_to:
+            qg_payload_data["ValidityTo"] = _parse_datetime_local(validity_to)
+
+        try:
+            qg_payload = _create_payload(request.session_code, qg_payload_data)
+            new_qg = controller.heappe_management_cluster_node_type_aggregation_post(**qg_payload)
+            new_qg_dict = new_qg.to_dict() if hasattr(new_qg, "to_dict") else new_qg
+            if isinstance(new_qg_dict, dict):
+                new_qg_id = new_qg_dict.get("Id") or new_qg_dict.get("id")
+            else:
+                new_qg_id = getattr(new_qg, "id", None) or getattr(new_qg, "Id", None) or new_qg
+                
+            if new_qg_id:
+                agg_ref_map[qg["_ref"]] = new_qg_id
+        except Exception as e:
+            messages.warning(request, f"Failed to import queue group '{qg_name}': {e}")
+
+    # ── Import Queues (ClusterNodeType) ──────────────────────────────────────
+    queues = data.get("queues") or []
+    for q in queues:
+        ftm_id = ftm_ref_map.get(q.get("file_transfer_method_ref"))
+        qg_id = agg_ref_map.get(q.get("queue_group_ref"))
+        
+        q_payload_data = {
+            "ClusterId": new_cluster_id,
+            "Name": q.get("name"),
+            "Description": q.get("description"),
+            "NumberOfNodes": q.get("number_of_nodes"),
+            "CoresPerNode": q.get("cores_per_node"),
+            "Queue": q.get("queue"),
+            "QualityOfService": q.get("quality_of_service"),
+            "MaxWalltime": q.get("max_walltime"),
+            "ClusterAllocationName": q.get("cluster_allocation_name"),
+            "FileTransferMethodId": ftm_id,
+            "ClusterNodeTypeAggregationId": qg_id,
+        }
+        try:
+            q_payload = _create_payload(request.session_code, q_payload_data)
+            controller.heappe_management_cluster_node_type_post(**q_payload)
+        except Exception as e:
+            messages.warning(request, f"Failed to import queue '{q.get('name')}': {e}")
+
+    messages.success(request, f"Cluster '{payload_data['Name']}' successfully imported!")
+    return redirect("cluster_detail", cluster_id=new_cluster_id)
+
+
+@login_required
 def create_or_edit_filetransfer_method(request: HttpRequest, cluster_id: int) -> HttpResponse:
     server_hostname = request.POST.get("ServerHostname")
     port = int(request.POST.get("Port")) if request.POST.get("Port") else None
