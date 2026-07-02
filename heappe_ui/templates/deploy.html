@@ -1024,14 +1024,37 @@ $(document).ready(function() {
                 hideLoading();
                 // Revert switch state
                 $('#otel-toggle-switch').prop('checked', !isChecked);
-                const errMsg = xhr.responseJSON ? xhr.responseJSON.message : "Network error occurred.";
-                const alertHtml = `
-                    <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4 d-flex align-items-center gap-2" role="alert">
-                        <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
-                        <div>Error: ${errMsg}</div>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                `;
+                const resp = xhr.responseJSON || {};
+                const errMsg = resp.message || "Network error occurred.";
+
+                let alertHtml;
+                if (resp.needs_regen) {
+                    // Special case: OTEL keys missing from .env – prompt user to regenerate configs
+                    alertHtml = `
+                        <div class="alert alert-warning alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4" role="alert">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="bi bi-exclamation-triangle-fill text-warning fs-5 flex-shrink-0 mt-1"></i>
+                                <div>
+                                    <strong>Configuration update required</strong>
+                                    <div class="small mt-1">${errMsg}</div>
+                                    <button type="button" class="btn btn-warning btn-sm fw-bold mt-2 shadow-sm"
+                                            onclick="bootstrap.Tab.getOrCreateInstance(document.querySelector('#maintenance-tab')).show(); window.scrollTo({top:0, behavior:'smooth'});">
+                                        <i class="bi bi-gear-wide-connected me-1"></i>Go to Maintenance tab
+                                    </button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                } else {
+                    alertHtml = `
+                        <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4 d-flex align-items-center gap-2" role="alert">
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
+                            <div>Error: ${errMsg}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                }
                 $('#action-feedback').html(alertHtml);
             }
         });

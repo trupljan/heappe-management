@@ -1472,23 +1472,48 @@ def toggle_telemetry_view(request, instance_name):
     except Exception as e:
         return JsonResponse({'status': 'danger', 'message': f'Failed to read .env file: {str(e)}'}, status=500)
 
+    # Check that OTEL keys are present in .env – older configs may not have them.
+    # In that case, instruct the user to regenerate configs first.
+    missing_otel_keys = [k for k in ('OTEL_DISABLED', 'OTEL_HOST_GRPC_PORT', 'OTEL_JAEGER_CLIENT_PORT') if k not in env_vars]
+    if missing_otel_keys:
+        return JsonResponse({
+            'status': 'warning',
+            'message': (
+                'OpenTelemetry configuration keys are missing from the instance .env file '
+                f'({", ".join(missing_otel_keys)}). '
+                'This usually means the instance was deployed before OTEL support was added. '
+                'Please go to the <strong>Maintenance</strong> tab and click '
+                '<strong>Regenerate &amp; Restart</strong> to update the configuration, then try again.'
+            ),
+            'needs_regen': True
+        }, status=409)
+
     if action == 'enable':
-        # 1. Verify ports
+        # 1. Verify ports – only reallocate if OTEL is currently disabled.
+        # If OTEL is already enabled the running containers already hold those
+        # ports, so we must keep the existing values to avoid overwriting the
+        # .env with a different port and breaking the running stack.
+        otel_currently_disabled = (env_vars.get('OTEL_DISABLED', 'true').lower() == 'true')
+
         otel_grpc = int(env_vars.get('OTEL_HOST_GRPC_PORT', 4317))
         otel_jaeger = int(env_vars.get('OTEL_JAEGER_CLIENT_PORT', 16686))
 
-        # Test if ports are free, if not, allocate free ones
-        grpc_free, s_grpc = get_port_with_fallback(start_port=otel_grpc, max_tries=100)
-        jaeger_free, s_jaeger = get_port_with_fallback(start_port=otel_jaeger, max_tries=100)
-
-        try:
-            s_grpc.close()
-        except:
-            pass
-        try:
-            s_jaeger.close()
-        except:
-            pass
+        if otel_currently_disabled:
+            # Only reallocate ports when OTEL was disabled (containers not running).
+            grpc_free, s_grpc = get_port_with_fallback(start_port=otel_grpc, max_tries=100)
+            jaeger_free, s_jaeger = get_port_with_fallback(start_port=otel_jaeger, max_tries=100)
+            try:
+                s_grpc.close()
+            except:
+                pass
+            try:
+                s_jaeger.close()
+            except:
+                pass
+        else:
+            # OTEL is already enabled – keep existing ports, do not reallocate.
+            grpc_free = otel_grpc
+            jaeger_free = otel_jaeger
 
         # Update values
         new_env_lines = []

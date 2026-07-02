@@ -289,17 +289,18 @@
     <div class="card filter-card p-3 bg-white mb-3">
         <form method="GET" class="row g-3 align-items-end">
             <div class="col-md-2">
-                <label class="filter-label">Date</label>
+                <label class="filter-label">Date <span class="text-primary fw-bold" style="font-size:0.65rem;">(UTC)</span></label>
                 <input type="date" name="date" class="form-control form-control-custom form-control-sm w-100" value="{{ selected_date }}">
             </div>
             
             <div class="col-md-3">
-                <label class="filter-label">Time Window</label>
+                <label class="filter-label">Time Window <span class="text-primary fw-bold" style="font-size:0.65rem;">(UTC)</span></label>
                 <div class="d-flex gap-1.5 align-items-center">
-                    <input type="time" name="time_from" class="form-control form-control-custom form-control-sm w-100" value="{{ time_from }}">
+                    <input type="time" name="time_from" class="form-control form-control-custom form-control-sm w-100" value="{{ time_from }}" id="timeFromInput">
                     <span class="text-muted small">to</span>
-                    <input type="time" name="time_to" class="form-control form-control-custom form-control-sm w-100" value="{{ time_to }}">
+                    <input type="time" name="time_to" class="form-control form-control-custom form-control-sm w-100" value="{{ time_to }}" id="timeToInput">
                 </div>
+                <div class="mt-1" id="utcClockHint" style="font-size:0.68rem; color:#6c757d;"></div>
             </div>
 
             <div class="col-md-2">
@@ -788,5 +789,17 @@
             }
         }
     };
+    // UTC clock hint for Time Window filter
+    function updateUtcClock() {
+        const hint = document.getElementById('utcClockHint');
+        if (!hint) return;
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const utcTime = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
+        const utcDate = `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())}`;
+        hint.innerHTML = `<i class="bi bi-clock me-1"></i>Now UTC: <strong class="font-monospace text-dark">${utcDate} ${utcTime}</strong>`;
+    }
+    updateUtcClock();
+    setInterval(updateUtcClock, 1000);
 </script>
 {% endblock %}

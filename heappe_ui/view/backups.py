@@ -82,7 +82,13 @@ def database_backups(request: HttpRequest) -> HttpResponse:
     try:
         backups = controller.heappe_management_backups_get(SessionCode=request.session_code)
         if backups:
-            backups_list = [b.to_dict() for b in backups]
+            seen_file_names = set()
+            for b in backups:
+                d = b.to_dict()
+                fn = d.get("file_name")
+                if fn not in seen_file_names:
+                    seen_file_names.add(fn)
+                    backups_list.append(d)
     except Exception as e:
         messages.error(request, f"Failed to retrieve database backups list: {e}")
 
