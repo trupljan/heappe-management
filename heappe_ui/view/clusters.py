@@ -377,6 +377,142 @@ def cluster_delete(request: HttpRequest, cluster_id: int) -> HttpResponse:
     )
     return redirect("cluster_list")
 
+
+@login_required
+def cluster_export(request: HttpRequest, cluster_id: int) -> HttpResponse:
+    """Export cluster configuration (without projects) as a JSON migration file."""
+    import json as _json
+    from datetime import datetime, timezone
+
+    controller = hp.ManagementApi(request.api_instance)
+
+    try:
+        cluster = controller.heappe_management_cluster_get(
+            Id=cluster_id, SessionCode=request.session_code
+        )
+        cluster_dict = cluster.to_dict()
+    except Exception as e:
+        messages.error(request, f"Failed to fetch cluster: {e}")
+        return redirect("cluster_detail", cluster_id=cluster_id)
+
+    # ── File transfer methods for this cluster ──────────────────────────────
+    try:
+        all_ftm = controller.heappe_management_file_transfer_methods_get(
+            SessionCode=request.session_code
+        ) or []
+        cluster_ftm = [f.to_dict() for f in all_ftm if f.cluster_id == cluster_id]
+    except Exception:
+        cluster_ftm = []
+
+    # Build FTM list (no ids, no cluster_id) and an id→ref lookup
+    ftm_ref_map = {}  # ftm_id → "_ref" string
+    ftm_export = []
+    for idx, ftm in enumerate(cluster_ftm):
+        ref = f"ftm_{idx}"
+        ftm_ref_map[ftm["id"]] = ref
+        ftm_export.append({
+            "_ref": ref,
+            "server_hostname": ftm.get("server_hostname"),
+            "port": ftm.get("port"),
+            "protocol": ftm.get("protocol"),
+        })
+
+    # ── Node types (queues) for this cluster ────────────────────────────────
+    node_types = cluster_dict.get("node_types") or []
+
+    # Collect aggregation ids referenced by any queue in this cluster
+    used_agg_ids = set()
+    for nt in node_types:
+        agg = nt.get("cluster_node_type_aggregation")
+        if agg:
+            agg_id = agg.get("id") if isinstance(agg, dict) else getattr(agg, "id", None)
+            if agg_id:
+                used_agg_ids.add(agg_id)
+
+    # ── Queue groups (aggregations) used by this cluster ────────────────────
+    agg_ref_map = {}  # agg_id → "_ref" string
+    agg_export = []
+    if used_agg_ids:
+        try:
+            all_aggs = controller.heappe_management_cluster_node_type_aggregations_get(
+                SessionCode=request.session_code
+            ) or []
+            for idx, agg in enumerate(all_aggs):
+                agg_d = agg.to_dict() if hasattr(agg, "to_dict") else agg
+                if agg_d.get("id") in used_agg_ids:
+                    ref = f"qg_{len(agg_export)}"
+                    agg_ref_map[agg_d["id"]] = ref
+                    validity_from = agg_d.get("validity_from")
+                    validity_to = agg_d.get("validity_to")
+                    agg_export.append({
+                        "_ref": ref,
+                        "name": agg_d.get("name"),
+                        "description": agg_d.get("description"),
+                        "allocation_type": agg_d.get("allocation_type"),
+                        "validity_from": validity_from.isoformat() if hasattr(validity_from, "isoformat") else validity_from,
+                        "validity_to": validity_to.isoformat() if hasattr(validity_to, "isoformat") else validity_to,
+                    })
+        except Exception:
+            pass
+
+    # ── Queues export ────────────────────────────────────────────────────────
+    queues_export = []
+    for nt in node_types:
+        agg = nt.get("cluster_node_type_aggregation")
+        agg_id = None
+        if agg:
+            agg_id = agg.get("id") if isinstance(agg, dict) else getattr(agg, "id", None)
+
+        queues_export.append({
+            "name": nt.get("name"),
+            "description": nt.get("description"),
+            "number_of_nodes": nt.get("number_of_nodes"),
+            "cores_per_node": nt.get("cores_per_node"),
+            "queue": nt.get("queue"),
+            "quality_of_service": nt.get("quality_of_service"),
+            "max_walltime": nt.get("max_walltime"),
+            "cluster_allocation_name": nt.get("cluster_allocation_name"),
+            "file_transfer_method_ref": ftm_ref_map.get(nt.get("file_transfer_method_id")),
+            "queue_group_ref": agg_ref_map.get(agg_id) if agg_id else None,
+        })
+
+    # ── Cluster settings (no id, no node_types, no projects) ─────────────────
+    custom_cfg = cluster_dict.get("custom_configuration") or {}
+
+    export_data = {
+        "version": "1.0",
+        "exported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source_cluster_id": cluster_id,
+        "cluster": {
+            "name": cluster_dict.get("name"),
+            "description": cluster_dict.get("description"),
+            "master_node_name": cluster_dict.get("master_node_name"),
+            "scheduler_type": cluster_dict.get("scheduler_type"),
+            "connection_protocol": cluster_dict.get("connection_protocol"),
+            "time_zone": cluster_dict.get("time_zone"),
+            "port": cluster_dict.get("port"),
+            "update_job_state_by_service_account": cluster_dict.get("update_job_state_by_service_account", False),
+            "domain_name": cluster_dict.get("domain_name"),
+            "custom_configuration": custom_cfg,
+        },
+        "file_transfer_methods": ftm_export,
+        "queue_groups": agg_export,
+        "queues": queues_export,
+    }
+
+    cluster_name_safe = (cluster_dict.get("name") or f"cluster_{cluster_id}").replace(" ", "_")
+    date_str = datetime.now(timezone.utc).strftime("%Y%m%d")
+    filename = f"cluster_{cluster_name_safe}_{date_str}.json"
+
+    response = HttpResponse(
+        _json.dumps(export_data, indent=2, ensure_ascii=False),
+        content_type="application/json",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+
 @login_required
 def create_or_edit_filetransfer_method(request: HttpRequest, cluster_id: int) -> HttpResponse:
     server_hostname = request.POST.get("ServerHostname")

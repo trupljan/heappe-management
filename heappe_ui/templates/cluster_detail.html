@@ -47,9 +47,16 @@
                             <i class="bi bi-gear text-primary fs-5"></i>
                             <h5 class="h6 mb-0 fw-bold text-dark">Cluster Configuration</h5>
                         </div>
-                        <button class="btn btn-xs btn-outline-secondary" onclick="location.reload();" title="Reload settings">
-                            <i class="bi bi-arrow-clockwise"></i>
-                        </button>
+                        <div class="d-flex gap-2">
+                            <a href="{% url 'cluster_export' cluster.id %}"
+                               class="btn btn-xs btn-outline-success fw-semibold"
+                               title="Download cluster config as JSON (includes queues & queue groups, excludes projects)">
+                                <i class="bi bi-download me-1"></i>Export Config
+                            </a>
+                            <button class="btn btn-xs btn-outline-secondary" onclick="location.reload();" title="Reload settings">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body p-4">
                         <form method="post">
