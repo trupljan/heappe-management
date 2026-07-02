@@ -71,7 +71,7 @@ def execute_docker_compose_detached(command, compose_dir, timeout=600):
         )
 
 
-def execute_docker_compose(command, compose_dir, timeout=300):
+def execute_docker_compose(command, compose_dir, timeout=900):
     """Execute a Docker Compose command safely under Gunicorn."""
     try:
         result = subprocess.run(
@@ -310,8 +310,8 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
         ]
 
         log_message("Waiting for heappe and mssql containers to be running...")
-        wait_for_container_running(f"{instance_name}_heappe", timeout=300, interval=10)
-        wait_for_container_running(f"{instance_name}_mssql", timeout=300, interval=10)
+        wait_for_container_running(f"{instance_name}_heappe", timeout=900, interval=10)
+        wait_for_container_running(f"{instance_name}_mssql", timeout=900, interval=10)
 
         log_message("Restarting services to apply database and vault configs...")
         restart_result = execute_docker_compose(restart_command, compose_dir)
