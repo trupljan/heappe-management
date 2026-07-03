@@ -107,6 +107,9 @@ urlpatterns = [
     path('migration-package/import/', views.import_migration_package, name='import_migration_package'),
     path('report-error/', views.report_error_view, name='report_error_view'),
     path('interactive-docs/', views.interactive_docs_view, name='interactive_docs_view'),
+    path('integration/', views.api_integration_view, name='api_integration_view'),
+    path('integration/execute/', views.execute_api_call, name='execute_api_call'),
+
 
     # Admin Users Management & Decrypt view
     path('admin-users/', views.admin_users_list, name='admin_users_list'),

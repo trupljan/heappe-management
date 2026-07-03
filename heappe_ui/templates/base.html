@@ -173,6 +173,11 @@
                             <i class="bi bi-file-earmark-text fs-5"></i><span>Instance Logs</span>
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'integration' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'api_integration_view' %}">
+                            <i class="bi bi-cpu fs-5"></i><span>API Integration</span>
+                        </a>
+                    </li>
                     {% if request.session.chosen_instance and not otel_disabled %}
                     <li class="nav-item">
                         <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'jaeger' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'jaeger_page' %}">
@@ -328,6 +333,11 @@
                         <li class="nav-item" data-bs-dismiss="offcanvas">
                             <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'logs' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'logs' %}">
                                 <i class="bi bi-file-earmark-text fs-5"></i><span>Instance Logs</span>
+                            </a>
+                        </li>
+                        <li class="nav-item" data-bs-dismiss="offcanvas">
+                            <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'integration' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'api_integration_view' %}">
+                                <i class="bi bi-cpu fs-5"></i><span>API Integration</span>
                             </a>
                         </li>
                         {% if request.session.chosen_instance and not otel_disabled %}
