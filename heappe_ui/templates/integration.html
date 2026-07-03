@@ -595,6 +595,13 @@
         
         document.getElementById("response-container").classList.add("d-none");
         
+        // Reset Send Button state
+        const btnSend = document.getElementById("btn-send");
+        if (btnSend) {
+            btnSend.disabled = false;
+            btnSend.innerHTML = `<i class="bi bi-send-fill"></i> Send Request`;
+        }
+        
         // Render Path/Query Parameter inputs
         const paramsCard = document.getElementById("params-card");
         const paramsContainer = document.getElementById("params-container");
