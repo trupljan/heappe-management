@@ -304,7 +304,7 @@
                 <div class="mb-4 d-none" id="body-editor-container">
                     <label class="form-label small fw-bold text-secondary mb-2"><i class="bi bi-filetype-json me-1"></i> JSON Request Body</label>
                     <div class="json-editor-container">
-                        <textarea class="json-editor" id="json-payload" placeholder="{ ... }"></textarea>
+                        <textarea class="json-editor" id="json-payload" placeholder="{ ... }" oninput="saveCurrentStateToCache()"></textarea>
                         <div class="json-editor-tools">
                             <button type="button" class="btn btn-sm btn-outline-light py-1 px-2.5" onclick="injectSelectedIdsToPayload()">
                                 <i class="bi bi-box-arrow-in-down me-1"></i>Inject Selector IDs
@@ -401,6 +401,7 @@
     let activeClass = '';
     let activeMethod = '';
     let activeEndpoint = null;
+    const workspaceCache = {};
     
     // Auto-generate UI API Directory on page load
     document.addEventListener("DOMContentLoaded", function() {
@@ -570,7 +571,73 @@
         onSelectorChange();
     }
     
+    function saveCurrentStateToCache() {
+        if (!activeClass || !activeMethod) return;
+        const key = `${activeClass}-${activeMethod}`;
+        if (!workspaceCache[key]) {
+            workspaceCache[key] = { params: {}, payload: "", response: null };
+        }
+        
+        // Save parameters
+        const params = {};
+        if (activeEndpoint) {
+            activeEndpoint.params.forEach(p => {
+                if (p.name !== 'body' && p.name !== 'SessionCode') {
+                    const input = document.getElementById(`param-input-${p.name}`);
+                    if (input && input.type !== 'file') {
+                        params[p.name] = input.value;
+                    }
+                }
+            });
+        }
+        workspaceCache[key].params = params;
+        
+        // Save payload
+        const jsonTextarea = document.getElementById("json-payload");
+        if (jsonTextarea) {
+            workspaceCache[key].payload = jsonTextarea.value;
+        }
+    }
+
+    function saveResponseToCache(statusText, statusClass, durationText, bodyText, bodyColor, headersObj) {
+        if (!activeClass || !activeMethod) return;
+        const key = `${activeClass}-${activeMethod}`;
+        if (!workspaceCache[key]) {
+            workspaceCache[key] = { params: {}, payload: "", response: null };
+        }
+        workspaceCache[key].response = {
+            status: statusText,
+            statusClass: statusClass,
+            time: durationText,
+            body: bodyText,
+            bodyColor: bodyColor,
+            headers: headersObj
+        };
+    }
+
+    function getSelectorValueForParam(paramName) {
+        const lowerName = paramName.toLowerCase();
+        const globalProject = document.getElementById("global-project").value;
+        const globalCluster = document.getElementById("global-cluster").value;
+        const globalQueue = document.getElementById("global-queue").value;
+        const globalTemplate = document.getElementById("global-template").value;
+        
+        if ((lowerName === 'projectid' || lowerName === 'id' && activeMethod.includes('project')) && globalProject) {
+            return globalProject;
+        } else if ((lowerName === 'clusterid' || lowerName === 'id' && activeMethod.includes('cluster')) && globalCluster) {
+            return globalCluster;
+        } else if ((lowerName === 'queueid' || lowerName === 'nodetypeid' || lowerName === 'id' && activeMethod.includes('queue')) && globalQueue) {
+            return globalQueue;
+        } else if ((lowerName === 'commandtemplateid' || lowerName === 'templateid' || lowerName === 'id' && activeMethod.includes('template')) && globalTemplate) {
+            return globalTemplate;
+        }
+        return "";
+    }
+
     function selectEndpoint(apiClass, methodName) {
+        // Save current state of the active endpoint before switching
+        saveCurrentStateToCache();
+        
         document.querySelectorAll(".api-item").forEach(el => el.classList.remove("active"));
         const item = document.getElementById(`api-item-${apiClass}-${methodName}`);
         if (item) item.classList.add("active");
@@ -593,14 +660,15 @@
         badge.className = `badge method-badge method-${activeEndpoint.http_method.toLowerCase()}`;
         badge.innerText = activeEndpoint.http_method;
         
-        document.getElementById("response-container").classList.add("d-none");
-        
         // Reset Send Button state
         const btnSend = document.getElementById("btn-send");
         if (btnSend) {
             btnSend.disabled = false;
             btnSend.innerHTML = `<i class="bi bi-send-fill"></i> Send Request`;
         }
+        
+        const key = `${apiClass}-${methodName}`;
+        const cached = workspaceCache[key];
         
         // Render Path/Query Parameter inputs
         const paramsCard = document.getElementById("params-card");
@@ -630,13 +698,22 @@
                     input.placeholder = p.description || `Enter value for ${p.name}`;
                 }
                 input.id = `param-input-${p.name}`;
-                col.appendChild(input);
+                input.oninput = saveCurrentStateToCache;
                 
+                // Load cached parameter value if available
+                if (cached && cached.params && cached.params.hasOwnProperty(p.name)) {
+                    input.value = cached.params[p.name];
+                } else {
+                    // Fallback to top hierarchy selectors if not cached
+                    const selectorVal = getSelectorValueForParam(p.name);
+                    if (selectorVal) {
+                        input.value = selectorVal;
+                    }
+                }
+                
+                col.appendChild(input);
                 paramsContainer.appendChild(col);
             });
-            
-            // Auto fill inputs with pre-selected values
-            fillParameterInputsFromSelectors();
         } else {
             paramsCard.classList.add("d-none");
         }
@@ -648,15 +725,64 @@
         const hasBody = activeEndpoint.params.some(p => p.name === 'body');
         if (hasBody) {
             bodyContainer.classList.remove("d-none");
-            let template = activeEndpoint.payload_template || {};
-            if (template.hasOwnProperty("SessionCode")) {
-                template["SessionCode"] = ""; 
+            if (cached && cached.payload !== undefined && cached.payload !== "") {
+                jsonTextarea.value = cached.payload;
+            } else {
+                let template = activeEndpoint.payload_template || {};
+                if (template.hasOwnProperty("SessionCode")) {
+                    template["SessionCode"] = ""; 
+                }
+                template = injectIdsRecursive(template);
+                jsonTextarea.value = JSON.stringify(template, null, 2);
             }
-            template = injectIdsRecursive(template);
-            jsonTextarea.value = JSON.stringify(template, null, 2);
         } else {
             bodyContainer.classList.add("d-none");
             jsonTextarea.value = "";
+        }
+        
+        // Restore response from cache if available
+        const responseContainer = document.getElementById("response-container");
+        if (cached && cached.response) {
+            responseContainer.classList.remove("d-none");
+            
+            const statusBadge = document.getElementById("response-status");
+            statusBadge.innerText = cached.response.status;
+            statusBadge.className = "badge " + cached.response.statusClass;
+            
+            document.getElementById("response-time").innerText = cached.response.time;
+            
+            const bodyPre = document.getElementById("response-body");
+            bodyPre.innerText = cached.response.body;
+            bodyPre.style.color = cached.response.bodyColor;
+            
+            const headersBody = document.getElementById("response-headers-body");
+            headersBody.innerHTML = "";
+            const headers = cached.response.headers || {};
+            for (let key in headers) {
+                const tr = document.createElement("tr");
+                const tdKey = document.createElement("td");
+                tdKey.className = "ps-3 py-2 font-monospace fw-bold text-secondary";
+                tdKey.innerText = key;
+                tr.appendChild(tdKey);
+                
+                const tdVal = document.createElement("td");
+                tdVal.className = "py-2 font-monospace";
+                tdVal.innerText = headers[key];
+                tr.appendChild(tdVal);
+                
+                headersBody.appendChild(tr);
+            }
+            if (Object.keys(headers).length === 0) {
+                const tr = document.createElement("tr");
+                const td = document.createElement("td");
+                td.colSpan = 2;
+                td.className = "text-center text-muted py-3 small";
+                td.innerText = "No response headers available.";
+                tr.appendChild(td);
+                headersBody.appendChild(tr);
+            }
+        } else {
+            responseContainer.classList.add("d-none");
         }
     }
     
@@ -664,25 +790,15 @@
         if (!activeEndpoint) return;
         
         activeEndpoint.params.forEach(p => {
-            const lowerName = p.name.toLowerCase();
             const input = document.getElementById(`param-input-${p.name}`);
             if (!input) return;
             
-            const globalProject = document.getElementById("global-project").value;
-            const globalCluster = document.getElementById("global-cluster").value;
-            const globalQueue = document.getElementById("global-queue").value;
-            const globalTemplate = document.getElementById("global-template").value;
-            
-            if ((lowerName === 'projectid' || lowerName === 'id' && activeMethod.includes('project')) && globalProject) {
-                input.value = globalProject;
-            } else if ((lowerName === 'clusterid' || lowerName === 'id' && activeMethod.includes('cluster')) && globalCluster) {
-                input.value = globalCluster;
-            } else if ((lowerName === 'queueid' || lowerName === 'nodetypeid' || lowerName === 'id' && activeMethod.includes('queue')) && globalQueue) {
-                input.value = globalQueue;
-            } else if ((lowerName === 'commandtemplateid' || lowerName === 'templateid' || lowerName === 'id' && activeMethod.includes('template')) && globalTemplate) {
-                input.value = globalTemplate;
+            const val = getSelectorValueForParam(p.name);
+            if (val) {
+                input.value = val;
             }
         });
+        saveCurrentStateToCache();
     }
     
     function onSelectorChange() {
@@ -825,9 +941,34 @@
                 return { status: response.status, data: data };
             });
         })
-        .then(result => {
-            btnSend.disabled = false;
-            btnSend.innerHTML = `<i class="bi bi-send-fill"></i> Send Request`;
+            // Save response to cache
+            let statusClass = "bg-danger-subtle text-danger border border-danger-subtle";
+            if (result.status >= 200 && result.status < 300) {
+                statusClass = "bg-success-subtle text-success border border-success-subtle";
+            } else if (result.status >= 400 && result.status < 500) {
+                statusClass = "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
+            }
+            
+            const duration = result.data.duration_ms !== undefined ? `${result.data.duration_ms} ms` : "N/A";
+            const durationText = `Duration: ${duration}`;
+            
+            let bodyText = "";
+            let bodyColor = "#212529";
+            if (result.data.error) {
+                bodyText = JSON.stringify(result.data.error, null, 2);
+                bodyColor = "#c62828";
+            } else {
+                bodyText = JSON.stringify(result.data.data, null, 2);
+            }
+            
+            saveResponseToCache(
+                `${result.status} ${getStatusText(result.status)}`,
+                statusClass,
+                durationText,
+                bodyText,
+                bodyColor,
+                result.data.headers || {}
+            );
             
             responseContainer.classList.remove("d-none");
             
@@ -842,17 +983,11 @@
                 statusBadge.classList.add("bg-danger-subtle", "text-danger", "border", "border-danger-subtle");
             }
             
-            const duration = result.data.duration_ms !== undefined ? `${result.data.duration_ms} ms` : "N/A";
-            document.getElementById("response-time").innerText = `Duration: ${duration}`;
+            document.getElementById("response-time").innerText = durationText;
             
             const bodyPre = document.getElementById("response-body");
-            if (result.data.error) {
-                bodyPre.innerText = JSON.stringify(result.data.error, null, 2);
-                bodyPre.style.color = "#c62828";
-            } else {
-                bodyPre.innerText = JSON.stringify(result.data.data, null, 2);
-                bodyPre.style.color = "#212529";
-            }
+            bodyPre.innerText = bodyText;
+            bodyPre.style.color = bodyColor;
             
             const headersBody = document.getElementById("response-headers-body");
             headersBody.innerHTML = "";
@@ -884,6 +1019,16 @@
         .catch(err => {
             btnSend.disabled = false;
             btnSend.innerHTML = `<i class="bi bi-send-fill"></i> Send Request`;
+            
+            // Save response to cache
+            saveResponseToCache(
+                "500 Client Error",
+                "bg-danger-subtle text-danger border border-danger-subtle",
+                "Duration: N/A",
+                "Internal UI Exception: " + err.message,
+                "#c62828",
+                {}
+            );
             
             responseContainer.classList.remove("d-none");
             
