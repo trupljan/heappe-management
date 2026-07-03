@@ -941,6 +941,7 @@
                 return { status: response.status, data: data };
             });
         })
+        .then(result => {
             // Save response to cache
             let statusClass = "bg-danger-subtle text-danger border border-danger-subtle";
             if (result.status >= 200 && result.status < 300) {
@@ -991,8 +992,8 @@
             
             const headersBody = document.getElementById("response-headers-body");
             headersBody.innerHTML = "";
-            const headers = result.data.headers || {};
-            for (let key in headers) {
+            const responseHeaders = result.data.headers || {};
+            for (let key in responseHeaders) {
                 const tr = document.createElement("tr");
                 const tdKey = document.createElement("td");
                 tdKey.className = "ps-3 py-2 font-monospace fw-bold text-secondary";
@@ -1001,12 +1002,12 @@
                 
                 const tdVal = document.createElement("td");
                 tdVal.className = "py-2 font-monospace";
-                tdVal.innerText = headers[key];
+                tdVal.innerText = responseHeaders[key];
                 tr.appendChild(tdVal);
                 
                 headersBody.appendChild(tr);
             }
-            if (Object.keys(headers).length === 0) {
+            if (Object.keys(responseHeaders).length === 0) {
                 const tr = document.createElement("tr");
                 const td = document.createElement("td");
                 td.colSpan = 2;
