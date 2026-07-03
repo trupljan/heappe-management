@@ -847,6 +847,66 @@ def instance_credentials_delete(request, pk):
     return render(request, 'instance_credentials.html', {'object_list': InstanceCredentials.objects.all()})
 
 
+@login_required
+def instance_health_check_api(request, pk):
+    import time
+    instance = get_object_or_404(InstanceCredentials, pk=pk)
+    
+    db_host = instance.heappe_host
+    db_port = instance.heappe_port
+    full_host = f"{db_host}:{db_port}" if db_port and db_port not in ['80', '443', ''] else db_host
+    host_url = 'http://' + full_host if not full_host.startswith('http') else full_host
+    
+    config = hp.Configuration()
+    config.host = host_url
+    config.verify_ssl = True
+    
+    api_client = hp.ApiClient(config)
+    
+    start_time = time.time()
+    try:
+        health_api = hp.HealthApi(api_client)
+        health_info = health_api.heappe_health_get()
+        duration = int((time.time() - start_time) * 1000)
+        
+        db_healthy = True
+        vault_healthy = True
+        if health_info and hasattr(health_info, 'component') and health_info.component:
+            comp = health_info.component
+            if hasattr(comp, 'database') and comp.database:
+                db_healthy = getattr(comp.database, 'is_healthy', True)
+            if hasattr(comp, 'vault') and comp.vault:
+                vault_healthy = getattr(comp.vault, 'is_healthy', True)
+                
+        version = "unknown"
+        if health_info and hasattr(health_info, 'version') and health_info.version:
+            version = health_info.version
+            
+        instance_identifier = "unknown"
+        if health_info and hasattr(health_info, 'instance_identifier') and health_info.instance_identifier:
+            instance_identifier = health_info.instance_identifier
+            
+        return JsonResponse({
+            "status": "online",
+            "version": version,
+            "instance_identifier": instance_identifier,
+            "database_healthy": db_healthy,
+            "vault_healthy": vault_healthy,
+            "latency_ms": duration,
+            "message": "Healthy"
+        })
+    except Exception as e:
+        return JsonResponse({
+            "status": "offline",
+            "version": None,
+            "instance_identifier": None,
+            "database_healthy": False,
+            "vault_healthy": False,
+            "latency_ms": None,
+            "message": str(e)
+        })
+
+
 import subprocess
 import os
 from django.conf import settings

@@ -77,6 +77,7 @@ urlpatterns = [
     path('instances/create/', views.instance_credentials_create, name='instance_credentials_create'),
     path('instances/<int:pk>/edit/', views.instance_credentials_edit, name='instance_credentials_edit'),
     path('instances/<int:pk>/delete/', views.instance_credentials_delete, name='instance_credentials_delete'),
+    path('instances/<int:pk>/health/', views.instance_health_check_api, name='instance_health_check_api'),
 
     path('instances/choose/', views.chose_instance_view, name='chose_instance_view'),
 
