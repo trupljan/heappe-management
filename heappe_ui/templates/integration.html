@@ -621,9 +621,15 @@
                 
                 const input = document.createElement("input");
                 input.className = "form-control form-control-sm";
-                input.type = "text";
+                if (p.name === 'files') {
+                    input.type = "file";
+                    input.multiple = true;
+                    input.name = "files";
+                } else {
+                    input.type = "text";
+                    input.placeholder = p.description || `Enter value for ${p.name}`;
+                }
                 input.id = `param-input-${p.name}`;
-                input.placeholder = p.description || `Enter value for ${p.name}`;
                 col.appendChild(input);
                 
                 paramsContainer.appendChild(col);
@@ -754,12 +760,21 @@
         responseContainer.classList.add("d-none");
         
         const params = {};
+        let hasFiles = false;
+        const fileInputs = [];
         if (activeEndpoint) {
             activeEndpoint.params.forEach(p => {
                 if (p.name !== 'body' && p.name !== 'SessionCode') {
                     const input = document.getElementById(`param-input-${p.name}`);
                     if (input) {
-                        params[p.name] = input.value;
+                        if (input.type === 'file') {
+                            if (input.files && input.files.length > 0) {
+                                hasFiles = true;
+                                fileInputs.push(input);
+                            }
+                        } else {
+                            params[p.name] = input.value;
+                        }
                     }
                 }
             });
@@ -772,18 +787,38 @@
         document.getElementById("req-details-params").innerText = JSON.stringify(params, null, 2);
         document.getElementById("req-details-payload").innerText = payloadText || "{}";
         
-        fetch("{% url 'execute_api_call' %}", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "X-CSRFToken": "{{ csrf_token }}"
-            },
-            body: JSON.stringify({
+        let requestBody;
+        let headers = {
+            "X-CSRFToken": "{{ csrf_token }}"
+        };
+        
+        if (hasFiles) {
+            requestBody = new FormData();
+            requestBody.append("api_class", activeClass);
+            requestBody.append("method_name", activeMethod);
+            requestBody.append("params", JSON.stringify(params));
+            requestBody.append("payload", payloadText);
+            
+            fileInputs.forEach(input => {
+                const name = input.getAttribute("name") || "files";
+                for (let i = 0; i < input.files.length; i++) {
+                    requestBody.append(name, input.files[i]);
+                }
+            });
+        } else {
+            headers["Content-Type"] = "application/json";
+            requestBody = JSON.stringify({
                 api_class: activeClass,
                 method_name: activeMethod,
                 params: params,
                 payload: payloadText
-            })
+            });
+        }
+        
+        fetch("{% url 'execute_api_call' %}", {
+            method: "POST",
+            headers: headers,
+            body: requestBody
         })
         .then(response => {
             return response.json().then(data => {

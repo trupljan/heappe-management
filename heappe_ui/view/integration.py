@@ -265,13 +265,38 @@ def execute_api_call(request: HttpRequest) -> JsonResponse:
     if request.method != "POST":
         return JsonResponse({"error": "Only POST method is allowed"}, status=400)
         
+    temp_files = []
     try:
-        data = json.loads(request.body)
-        api_class_name = data.get("api_class")
-        method_name = data.get("method_name")
-        payload_data = data.get("payload", "")
-        param_args = data.get("params", {})
-        
+        # Resolve request parameters from either multipart/form-data or application/json
+        if request.content_type.startswith('multipart/form-data') or request.FILES:
+            api_class_name = request.POST.get("api_class")
+            method_name = request.POST.get("method_name")
+            payload_data = request.POST.get("payload", "")
+            param_args = json.loads(request.POST.get("params", "{}"))
+            
+            # Handle uploaded files by writing them to temporary disk paths
+            if request.FILES:
+                import tempfile
+                import os
+                for field_name in request.FILES:
+                    uploaded_files = request.FILES.getlist(field_name)
+                    paths = []
+                    for f in uploaded_files:
+                        ext = os.path.splitext(f.name)[1]
+                        temp_f = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+                        for chunk in f.chunks():
+                            temp_f.write(chunk)
+                        temp_f.close()
+                        temp_files.append(temp_f.name)
+                        paths.append(temp_f.name)
+                    param_args[field_name] = paths
+        else:
+            data = json.loads(request.body)
+            api_class_name = data.get("api_class")
+            method_name = data.get("method_name")
+            payload_data = data.get("payload", "")
+            param_args = data.get("params", {})
+            
         # Resolve API class
         api_class = getattr(hp, api_class_name, None)
         if not api_class:
@@ -314,8 +339,6 @@ def execute_api_call(request: HttpRequest) -> JsonResponse:
         # Populate body payload
         if "body" in param_names:
             if payload_data:
-                # We pass the dictionary payload directly as it serializes natively.
-                # However, if needed by call_api, ensure it is a dict or string.
                 if isinstance(payload_data, str):
                     try:
                         kwargs["body"] = json.loads(payload_data)
@@ -384,3 +407,13 @@ def execute_api_call(request: HttpRequest) -> JsonResponse:
             "headers": headers,
             "error": error_msg
         }, status=status_code if status_code >= 400 and status_code < 600 else 500)
+        
+    finally:
+        # Clean up any temporary files created for file upload
+        import os
+        for path in temp_files:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception as ex:
+                print(f"Error cleaning up temporary upload file {path}: {ex}")
