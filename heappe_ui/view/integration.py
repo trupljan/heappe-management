@@ -181,13 +181,53 @@ def api_integration_view(request: HttpRequest) -> HttpResponse:
         
     discovery_data = get_api_discovery_data()
     
+    # Build serialization-friendly mapping for client-side hierarchical filtering
+    projects_map = []
+    for p in projects:
+        cluster_ids = []
+        if hasattr(p, "cluster_project_storage_paths") and p.cluster_project_storage_paths:
+            cluster_ids = [path.cluster_id for path in p.cluster_project_storage_paths if hasattr(path, "cluster_id") and path.cluster_id]
+            
+        template_ids = []
+        if hasattr(p, "command_templates") and p.command_templates:
+            template_ids = [t.id for t in p.command_templates if hasattr(t, "id") and t.id]
+            
+        projects_map.append({
+            "id": getattr(p, "id", None),
+            "name": getattr(p, "name", ""),
+            "cluster_ids": cluster_ids,
+            "template_ids": template_ids
+        })
+        
+    queues_map = []
+    for q in queues:
+        queues_map.append({
+            "id": getattr(q, "id", None),
+            "name": getattr(q, "name", ""),
+            "cluster_id": getattr(q, "cluster_id", None)
+        })
+        
+    templates_map = []
+    for t in templates:
+        templates_map.append({
+            "id": getattr(t, "id", None),
+            "name": getattr(t, "name", "")
+        })
+        
+    resource_map = {
+        "projects": projects_map,
+        "queues": queues_map,
+        "templates": templates_map
+    }
+    
     context = {
         "projects": projects,
         "clusters": clusters,
         "queues": queues,
         "templates": templates,
         "discovery_json": json.dumps(discovery_data),
-        "discovery_data": discovery_data
+        "discovery_data": discovery_data,
+        "resource_map_json": json.dumps(resource_map)
     }
     return render(request, "integration.html", context)
 
