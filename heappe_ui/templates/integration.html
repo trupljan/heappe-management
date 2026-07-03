@@ -214,8 +214,8 @@
             <i class="bi bi-diagram-3 text-primary"></i> Hierarchical API Selectors
         </h6>
         <div class="row g-3">
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-muted">1. Cluster</label>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label small fw-semibold text-muted">Cluster</label>
                 <select class="form-select form-select-sm" id="global-cluster" onchange="onClusterChange()">
                     <option value="">-- Select Cluster --</option>
                     {% for c in clusters %}
@@ -223,20 +223,20 @@
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-muted">2. Project (Assigned to Cluster)</label>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label small fw-semibold text-muted">Project</label>
                 <select class="form-select form-select-sm" id="global-project" onchange="onProjectChange()" disabled>
                     <option value="">-- Select Project --</option>
                 </select>
             </div>
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-muted">3. Queue (Assigned to Cluster)</label>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label small fw-semibold text-muted">Queue</label>
                 <select class="form-select form-select-sm" id="global-queue" onchange="onSelectorChange()" disabled>
                     <option value="">-- Select Queue --</option>
                 </select>
             </div>
-            <div class="col-md-3">
-                <label class="form-label small fw-semibold text-muted">4. Command Template (Assigned to Project)</label>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label small fw-semibold text-muted">Command Template</label>
                 <select class="form-select form-select-sm" id="global-template" onchange="onSelectorChange()" disabled>
                     <option value="">-- Select Template --</option>
                 </select>
@@ -272,15 +272,16 @@
         
         <!-- Active Endpoint Editor -->
         <div class="d-none" id="active-endpoint-container">
-            <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-4">
-                <div>
-                    <div class="d-flex align-items-center gap-2">
+            <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-4 flex-wrap gap-3">
+                <div style="min-width: 0; flex: 1;">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
                         <span class="badge method-badge" id="endpoint-method">POST</span>
-                        <h4 class="fw-bold mb-0 text-dark" id="endpoint-title">heappe_health_get</h4>
+                        <h4 class="fw-bold mb-0 text-dark text-break" id="endpoint-title">heappe_health_get</h4>
                     </div>
+                    <div class="text-muted small font-monospace mt-1.5 text-break" id="endpoint-raw-method" style="font-size: 0.75rem;"></div>
                     <p class="text-muted small mt-2 mb-0" id="endpoint-desc">Fetches health status of HEAppE Middleware</p>
                 </div>
-                <div class="text-end">
+                <div class="text-end flex-shrink-0">
                     <span class="badge bg-light text-secondary border font-monospace" id="endpoint-api-class">HealthApi</span>
                     <div class="small text-muted mt-1 font-monospace" id="endpoint-return-type">Returns: HealthExt</div>
                 </div>
@@ -581,7 +582,9 @@
         document.getElementById("empty-state").classList.add("d-none");
         document.getElementById("active-endpoint-container").classList.remove("d-none");
         
-        document.getElementById("endpoint-title").innerText = methodName;
+        const swaggerName = getSwaggerName(apiClass, methodName);
+        document.getElementById("endpoint-title").innerText = swaggerName;
+        document.getElementById("endpoint-raw-method").innerText = methodName;
         document.getElementById("endpoint-desc").innerText = activeEndpoint.description || "No description provided.";
         document.getElementById("endpoint-api-class").innerText = apiClass;
         document.getElementById("endpoint-return-type").innerText = `Returns: ${activeEndpoint.return_type}`;

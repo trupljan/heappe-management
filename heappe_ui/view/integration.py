@@ -173,11 +173,32 @@ def api_integration_view(request: HttpRequest) -> HttpResponse:
     except Exception as e:
         print(f"Error fetching queues for selectors: {e}")
         
-    try:
-        mgmt = hp.ManagementApi(request.api_instance)
-        templates = mgmt.heappe_management_command_templates_get(SessionCode=request.session_code) or []
-    except Exception as e:
-        print(f"Error fetching templates for selectors: {e}")
+    # Command templates must be fetched per ProjectId.
+    # We fetch them concurrently using a ThreadPoolExecutor to keep page load fast.
+    from concurrent.futures import ThreadPoolExecutor
+    
+    def fetch_templates_for_project(project_id):
+        try:
+            mgmt = hp.ManagementApi(request.api_instance)
+            return project_id, mgmt.heappe_management_command_templates_get(SessionCode=request.session_code, ProjectId=project_id) or []
+        except Exception as ex:
+            print(f"Error fetching templates for project {project_id}: {ex}")
+            return project_id, []
+            
+    templates_by_project = {}
+    if projects:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = executor.map(fetch_templates_for_project, [p.id for p in projects if hasattr(p, "id") and p.id])
+            for proj_id, t_list in results:
+                templates_by_project[proj_id] = t_list
+                
+    # Collect all unique templates fetched
+    all_unique_templates = {}
+    for proj_id, t_list in templates_by_project.items():
+        for t in t_list:
+            if hasattr(t, "id") and t.id:
+                all_unique_templates[t.id] = t
+    templates = list(all_unique_templates.values())
         
     discovery_data = get_api_discovery_data()
     
@@ -189,8 +210,10 @@ def api_integration_view(request: HttpRequest) -> HttpResponse:
             cluster_ids = [path.cluster_id for path in p.cluster_project_storage_paths if hasattr(path, "cluster_id") and path.cluster_id]
             
         template_ids = []
-        if hasattr(p, "command_templates") and p.command_templates:
-            template_ids = [t.id for t in p.command_templates if hasattr(t, "id") and t.id]
+        p_templates = templates_by_project.get(getattr(p, "id", None), [])
+        for t in p_templates:
+            if hasattr(t, "id") and t.id:
+                template_ids.append(t.id)
             
         projects_map.append({
             "id": getattr(p, "id", None),
