@@ -431,6 +431,49 @@ class ProjectCommandTemplatesBulkDeleteTests(TestCase):
         self.assertEqual(second_call['body']['CommandTemplateId'], 43)
 
 
+class ProjectCommandTemplateIndividualDeleteTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser", password="password")
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_individual_delete_command_template_success(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+
+        # Mock template response to get project_id
+        mock_template1 = mock.MagicMock()
+        mock_template1.project_id = 1
+        
+        # When heappe_management_command_template_get is called, return template info
+        mock_mgmt_instance.heappe_management_command_template_get.return_value = mock_template1
+
+        request = self.factory.post("/command-templates/42/delete/")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        # Mock messages framework
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.command_template import command_template_delete
+        response = command_template_delete(request, command_template_id=42)
+
+        # Check redirect to project detail page
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/projects/1/?tab=commandtemplates") or response.url.endswith("?tab=commandtemplates"))
+
+        # Verify API delete call
+        mock_mgmt_instance.heappe_management_remove_command_template_delete.assert_called_once()
+        call_args = mock_mgmt_instance.heappe_management_remove_command_template_delete.call_args[1]
+        self.assertEqual(call_args['body']['CommandTemplateId'], 42)
+
+
 class AdaptorUserApiFormattingTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()

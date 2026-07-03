@@ -290,13 +290,20 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
 def command_template_delete(request: HttpRequest, command_template_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
 
-    try:
-        template = controller.heappe_management_command_template_get(
-            Id=command_template_id, SessionCode=request.session_code
-        )
-        project_id = template.project_id
-    except Exception:
-        project_id = request.GET.get('project_id')
+    project_id = request.GET.get('project_id') or request.POST.get('project_id')
+    if not project_id:
+        try:
+            template = controller.heappe_management_command_template_get(
+                Id=command_template_id, SessionCode=request.session_code
+            )
+            if hasattr(template, 'to_dict'):
+                project_id = template.to_dict().get('project_id')
+            elif isinstance(template, dict):
+                project_id = template.get('project_id')
+            else:
+                project_id = getattr(template, 'project_id', None) or getattr(template, 'ProjectId', None)
+        except Exception as e:
+            print(f"Error fetching command template {command_template_id} to determine project_id: {e}")
 
     payload_data = {"CommandTemplateId": command_template_id}
     payload = _create_payload(request.session_code, payload_data)
@@ -309,6 +316,18 @@ def command_template_delete(request: HttpRequest, command_template_id: int) -> H
     )
 
     if project_id:
+        try:
+            project_id = int(project_id)
+        except (ValueError, TypeError):
+            project_id = None
+
+    if project_id:
+        # Invalidate command templates session cache
+        cache_key = f"command_templates_cache_{project_id}"
+        cache_time_key = f"command_templates_cache_{project_id}_time"
+        request.session.pop(cache_key, None)
+        request.session.pop(cache_time_key, None)
+
         response = redirect("project_detail", project_id=project_id)
         response['Location'] += "?tab=commandtemplates"
         return response

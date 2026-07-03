@@ -1281,13 +1281,30 @@
     function initDatetimeInputs(root) {
         const nowStr = localNowString();
         (root || document).querySelectorAll('input[type="datetime-local"]').forEach(function (inp) {
-            // Always keep max in sync with local now so the validation tooltip is correct
-            if (!inp.max) {
+            const nameLower = (inp.name || '').toLowerCase();
+            const idLower = (inp.id || '').toLowerCase();
+            const allowFuture = inp.hasAttribute('data-allow-future') || 
+                                nameLower.includes('valid') || 
+                                nameLower.includes('end') || 
+                                nameLower.includes('start') ||
+                                idLower.includes('valid') || 
+                                idLower.includes('end') || 
+                                idLower.includes('start');
+
+            // Always keep max in sync with local now if it's not a future-allowing input
+            if (!inp.max && !allowFuture) {
                 inp.max = nowStr;
             }
             // Pre-fill only inputs that have no value set (neither via HTML nor via JS)
             if (!inp.value) {
-                inp.value = nowStr;
+                const noPrefill = inp.hasAttribute('data-no-prefill') || inp.classList.contains('no-prefill');
+                if (!noPrefill) {
+                    if (nameLower.includes('validityto') || nameLower.includes('enddate') || idLower.includes('validityto') || idLower.includes('enddate')) {
+                        inp.value = "9999-12-31T23:59";
+                    } else {
+                        inp.value = nowStr;
+                    }
+                }
             }
         });
     }

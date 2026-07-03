@@ -633,7 +633,7 @@
                                                             <i class="bi bi-trash"></i>
                                                         </button>
                                                     </div>
-                                                    <form id="del-templ-{{template.id}}" method="post" action="{% url 'command_template_delete' template.id %}" class="d-none">
+                                                    <form id="del-templ-{{template.id}}" method="post" action="{% url 'command_template_delete' template.id %}?project_id={{ project.id }}" class="d-none">
                                                         {% csrf_token %}
                                                     </form>
                                                 </td>
