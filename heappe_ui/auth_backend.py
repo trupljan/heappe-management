@@ -77,7 +77,7 @@ def patch_api_client(api_instance):
 
         # Inject default _request_timeout if not specified
         if bound_args.arguments.get('_request_timeout') is None:
-            bound_args.arguments['_request_timeout'] = 5.0
+            bound_args.arguments['_request_timeout'] = 5
 
         # Modify query_params
         query_params = bound_args.arguments.get('query_params')

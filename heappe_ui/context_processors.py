@@ -140,7 +140,7 @@ def middleware_update_renderer(request):
                     patch_api_client(api_client)
 
                     controller = hp.HealthApi(api_client)
-                    health_info = controller.heappe_health_get(_request_timeout=3.0)
+                    health_info = controller.heappe_health_get(_request_timeout=3)
                     if health_info and health_info.version:
                         deployed_version = health_info.version.lstrip("vV")
                 except Exception as e:
