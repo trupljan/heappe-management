@@ -1424,6 +1424,18 @@ def instance_config_view(request, instance_name):
             action_message, action_status = handle_global_action(compose_dir, instance_name, 'restart_all')
             return JsonResponse({'status': action_status, 'message': action_message})
 
+        elif action == 'status_poll':
+            # Lightweight read-only poll: just return current container statuses as JSON
+            poll_containers = [
+                get_container_details(c) for c in client.containers.list(all=True)
+                if c.labels.get('com.docker.compose.project') == instance_name
+            ]
+            return JsonResponse({
+                'status': 'ok',
+                'instance_name': instance_name,
+                'containers': poll_containers
+            })
+
     # GET request - read config content
     try:
         exec_result = target_container.exec_run(f"cat {config_path}")
