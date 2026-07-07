@@ -865,10 +865,16 @@ def instance_health_check_api(request, pk):
     
     api_client = hp.ApiClient(config)
     
+    # Patch the API client and associate with the request to apply consistent settings (like timeout)
+    from heappe_ui.auth_backend import patch_api_client
+    api_client._request = request
+    patch_api_client(api_client)
+    
     start_time = time.time()
     try:
         health_api = hp.HealthApi(api_client)
-        health_info = health_api.heappe_health_get()
+        # Use a short timeout of 2 seconds for quick response in grid check
+        health_info = health_api.heappe_health_get(_request_timeout=2)
         duration = int((time.time() - start_time) * 1000)
         
         db_healthy = True
