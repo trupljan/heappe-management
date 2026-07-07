@@ -68,9 +68,16 @@ def patch_api_client(api_instance):
         bound_args = sig.bind(*args, **kwargs)
         bound_args.apply_defaults()
 
+        # Fail fast if connection failed recently (within 30 seconds) to avoid blocking threads on offline instance
+        request = getattr(api_instance, '_request', None)
+        if request:
+            last_failed_auth = request.session.get("heappe_last_failed_auth", 0)
+            if last_failed_auth and (time.time() - last_failed_auth < 30):
+                raise ConnectionError("HEAppE connection is offline (cooldown active).")
+
         # Inject default _request_timeout if not specified
         if bound_args.arguments.get('_request_timeout') is None:
-            bound_args.arguments['_request_timeout'] = 10.0
+            bound_args.arguments['_request_timeout'] = 5.0
 
         # Modify query_params
         query_params = bound_args.arguments.get('query_params')
@@ -285,6 +292,13 @@ class HeappeAuthBackend:
                 print(f"[auth_backend] Could not obtain session code (new API only, no fallback): {e_sc}")
         except Exception as e:
             print(f"[auth_backend] X-API-Key authentication failed or unsupported: {e}")
+            
+            # If the failure is due to a network connection/timeout issue, do not attempt fallback
+            exc_str = f"{type(e).__name__} {str(e)}".lower()
+            if any(term in exc_str for term in ["timeout", "conn", "unreachable", "refused", "maxretry", "socket"]):
+                print("[auth_backend] Network error detected. Skipping fallback authentication.")
+                return None
+
             # Fallback to session code
             config.api_key = {}
             api_instance.default_headers.pop("X-API-Key", None)

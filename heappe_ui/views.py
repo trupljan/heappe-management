@@ -224,6 +224,7 @@ def chose_instance_view(request):
             request.session.pop("heappe_host_url", None)
             request.session.pop("heappe_use_api_key", None)
             request.session.pop("heappe_last_auth", None)
+            request.session.pop("heappe_last_failed_auth", None)
             return redirect("dashboard_view")
 
     instances = InstanceCredentials.objects.all()
@@ -790,6 +791,7 @@ def instance_credentials_list(request, pk=None):
             request.session.pop("heappe_host_url", None)
             request.session.pop("heappe_use_api_key", None)
             request.session.pop("heappe_last_auth", None)
+            request.session.pop("heappe_last_failed_auth", None)
             return redirect("dashboard_view")
 
     instances = InstanceCredentials.objects.all().order_by('instance_name')

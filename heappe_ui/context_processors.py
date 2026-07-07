@@ -104,8 +104,14 @@ def middleware_update_renderer(request):
     deployed_version = request.session.get("middleware_deployed_version", "")
     latest_version = request.session.get("middleware_latest_version", "")
 
-    # Run check at most once per hour (3600 seconds), or if instance has changed, or if cache is empty
-    if (now - last_check > 3600) or (instance_name != last_checked_instance) or not deployed_version or not latest_version:
+    # Run check at most once per hour (3600 seconds), or if instance has changed, or if cache is empty.
+    # Skip the check entirely if the instance failed to authenticate recently (within 60s) to prevent blocking on down services.
+    should_run_check = (now - last_check > 3600) or (instance_name != last_checked_instance) or not deployed_version or not latest_version
+    last_failed_auth = request.session.get("heappe_last_failed_auth", 0)
+    if last_failed_auth and (now - last_failed_auth < 60):
+        should_run_check = False
+
+    if should_run_check:
         is_updating = False
         try:
             from heappe_ui.models import InstanceCredentials
@@ -128,8 +134,13 @@ def middleware_update_renderer(request):
                     config.verify_ssl = True
                     
                     api_client = hp.ApiClient(config)
+                    # Patch the API client and associate with the request to apply consistent settings (like timeout)
+                    from heappe_ui.auth_backend import patch_api_client
+                    api_client._request = request
+                    patch_api_client(api_client)
+
                     controller = hp.HealthApi(api_client)
-                    health_info = controller.heappe_health_get()
+                    health_info = controller.heappe_health_get(_request_timeout=3.0)
                     if health_info and health_info.version:
                         deployed_version = health_info.version.lstrip("vV")
                 except Exception as e:

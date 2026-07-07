@@ -63,6 +63,11 @@ class HeappeSessionMiddleware:
         if not hasattr(request, 'user') or not request.user.is_authenticated:
             return process_response(self.get_response(request))
 
+        # Check if user has chosen an instance. If not, redirect them to select/create one.
+        if not request.session.get("chosen_instance"):
+            from django.shortcuts import redirect
+            return redirect("instance_credentials_list")
+
         try:
             now = time.time()
             last_auth = request.session.get("heappe_last_auth", 0)
@@ -218,7 +223,7 @@ class HeappeExceptionMiddleware:
             is_heappe_error = True
         else:
             exc_lower = error_type.lower() + " " + error_message.lower()
-            if any(term in exc_lower for term in ["timeout", "conn", "unreachable", "refused", "maxretry", "apiexception"]):
+            if any(term in exc_lower for term in ["timeout", "conn", "unreachable", "refused", "maxretry", "apiexception", "api_instance"]):
                 is_heappe_error = True
 
         # If in debug mode, let Django raise the standard traceback screen unless it's a HEAppE error
@@ -282,6 +287,11 @@ class HeappeExceptionMiddleware:
             elif "conn" in exc_lower or "unreachable" in exc_lower or "refused" in exc_lower or "maxretry" in exc_lower:
                 error_title = "HEAppE Server Unreachable"
                 error_desc = "Could not establish a connection to the HEAppE server host. Please check network settings or server status."
+                error_icon = "bi-wifi-off"
+                error_theme = "danger"
+            elif "api_instance" in exc_lower:
+                error_title = "HEAppE Connection Offline"
+                error_desc = "Could not establish a connection to the selected HEAppE instance. The service might be offline."
                 error_icon = "bi-wifi-off"
                 error_theme = "danger"
 
