@@ -1171,10 +1171,10 @@ $(document).ready(function() {
     // --- CONTAINER & GLOBAL ACTIONS ---
     // ── Restart-All: phased progress + post-restart polling ──────────────────
     const RESTART_PHASES = [
-        { id: 'step-stop',     label: 'Stopping all containers',          durationMs: 15000 },
-        { id: 'step-db',       label: 'Starting database…',               durationMs: 20000 },
-        { id: 'step-vault',    label: 'Starting & unsealing Vault…',      durationMs: 40000 },
-        { id: 'step-services', label: 'Starting remaining services…',     durationMs: 15000 },
+        { id: 'step-stop',     label: 'Stopping all containers',          durationMs: 3000 },
+        { id: 'step-db',       label: 'Starting database…',               durationMs: 4000 },
+        { id: 'step-vault',    label: 'Starting & unsealing Vault…',      durationMs: 8000 },
+        { id: 'step-services', label: 'Starting remaining services…',     durationMs: 4000 },
         { id: 'step-done',     label: 'Waiting for HEAppE to come online…', durationMs: 9999999 }
     ];
 
