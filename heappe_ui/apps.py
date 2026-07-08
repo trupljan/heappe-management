@@ -78,6 +78,29 @@ class HeappeUiConfig(AppConfig):
                 if isinstance(raw_data, bytes):
                     raw_data = raw_data.decode('utf-8')
                 print(f"[RAW HTTP RESPONSE] {method} {url} -> Status: {getattr(response, 'status', 'Unknown')}, Body: {raw_data}")
+                
+                # Deserialization check
+                if response and getattr(response, 'data', None):
+                    try:
+                        import json
+                        parsed_json = json.loads(response.data)
+                        print(f"[DEBUG_DESER] URL: {url} | parsed JSON count: {len(parsed_json) if isinstance(parsed_json, list) else 'not a list'}")
+                        if 'Management/Clusters' in url:
+                            try:
+                                man_deser = self.deserialize(response, 'list[ExtendedClusterExt]')
+                                print(f"[DEBUG_DESER] URL: {url} | manual deserialize success: {man_deser is not None}, count: {len(man_deser) if man_deser else 0}")
+                            except Exception as ex_cls:
+                                print(f"[DEBUG_DESER] URL: {url} | manual deserialize clusters failed: {ex_cls}")
+                                import traceback; traceback.print_exc()
+                        elif 'Management/Projects' in url:
+                            try:
+                                man_deser = self.deserialize(response, 'list[ProjectExt]')
+                                print(f"[DEBUG_DESER] URL: {url} | manual deserialize success: {man_deser is not None}, count: {len(man_deser) if man_deser else 0}")
+                            except Exception as ex_prj:
+                                print(f"[DEBUG_DESER] URL: {url} | manual deserialize projects failed: {ex_prj}")
+                                import traceback; traceback.print_exc()
+                    except Exception as ex_gen:
+                        print(f"[DEBUG_DESER] URL: {url} | general check failed: {ex_gen}")
             except Exception as e:
                 print(f"[RAW HTTP RESPONSE] Error reading response details: {e}")
             return response
