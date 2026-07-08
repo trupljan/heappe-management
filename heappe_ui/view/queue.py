@@ -52,6 +52,22 @@ def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     node_type = controller.heappe_management_cluster_node_type_get(Id=queue_id, SessionCode=request.session_code).to_dict()
     if request.method == "POST":
+        # check if cluster has scheduler_type == 32 (QScheduler)
+        scheduler_type = None
+        cluster_id = node_type.get("cluster_id")
+        if cluster_id:
+            try:
+                cluster_data = controller.heappe_management_cluster_get(Id=cluster_id, SessionCode=request.session_code).to_dict()
+                scheduler_type = cluster_data.get("scheduler_type")
+            except Exception as e:
+                print(f"Error fetching cluster in queue_detail: {e}")
+        
+        queue_val = request.POST.get("Queue", "")
+        if scheduler_type == 32:
+            if not queue_val.isdigit() or int(queue_val) <= 0:
+                messages.error(request, "Validation Error: Queue identifier must be a valid positive integer representing the QScheduler Machine ID.")
+                return redirect("queue_detail", queue_id=queue_id)
+
         # update queue
         payload_data = {
             "Id": queue_id,
@@ -147,6 +163,20 @@ def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
         })
 
     if request.method == "POST":
+        # check if cluster has scheduler_type == 32 (QScheduler)
+        scheduler_type = None
+        try:
+            cluster_data = controller.heappe_management_cluster_get(Id=cluster_id, SessionCode=request.session_code).to_dict()
+            scheduler_type = cluster_data.get("scheduler_type")
+        except Exception as e:
+            print(f"Error fetching cluster in queue_create: {e}")
+        
+        queue_val = request.POST.get("Queue", "")
+        if scheduler_type == 32:
+            if not queue_val.isdigit() or int(queue_val) <= 0:
+                messages.error(request, "Validation Error: Queue identifier must be a valid positive integer representing the QScheduler Machine ID.")
+                return redirect("queue_create", cluster_id=cluster_id)
+
         payload_data = {
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),

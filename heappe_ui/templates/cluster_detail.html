@@ -96,6 +96,7 @@
                                         <option value="8" {% if cluster.scheduler_type == 8 %}selected{% endif %}>HyperQueue</option>
                                         {% if is_v6_4_0_plus %}
                                         <option value="16" {% if cluster.scheduler_type == 16 %}selected{% endif %}>FirecREST (Slurm)</option>
+                                        <option value="32" {% if cluster.scheduler_type == 32 %}selected{% endif %}>QScheduler</option>
                                         {% endif %}
                                     </select>
                                 </div>
@@ -191,6 +192,20 @@
                                             </div>
                                         </div>
 
+                                        <!-- QScheduler Specific Settings (Visible only when QScheduler scheduler type is selected) -->
+                                        <div id="qs-settings-section" class="mb-3" style="display: none;">
+                                            <div class="fw-bold small text-primary mb-2">
+                                                <i class="bi bi-cpu-fill me-1"></i> QScheduler Settings
+                                            </div>
+                                            <div class="row g-2 mb-3 bg-white p-3 rounded border border-light-subtle">
+                                                <div class="col-12">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-QSchedulerPort">QSchedulerPort <span class="text-danger">*</span></label>
+                                                    <input type="number" class="form-control form-control-sm border-light-subtle bg-white" id="qs-QSchedulerPort" placeholder="e.g. 3000" min="1" max="65535" value="3000">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Port on which the QScheduler REST API service is running on the target machine.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <!-- General Custom Parameters (Key-Value Dynamic Table) -->
                                         <div>
                                             <div class="fw-bold small text-secondary mb-2">
@@ -216,12 +231,16 @@
                                         const fcExpirioSecretName = document.getElementById('fc-ExpirioSecretName');
                                         const fcHomeDirectoryTemplate = document.getElementById('fc-HomeDirectoryTemplate');
                                         
+                                        const qsSettingsSection = document.getElementById('qs-settings-section');
+                                        const qsQSchedulerPort = document.getElementById('qs-QSchedulerPort');
+                                        
                                         const kvContainer = document.getElementById('custom-kv-container');
                                         const btnAddParam = document.getElementById('btn-add-param');
                                         
                                         if (!customConfigTextarea || !schedulerSelect) return;
 
                                         const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate'];
+                                        const RESERVED_QS_KEYS = ['QSchedulerPort'];
 
                                         function getParsedJSON() {
                                             try {
@@ -284,11 +303,13 @@
                                             fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
                                             fcHomeDirectoryTemplate.value = data['HomeDirectoryTemplate'] || '/users/{username}';
                                             
+                                            qsQSchedulerPort.value = data['QSchedulerPort'] || '3000';
+                                            
                                             kvContainer.innerHTML = '';
                                             
                                             let hasGeneral = false;
                                             for (const [k, v] of Object.entries(data)) {
-                                                if (!RESERVED_FC_KEYS.includes(k)) {
+                                                if (!RESERVED_FC_KEYS.includes(k) && !RESERVED_QS_KEYS.includes(k)) {
                                                     addParameterRow(k, v);
                                                     hasGeneral = true;
                                                 }
@@ -310,6 +331,8 @@
                                                     data['ExpirioSecretName'] = fcExpirioSecretName.value.trim();
                                                 }
                                                 data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
+                                            } else if (schedulerSelect.value === '32') {
+                                                data['QSchedulerPort'] = qsQSchedulerPort.value.trim() || '3000';
                                             }
                                             
                                             const rows = kvContainer.querySelectorAll('.row');
@@ -319,6 +342,9 @@
                                                 
                                                 if (key) {
                                                     if (schedulerSelect.value === '16' && RESERVED_FC_KEYS.includes(key)) {
+                                                        return;
+                                                    }
+                                                    if (schedulerSelect.value === '32' && RESERVED_QS_KEYS.includes(key)) {
                                                         return;
                                                     }
                                                     data[key] = value;
@@ -331,8 +357,13 @@
                                         function toggleSchedulerSections() {
                                             if (schedulerSelect.value === '16') {
                                                 fcSettingsSection.style.display = 'block';
+                                                qsSettingsSection.style.display = 'none';
+                                            } else if (schedulerSelect.value === '32') {
+                                                fcSettingsSection.style.display = 'none';
+                                                qsSettingsSection.style.display = 'block';
                                             } else {
                                                 fcSettingsSection.style.display = 'none';
+                                                qsSettingsSection.style.display = 'none';
                                             }
                                             serializeToJSON();
                                         }
@@ -343,6 +374,8 @@
                                         fcFields.forEach(input => {
                                             input.addEventListener('input', serializeToJSON);
                                         });
+                                        
+                                        qsQSchedulerPort.addEventListener('input', serializeToJSON);
 
                                         btnAddParam.addEventListener('click', function() {
                                             addParameterRow('', '');
@@ -364,6 +397,22 @@
                                                     if (!fcHomeDirectoryTemplate.value.trim()) {
                                                         alert('For FirecREST scheduler, HomeDirectoryTemplate must be specified.');
                                                         fcHomeDirectoryTemplate.focus();
+                                                        e.preventDefault();
+                                                        return false;
+                                                    }
+                                                }
+                                                if (schedulerSelect.value === '32') {
+                                                    const portStr = qsQSchedulerPort.value.trim();
+                                                    if (!portStr) {
+                                                        alert('For QScheduler, QSchedulerPort must be specified.');
+                                                        qsQSchedulerPort.focus();
+                                                        e.preventDefault();
+                                                        return false;
+                                                    }
+                                                    const portVal = parseInt(portStr, 10);
+                                                    if (isNaN(portVal) || portVal < 1 || portVal > 65535) {
+                                                        alert('For QScheduler, QSchedulerPort must be a valid integer port number (1-65535).');
+                                                        qsQSchedulerPort.focus();
                                                         e.preventDefault();
                                                         return false;
                                                     }

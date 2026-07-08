@@ -109,6 +109,18 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                         home_dir = custom_config_parsed.get("HomeDirectoryTemplate", "").strip()
                         if not home_dir:
                             raise ValueError("For FirecREST scheduler, HomeDirectoryTemplate must be specified.")
+                    
+                    if payload_data.get("SchedulerType") == 32:
+                        qs_port_str = custom_config_parsed.get("QSchedulerPort", "").strip()
+                        if not qs_port_str:
+                            qs_port_str = "3000"
+                        try:
+                            qs_port = int(qs_port_str)
+                            if not (1 <= qs_port <= 65535):
+                                raise ValueError()
+                        except ValueError:
+                            raise ValueError("For QScheduler, QSchedulerPort must be a valid integer port number (1-65535).")
+                        custom_config_parsed["QSchedulerPort"] = str(qs_port)
 
                     custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
                     payload_data["CustomConfiguration"] = custom_configuration
@@ -159,7 +171,10 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                         'custom_configuration_json': "{}",
                         'is_v6_4_0_plus': is_v6_4_0_plus,
                     })
-                payload_data["CustomConfiguration"] = {}
+                elif payload_data.get("SchedulerType") == 32:
+                    payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000"}
+                else:
+                    payload_data["CustomConfiguration"] = {}
 
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
@@ -252,6 +267,18 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                         home_dir = custom_config_parsed.get("HomeDirectoryTemplate", "").strip()
                         if not home_dir:
                             raise ValueError("For FirecREST scheduler, HomeDirectoryTemplate must be specified.")
+                    
+                    if payload_data.get("SchedulerType") == 32:
+                        qs_port_str = custom_config_parsed.get("QSchedulerPort", "").strip()
+                        if not qs_port_str:
+                            qs_port_str = "3000"
+                        try:
+                            qs_port = int(qs_port_str)
+                            if not (1 <= qs_port <= 65535):
+                                raise ValueError()
+                        except ValueError:
+                            raise ValueError("For QScheduler, QSchedulerPort must be a valid integer port number (1-65535).")
+                        custom_config_parsed["QSchedulerPort"] = str(qs_port)
 
                     custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
                     payload_data["CustomConfiguration"] = custom_configuration
@@ -264,7 +291,10 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                     messages.error(request, "Validation Error: For FirecREST scheduler, IdpUrl/ExpirioSecretName and HomeDirectoryTemplate must be specified.")
                     request.session['invalid_custom_config'] = "{}"
                     return redirect("cluster_detail", cluster_id=cluster_id)
-                payload_data["CustomConfiguration"] = {}
+                elif payload_data.get("SchedulerType") == 32:
+                    payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000"}
+                else:
+                    payload_data["CustomConfiguration"] = {}
 
         payload = _create_payload(request.session_code, payload_data)
         payload["body"]["Id"] = cluster_id

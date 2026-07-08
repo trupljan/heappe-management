@@ -45,7 +45,7 @@
 
                     <div class="col-md-4">
                         <label class="form-label small text-muted fw-semibold">Name</label>
-                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Name" value="{{ node_type.name }}" required placeholder="e.g. qprod">
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Name" value="{{ node_type.name }}" required placeholder="{% if cluster.scheduler_type == 32 %}e.g. IQM Star24{% else %}e.g. qprod{% endif %}">
                     </div>
 
                     <div class="col-md-6">
@@ -77,8 +77,15 @@
                     {% endif %}
 
                     <div class="col-md-4">
-                        <label class="form-label small text-muted fw-semibold">Queue Scheduler Name</label>
-                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Queue" value="{{ node_type.queue }}" required placeholder="e.g. workq">
+                        <label class="form-label small text-muted fw-semibold">
+                            {% if cluster.scheduler_type == 32 %}QScheduler Machine ID{% else %}Queue Scheduler Name{% endif %}
+                        </label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="Queue" value="{{ node_type.queue }}" required placeholder="{% if cluster.scheduler_type == 32 %}e.g. 1{% else %}e.g. workq{% endif %}" {% if cluster.scheduler_type == 32 %}pattern="[1-9][0-9]*" title="Must be a valid positive integer string representing the QScheduler Machine ID"{% endif %}>
+                        {% if cluster.scheduler_type == 32 %}
+                        <div class="form-text text-muted" style="font-size: 0.72rem;">
+                            <i class="bi bi-info-circle me-1"></i>Must be a valid positive integer string representing the QScheduler Machine ID.
+                        </div>
+                        {% endif %}
                     </div>
 
                     <div class="col-md-4">
@@ -348,6 +355,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = originalText;
             });
+        });
+    }
+    // Form validation for QScheduler Machine ID
+    const mainForm = document.querySelector('form[method="post"]:not(#ajaxCreateQueueGroupForm)');
+    if (mainForm) {
+        mainForm.addEventListener('submit', function(e) {
+            {% if cluster and cluster.scheduler_type == 32 %}
+            const queueInput = mainForm.querySelector('input[name="Queue"]');
+            if (queueInput) {
+                const val = queueInput.value.trim();
+                const isPositiveInteger = /^[1-9]\d*$/.test(val);
+                if (!isPositiveInteger) {
+                    alert('Queue identifier must be a valid positive integer representing the QScheduler Machine ID.');
+                    queueInput.focus();
+                    e.preventDefault();
+                    return false;
+                }
+            }
+            {% endif %}
         });
     }
 });

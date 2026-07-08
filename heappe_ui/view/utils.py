@@ -18,7 +18,8 @@ SCHEDULER_CHOICES = [
     (2, "PBS Pro"),
     (4, "Slurm"),
     (8, "HyperQueue"),
-    (16, "FirecREST (Slurm)")
+    (16, "FirecREST (Slurm)"),
+    (32, "QScheduler")
 ]
 
 CONNECTION_PROTOCOL_CHOICES = [
