@@ -55,6 +55,17 @@ class HeappeUiConfig(AppConfig):
             print("\n".join(debug_log))
             raise AttributeError(f"ApiClient not found. Import attempts failed. Details: {import_errors}")
 
+        # Debug print
+        try:
+            import py4heappe
+            print(f"[DEBUG_IMPORT] py4heappe loaded from: {getattr(py4heappe, '__file__', 'No file')}")
+            import py4heappe.heappe_v6 as hp_v6
+            print(f"[DEBUG_IMPORT] heappe_v6 loaded from: {getattr(hp_v6, '__file__', 'No file')}")
+            import py4heappe.heappe_v6.core.models as hp_models
+            print(f"[DEBUG_IMPORT] heappe_v6 models loaded from: {getattr(hp_models, '__file__', 'No file')}")
+        except Exception as e:
+            print(f"[DEBUG_IMPORT] Failed loading py4heappe models: {e}")
+
         # Ensure ApiClient is exposed on the hp module for other parts of the application
         if not hasattr(hp, 'ApiClient'):
             hp.ApiClient = ApiClient
