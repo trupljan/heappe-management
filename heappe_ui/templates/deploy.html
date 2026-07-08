@@ -850,7 +850,7 @@ function startUpdatePolling(actionType = 'update') {
         $('#update-status-title').text('Updating Instance...');
         $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Update Logs):');
     } else {
-        $('#updateProgressModalLabel').html('<i class="bi bi-rocket-takeoff spin-icon me-2 text-success"></i>HEAppE Middleware Deployment');
+        $('#updateProgressModalLabel').html('<i class="bi bi-rocket-takeoff launch-icon me-2 text-success"></i>HEAppE Middleware Deployment');
         $('#update-status-title').text('Deploying Instance...');
         $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Deployment Logs):');
     }
@@ -1951,6 +1951,16 @@ $(document).ready(function() {
     @keyframes spin-anim {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
+    }
+    .launch-icon {
+        display: inline-block !important;
+        animation: launch-anim 0.9s ease-in-out infinite;
+        transform-origin: center center;
+    }
+    @keyframes launch-anim {
+        0%   { transform: rotate(-20deg) scale(1); }
+        50%  { transform: rotate(20deg) scale(1.15); }
+        100% { transform: rotate(-20deg) scale(1); }
     }
     #update-logs {
         font-family: 'Courier New', Courier, monospace;
