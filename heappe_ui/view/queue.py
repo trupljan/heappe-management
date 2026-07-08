@@ -3,7 +3,7 @@ from django.urls import reverse
 from django.http import JsonResponse
 
 from .imports import *
-from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_view, login_required, ACCOUNTING_OPERATORS, ACCOUNTING_TIMES, ACCOUNTING_NUMBERS, _parse_datetime_local
+from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_view, login_required, ACCOUNTING_OPERATORS, ACCOUNTING_TIMES, ACCOUNTING_NUMBERS, _parse_datetime_local, clean_ver
 
 
 
@@ -62,11 +62,15 @@ def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
             except Exception as e:
                 print(f"Error fetching cluster in queue_detail: {e}")
         
+        deployed_version = request.session.get("middleware_deployed_version", "")
+        is_v6_5_0_plus = clean_ver(deployed_version) >= [6, 5, 0]
+
         queue_val = request.POST.get("Queue", "")
         if scheduler_type == 32:
-            if not queue_val.isdigit() or int(queue_val) <= 0:
-                messages.error(request, "Validation Error: Queue identifier must be a valid positive integer representing the QScheduler Machine ID.")
-                return redirect("queue_detail", queue_id=queue_id)
+            if not is_v6_5_0_plus:
+                if not queue_val.isdigit() or int(queue_val) <= 0:
+                    messages.error(request, "Validation Error: Queue identifier must be a valid positive integer representing the QScheduler Machine ID.")
+                    return redirect("queue_detail", queue_id=queue_id)
 
         # update queue
         payload_data = {
@@ -171,11 +175,15 @@ def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
         except Exception as e:
             print(f"Error fetching cluster in queue_create: {e}")
         
+        deployed_version = request.session.get("middleware_deployed_version", "")
+        is_v6_5_0_plus = clean_ver(deployed_version) >= [6, 5, 0]
+
         queue_val = request.POST.get("Queue", "")
         if scheduler_type == 32:
-            if not queue_val.isdigit() or int(queue_val) <= 0:
-                messages.error(request, "Validation Error: Queue identifier must be a valid positive integer representing the QScheduler Machine ID.")
-                return redirect("queue_create", cluster_id=cluster_id)
+            if not is_v6_5_0_plus:
+                if not queue_val.isdigit() or int(queue_val) <= 0:
+                    messages.error(request, "Validation Error: Queue identifier must be a valid positive integer representing the QScheduler Machine ID.")
+                    return redirect("queue_create", cluster_id=cluster_id)
 
         payload_data = {
             "Name": request.POST.get("Name"),

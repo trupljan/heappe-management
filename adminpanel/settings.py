@@ -15,18 +15,24 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Configure local py4heappe redirection
+# Configure local py4heappe redirection and optional client regeneration
 try:
     import sys
+    from heappe_generator import check_and_generate_client
+    check_and_generate_client(str(BASE_DIR))
+except Exception as e:
+    print(f"[settings] Client auto-generator check failed: {e}")
+
+try:
     import py4heappe
-    local_heappe_v6 = BASE_DIR / "heappe_v6"
+    local_heappe_v6 = BASE_DIR / "py4heappe" / "heappe_v6"
     if local_heappe_v6.exists():
-        # Ensure local __init__.py exists in heappe_v6
+        # Ensure local __init__.py exists in py4heappe/heappe_v6
         init_file = local_heappe_v6 / "__init__.py"
         if not init_file.exists():
             init_file.touch()
-        # Prepend BASE_DIR to py4heappe.__path__ so that importing py4heappe.heappe_v6 resolves to local
-        repo_path_str = str(BASE_DIR)
+        # Prepend BASE_DIR/py4heappe to py4heappe.__path__ so that importing py4heappe.heappe_v6 resolves to local
+        repo_path_str = str(BASE_DIR / "py4heappe")
         if repo_path_str not in py4heappe.__path__:
             py4heappe.__path__.insert(0, repo_path_str)
 except Exception as e:

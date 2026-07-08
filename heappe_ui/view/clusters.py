@@ -44,6 +44,7 @@ def cluster_list(request: HttpRequest) -> HttpResponse:
 def cluster_create(request: HttpRequest) -> HttpResponse:
     deployed_version = request.session.get("middleware_deployed_version", "")
     is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    is_v6_5_0_plus = clean_ver(deployed_version) >= [6, 5, 0]
 
     controller = hp.ManagementApi(request.api_instance)
 
@@ -77,7 +78,9 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
             'proxy_connections': get_proxy_list(),
             'active_tab': 'detail',
             'custom_configuration_json': '{}',
+            'custom_configuration_vault_toggles_json': '{}',
             'is_v6_4_0_plus': is_v6_4_0_plus,
+            'is_v6_5_0_plus': is_v6_5_0_plus,
         })
     if request.method == "POST":
         payload_data = {
@@ -95,6 +98,44 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
 
         if is_v6_4_0_plus:
             custom_config_raw = request.POST.get("CustomConfiguration", "")
+            custom_vault_raw = request.POST.get("CustomConfigurationVaultToggles", "")
+
+            if is_v6_5_0_plus:
+                custom_vault_parsed = {}
+                if custom_vault_raw.strip():
+                    try:
+                        custom_vault_parsed = json.loads(custom_vault_raw)
+                        if not isinstance(custom_vault_parsed, dict):
+                            raise ValueError("Custom configuration vault toggles must be a JSON object (dictionary)")
+                        payload_data["CustomConfigurationVaultToggles"] = {str(k): bool(v) for k, v in custom_vault_parsed.items()}
+                    except Exception as e:
+                        messages.error(request, f"Invalid Custom Configuration Vault Toggles JSON: {e}")
+                        return render(request, "cluster_detail.html", {
+                            'PROTOCOL_CHOICES': PROTOCOL_CHOICES,
+                            'SCHEDULER_CHOICES': SCHEDULER_CHOICES,
+                            'CONNECTION_PROTOCOL_CHOICES': CONNECTION_PROTOCOL_CHOICES,
+                            'proxy_connections': get_proxy_list(),
+                            'active_tab': 'detail',
+                            'cluster': {
+                                'name': request.POST.get("Name"),
+                                'description': request.POST.get("Description"),
+                                'master_node_name': request.POST.get("MasterNodeName"),
+                                'scheduler_type': int(request.POST.get("SchedulerType")) if request.POST.get("SchedulerType") else None,
+                                'connection_protocol': int(request.POST.get("ConnectionProtocol")) if request.POST.get("ConnectionProtocol") else None,
+                                'time_zone': request.POST.get("TimeZone"),
+                                'port': int(request.POST.get("Port")) if request.POST.get("Port") else None,
+                                'update_job_state_by_service_account': request.POST.get("UpdateJobStateByServiceAccount") == "on",
+                                'domain_name': request.POST.get("DomainName"),
+                                'proxy_connection': int(request.POST.get("ProxyConnectionId")) if request.POST.get("ProxyConnectionId") else None,
+                            },
+                            'custom_configuration_json': custom_config_raw,
+                            'custom_configuration_vault_toggles_json': custom_vault_raw,
+                            'is_v6_4_0_plus': is_v6_4_0_plus,
+                            'is_v6_5_0_plus': is_v6_5_0_plus,
+                        })
+                else:
+                    payload_data["CustomConfigurationVaultToggles"] = {}
+
             if custom_config_raw.strip():
                 try:
                     custom_config_parsed = json.loads(custom_config_raw)
@@ -121,6 +162,15 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                         except ValueError:
                             raise ValueError("For QScheduler, QSchedulerPort must be a valid integer port number (1-65535).")
                         custom_config_parsed["QSchedulerPort"] = str(qs_port)
+                        
+                        if is_v6_5_0_plus:
+                            use_sessions = custom_config_parsed.get("QSchedulerUseSessions", "true").strip()
+                            if use_sessions not in ("true", "false"):
+                                use_sessions = "true"
+                            custom_config_parsed["QSchedulerUseSessions"] = use_sessions
+                            
+                            notify_token = custom_config_parsed.get("QSchedulerNotifyToken", "")
+                            custom_config_parsed["QSchedulerNotifyToken"] = notify_token
 
                     custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
                     payload_data["CustomConfiguration"] = custom_configuration
@@ -145,7 +195,9 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                             'proxy_connection': int(request.POST.get("ProxyConnectionId")) if request.POST.get("ProxyConnectionId") else None,
                         },
                         'custom_configuration_json': custom_config_raw,
+                        'custom_configuration_vault_toggles_json': custom_vault_raw,
                         'is_v6_4_0_plus': is_v6_4_0_plus,
+                        'is_v6_5_0_plus': is_v6_5_0_plus,
                     })
             else:
                 if payload_data.get("SchedulerType") == 16:
@@ -169,10 +221,16 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                             'proxy_connection': int(request.POST.get("ProxyConnectionId")) if request.POST.get("ProxyConnectionId") else None,
                         },
                         'custom_configuration_json': "{}",
+                        'custom_configuration_vault_toggles_json': custom_vault_raw,
                         'is_v6_4_0_plus': is_v6_4_0_plus,
+                        'is_v6_5_0_plus': is_v6_5_0_plus,
                     })
                 elif payload_data.get("SchedulerType") == 32:
-                    payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000"}
+                    if is_v6_5_0_plus:
+                        payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000", "QSchedulerUseSessions": "true", "QSchedulerNotifyToken": ""}
+                        payload_data["CustomConfigurationVaultToggles"] = {}
+                    else:
+                        payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000"}
                 else:
                     payload_data["CustomConfiguration"] = {}
 
@@ -205,6 +263,7 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
 
     deployed_version = request.session.get("middleware_deployed_version", "")
     is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    is_v6_5_0_plus = clean_ver(deployed_version) >= [6, 5, 0]
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -253,6 +312,24 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
 
         if is_v6_4_0_plus:
             custom_config_raw = request.POST.get("CustomConfiguration", "")
+            custom_vault_raw = request.POST.get("CustomConfigurationVaultToggles", "")
+
+            if is_v6_5_0_plus:
+                custom_vault_parsed = {}
+                if custom_vault_raw.strip():
+                    try:
+                        custom_vault_parsed = json.loads(custom_vault_raw)
+                        if not isinstance(custom_vault_parsed, dict):
+                            raise ValueError("Custom configuration vault toggles must be a JSON object (dictionary)")
+                        payload_data["CustomConfigurationVaultToggles"] = {str(k): bool(v) for k, v in custom_vault_parsed.items()}
+                    except Exception as e:
+                        messages.error(request, f"Invalid Custom Configuration Vault Toggles JSON: {e}")
+                        request.session['invalid_custom_config'] = custom_config_raw
+                        request.session['invalid_custom_config_vault_toggles'] = custom_vault_raw
+                        return redirect("cluster_detail", cluster_id=cluster_id)
+                else:
+                    payload_data["CustomConfigurationVaultToggles"] = {}
+
             if custom_config_raw.strip():
                 try:
                     custom_config_parsed = json.loads(custom_config_raw)
@@ -279,20 +356,35 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                         except ValueError:
                             raise ValueError("For QScheduler, QSchedulerPort must be a valid integer port number (1-65535).")
                         custom_config_parsed["QSchedulerPort"] = str(qs_port)
+                        
+                        if is_v6_5_0_plus:
+                            use_sessions = custom_config_parsed.get("QSchedulerUseSessions", "true").strip()
+                            if use_sessions not in ("true", "false"):
+                                use_sessions = "true"
+                            custom_config_parsed["QSchedulerUseSessions"] = use_sessions
+                            
+                            notify_token = custom_config_parsed.get("QSchedulerNotifyToken", "")
+                            custom_config_parsed["QSchedulerNotifyToken"] = notify_token
 
                     custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
                     payload_data["CustomConfiguration"] = custom_configuration
                 except Exception as e:
                     messages.error(request, f"Invalid Custom Configuration JSON: {e}")
                     request.session['invalid_custom_config'] = custom_config_raw
+                    request.session['invalid_custom_config_vault_toggles'] = custom_vault_raw
                     return redirect("cluster_detail", cluster_id=cluster_id)
             else:
                 if payload_data.get("SchedulerType") == 16:
                     messages.error(request, "Validation Error: For FirecREST scheduler, IdpUrl/ExpirioSecretName and HomeDirectoryTemplate must be specified.")
                     request.session['invalid_custom_config'] = "{}"
+                    request.session['invalid_custom_config_vault_toggles'] = custom_vault_raw
                     return redirect("cluster_detail", cluster_id=cluster_id)
                 elif payload_data.get("SchedulerType") == 32:
-                    payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000"}
+                    if is_v6_5_0_plus:
+                        payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000", "QSchedulerUseSessions": "true", "QSchedulerNotifyToken": ""}
+                        payload_data["CustomConfigurationVaultToggles"] = {}
+                    else:
+                        payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000"}
                 else:
                     payload_data["CustomConfiguration"] = {}
 
@@ -338,6 +430,14 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
         else:
             custom_config_json = '{}'
 
+    custom_vault_toggles_json = request.session.pop('invalid_custom_config_vault_toggles', None)
+    if custom_vault_toggles_json is None:
+        if 'custom_configuration_vault_toggles' in cluster_dict:
+            custom_vault_toggles = cluster_dict.get('custom_configuration_vault_toggles') or {}
+            custom_vault_toggles_json = json.dumps(custom_vault_toggles, indent=4)
+        else:
+            custom_vault_toggles_json = '{}'
+
     from .project import PREFERRED_AUTH_TYPES_NO_PROXY, PREFERRED_AUTH_TYPES_WITH_PROXY, PREFERRED_AUTH_TYPE_CHOICES
 
     context = {
@@ -345,7 +445,9 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
         'active_tab': tab,
         'proxy_connections': proxy_list,
         'custom_configuration_json': custom_config_json,
+        'custom_configuration_vault_toggles_json': custom_vault_toggles_json,
         'is_v6_4_0_plus': is_v6_4_0_plus,
+        'is_v6_5_0_plus': is_v6_5_0_plus,
         'preferred_auth_types_no_proxy': PREFERRED_AUTH_TYPES_NO_PROXY,
         'preferred_auth_types_with_proxy': PREFERRED_AUTH_TYPES_WITH_PROXY,
         'preferred_auth_type_choices': PREFERRED_AUTH_TYPE_CHOICES,
@@ -508,6 +610,7 @@ def cluster_export(request: HttpRequest, cluster_id: int) -> HttpResponse:
 
     # ── Cluster settings (no id, no node_types, no projects) ─────────────────
     custom_cfg = cluster_dict.get("custom_configuration") or {}
+    custom_vault = cluster_dict.get("custom_configuration_vault_toggles") or {}
 
     export_data = {
         "version": "1.0",
@@ -524,6 +627,7 @@ def cluster_export(request: HttpRequest, cluster_id: int) -> HttpResponse:
             "update_job_state_by_service_account": cluster_dict.get("update_job_state_by_service_account", False),
             "domain_name": cluster_dict.get("domain_name"),
             "custom_configuration": custom_cfg,
+            "custom_configuration_vault_toggles": custom_vault,
         },
         "file_transfer_methods": ftm_export,
         "queue_groups": agg_export,
@@ -571,6 +675,7 @@ def cluster_import(request: HttpRequest) -> HttpResponse:
     # Check version compatibility
     deployed_version = request.session.get("middleware_deployed_version", "")
     is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    is_v6_5_0_plus = clean_ver(deployed_version) >= [6, 5, 0]
 
     # Create the cluster
     cluster_data = data["cluster"]
@@ -588,6 +693,8 @@ def cluster_import(request: HttpRequest) -> HttpResponse:
     
     if is_v6_4_0_plus and "custom_configuration" in cluster_data:
         payload_data["CustomConfiguration"] = cluster_data["custom_configuration"]
+    if is_v6_5_0_plus and "custom_configuration_vault_toggles" in cluster_data:
+        payload_data["CustomConfigurationVaultToggles"] = cluster_data["custom_configuration_vault_toggles"]
 
     try:
         # Create cluster

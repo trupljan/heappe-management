@@ -284,8 +284,10 @@ def middleware_update_renderer(request):
             print(f"Error in context processor telemetry check: {e}")
 
     is_v6_4_0_plus = False
+    is_v6_5_0_plus = False
     if deployed_version:
         is_v6_4_0_plus = (clean_ver(deployed_version) >= [6, 4, 0])
+        is_v6_5_0_plus = (clean_ver(deployed_version) >= [6, 5, 0])
 
     return {
         'caching_enabled': not disable_cache,
@@ -294,6 +296,7 @@ def middleware_update_renderer(request):
         'middleware_latest_version': latest_version,
         'cache_status': cache_status,
         'is_v6_4_0_plus': is_v6_4_0_plus,
+        'is_v6_5_0_plus': is_v6_5_0_plus,
         'jaeger_url': jaeger_url,
         'jaeger_port': jaeger_port,
         'otel_disabled': otel_disabled,

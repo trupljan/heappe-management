@@ -1959,3 +1959,297 @@ class HEAppEDeployServiceTests(TestCase):
             with self.assertRaises(ValueError) as ctx:
                 self.service.update_init(self.instance_name, "V6.3.3")
             self.assertEqual(str(ctx.exception), "Merger failed")
+
+
+class QSchedulerConfigTests(TestCase):
+    """Tests for QScheduler CustomConfiguration and VaultToggles serialization logic."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser_qs", password="password")
+
+    # ------------------------------------------------------------------
+    # clean_ver / is_v6_5_0_plus gating
+    # ------------------------------------------------------------------
+    def test_is_v6_5_0_plus_true(self):
+        from heappe_ui.view.utils import clean_ver
+        for ver in ["6.5.0", "v6.5.0", "V6.5.0", "6.5.1", "6.6.0", "7.0.0"]:
+            self.assertTrue(
+                clean_ver(ver) >= [6, 5, 0],
+                msg=f"Expected {ver} to satisfy >= 6.5.0"
+            )
+
+    def test_is_v6_5_0_plus_false(self):
+        from heappe_ui.view.utils import clean_ver
+        for ver in ["6.4.9", "6.4.0", "6.3.0", "5.9.0", "", None]:
+            self.assertFalse(
+                clean_ver(ver) >= [6, 5, 0],
+                msg=f"Expected {ver} to NOT satisfy >= 6.5.0"
+            )
+
+    # ------------------------------------------------------------------
+    # Queue validation: QScheduler + v6.5.0+ allows non-integer names
+    # ------------------------------------------------------------------
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_queue_create_qscheduler_v650_allows_string_queue_name(self, mock_api):
+        """With QScheduler + version >= 6.5.0 the Queue field may be a non-integer string."""
+        mock_instance = mock.MagicMock()
+        mock_api.return_value = mock_instance
+
+        cluster_obj = mock.MagicMock()
+        cluster_obj.to_dict.return_value = {"scheduler_type": 32, "id": 1}
+        mock_instance.heappe_management_cluster_get.return_value = cluster_obj
+
+        created_queue = mock.MagicMock()
+        created_queue.to_dict.return_value = {"Id": 101, "Queue": "QuantumDevice"}
+        mock_instance.heappe_management_cluster_node_type_post.return_value = created_queue
+
+        request = self.factory.post("/queues/create/1/", {
+            "Name": "QuantumQueue",
+            "Description": "A QScheduler queue",
+            "Queue": "QuantumDevice",
+            "NumberOfNodes": "1",
+            "CoresPerNode": "1",
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test",
+            "heappe_session_code": "tok",
+            "middleware_deployed_version": "6.5.0",
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "tok"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.queue import queue_create
+        response = queue_create(request, cluster_id=1)
+
+        # Should not redirect to error; integer check should be bypassed
+        self.assertNotIn(b"Validation Error", response.content if hasattr(response, 'content') else b"")
+        # If the API was called then no validation error was raised
+        mock_instance.heappe_management_cluster_node_type_post.assert_called_once()
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_queue_create_qscheduler_pre_v650_rejects_string_queue_name(self, mock_api):
+        """With QScheduler + version < 6.5.0 the Queue field must be a positive integer."""
+        mock_instance = mock.MagicMock()
+        mock_api.return_value = mock_instance
+
+        cluster_obj = mock.MagicMock()
+        cluster_obj.to_dict.return_value = {"scheduler_type": 32, "id": 1}
+        mock_instance.heappe_management_cluster_get.return_value = cluster_obj
+
+        request = self.factory.post("/queues/create/1/", {
+            "Name": "OldQueue",
+            "Description": "Pre-6.5 QScheduler queue",
+            "Queue": "QuantumDevice",   # string, invalid for < 6.5.0
+            "NumberOfNodes": "1",
+            "CoresPerNode": "1",
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test",
+            "heappe_session_code": "tok",
+            "middleware_deployed_version": "6.4.0",
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "tok"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.queue import queue_create
+        response = queue_create(request, cluster_id=1)
+
+        # Should redirect (validation error redirects without calling API)
+        self.assertEqual(response.status_code, 302)
+        mock_instance.heappe_management_cluster_node_type_post.assert_not_called()
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_queue_create_non_qscheduler_always_allows_string(self, mock_api):
+        """Non-QScheduler (e.g. Slurm=4) queue creation is never blocked for string names."""
+        mock_instance = mock.MagicMock()
+        mock_api.return_value = mock_instance
+
+        cluster_obj = mock.MagicMock()
+        cluster_obj.to_dict.return_value = {"scheduler_type": 4, "id": 2}
+        mock_instance.heappe_management_cluster_get.return_value = cluster_obj
+
+        created_queue = mock.MagicMock()
+        created_queue.to_dict.return_value = {"Id": 102, "Queue": "normal"}
+        mock_instance.heappe_management_cluster_node_type_post.return_value = created_queue
+
+        request = self.factory.post("/queues/create/2/", {
+            "Name": "SlurmQueue",
+            "Description": "",
+            "Queue": "normal",
+            "NumberOfNodes": "2",
+            "CoresPerNode": "24",
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test",
+            "heappe_session_code": "tok",
+            "middleware_deployed_version": "6.4.0",
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "tok"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.queue import queue_create
+        response = queue_create(request, cluster_id=2)
+
+        # API should be called because validation only blocks QScheduler clusters
+        mock_instance.heappe_management_cluster_node_type_post.assert_called_once()
+
+
+class QSchedulerVaultToggleSerializationTests(TestCase):
+    """Unit tests for CustomConfigurationVaultToggles serialization in cluster views."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser_vault", password="password")
+
+    def _make_cluster_mock(self, scheduler_type=32):
+        cluster = mock.MagicMock()
+        cluster.id = 10
+        cluster.name = "QCluster"
+        cluster.description = ""
+        cluster.master_node_name = "qmaster"
+        cluster.scheduler_type = scheduler_type
+        cluster.connection_protocol = 2
+        cluster.time_zone = "UTC"
+        cluster.port = 22
+        cluster.proxy_connection = None
+        cluster.update_job_state_by_service_account = False
+        cluster.domain_name = "qcluster.example.com"
+        cluster.node_types = []
+        cluster.custom_configuration = '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","QSchedulerNotifyToken":"secret"}'
+        cluster.to_dict.return_value = {
+            "id": 10,
+            "name": "QCluster",
+            "description": "",
+            "master_node_name": "qmaster",
+            "scheduler_type": scheduler_type,
+            "connection_protocol": 2,
+            "time_zone": "UTC",
+            "port": 22,
+            "proxy_connection": None,
+            "update_job_state_by_service_account": False,
+            "domain_name": "qcluster.example.com",
+            "node_types": [],
+            "custom_configuration": '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","QSchedulerNotifyToken":"secret"}',
+        }
+        return cluster
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_cluster_create_post_qscheduler_v650_sends_vault_toggles(self, mock_api):
+        """cluster_create POST for QScheduler + v6.5.0 should pass CustomConfigurationVaultToggles."""
+        mock_instance = mock.MagicMock()
+        mock_api.return_value = mock_instance
+        mock_instance.heappe_management_cluster_proxy_connections_get.return_value = []
+
+        created_cluster = mock.MagicMock()
+        created_cluster.id = 10
+        mock_instance.heappe_management_cluster_post.return_value = created_cluster
+
+        custom_config = '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","QSchedulerNotifyToken":"mytoken"}'
+        vault_toggles = '{"QSchedulerNotifyToken":true,"QSchedulerNotifyToken:IsHashed":false}'
+
+        request = self.factory.post("/clusters/create/", {
+            "Name": "NewQCluster",
+            "Description": "",
+            "MasterNodeName": "qmaster",
+            "SchedulerType": "32",
+            "ConnectionProtocol": "2",
+            "TimeZone": "UTC",
+            "Port": "22",
+            "UpdateJobStateByServiceAccount": "true",
+            "DomainName": "qcluster.example.com",
+            "CustomConfiguration": custom_config,
+            "CustomConfigurationVaultToggles": vault_toggles,
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test",
+            "heappe_session_code": "tok",
+            "middleware_deployed_version": "6.5.0",
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "tok"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.clusters import cluster_create
+        response = cluster_create(request)
+
+        # API should be called once
+        mock_instance.heappe_management_cluster_post.assert_called_once()
+        call_kwargs = mock_instance.heappe_management_cluster_post.call_args[1]
+        body = call_kwargs["body"]
+
+        # Verify CustomConfigurationVaultToggles was passed on the body
+        self.assertTrue(
+            hasattr(body, "custom_configuration_vault_toggles"),
+            "Expected body to have custom_configuration_vault_toggles attribute"
+        )
+        import json
+        toggles = body.custom_configuration_vault_toggles
+        self.assertTrue(toggles.get("QSchedulerNotifyToken"), "Expected vault flag to be True for token")
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_cluster_create_post_qscheduler_pre_v650_no_vault_toggles(self, mock_api):
+        """cluster_create POST for QScheduler + v < 6.5.0 should NOT pass CustomConfigurationVaultToggles."""
+        mock_instance = mock.MagicMock()
+        mock_api.return_value = mock_instance
+        mock_instance.heappe_management_cluster_proxy_connections_get.return_value = []
+
+        created_cluster = mock.MagicMock()
+        created_cluster.id = 11
+        mock_instance.heappe_management_cluster_post.return_value = created_cluster
+
+        request = self.factory.post("/clusters/create/", {
+            "Name": "OldQCluster",
+            "Description": "",
+            "MasterNodeName": "qmaster",
+            "SchedulerType": "32",
+            "ConnectionProtocol": "2",
+            "TimeZone": "UTC",
+            "Port": "22",
+            "UpdateJobStateByServiceAccount": "true",
+            "DomainName": "qcluster.example.com",
+            "CustomConfiguration": '{"QSchedulerPort":"3000"}',
+            "CustomConfigurationVaultToggles": '{}',
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test",
+            "heappe_session_code": "tok",
+            "middleware_deployed_version": "6.4.0",
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "tok"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.clusters import cluster_create
+        response = cluster_create(request)
+
+        mock_instance.heappe_management_cluster_post.assert_called_once()
+        call_kwargs = mock_instance.heappe_management_cluster_post.call_args[1]
+        body = call_kwargs["body"]
+
+        # For pre-6.5.0 no vault toggles should be set on the body
+        vault_field = getattr(body, "custom_configuration_vault_toggles", None)
+        # Either None or not set at all
+        self.assertFalse(
+            vault_field,
+            "Expected custom_configuration_vault_toggles to be falsy for pre-6.5.0"
+        )
+
