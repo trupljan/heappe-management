@@ -27,6 +27,9 @@ def check_and_generate_client(base_dir):
             try:
                 shutil.rmtree(local_dir)
                 parent_dir = os.path.dirname(local_dir)
+                init_file = os.path.join(parent_dir, "__init__.py")
+                if os.path.exists(init_file):
+                    os.remove(init_file)
                 if os.path.exists(parent_dir) and not os.listdir(parent_dir):
                     os.rmdir(parent_dir)
             except Exception as e:
@@ -218,6 +221,12 @@ def check_and_generate_client(base_dir):
                 mf.write("auto-generated")
             with open(os.path.join(local_dir, ".spec_hash"), "w") as hf:
                 hf.write(spec_hash)
+            
+            # Create local package marker if not present
+            init_file = os.path.join(os.path.dirname(local_dir), "__init__.py")
+            if not os.path.exists(init_file):
+                with open(init_file, "w") as f:
+                    f.write("# Local py4heappe package marker\n")
             print("[heappe-generator] Local client generated successfully!")
         else:
             print(f"[heappe-generator] Error: Could not find generated package under {temp_out}")
