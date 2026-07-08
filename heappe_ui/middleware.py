@@ -1,3 +1,4 @@
+import re
 import time
 from heappe_ui.auth_backend import HeappeAuthBackend
 import py4heappe.heappe_v6.core as hp
@@ -63,10 +64,16 @@ class HeappeSessionMiddleware:
         if not hasattr(request, 'user') or not request.user.is_authenticated:
             return process_response(self.get_response(request))
 
+        # Allow access to the bare /deploy/ page (deploy-new-instance) without a chosen_instance.
+        # URLs with an instance_name (e.g. /deploy/my_instance/) still require the session below.
+        if re.fullmatch(r".*/deploy/", path):
+            return process_response(self.get_response(request))
+
         # Check if user has chosen an instance. If not, redirect them to select/create one.
         if not request.session.get("chosen_instance"):
             from django.shortcuts import redirect
             return redirect("instance_credentials_list")
+
 
         try:
             now = time.time()

@@ -1072,7 +1072,6 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 action_status = 'info'
 
                 # --- JSON RESPONSE WITH REDIRECT ---
-
                 redirect_url = reverse('deploy_view', kwargs={'instance_name': instance_name})
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     return JsonResponse({
@@ -1081,6 +1080,9 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                         'instance_name': instance_name,
                         'redirect_url': redirect_url
                     })
+                # Fallback for non-AJAX (direct form submit without JS)
+                from django.http import HttpResponseRedirect
+                return HttpResponseRedirect(redirect_url)
 
             elif action == "update":
                 config = HEAppEConfig(
