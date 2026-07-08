@@ -2000,8 +2000,7 @@ class QSchedulerConfigTests(TestCase):
         cluster_obj.to_dict.return_value = {"scheduler_type": 32, "id": 1}
         mock_instance.heappe_management_cluster_get.return_value = cluster_obj
 
-        created_queue = mock.MagicMock()
-        created_queue.to_dict.return_value = {"Id": 101, "Queue": "QuantumDevice"}
+        created_queue = {"Id": 101, "Queue": "QuantumDevice"}
         mock_instance.heappe_management_cluster_node_type_post.return_value = created_queue
 
         request = self.factory.post("/queues/create/1/", {
@@ -2077,8 +2076,7 @@ class QSchedulerConfigTests(TestCase):
         cluster_obj.to_dict.return_value = {"scheduler_type": 4, "id": 2}
         mock_instance.heappe_management_cluster_get.return_value = cluster_obj
 
-        created_queue = mock.MagicMock()
-        created_queue.to_dict.return_value = {"Id": 102, "Queue": "normal"}
+        created_queue = {"Id": 102, "Queue": "normal"}
         mock_instance.heappe_management_cluster_node_type_post.return_value = created_queue
 
         request = self.factory.post("/queues/create/2/", {
@@ -2153,12 +2151,11 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
         mock_api.return_value = mock_instance
         mock_instance.heappe_management_cluster_proxy_connections_get.return_value = []
 
-        created_cluster = mock.MagicMock()
-        created_cluster.id = 10
+        created_cluster = {"id": 10}
         mock_instance.heappe_management_cluster_post.return_value = created_cluster
 
         custom_config = '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","QSchedulerNotifyToken":"mytoken"}'
-        vault_toggles = '{"QSchedulerNotifyToken":true,"QSchedulerNotifyToken:IsHashed":false}'
+        vault_toggles = '{"QSchedulerNotifyToken":true}'
 
         request = self.factory.post("/clusters/create/", {
             "Name": "NewQCluster",
@@ -2194,12 +2191,11 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
         body = call_kwargs["body"]
 
         # Verify CustomConfigurationVaultToggles was passed on the body
-        self.assertTrue(
-            hasattr(body, "custom_configuration_vault_toggles"),
-            "Expected body to have custom_configuration_vault_toggles attribute"
+        self.assertIn(
+            "CustomConfigurationVaultToggles", body,
+            "Expected body to have CustomConfigurationVaultToggles key"
         )
-        import json
-        toggles = body.custom_configuration_vault_toggles
+        toggles = body["CustomConfigurationVaultToggles"]
         self.assertTrue(toggles.get("QSchedulerNotifyToken"), "Expected vault flag to be True for token")
 
     @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
@@ -2209,8 +2205,7 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
         mock_api.return_value = mock_instance
         mock_instance.heappe_management_cluster_proxy_connections_get.return_value = []
 
-        created_cluster = mock.MagicMock()
-        created_cluster.id = 11
+        created_cluster = {"id": 11}
         mock_instance.heappe_management_cluster_post.return_value = created_cluster
 
         request = self.factory.post("/clusters/create/", {

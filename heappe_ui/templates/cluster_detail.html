@@ -224,12 +224,6 @@
                                                         <label class="form-check-label small text-dark fw-medium" for="qs-StoreInVault">Store QScheduler token in HashiCorp Vault</label>
                                                     </div>
                                                 </div>
-                                                <div class="col-md-6 mt-3">
-                                                    <div class="form-check">
-                                                        <input class="form-check-input border-secondary-subtle shadow-none" type="checkbox" id="qs-HashInDb">
-                                                        <label class="form-check-label small text-dark fw-medium" for="qs-HashInDb">Hash token when stored in Database (SHA256)</label>
-                                                    </div>
-                                                </div>
                                                 {% endif %}
                                             </div>
                                         </div>
@@ -265,7 +259,6 @@
                                         const qsQSchedulerUseSessions = document.getElementById('qs-QSchedulerUseSessions');
                                         const qsQSchedulerNotifyToken = document.getElementById('qs-QSchedulerNotifyToken');
                                         const qsStoreInVault = document.getElementById('qs-StoreInVault');
-                                        const qsHashInDb = document.getElementById('qs-HashInDb');
                                         
                                         const kvContainer = document.getElementById('custom-kv-container');
                                         const btnAddParam = document.getElementById('btn-add-param');
@@ -355,11 +348,9 @@
                                             if (qsQSchedulerNotifyToken) {
                                                 qsQSchedulerNotifyToken.value = data['QSchedulerNotifyToken'] || '';
                                             }
-                                            if (qsStoreInVault && qsHashInDb) {
+                                            if (qsStoreInVault) {
                                                 const vaultToggles = getParsedVaultTogglesJSON();
                                                 qsStoreInVault.checked = !!vaultToggles['QSchedulerNotifyToken'];
-                                                qsHashInDb.checked = !!vaultToggles['QSchedulerNotifyToken:IsHashed'];
-                                                qsHashInDb.disabled = qsStoreInVault.checked;
                                             }
                                             
                                             kvContainer.innerHTML = '';
@@ -397,9 +388,8 @@
                                                 if (qsQSchedulerNotifyToken) {
                                                     data['QSchedulerNotifyToken'] = qsQSchedulerNotifyToken.value;
                                                     
-                                                    if (qsStoreInVault && qsHashInDb) {
+                                                    if (qsStoreInVault) {
                                                         vaultToggles['QSchedulerNotifyToken'] = qsStoreInVault.checked;
-                                                        vaultToggles['QSchedulerNotifyToken:IsHashed'] = qsHashInDb.checked;
                                                     }
                                                 }
                                             }
@@ -454,17 +444,8 @@
                                         if (qsQSchedulerNotifyToken) {
                                             qsQSchedulerNotifyToken.addEventListener('input', serializeToJSON);
                                         }
-                                        if (qsStoreInVault && qsHashInDb) {
-                                            qsStoreInVault.addEventListener('change', function() {
-                                                if (qsStoreInVault.checked) {
-                                                    qsHashInDb.checked = false;
-                                                    qsHashInDb.disabled = true;
-                                                } else {
-                                                    qsHashInDb.disabled = false;
-                                                }
-                                                serializeToJSON();
-                                            });
-                                            qsHashInDb.addEventListener('change', serializeToJSON);
+                                        if (qsStoreInVault) {
+                                            qsStoreInVault.addEventListener('change', serializeToJSON);
                                         }
 
                                         btnAddParam.addEventListener('click', function() {
