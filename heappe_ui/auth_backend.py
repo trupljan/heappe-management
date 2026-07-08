@@ -255,9 +255,9 @@ class HeappeAuthBackend:
         config.verify_ssl = True
 
         # Try API Key authentication first
-        config.api_key = {'X-API-Key': f"{username}:{password}"}
+        config.api_key = {'X-Api-token': f"{username}:{password}"}
         api_instance = hp.ApiClient(config)
-        api_instance.set_default_header("X-API-Key", f"{username}:{password}")
+        api_instance.set_default_header("X-Api-token", f"{username}:{password}")
         api_instance._is_reauthenticating = True
         api_instance._request = request
         patch_api_client(api_instance)
@@ -268,9 +268,9 @@ class HeappeAuthBackend:
         session_code = None
 
         try:
-            print(f"[auth_backend] Attempting X-API-Key authentication to {host_url} for user {username}...")
+            print(f"[auth_backend] Attempting X-Api-token authentication to {host_url} for user {username}...")
             ulm.heappe_user_and_limitation_management_current_user_info_get()
-            print(f"[auth_backend] X-API-Key authentication successful.")
+            print(f"[auth_backend] X-Api-token authentication successful.")
             use_api_key = True
 
             # Best-effort: also obtain a session code so that old HEAppE server versions
@@ -292,7 +292,7 @@ class HeappeAuthBackend:
             except Exception as e_sc:
                 print(f"[auth_backend] Could not obtain session code (new API only, no fallback): {e_sc}")
         except Exception as e:
-            print(f"[auth_backend] X-API-Key authentication failed or unsupported: {e}")
+            print(f"[auth_backend] X-Api-token authentication failed or unsupported: {e}")
             
             # If the failure is due to a network connection/timeout issue, do not attempt fallback
             exc_str = f"{type(e).__name__} {str(e)}".lower()
@@ -302,7 +302,7 @@ class HeappeAuthBackend:
 
             # Fallback to session code
             config.api_key = {}
-            api_instance.default_headers.pop("X-API-Key", None)
+            api_instance.default_headers.pop("X-Api-token", None)
 
             cred = {
                 "_preload_content": False,

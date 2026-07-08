@@ -532,9 +532,9 @@ def submit_job_view(request, command_template_id:int):
                     user_config.api_key_prefix = {'Authorization': 'Bearer'}
                     submit_api_instance.set_default_header("Authorization", f"Bearer {auth_credential}")
                 elif auth_method == "apikey":
-                    user_config.api_key = {'X-API-Key': auth_credential}
+                    user_config.api_key = {'X-Api-token': auth_credential}
                     user_config.api_key_prefix = {}
-                    submit_api_instance.set_default_header("X-API-Key", auth_credential)
+                    submit_api_instance.set_default_header("X-Api-token", auth_credential)
 
                 from heappe_ui.auth_backend import patch_api_client
                 submit_api_instance._request = request

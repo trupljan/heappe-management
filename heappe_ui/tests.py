@@ -1091,10 +1091,10 @@ class SubmitJobTests(TestCase):
         # It should redirect to job_status_view
         self.assertEqual(response.status_code, 302)
         
-        # Verify custom ApiClient was initialized and configured with X-API-Key
+        # Verify custom ApiClient was initialized and configured with X-Api-token
         mock_api_client_cls.assert_called_once()
         config_passed = mock_api_client_cls.call_args[0][0]
-        self.assertEqual(config_passed.api_key['X-API-Key'], "my_api_key_456")
+        self.assertEqual(config_passed.api_key['X-Api-token'], "my_api_key_456")
         
         # Verify custom JobManagementApi instantiation
         mock_job_mgmt_api.assert_called_once_with(mock_api_instance)
@@ -2294,17 +2294,27 @@ class ApiSessionCodePatchingTests(TestCase):
                     if "unexpected keyword argument" in err_msg and ("SessionCode" in err_msg or "session_code" in err_msg):
                         kwargs.pop('SessionCode', None)
                         kwargs.pop('session_code', None)
-                        if session_code and getattr(self, 'api_client', None):
+                        if getattr(self, 'api_client', None):
                             client = self.api_client
-                            client.set_default_header("Authorization", f"Bearer {session_code}")
-                            if getattr(client, 'configuration', None):
-                                cfg = client.configuration
-                                if not hasattr(cfg, 'api_key') or not isinstance(cfg.api_key, dict):
-                                    cfg.api_key = {}
-                                cfg.api_key['Authorization'] = session_code
-                                if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
-                                    cfg.api_key_prefix = {}
-                                cfg.api_key_prefix['Authorization'] = 'Bearer'
+                            req = getattr(client, '_request', None)
+                            token_val = None
+                            if req:
+                                username = req.session.get("heappe_username")
+                                password = req.session.get("heappe_password")
+                                if username and password:
+                                    token_val = f"{username}:{password}"
+                            if not token_val:
+                                token_val = session_code
+                            if token_val:
+                                client.set_default_header("X-Api-token", token_val)
+                                if getattr(client, 'configuration', None):
+                                    cfg = client.configuration
+                                    if not hasattr(cfg, 'api_key') or not isinstance(cfg.api_key, dict):
+                                        cfg.api_key = {}
+                                    cfg.api_key['X-Api-token'] = token_val
+                                    if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
+                                        cfg.api_key_prefix = {}
+                                    cfg.api_key_prefix['X-Api-token'] = ''
                         return original_method(self, *args, **kwargs)
                     else:
                         raise
@@ -2323,7 +2333,7 @@ class ApiSessionCodePatchingTests(TestCase):
         self.assertEqual(res1.get("SessionCode"), "token_xyz")
         self.assertEqual(res1.get("other_arg"), "val")
         # Header was not modified
-        self.assertNotIn("Authorization", client1.default_headers)
+        self.assertNotIn("X-Api-token", client1.default_headers)
 
         # CASE 2: Simulating new generated client behavior (SessionCode is rejected)
         client2 = MockApiClient()
@@ -2333,10 +2343,10 @@ class ApiSessionCodePatchingTests(TestCase):
         # Verify SessionCode was popped from kwargs to prevent TypeError in actual clients
         self.assertNotIn("SessionCode", res2)
         self.assertEqual(res2.get("other_arg"), "val")
-        # Verify Authorization headers and config were set on the client
-        self.assertEqual(client2.default_headers.get("Authorization"), "Bearer token_xyz")
-        self.assertEqual(client2.configuration.api_key.get("Authorization"), "token_xyz")
-        self.assertEqual(client2.configuration.api_key_prefix.get("Authorization"), "Bearer")
+        # Verify X-Api-token headers and config were set on the client
+        self.assertEqual(client2.default_headers.get("X-Api-token"), "token_xyz")
+        self.assertEqual(client2.configuration.api_key.get("X-Api-token"), "token_xyz")
+        self.assertEqual(client2.configuration.api_key_prefix.get("X-Api-token"), "")
 
 
 

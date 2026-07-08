@@ -72,7 +72,7 @@
                                 <select class="form-select border-secondary-subtle py-2 rounded-3" id="auth_method" name="AuthMethod" onchange="toggleAuthFields()">
                                     <option value="default" selected>Currently Logged-in User</option>
                                     <option value="jwt">JWT Token (Bearer)</option>
-                                    <option value="apikey">X-API-Key</option>
+                                    <option value="apikey">X-Api-token</option>
                                 </select>
                             </div>
                             
@@ -252,7 +252,7 @@ function toggleAuthFields() {
             label.textContent = "JWT Token (without Bearer prefix)";
             input.placeholder = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...";
         } else if (method === "apikey") {
-            label.textContent = "X-API-Key";
+            label.textContent = "X-Api-token";
             input.placeholder = "username:password or custom-key";
         }
     }

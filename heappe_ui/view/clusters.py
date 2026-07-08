@@ -1434,16 +1434,16 @@ ENTRYPOINT ["/entrypoint.sh"]
         session_code = None
         use_api_key = False
 
-        # Try X-API-Key first (same flow as HeappeAuthBackend.authenticate)
-        config.api_key = {'X-API-Key': f"{db_username}:{db_password}"}
+        # Try X-Api-token first (same flow as HeappeAuthBackend.authenticate)
+        config.api_key = {'X-Api-token': f"{db_username}:{db_password}"}
         api_client = hp.ApiClient(config)
-        api_client.set_default_header("X-API-Key", f"{db_username}:{db_password}")
+        api_client.set_default_header("X-Api-token", f"{db_username}:{db_password}")
         patch_api_client(api_client)
         ulm = hp.UserAndLimitationManagementApi(api_client)
         try:
             ulm.heappe_user_and_limitation_management_current_user_info_get()
             use_api_key = True
-            log("X-API-Key authentication successful.")
+            log("X-Api-token authentication successful.")
             # Best-effort: also get a session code for old HEAppE versions that require it in body
             try:
                 r = ulm.heappe_user_and_limitation_management_authenticate_user_password_post(
@@ -1455,9 +1455,9 @@ ENTRYPOINT ["/entrypoint.sh"]
             except Exception as e_sc:
                 log(f"Note: Could not obtain session code (new API, no fallback needed): {e_sc}")
         except Exception as e_key:
-            log(f"X-API-Key auth failed, falling back to session code: {e_key}")
+            log(f"X-Api-token auth failed, falling back to session code: {e_key}")
             config.api_key = {}
-            api_client.default_headers.pop("X-API-Key", None)
+            api_client.default_headers.pop("X-Api-token", None)
             try:
                 r = ulm.heappe_user_and_limitation_management_authenticate_user_password_post(
                     _preload_content=False,
