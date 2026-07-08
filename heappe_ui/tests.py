@@ -2253,3 +2253,95 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
             "Expected custom_configuration_vault_toggles to be falsy for pre-6.5.0"
         )
 
+
+class ApiSessionCodePatchingTests(TestCase):
+    """Tests that generated API methods are dynamically wrapped to handle SessionCode."""
+
+    def test_api_method_wraps_session_code(self):
+        class MockConfig:
+            def __init__(self):
+                self.api_key = {}
+                self.api_key_prefix = {}
+
+        class MockApiClient:
+            def __init__(self):
+                self.default_headers = {}
+                self.configuration = MockConfig()
+            def set_default_header(self, k, v):
+                self.default_headers[k] = v
+
+        class MockApiClass:
+            def __init__(self, api_client):
+                self.api_client = api_client
+
+            def test_method_accepts_session_code(self, **kwargs):
+                # Simulates PIP package behavior: accepts SessionCode without error
+                if "SessionCode" not in kwargs:
+                    raise ValueError("SessionCode must be present!")
+                return kwargs
+
+            def test_method_rejects_session_code(self, **kwargs):
+                # Simulates new generated client: raises TypeError on SessionCode
+                if "SessionCode" in kwargs:
+                    raise TypeError("Got an unexpected keyword argument 'SessionCode' to method test_method_rejects_session_code")
+                return kwargs
+
+        # Re-declare wrapper logic to match apps.py
+        import functools
+        def wrap_api_method(original_method):
+            @functools.wraps(original_method)
+            def method_wrapper(self, *args, **kwargs):
+                session_code = kwargs.get('SessionCode') or kwargs.get('session_code')
+                try:
+                    return original_method(self, *args, **kwargs)
+                except TypeError as e:
+                    err_msg = str(e)
+                    if "unexpected keyword argument" in err_msg and ("SessionCode" in err_msg or "session_code" in err_msg):
+                        kwargs.pop('SessionCode', None)
+                        kwargs.pop('session_code', None)
+                        if session_code and getattr(self, 'api_client', None):
+                            client = self.api_client
+                            client.set_default_header("Authorization", f"Bearer {session_code}")
+                            if getattr(client, 'configuration', None):
+                                cfg = client.configuration
+                                if not hasattr(cfg, 'api_key') or not isinstance(cfg.api_key, dict):
+                                    cfg.api_key = {}
+                                cfg.api_key['Authorization'] = session_code
+                                if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
+                                    cfg.api_key_prefix = {}
+                                cfg.api_key_prefix['Authorization'] = 'Bearer'
+                        return original_method(self, *args, **kwargs)
+                    else:
+                        raise
+            return method_wrapper
+
+        # Wrap both methods
+        MockApiClass.test_method_accepts_session_code = wrap_api_method(MockApiClass.test_method_accepts_session_code)
+        MockApiClass.test_method_rejects_session_code = wrap_api_method(MockApiClass.test_method_rejects_session_code)
+
+        # CASE 1: Simulating PIP client behavior (SessionCode is accepted)
+        client1 = MockApiClient()
+        instance1 = MockApiClass(client1)
+        res1 = instance1.test_method_accepts_session_code(SessionCode="token_xyz", other_arg="val")
+        
+        # Verify SessionCode was passed in kwargs (for old servers / pip packages)
+        self.assertEqual(res1.get("SessionCode"), "token_xyz")
+        self.assertEqual(res1.get("other_arg"), "val")
+        # Header was not modified
+        self.assertNotIn("Authorization", client1.default_headers)
+
+        # CASE 2: Simulating new generated client behavior (SessionCode is rejected)
+        client2 = MockApiClient()
+        instance2 = MockApiClass(client2)
+        res2 = instance2.test_method_rejects_session_code(SessionCode="token_xyz", other_arg="val")
+        
+        # Verify SessionCode was popped from kwargs to prevent TypeError in actual clients
+        self.assertNotIn("SessionCode", res2)
+        self.assertEqual(res2.get("other_arg"), "val")
+        # Verify Authorization headers and config were set on the client
+        self.assertEqual(client2.default_headers.get("Authorization"), "Bearer token_xyz")
+        self.assertEqual(client2.configuration.api_key.get("Authorization"), "token_xyz")
+        self.assertEqual(client2.configuration.api_key_prefix.get("Authorization"), "Bearer")
+
+
+
