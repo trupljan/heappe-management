@@ -90,6 +90,10 @@ class HeappeUiConfig(AppConfig):
                 print(f"[DEBUG_IMPORT] URL: {url} | py4heappe file: {getattr(py4heappe, '__file__', 'No file')} | models file: {getattr(hp_models, '__file__', 'No file')}")
                 print(f"[DEBUG_IMPORT] URL: {url} | models attributes: {[x for x in dir(hp_models) if not x.startswith('_')]}")
                 try:
+                    import os
+                    models_dir = os.path.dirname(getattr(hp_models, '__file__', ''))
+                    if os.path.exists(models_dir):
+                        print(f"[DEBUG_IMPORT] URL: {url} | models files: {os.listdir(models_dir)[:30]}")
                     with open(getattr(hp_models, '__file__', '')) as f:
                         lines = f.readlines()
                     print(f"[DEBUG_IMPORT] URL: {url} | models __init__.py line count: {len(lines)}")
