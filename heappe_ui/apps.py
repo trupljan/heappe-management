@@ -88,6 +88,16 @@ class HeappeUiConfig(AppConfig):
                 import py4heappe
                 import py4heappe.heappe_v6.core.models as hp_models
                 print(f"[DEBUG_IMPORT] URL: {url} | py4heappe file: {getattr(py4heappe, '__file__', 'No file')} | models file: {getattr(hp_models, '__file__', 'No file')}")
+                print(f"[DEBUG_IMPORT] URL: {url} | models attributes: {[x for x in dir(hp_models) if not x.startswith('_')]}")
+                try:
+                    with open(getattr(hp_models, '__file__', '')) as f:
+                        lines = f.readlines()
+                    print(f"[DEBUG_IMPORT] URL: {url} | models __init__.py line count: {len(lines)}")
+                    # Find any ProjectExt import
+                    pe_lines = [l.strip() for l in lines if 'ProjectExt' in l]
+                    print(f"[DEBUG_IMPORT] URL: {url} | ProjectExt lines in init: {pe_lines}")
+                except Exception as ex:
+                    print(f"[DEBUG_IMPORT] URL: {url} | failed to read init file: {ex}")
             except Exception as e:
                 print(f"[DEBUG_IMPORT] URL: {url} | failed check: {e}")
             try:
