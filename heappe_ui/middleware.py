@@ -128,9 +128,9 @@ class HeappeSessionMiddleware:
                 if use_api_key:
                     username = request.session.get("heappe_username")
                     password = request.session.get("heappe_password")
-                    user_config.api_key = {'X-Api-token': f"{username}:{password}"}
+                    user_config.api_key = {'X-API-Key': f"{username}:{password}"}
                     api_instance = hp.ApiClient(user_config)
-                    api_instance.set_default_header("X-Api-token", f"{username}:{password}")
+                    api_instance.set_default_header("X-API-Key", f"{username}:{password}")
                 else:
                     api_instance = hp.ApiClient(user_config)
 

@@ -184,27 +184,17 @@ class HeappeUiConfig(AppConfig):
                             # Handle session code
                             if rejected_arg == 'session_code' or rejected_arg == 'SessionCode':
                                 kwargs.pop(rejected_arg, None)
-                                if getattr(self, 'api_client', None):
+                                if session_code and getattr(self, 'api_client', None):
                                     client = self.api_client
-                                    req = getattr(client, '_request', None)
-                                    token_val = None
-                                    if req:
-                                        username = req.session.get("heappe_username")
-                                        password = req.session.get("heappe_password")
-                                        if username and password:
-                                            token_val = f"{username}:{password}"
-                                    if not token_val:
-                                        token_val = session_code
-                                    if token_val:
-                                        client.set_default_header("X-Api-token", token_val)
-                                        if getattr(client, 'configuration', None):
-                                            cfg = client.configuration
-                                            if not hasattr(cfg, 'api_key') or not isinstance(cfg.api_key, dict):
-                                                cfg.api_key = {}
-                                            cfg.api_key['X-Api-token'] = token_val
-                                            if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
-                                                cfg.api_key_prefix = {}
-                                            cfg.api_key_prefix['X-Api-token'] = ''
+                                    client.set_default_header("X-Api-token", session_code)
+                                    if getattr(client, 'configuration', None):
+                                        cfg = client.configuration
+                                        if not hasattr(cfg, 'api_key') or not isinstance(cfg.api_key, dict):
+                                            cfg.api_key = {}
+                                        cfg.api_key['X-Api-token'] = session_code
+                                        if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
+                                            cfg.api_key_prefix = {}
+                                        cfg.api_key_prefix['X-Api-token'] = ''
                                 return method_wrapper(self, *args, **kwargs)
                             
                             # Convert PascalCase to snake_case
