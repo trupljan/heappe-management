@@ -117,34 +117,38 @@ def check_and_generate_client(base_dir):
         except Exception as e:
             print(f"[heappe-generator] Exception during codegen execution: {e}")
 
-    # METHOD 2: Try generating via public Swagger Generator API as fallback
+    # METHOD 2: Try generating via public Swagger Generator v3 API as fallback
     if not success:
         try:
-            print("[heappe-generator] Method 2: Attempting client generation via online Swagger Generator API...")
+            print("[heappe-generator] Method 2: Attempting client generation via online Swagger Generator V3 API...")
             with open(found_spec, "r", encoding="utf-8") as f:
                 spec_data = json.load(f)
                 
             payload = {
+                "lang": "python",
                 "spec": spec_data,
+                "type": "CLIENT",
+                "codegenVersion": "V3",
                 "options": {
-                    "packageName": "py4heappe.heappe_v6.core"
+                    "additionalProperties": {
+                        "packageName": "py4heappe.heappe_v6.core",
+                        "projectName": "Py4HEAppE"
+                    }
                 }
             }
             
             data = json.dumps(payload).encode('utf-8')
             req = urllib.request.Request(
-                "https://generator.swagger.io/api/gen/clients/python",
+                "https://generator3.swagger.io/api/generate",
                 data=data,
                 headers={'Content-Type': 'application/json'}
             )
             
-            with urllib.request.urlopen(req, timeout=30) as response:
-                res_data = json.loads(response.read().decode('utf-8'))
-                zip_url = res_data['link']
+            with urllib.request.urlopen(req, timeout=60) as response:
+                zip_data = response.read()
                 
-            print(f"[heappe-generator] Downloading generated SDK from {zip_url}...")
-            zip_response = urllib.request.urlopen(zip_url, timeout=30)
-            zip_file = zipfile.ZipFile(io.BytesIO(zip_response.read()))
+            print(f"[heappe-generator] Extracting received ZIP package...")
+            zip_file = zipfile.ZipFile(io.BytesIO(zip_data))
             
             prefix = ""
             for name in zip_file.namelist():
@@ -167,9 +171,9 @@ def check_and_generate_client(base_dir):
                             outfile.write(zip_file.read(member.filename))
                             
             success = True
-            print("[heappe-generator] Online generation succeeded!")
+            print("[heappe-generator] Online generation V3 succeeded!")
         except Exception as e:
-            print(f"[heappe-generator] Online generation failed: {e}")
+            print(f"[heappe-generator] Online generation V3 failed: {e}")
 
     # METHOD 3: Fallback to system openapi-generator-cli
     if not success:
