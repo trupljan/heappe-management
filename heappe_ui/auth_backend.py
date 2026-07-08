@@ -190,6 +190,7 @@ def patch_api_client(api_instance):
                         log_content = response
                 except Exception as ex:
                     log_content = f"Serialization error: {ex}"
+            print(f"[HEAppE API Response Content] Path {resource_path}: {log_content}")
             
             if request:
                 request.heappe_api_logs.append({
