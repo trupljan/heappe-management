@@ -85,6 +85,12 @@ class HeappeUiConfig(AppConfig):
         def patched_request(self, method, url, *args, **kwargs):
             response = original_request(self, method, url, *args, **kwargs)
             try:
+                import py4heappe
+                import py4heappe.heappe_v6.core.models as hp_models
+                print(f"[DEBUG_IMPORT] URL: {url} | py4heappe file: {getattr(py4heappe, '__file__', 'No file')} | models file: {getattr(hp_models, '__file__', 'No file')}")
+            except Exception as e:
+                print(f"[DEBUG_IMPORT] URL: {url} | failed check: {e}")
+            try:
                 raw_data = getattr(response, 'data', None)
                 if isinstance(raw_data, bytes):
                     raw_data = raw_data.decode('utf-8')
