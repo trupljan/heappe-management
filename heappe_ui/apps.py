@@ -68,7 +68,22 @@ class HeappeUiConfig(AppConfig):
             patch_api_client(self)
 
         ApiClient.__init__ = patched_init
-        print("[heappe_ui] Globally patched hp.ApiClient with timeout and logging.")
+
+        original_request = ApiClient.request
+
+        def patched_request(self, method, url, *args, **kwargs):
+            response = original_request(self, method, url, *args, **kwargs)
+            try:
+                raw_data = getattr(response, 'data', None)
+                if isinstance(raw_data, bytes):
+                    raw_data = raw_data.decode('utf-8')
+                print(f"[RAW HTTP RESPONSE] {method} {url} -> Status: {getattr(response, 'status', 'Unknown')}, Body: {raw_data}")
+            except Exception as e:
+                print(f"[RAW HTTP RESPONSE] Error reading response details: {e}")
+            return response
+
+        ApiClient.request = patched_request
+        print("[heappe_ui] Globally patched hp.ApiClient with timeout, logging, and raw response tracing.")
 
         # Dynamically wrap all Api classes and methods to handle SessionCode transparently
         import inspect
