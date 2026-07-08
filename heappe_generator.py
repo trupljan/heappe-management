@@ -26,7 +26,6 @@ def check_and_generate_client(base_dir):
             print("[heappe-generator] No Swagger spec found. Removing auto-generated local client to fallback to pip...")
             try:
                 shutil.rmtree(local_dir)
-                # If py4heappe folder is now empty, remove it as well
                 parent_dir = os.path.dirname(local_dir)
                 if os.path.exists(parent_dir) and not os.listdir(parent_dir):
                     os.rmdir(parent_dir)
@@ -68,92 +67,109 @@ def check_and_generate_client(base_dir):
 
     success = False
 
-    # METHOD 1: Try generating via public Swagger Generator API (no Java/local tools required)
-    try:
-        print("[heappe-generator] Method 1: Attempting client generation via online Swagger Generator API...")
-        with open(found_spec, "r", encoding="utf-8") as f:
-            spec_data = json.load(f)
-            
-        payload = {
-            "spec": spec_data,
-            "options": {
-                "packageName": "py4heappe.heappe_v6.core"
-            }
-        }
-        
-        data = json.dumps(payload).encode('utf-8')
-        req = urllib.request.Request(
-            "https://generator.swagger.io/api/gen/clients/python",
-            data=data,
-            headers={'Content-Type': 'application/json'}
-        )
-        
-        # Call API
-        with urllib.request.urlopen(req, timeout=30) as response:
-            res_data = json.loads(response.read().decode('utf-8'))
-            zip_url = res_data['link']
-            
-        # Download ZIP package
-        print(f"[heappe-generator] Downloading generated SDK from {zip_url}...")
-        zip_response = urllib.request.urlopen(zip_url, timeout=30)
-        zip_file = zipfile.ZipFile(io.BytesIO(zip_response.read()))
-        
-        # Locate the prefix inside ZIP file (usually 'python-client/')
-        prefix = ""
-        for name in zip_file.namelist():
-            if name.endswith("py4heappe/heappe_v6/core/__init__.py"):
-                prefix = name.split("py4heappe/heappe_v6/core/__init__.py")[0]
-                break
-                
-        # Extract package contents into temp_out
-        os.makedirs(temp_out, exist_ok=True)
-        for member in zip_file.infolist():
-            if member.filename.startswith(prefix):
-                rel_path = member.filename[len(prefix):]
-                if not rel_path:
-                    continue
-                target_path = os.path.join(temp_out, rel_path)
-                if member.is_dir():
-                    os.makedirs(target_path, exist_ok=True)
-                else:
-                    os.makedirs(os.path.dirname(target_path), exist_ok=True)
-                    with open(target_path, "wb") as outfile:
-                        outfile.write(zip_file.read(member.filename))
-                        
-        success = True
-        print("[heappe-generator] Online generation succeeded!")
-    except Exception as e:
-        print(f"[heappe-generator] Online generation failed: {e}")
+    # Clean up old v2 jar if present
+    old_jar = os.path.join(base_dir, "swagger-codegen-cli-2.4.39.jar")
+    if os.path.exists(old_jar):
+        try:
+            os.remove(old_jar)
+        except Exception:
+            pass
 
-    # METHOD 2: Fallback to local swagger-codegen-cli JAR (requires Java)
+    # METHOD 1: Try generating using swagger-codegen-cli v3 with custom templates (requires Java)
+    jar_path = os.path.join(base_dir, "swagger-codegen-cli-3.0.71.jar")
+    if not os.path.exists(jar_path):
+        url = "https://repo1.maven.org/maven2/io/swagger/codegen/v3/swagger-codegen-cli/3.0.71/swagger-codegen-cli-3.0.71.jar"
+        print(f"[heappe-generator] Downloading swagger-codegen-cli v3 JAR from {url}...")
+        try:
+            urllib.request.urlretrieve(url, jar_path)
+        except Exception as e:
+            print(f"[heappe-generator] Failed to download generator JAR: {e}")
+            jar_path = None
+
+    if jar_path and os.path.exists(jar_path):
+        templates_path = os.path.join(base_dir, "codegen_templates", "Templates", "python")
+        if not os.path.exists(templates_path):
+            templates_path = os.path.join(base_dir, "codegen_templates", "python")
+        
+        config_path = os.path.join(base_dir, "codegen_config.json")
+        
+        cmd = [
+            "java", "-jar", jar_path, "generate",
+            "-i", found_spec,
+            "-l", "python",
+            "-o", temp_out
+        ]
+        if os.path.exists(templates_path):
+            cmd += ["-t", templates_path]
+        if os.path.exists(config_path):
+            cmd += ["-c", config_path]
+        else:
+            cmd += ["-DpackageName=py4heappe.heappe_v6.core"]
+            
+        print(f"[heappe-generator] Method 1: Running: {' '.join(cmd)}")
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0:
+                success = True
+                print("[heappe-generator] Local JAR generation succeeded!")
+            else:
+                print(f"[heappe-generator] Codegen error:\n{res.stderr}")
+        except Exception as e:
+            print(f"[heappe-generator] Exception during codegen execution: {e}")
+
+    # METHOD 2: Try generating via public Swagger Generator API as fallback
     if not success:
-        jar_path = os.path.join(base_dir, "swagger-codegen-cli-2.4.39.jar")
-        if not os.path.exists(jar_path):
-            url = "https://repo1.maven.org/maven2/io/swagger/swagger-codegen-cli/2.4.39/swagger-codegen-cli-2.4.39.jar"
-            print(f"[heappe-generator] Downloading swagger-codegen-cli JAR from {url}...")
-            try:
-                urllib.request.urlretrieve(url, jar_path)
-            except Exception as e:
-                print(f"[heappe-generator] Failed to download generator JAR: {e}")
-                jar_path = None
-
-        if jar_path and os.path.exists(jar_path):
-            cmd = [
-                "java", "-jar", jar_path, "generate",
-                "-i", found_spec,
-                "-l", "python",
-                "-o", temp_out,
-                "-DpackageName=py4heappe.heappe_v6.core"
-            ]
-            print(f"[heappe-generator] Method 2: Running: {' '.join(cmd)}")
-            try:
-                res = subprocess.run(cmd, capture_output=True, text=True)
-                if res.returncode == 0:
-                    success = True
-                else:
-                    print(f"[heappe-generator] Codegen error:\n{res.stderr}")
-            except Exception as e:
-                print(f"[heappe-generator] Exception during codegen execution: {e}")
+        try:
+            print("[heappe-generator] Method 2: Attempting client generation via online Swagger Generator API...")
+            with open(found_spec, "r", encoding="utf-8") as f:
+                spec_data = json.load(f)
+                
+            payload = {
+                "spec": spec_data,
+                "options": {
+                    "packageName": "py4heappe.heappe_v6.core"
+                }
+            }
+            
+            data = json.dumps(payload).encode('utf-8')
+            req = urllib.request.Request(
+                "https://generator.swagger.io/api/gen/clients/python",
+                data=data,
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            with urllib.request.urlopen(req, timeout=30) as response:
+                res_data = json.loads(response.read().decode('utf-8'))
+                zip_url = res_data['link']
+                
+            print(f"[heappe-generator] Downloading generated SDK from {zip_url}...")
+            zip_response = urllib.request.urlopen(zip_url, timeout=30)
+            zip_file = zipfile.ZipFile(io.BytesIO(zip_response.read()))
+            
+            prefix = ""
+            for name in zip_file.namelist():
+                if name.endswith("py4heappe/heappe_v6/core/__init__.py"):
+                    prefix = name.split("py4heappe/heappe_v6/core/__init__.py")[0]
+                    break
+                    
+            os.makedirs(temp_out, exist_ok=True)
+            for member in zip_file.infolist():
+                if member.filename.startswith(prefix):
+                    rel_path = member.filename[len(prefix):]
+                    if not rel_path:
+                        continue
+                    target_path = os.path.join(temp_out, rel_path)
+                    if member.is_dir():
+                        os.makedirs(target_path, exist_ok=True)
+                    else:
+                        os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                        with open(target_path, "wb") as outfile:
+                            outfile.write(zip_file.read(member.filename))
+                            
+            success = True
+            print("[heappe-generator] Online generation succeeded!")
+        except Exception as e:
+            print(f"[heappe-generator] Online generation failed: {e}")
 
     # METHOD 3: Fallback to system openapi-generator-cli
     if not success:

@@ -34,7 +34,8 @@ def queues_view(request: HttpRequest) -> HttpResponse:
                 return redirect(f"/clusters/{cluster_id}/?tab=queues")
             return redirect("queues_view")
 
-    queues = [c.to_dict() for c in controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
+    raw_queues = controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)
+    queues = [c.to_dict() for c in raw_queues] if raw_queues else []
     
     filetransfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code) or []
     ftm_dict = {}

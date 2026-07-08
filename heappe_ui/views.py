@@ -405,7 +405,8 @@ def dashboard_metrics_partial(request: HttpRequest) -> HttpResponse:
 
     # Get queue information
     try:
-        queues = [c.to_dict() for c in controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
+        raw_queues = controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)
+        queues = [c.to_dict() for c in raw_queues] if raw_queues else []
         context['queues'] = queues
     except Exception as e:
         print(f"Error fetching queues: {e}")
@@ -440,7 +441,7 @@ def dashboard_jobs_distribution_partial(request: HttpRequest) -> HttpResponse:
             'Failed', 'Canceled', 'WaitingForServiceAccount', 'Deleted'
         ]
         job_counts = {s: 0 for s in all_states}
-        for js in job_stats:
+        for js in (job_stats or []):
             job_counts[js.job_state_name] = js.count
         total_jobs = sum(job_counts.values())
         return JsonResponse({

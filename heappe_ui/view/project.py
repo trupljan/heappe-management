@@ -228,7 +228,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         node_types_time = request.session.get("node_types_cache_time", 0)
         if disable_cache or force_refresh or not node_types_cache or (time.time() - node_types_time > 300) or (node_types_time < last_global_mod):
             all_node_types_raw = controller.heappe_management_cluster_node_types_get(SessionCode=session_code)
-            node_types_cache = [nt.to_dict() for nt in all_node_types_raw]
+            node_types_cache = [nt.to_dict() for nt in all_node_types_raw] if all_node_types_raw else []
             request.session["node_types_cache"] = node_types_cache
             request.session["node_types_cache_time"] = time.time()
 

@@ -94,6 +94,11 @@ class HeappeUiConfig(AppConfig):
         except Exception:
             pass
 
+        def pascal_to_snake(name):
+            import re
+            s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+            return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
         def wrap_api_method(original_method):
             @functools.wraps(original_method)
             def method_wrapper(self, *args, **kwargs):
@@ -102,23 +107,34 @@ class HeappeUiConfig(AppConfig):
                     return original_method(self, *args, **kwargs)
                 except TypeError as e:
                     err_msg = str(e)
-                    if "unexpected keyword argument" in err_msg and ("SessionCode" in err_msg or "session_code" in err_msg):
-                        kwargs.pop('SessionCode', None)
-                        kwargs.pop('session_code', None)
-                        if session_code and getattr(self, 'api_client', None):
-                            client = self.api_client
-                            client.set_default_header("Authorization", f"Bearer {session_code}")
-                            if getattr(client, 'configuration', None):
-                                cfg = client.configuration
-                                if not hasattr(cfg, 'api_key') or not isinstance(cfg.api_key, dict):
-                                    cfg.api_key = {}
-                                cfg.api_key['Authorization'] = session_code
-                                if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
-                                    cfg.api_key_prefix = {}
-                                cfg.api_key_prefix['Authorization'] = 'Bearer'
-                        return original_method(self, *args, **kwargs)
-                    else:
-                        raise
+                    if "unexpected keyword argument" in err_msg:
+                        import re
+                        m = re.search(r"unexpected keyword argument '([^']+)'", err_msg)
+                        if m:
+                            rejected_arg = m.group(1)
+                            # Handle session code
+                            if rejected_arg == 'session_code' or rejected_arg == 'SessionCode':
+                                kwargs.pop(rejected_arg, None)
+                                if session_code and getattr(self, 'api_client', None):
+                                    client = self.api_client
+                                    client.set_default_header("Authorization", f"Bearer {session_code}")
+                                    if getattr(client, 'configuration', None):
+                                        cfg = client.configuration
+                                        if not hasattr(cfg, 'api_key') or not isinstance(cfg.api_key, dict):
+                                            cfg.api_key = {}
+                                        cfg.api_key['Authorization'] = session_code
+                                        if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
+                                            cfg.api_key_prefix = {}
+                                        cfg.api_key_prefix['Authorization'] = 'Bearer'
+                                return method_wrapper(self, *args, **kwargs)
+                            
+                            # Convert PascalCase to snake_case
+                            snake_arg = pascal_to_snake(rejected_arg)
+                            if snake_arg != rejected_arg and rejected_arg in kwargs:
+                                val = kwargs.pop(rejected_arg)
+                                kwargs[snake_arg] = val
+                                return method_wrapper(self, *args, **kwargs)
+                    raise
             return method_wrapper
 
         patched_methods_count = 0
