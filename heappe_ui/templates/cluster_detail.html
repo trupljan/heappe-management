@@ -228,231 +228,490 @@
                                             </div>
                                         </div>
 
-                                        <!-- General Custom Parameters (Key-Value Dynamic Table) -->
-                                        <div>
-                                            <div class="fw-bold small text-secondary mb-2">
-                                                <i class="bi bi-list-nested me-1"></i> Parameters
-                                            </div>
-                                            <div id="custom-kv-container">
-                                                <!-- Dynamic rows will be inserted here by JavaScript -->
-                                            </div>
-                                            <button type="button" id="btn-add-param" class="btn btn-xs btn-outline-primary fw-bold mt-2">
-                                                <i class="bi bi-plus-lg me-1"></i>Add Parameter
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
+                                         <!-- General Custom Parameters (Key-Value Dynamic Table) -->
+                                         <div>
+                                             <div class="fw-bold small text-secondary mb-2">
+                                                 <i class="bi bi-list-nested me-1"></i> Parameters
+                                             </div>
+                                             <div id="custom-kv-container">
+                                                 <!-- Dynamic rows will be inserted here by JavaScript -->
+                                             </div>
+                                             <datalist id="predefined-keys-list">
+                                                 <option value="ScriptsBasePath">
+                                                 <option value="ClusterScriptsRepository">
+                                                 <option value="ClusterScriptsRepositoryBranch">
+                                                 <option value="KeyScriptsDirectoryInRepository">
+                                                 <option value="InstanceIdentifierPath">
+                                                 <option value="SubExecutionsPath">
+                                                 <option value="SubScriptsPath">
+                                                 <option value="JobLogArchiveSubPath">
+                                                 <option value="EventualConsistencyRetryCount">
+                                                 <option value="EventualConsistencyRetryDelayMs">
+                                                 <option value="HomeDirectoryTemplate">
+                                                 <option value="IdpUrl">
+                                                 <option value="ExpirioSecretName">
+                                                 <option value="ExpirioClientIdKey">
+                                                 <option value="ExpirioClientSecretKey">
+                                                 <option value="SshCaSettings:UseCertificateAuthorityForAuthentication">
+                                                 <option value="SshCaSettings:BaseUri">
+                                                 <option value="SshCaSettings:CAName">
+                                                 <option value="SshCaSettings:ConnectionTimeoutInSeconds">
+                                                 <option value="BusinessLogicSettings:SharedAccountsPoolMode">
+                                                 <option value="BusinessLogicSettings:AutoInitializeProjectCredentialsOnFirstUse">
+                                             </datalist>
 
-                                <script>
-                                    document.addEventListener('DOMContentLoaded', function() {
-                                        const schedulerSelect = document.querySelector('select[name="SchedulerType"]');
-                                        const customConfigTextarea = document.querySelector('textarea[name="CustomConfiguration"]');
-                                        const customConfigVaultTogglesTextarea = document.querySelector('textarea[name="CustomConfigurationVaultToggles"]');
-                                        
-                                        const fcSettingsSection = document.getElementById('fc-settings-section');
-                                        const fcIdpUrl = document.getElementById('fc-IdpUrl');
-                                        const fcExpirioSecretName = document.getElementById('fc-ExpirioSecretName');
-                                        const fcHomeDirectoryTemplate = document.getElementById('fc-HomeDirectoryTemplate');
-                                        
-                                        const qsSettingsSection = document.getElementById('qs-settings-section');
-                                        const qsQSchedulerPort = document.getElementById('qs-QSchedulerPort');
-                                        const qsQSchedulerUseSessions = document.getElementById('qs-QSchedulerUseSessions');
-                                        const qsQSchedulerNotifyToken = document.getElementById('qs-QSchedulerNotifyToken');
-                                        const qsStoreInVault = document.getElementById('qs-StoreInVault');
-                                        
-                                        const kvContainer = document.getElementById('custom-kv-container');
-                                        const btnAddParam = document.getElementById('btn-add-param');
-                                        
-                                        if (!customConfigTextarea || !schedulerSelect) return;
+                                             <div class="d-flex flex-wrap align-items-center gap-2 mt-2 pt-2 border-top border-light-subtle">
+                                                 <button type="button" id="btn-add-param" class="btn btn-xs btn-outline-primary fw-bold">
+                                                     <i class="bi bi-plus-lg me-1"></i>Add Custom Parameter
+                                                 </button>
+                                                 <span class="text-muted small">or</span>
+                                                 <div class="input-group input-group-sm" style="width: auto; min-width: 250px;">
+                                                     <label class="input-group-text px-2 py-1 bg-light text-secondary border-light-subtle" style="font-size: 0.72rem;" for="select-predefined-key"><i class="bi bi-list-ul me-1"></i>Add Predefined</label>
+                                                     <select id="select-predefined-key" class="form-select form-select-sm border-light-subtle bg-white text-dark" style="font-size: 0.75rem; padding-top: 0.2rem; padding-bottom: 0.2rem;">
+                                                         <option value="">-- Choose Key --</option>
+                                                         <optgroup label="General & Scripts (Non-FirecREST)">
+                                                             <option value="ScriptsBasePath">ScriptsBasePath</option>
+                                                             <option value="ClusterScriptsRepository">ClusterScriptsRepository</option>
+                                                             <option value="ClusterScriptsRepositoryBranch">ClusterScriptsRepositoryBranch</option>
+                                                             <option value="KeyScriptsDirectoryInRepository">KeyScriptsDirectoryInRepository</option>
+                                                             <option value="InstanceIdentifierPath">InstanceIdentifierPath</option>
+                                                             <option value="SubExecutionsPath">SubExecutionsPath</option>
+                                                             <option value="SubScriptsPath">SubScriptsPath</option>
+                                                             <option value="JobLogArchiveSubPath">JobLogArchiveSubPath</option>
+                                                             <option value="EventualConsistencyRetryCount">EventualConsistencyRetryCount</option>
+                                                             <option value="EventualConsistencyRetryDelayMs">EventualConsistencyRetryDelayMs</option>
+                                                         </optgroup>
+                                                         <optgroup label="Remote Path Expansion">
+                                                             <option value="HomeDirectoryTemplate">HomeDirectoryTemplate</option>
+                                                         </optgroup>
+                                                         <optgroup label="FirecREST Specific">
+                                                             <option value="IdpUrl">IdpUrl</option>
+                                                             <option value="ExpirioSecretName">ExpirioSecretName</option>
+                                                             <option value="ExpirioClientIdKey">ExpirioClientIdKey</option>
+                                                             <option value="ExpirioClientSecretKey">ExpirioClientSecretKey</option>
+                                                         </optgroup>
+                                                         <optgroup label="SSH CA Configuration Overrides">
+                                                             <option value="SshCaSettings:UseCertificateAuthorityForAuthentication">SshCaSettings:UseCertificateAuthorityForAuthentication</option>
+                                                             <option value="SshCaSettings:BaseUri">SshCaSettings:BaseUri</option>
+                                                             <option value="SshCaSettings:CAName">SshCaSettings:CAName</option>
+                                                             <option value="SshCaSettings:ConnectionTimeoutInSeconds">SshCaSettings:ConnectionTimeoutInSeconds</option>
+                                                         </optgroup>
+                                                         <optgroup label="General Business Logic Overrides">
+                                                             <option value="BusinessLogicSettings:SharedAccountsPoolMode">BusinessLogicSettings:SharedAccountsPoolMode</option>
+                                                             <option value="BusinessLogicSettings:AutoInitializeProjectCredentialsOnFirstUse">BusinessLogicSettings:AutoInitializeProjectCredentialsOnFirstUse</option>
+                                                         </optgroup>
+                                                     </select>
+                                                 </div>
+                                             </div>
+                                         </div>
+                                     </div>
+                                 </div>
 
-                                        const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate'];
-                                        const RESERVED_QS_KEYS = ['QSchedulerPort', 'QSchedulerUseSessions', 'QSchedulerNotifyToken'];
+                                 <script>
+                                     document.addEventListener('DOMContentLoaded', function() {
+                                         const schedulerSelect = document.querySelector('select[name="SchedulerType"]');
+                                         const customConfigTextarea = document.querySelector('textarea[name="CustomConfiguration"]');
+                                         const customConfigVaultTogglesTextarea = document.querySelector('textarea[name="CustomConfigurationVaultToggles"]');
+                                         
+                                         const fcSettingsSection = document.getElementById('fc-settings-section');
+                                         const fcIdpUrl = document.getElementById('fc-IdpUrl');
+                                         const fcExpirioSecretName = document.getElementById('fc-ExpirioSecretName');
+                                         const fcHomeDirectoryTemplate = document.getElementById('fc-HomeDirectoryTemplate');
+                                         
+                                         const qsSettingsSection = document.getElementById('qs-settings-section');
+                                         const qsQSchedulerPort = document.getElementById('qs-QSchedulerPort');
+                                         const qsQSchedulerUseSessions = document.getElementById('qs-QSchedulerUseSessions');
+                                         const qsQSchedulerNotifyToken = document.getElementById('qs-QSchedulerNotifyToken');
+                                         const qsStoreInVault = document.getElementById('qs-StoreInVault');
+                                         
+                                         const kvContainer = document.getElementById('custom-kv-container');
+                                         const btnAddParam = document.getElementById('btn-add-param');
+                                         const selectPredefinedKey = document.getElementById('select-predefined-key');
+                                         
+                                         if (!customConfigTextarea || !schedulerSelect) return;
 
-                                        function getParsedJSON() {
-                                            try {
-                                                const raw = customConfigTextarea.value.trim();
-                                                if (!raw) return {};
-                                                const parsed = JSON.parse(raw);
-                                                return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
-                                            } catch (e) {
-                                                return {};
-                                            }
-                                        }
+                                         const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate'];
+                                         const RESERVED_QS_KEYS = ['QSchedulerPort', 'QSchedulerUseSessions', 'QSchedulerNotifyToken'];
 
-                                        function getParsedVaultTogglesJSON() {
-                                            if (!customConfigVaultTogglesTextarea) return {};
-                                            try {
-                                                const raw = customConfigVaultTogglesTextarea.value.trim();
-                                                if (!raw) return {};
-                                                const parsed = JSON.parse(raw);
-                                                return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
-                                            } catch (e) {
-                                                return {};
-                                            }
-                                        }
+                                         const PREDEFINED_KEYS_META = {
+                                             'ScriptsBasePath': {
+                                                 desc: 'Base remote path on the cluster where HEAppE internal scripts are stored. Supports $USER or ${USER} placeholders.',
+                                                 example: '/home/project/$USER/.HEAppE'
+                                             },
+                                             'ClusterScriptsRepository': {
+                                                 desc: 'Git repository URL containing scheduler adapter scripts.',
+                                                 example: 'https://github.com/it4i/heappe-scripts.git'
+                                             },
+                                             'ClusterScriptsRepositoryBranch': {
+                                                 desc: 'Git repository branch to checkout.',
+                                                 example: 'main'
+                                             },
+                                             'KeyScriptsDirectoryInRepository': {
+                                                 desc: 'Path to the directory within the repository containing the key scripts.',
+                                                 example: 'pbs-pro'
+                                             },
+                                             'InstanceIdentifierPath': {
+                                                 desc: 'Unique sub-folder name to isolate multiple HEAppE instances on a shared file system.',
+                                                 example: 'production-instance'
+                                             },
+                                             'SubExecutionsPath': {
+                                                 desc: 'Folder name where job scripts are executed.',
+                                                 example: 'executions'
+                                             },
+                                             'SubScriptsPath': {
+                                                 desc: 'Folder name where job helper scripts are stored.',
+                                                 example: 'scripts'
+                                             },
+                                             'JobLogArchiveSubPath': {
+                                                 desc: 'Folder name where job execution logs are archived.',
+                                                 example: 'logs'
+                                             },
+                                             'EventualConsistencyRetryCount': {
+                                                 desc: 'Number of check retries for filesystems that are eventually consistent (e.g. Lustre, GPFS).',
+                                                 example: '5'
+                                             },
+                                             'EventualConsistencyRetryDelayMs': {
+                                                 desc: 'Delay in milliseconds between consistency retries.',
+                                                 example: '1000'
+                                             },
+                                             'HomeDirectoryTemplate': {
+                                                 desc: 'Used to expand relative paths (~) or environment variables ($HOME, ${HOME}) for the target user. Supports {username}, {USER}, and $USER templates.',
+                                                 example: '/storage/brno2/home/{username}'
+                                             },
+                                             'IdpUrl': {
+                                                 desc: 'Overrides the default identity provider (Keycloak/AAI) URL used to exchange tokens for FirecREST.',
+                                                 example: 'https://aai.my-eurohpc.eu/auth/realms/eurohpc'
+                                             },
+                                             'ExpirioSecretName': {
+                                                 desc: 'The name of the secret in the Expirio vault holding the FirecREST OIDC credentials (clientId and clientSecret).',
+                                                 example: 'discoverer-firecrest-secret'
+                                             },
+                                             'ExpirioClientIdKey': {
+                                                 desc: 'JSON property key representing client_id inside the Expirio secret (defaults to client_id).',
+                                                 example: 'firecrest_client_id'
+                                             },
+                                             'ExpirioClientSecretKey': {
+                                                 desc: 'JSON property key representing client_secret inside the Expirio secret (defaults to client_secret).',
+                                                 example: 'firecrest_client_secret'
+                                             },
+                                             'SshCaSettings:UseCertificateAuthorityForAuthentication': {
+                                                 desc: 'Override whether the SSH CA API should be used for this specific cluster (opt-in or opt-out).',
+                                                 example: 'true'
+                                             },
+                                             'SshCaSettings:BaseUri': {
+                                                 desc: 'Override the SSH CA API base URL for this cluster.',
+                                                 example: 'https://sshca.other-domain.eu'
+                                             },
+                                             'SshCaSettings:CAName': {
+                                                 desc: 'Override the SSH Certification Authority name.',
+                                                 example: 'other-ca-name'
+                                             },
+                                             'SshCaSettings:ConnectionTimeoutInSeconds': {
+                                                 desc: 'Override the SSH CA API timeout.',
+                                                 example: '30'
+                                             },
+                                             'BusinessLogicSettings:SharedAccountsPoolMode': {
+                                                 desc: 'Enable/disable shared account pool mode for this cluster.',
+                                                 example: 'true'
+                                             },
+                                             'BusinessLogicSettings:AutoInitializeProjectCredentialsOnFirstUse': {
+                                                 desc: 'Override whether to automatically initialize project credentials on first use.',
+                                                 example: 'true'
+                                             }
+                                         };
 
-                                        function addParameterRow(key = '', value = '') {
-                                            const rowId = 'kv-row-' + Math.random().toString(36).substr(2, 9);
-                                            const rowDiv = document.createElement('div');
-                                            rowDiv.className = 'row g-2 mb-2 align-items-center';
-                                            rowDiv.id = rowId;
-                                            
-                                            rowDiv.innerHTML = `
-                                                <div class="col-5">
-                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-key" placeholder="Key" value="${escapeHtml(key)}">
-                                                </div>
-                                                <div class="col-6">
-                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-value" placeholder="Value" value="${escapeHtml(value)}">
-                                                </div>
-                                                <div class="col-1 text-end">
-                                                    <button type="button" class="btn btn-xs btn-outline-danger btn-remove-row p-1" title="Remove parameter">
-                                                        <i class="bi bi-dash-lg"></i>
-                                                    </button>
-                                                </div>
-                                            `;
-                                            
-                                            const keyInput = rowDiv.querySelector('.kv-key');
-                                            const valInput = rowDiv.querySelector('.kv-value');
-                                            const btnRemove = rowDiv.querySelector('.btn-remove-row');
-                                            
-                                            keyInput.addEventListener('input', serializeToJSON);
-                                            valInput.addEventListener('input', serializeToJSON);
-                                            btnRemove.addEventListener('click', function() {
-                                                rowDiv.remove();
-                                                serializeToJSON();
-                                            });
-                                            
-                                            kvContainer.appendChild(rowDiv);
-                                            return rowDiv;
-                                        }
+                                         function getParsedJSON() {
+                                             try {
+                                                 const raw = customConfigTextarea.value.trim();
+                                                 if (!raw) return {};
+                                                 const parsed = JSON.parse(raw);
+                                                 return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+                                             } catch (e) {
+                                                 return {};
+                                             }
+                                         }
 
-                                        function escapeHtml(str) {
-                                            return str.replace(/&/g, "&amp;")
-                                                      .replace(/</g, "&lt;")
-                                                      .replace(/>/g, "&gt;")
-                                                      .replace(/"/g, "&quot;")
-                                                      .replace(/'/g, "&#039;");
-                                        }
+                                         function getParsedVaultTogglesJSON() {
+                                             if (!customConfigVaultTogglesTextarea) return {};
+                                             try {
+                                                 const raw = customConfigVaultTogglesTextarea.value.trim();
+                                                 if (!raw) return {};
+                                                 const parsed = JSON.parse(raw);
+                                                 return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+                                             } catch (e) {
+                                                 return {};
+                                             }
+                                         }
 
-                                        function populateUIFromJSON() {
-                                            const data = getParsedJSON();
-                                            
-                                            fcIdpUrl.value = data['IdpUrl'] || '';
-                                            fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
-                                            fcHomeDirectoryTemplate.value = data['HomeDirectoryTemplate'] || '/users/{username}';
-                                            
-                                            qsQSchedulerPort.value = data['QSchedulerPort'] || '3000';
-                                            if (qsQSchedulerUseSessions) {
-                                                qsQSchedulerUseSessions.checked = data['QSchedulerUseSessions'] === 'true';
-                                            }
-                                            if (qsQSchedulerNotifyToken) {
-                                                qsQSchedulerNotifyToken.value = data['QSchedulerNotifyToken'] || '';
-                                            }
-                                            if (qsStoreInVault) {
-                                                const vaultToggles = getParsedVaultTogglesJSON();
-                                                qsStoreInVault.checked = !!vaultToggles['QSchedulerNotifyToken'];
-                                            }
-                                            
-                                            kvContainer.innerHTML = '';
-                                            
-                                            let hasGeneral = false;
-                                            for (const [k, v] of Object.entries(data)) {
-                                                if (!RESERVED_FC_KEYS.includes(k) && !RESERVED_QS_KEYS.includes(k)) {
-                                                    addParameterRow(k, v);
-                                                    hasGeneral = true;
-                                                }
-                                            }
-                                            
-                                            if (!hasGeneral) {
-                                                addParameterRow('', '');
-                                            }
-                                        }
+                                         function addParameterRow(key = '', value = '') {
+                                             const rowId = 'kv-row-' + Math.random().toString(36).substr(2, 9);
+                                             const rowDiv = document.createElement('div');
+                                             rowDiv.className = 'row g-2 mb-2 align-items-start';
+                                             rowDiv.id = rowId;
+                                             
+                                             rowDiv.innerHTML = `
+                                                 <div class="col-5">
+                                                     <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-key" placeholder="Key" value="${escapeHtml(key)}" list="predefined-keys-list">
+                                                 </div>
+                                                 <div class="col-6">
+                                                     <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-value" placeholder="Value" value="${escapeHtml(value)}">
+                                                 </div>
+                                                 <div class="col-1 text-end pt-1">
+                                                     <button type="button" class="btn btn-xs btn-outline-danger btn-remove-row p-1" title="Remove parameter">
+                                                         <i class="bi bi-dash-lg"></i>
+                                                     </button>
+                                                 </div>
+                                                 <div class="col-12 desc-container mb-2" style="display: none; margin-top: 4px;">
+                                                     <div class="bg-white bg-opacity-75 p-2 rounded border border-light-subtle d-flex align-items-start gap-2 text-muted" style="font-size: 0.72rem; line-height: 1.35;">
+                                                         <i class="bi bi-info-circle-fill text-primary" style="margin-top: 2px;"></i>
+                                                         <div class="flex-grow-1">
+                                                             <span class="desc-text"></span>
+                                                             <div class="mt-1 d-flex align-items-center gap-2">
+                                                                 <span>Example: <code class="example-text bg-light text-dark px-1 py-0.5 rounded font-monospace" style="font-size: 0.65rem;"></code></span>
+                                                                 <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none fw-bold btn-use-example" style="font-size: 0.68rem; line-height: 1.2;">Use Example</button>
+                                                             </div>
+                                                         </div>
+                                                     </div>
+                                                 </div>
+                                             `;
+                                             
+                                             const keyInput = rowDiv.querySelector('.kv-key');
+                                             const valInput = rowDiv.querySelector('.kv-value');
+                                             const btnRemove = rowDiv.querySelector('.btn-remove-row');
+                                             const descContainer = rowDiv.querySelector('.desc-container');
+                                             const descText = rowDiv.querySelector('.desc-text');
+                                             const exampleText = rowDiv.querySelector('.example-text');
+                                             const btnUseExample = rowDiv.querySelector('.btn-use-example');
 
-                                        function serializeToJSON() {
-                                            const data = {};
-                                            const vaultToggles = {};
-                                            
-                                            if (schedulerSelect.value === '16') {
-                                                if (fcIdpUrl.value.trim()) {
-                                                    data['IdpUrl'] = fcIdpUrl.value.trim();
-                                                }
-                                                if (fcExpirioSecretName.value.trim()) {
-                                                    data['ExpirioSecretName'] = fcExpirioSecretName.value.trim();
-                                                }
-                                                data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
-                                            } else if (schedulerSelect.value === '32') {
-                                                data['QSchedulerPort'] = qsQSchedulerPort.value.trim() || '3000';
-                                                if (qsQSchedulerUseSessions) {
-                                                    data['QSchedulerUseSessions'] = qsQSchedulerUseSessions.checked ? 'true' : 'false';
-                                                }
-                                                if (qsQSchedulerNotifyToken) {
-                                                    data['QSchedulerNotifyToken'] = qsQSchedulerNotifyToken.value;
-                                                    
-                                                    if (qsStoreInVault) {
-                                                        vaultToggles['QSchedulerNotifyToken'] = qsStoreInVault.checked;
-                                                    }
-                                                }
-                                            }
-                                            
-                                            const rows = kvContainer.querySelectorAll('.row');
-                                            rows.forEach(row => {
-                                                const key = row.querySelector('.kv-key').value.trim();
-                                                const value = row.querySelector('.kv-value').value.trim();
-                                                
-                                                if (key) {
-                                                    if (schedulerSelect.value === '16' && RESERVED_FC_KEYS.includes(key)) {
-                                                        return;
-                                                    }
-                                                    if (schedulerSelect.value === '32' && RESERVED_QS_KEYS.includes(key)) {
-                                                        return;
-                                                    }
-                                                    data[key] = value;
-                                                }
-                                            });
-                                            
-                                            customConfigTextarea.value = JSON.stringify(data, null, 4);
-                                            if (customConfigVaultTogglesTextarea) {
-                                                customConfigVaultTogglesTextarea.value = JSON.stringify(vaultToggles, null, 4);
-                                            }
-                                        }
+                                             function updateMeta() {
+                                                 const k = keyInput.value.trim();
+                                                 const meta = PREDEFINED_KEYS_META[k];
+                                                 if (meta) {
+                                                     descText.textContent = meta.desc;
+                                                     exampleText.textContent = meta.example;
+                                                     descContainer.style.display = 'block';
+                                                 } else {
+                                                     descContainer.style.display = 'none';
+                                                 }
+                                             }
+                                             
+                                             keyInput.addEventListener('input', function() {
+                                                 updateMeta();
+                                                 serializeToJSON();
+                                             });
+                                             valInput.addEventListener('input', serializeToJSON);
+                                             btnRemove.addEventListener('click', function() {
+                                                 rowDiv.remove();
+                                                 serializeToJSON();
+                                             });
 
-                                        function toggleSchedulerSections() {
-                                            if (schedulerSelect.value === '16') {
-                                                fcSettingsSection.style.display = 'block';
-                                                qsSettingsSection.style.display = 'none';
-                                            } else if (schedulerSelect.value === '32') {
-                                                fcSettingsSection.style.display = 'none';
-                                                qsSettingsSection.style.display = 'block';
-                                            } else {
-                                                fcSettingsSection.style.display = 'none';
-                                                qsSettingsSection.style.display = 'none';
-                                            }
-                                            serializeToJSON();
-                                        }
+                                             btnUseExample.addEventListener('click', function(e) {
+                                                 e.preventDefault();
+                                                 const k = keyInput.value.trim();
+                                                 const meta = PREDEFINED_KEYS_META[k];
+                                                 if (meta) {
+                                                     valInput.value = meta.example;
+                                                     serializeToJSON();
+                                                     valInput.dispatchEvent(new Event('input'));
+                                                 }
+                                             });
+                                             
+                                             kvContainer.appendChild(rowDiv);
+                                             updateMeta();
+                                             return rowDiv;
+                                         }
 
-                                        schedulerSelect.addEventListener('change', toggleSchedulerSections);
-                                        
-                                        const fcFields = [fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate];
-                                        fcFields.forEach(input => {
-                                            input.addEventListener('input', serializeToJSON);
-                                        });
-                                        
-                                        qsQSchedulerPort.addEventListener('input', serializeToJSON);
-                                        if (qsQSchedulerUseSessions) {
-                                            qsQSchedulerUseSessions.addEventListener('change', serializeToJSON);
-                                        }
-                                        if (qsQSchedulerNotifyToken) {
-                                            qsQSchedulerNotifyToken.addEventListener('input', serializeToJSON);
-                                        }
-                                        if (qsStoreInVault) {
-                                            qsStoreInVault.addEventListener('change', serializeToJSON);
-                                        }
+                                         function escapeHtml(str) {
+                                             return str.replace(/&/g, "&amp;")
+                                                       .replace(/</g, "&lt;")
+                                                       .replace(/>/g, "&gt;")
+                                                       .replace(/"/g, "&quot;")
+                                                       .replace(/'/g, "&#039;");
+                                         }
 
-                                        btnAddParam.addEventListener('click', function() {
-                                            addParameterRow('', '');
-                                        });
+                                         function populateUIFromJSON() {
+                                             const data = getParsedJSON();
+                                             
+                                             fcIdpUrl.value = data['IdpUrl'] || '';
+                                             fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
+                                             fcHomeDirectoryTemplate.value = data['HomeDirectoryTemplate'] || '/users/{username}';
+                                             
+                                             qsQSchedulerPort.value = data['QSchedulerPort'] || '3000';
+                                             if (qsQSchedulerUseSessions) {
+                                                 qsQSchedulerUseSessions.checked = data['QSchedulerUseSessions'] === 'true';
+                                             }
+                                             if (qsQSchedulerNotifyToken) {
+                                                 qsQSchedulerNotifyToken.value = data['QSchedulerNotifyToken'] || '';
+                                             }
+                                             if (qsStoreInVault) {
+                                                 const vaultToggles = getParsedVaultTogglesJSON();
+                                                 qsStoreInVault.checked = !!vaultToggles['QSchedulerNotifyToken'];
+                                             }
+                                             
+                                             kvContainer.innerHTML = '';
+                                             
+                                             let hasGeneral = false;
+                                             for (const [k, v] of Object.entries(data)) {
+                                                 if (!RESERVED_FC_KEYS.includes(k) && !RESERVED_QS_KEYS.includes(k)) {
+                                                     addParameterRow(k, v);
+                                                     hasGeneral = true;
+                                                 }
+                                             }
+                                             
+                                             if (!hasGeneral) {
+                                                 addParameterRow('', '');
+                                             }
+                                         }
 
-                                        populateUIFromJSON();
+                                         function serializeToJSON() {
+                                             const data = {};
+                                             const vaultToggles = {};
+                                             
+                                             if (schedulerSelect.value === '16') {
+                                                 if (fcIdpUrl.value.trim()) {
+                                                     data['IdpUrl'] = fcIdpUrl.value.trim();
+                                                 }
+                                                 if (fcExpirioSecretName.value.trim()) {
+                                                     data['ExpirioSecretName'] = fcExpirioSecretName.value.trim();
+                                                 }
+                                                 data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
+                                             } else if (schedulerSelect.value === '32') {
+                                                 data['QSchedulerPort'] = qsQSchedulerPort.value.trim() || '3000';
+                                                 if (qsQSchedulerUseSessions) {
+                                                     data['QSchedulerUseSessions'] = qsQSchedulerUseSessions.checked ? 'true' : 'false';
+                                                 }
+                                                 if (qsQSchedulerNotifyToken) {
+                                                     data['QSchedulerNotifyToken'] = qsQSchedulerNotifyToken.value;
+                                                     
+                                                     if (qsStoreInVault) {
+                                                         vaultToggles['QSchedulerNotifyToken'] = qsStoreInVault.checked;
+                                                     }
+                                                 }
+                                             }
+                                             
+                                             const rows = kvContainer.querySelectorAll('.row');
+                                             rows.forEach(row => {
+                                                 const keyEl = row.querySelector('.kv-key');
+                                                 if (!keyEl) return;
+                                                 const key = keyEl.value.trim();
+                                                 const valEl = row.querySelector('.kv-value');
+                                                 const value = valEl ? valEl.value.trim() : '';
+                                                 
+                                                 if (key) {
+                                                     if (schedulerSelect.value === '16' && RESERVED_FC_KEYS.includes(key)) {
+                                                         return;
+                                                     }
+                                                     if (schedulerSelect.value === '32' && RESERVED_QS_KEYS.includes(key)) {
+                                                         return;
+                                                     }
+                                                     data[key] = value;
+                                                 }
+                                             });
+                                             
+                                             customConfigTextarea.value = JSON.stringify(data, null, 4);
+                                             if (customConfigVaultTogglesTextarea) {
+                                                 customConfigVaultTogglesTextarea.value = JSON.stringify(vaultToggles, null, 4);
+                                             }
+                                         }
+
+                                         function toggleSchedulerSections() {
+                                             if (schedulerSelect.value === '16') {
+                                                 fcSettingsSection.style.display = 'block';
+                                                 qsSettingsSection.style.display = 'none';
+                                             } else if (schedulerSelect.value === '32') {
+                                                 fcSettingsSection.style.display = 'none';
+                                                 qsSettingsSection.style.display = 'block';
+                                             } else {
+                                                 fcSettingsSection.style.display = 'none';
+                                                 qsSettingsSection.style.display = 'none';
+                                             }
+                                             serializeToJSON();
+                                         }
+
+                                         schedulerSelect.addEventListener('change', toggleSchedulerSections);
+                                         
+                                         const fcFields = [fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate];
+                                         fcFields.forEach(input => {
+                                             input.addEventListener('input', serializeToJSON);
+                                         });
+                                         
+                                         qsQSchedulerPort.addEventListener('input', serializeToJSON);
+                                         if (qsQSchedulerUseSessions) {
+                                             qsQSchedulerUseSessions.addEventListener('change', serializeToJSON);
+                                         }
+                                         if (qsQSchedulerNotifyToken) {
+                                             qsQSchedulerNotifyToken.addEventListener('input', serializeToJSON);
+                                         }
+                                         if (qsStoreInVault) {
+                                             qsStoreInVault.addEventListener('change', serializeToJSON);
+                                         }
+
+                                         btnAddParam.addEventListener('click', function() {
+                                             addParameterRow('', '');
+                                         });
+
+                                         if (selectPredefinedKey) {
+                                             selectPredefinedKey.addEventListener('change', function() {
+                                                 const selectedKey = selectPredefinedKey.value;
+                                                 if (!selectedKey) return;
+                                                 
+                                                 let existingRow = null;
+                                                 const rows = kvContainer.querySelectorAll('.row');
+                                                 rows.forEach(row => {
+                                                     const keyInput = row.querySelector('.kv-key');
+                                                     if (keyInput && keyInput.value.trim() === selectedKey) {
+                                                         existingRow = row;
+                                                     }
+                                                 });
+                                                 
+                                                 if (existingRow) {
+                                                     const valInput = existingRow.querySelector('.kv-value');
+                                                     if (valInput) {
+                                                         valInput.focus();
+                                                         const keyInput = existingRow.querySelector('.kv-key');
+                                                         keyInput.classList.remove('border-light-subtle');
+                                                         keyInput.classList.add('border-warning', 'shadow-sm');
+                                                         valInput.classList.remove('border-light-subtle');
+                                                         valInput.classList.add('border-warning', 'shadow-sm');
+                                                         setTimeout(() => {
+                                                             keyInput.classList.remove('border-warning', 'shadow-sm');
+                                                             keyInput.classList.add('border-light-subtle');
+                                                             valInput.classList.remove('border-warning', 'shadow-sm');
+                                                             valInput.classList.add('border-light-subtle');
+                                                         }, 1500);
+                                                     }
+                                                 } else {
+                                                     let populated = false;
+                                                     if (rows.length === 1) {
+                                                         const firstKeyInput = rows[0].querySelector('.kv-key');
+                                                         const firstValInput = rows[0].querySelector('.kv-value');
+                                                         if (firstKeyInput && !firstKeyInput.value.trim() && firstValInput && !firstValInput.value.trim()) {
+                                                             firstKeyInput.value = selectedKey;
+                                                             const meta = PREDEFINED_KEYS_META[selectedKey];
+                                                             if (meta) {
+                                                                 firstValInput.value = meta.example;
+                                                             }
+                                                             firstKeyInput.dispatchEvent(new Event('input'));
+                                                             firstValInput.dispatchEvent(new Event('input'));
+                                                             firstValInput.focus();
+                                                             populated = true;
+                                                         }
+                                                     }
+                                                     
+                                                     if (!populated) {
+                                                         const meta = PREDEFINED_KEYS_META[selectedKey];
+                                                         const newRow = addParameterRow(selectedKey, meta ? meta.example : '');
+                                                         const valInput = newRow.querySelector('.kv-value');
+                                                         if (valInput) valInput.focus();
+                                                         serializeToJSON();
+                                                     }
+                                                 }
+                                                 
+                                                 selectPredefinedKey.value = '';
+                                             });
+                                         }
+
+                                         populateUIFromJSON();
                                         toggleSchedulerSections();
 
                                         const form = customConfigTextarea.closest('form');
