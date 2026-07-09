@@ -33,7 +33,7 @@
         </li>
         <li class="nav-item">
             <a class="nav-link {% if active_tab == 'accounts' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=accounts">
-                <i class="bi bi-shield-lock me-1.5"></i>SSH Accounts
+                <i class="bi bi-shield-lock me-1.5"></i>{% if is_v6_4_0_plus %}Credentials{% else %}SSH Accounts{% endif %}
             </a>
         </li>
         {% if ui_features.adaptor_users %}
@@ -688,18 +688,18 @@
     </div>
 
     {% elif active_tab == 'accounts' %}
-    <!-- HPC SSH Accounts Tab -->
+    <!-- HPC Credentials Tab -->
     <div class="row justify-content-center">
         <div class="col-12">
             <div class="card border-0 shadow-sm bg-white mb-4">
                 <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-shield-lock text-primary fs-5"></i>
-                        <h5 class="h6 mb-0 fw-bold text-dark">HPC SSH Accounts</h5>
+                        <h5 class="h6 mb-0 fw-bold text-dark">{% if is_v6_4_0_plus %}HPC Credentials{% else %}HPC SSH Accounts{% endif %}</h5>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#addHpcAccountModal">
-                            <i class="bi bi-plus-lg me-1"></i>Add Account
+                        <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="{% if is_v6_4_0_plus %}#addCredentialModal{% else %}#addHpcAccountModal{% endif %}">
+                            <i class="bi bi-plus-lg me-1"></i>{% if is_v6_4_0_plus %}Add Credential{% else %}Add Account{% endif %}
                         </button>
                         <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();">
                             <i class="bi bi-arrow-clockwise"></i>
@@ -707,6 +707,9 @@
                     </div>
                 </div>
                 <div class="card-body p-0">
+                {% if is_v6_4_0_plus %}
+                    {% include "project_credentials.html" %}
+                {% else %}
                     {% if project_accounts %}
                     <div class="table-responsive">
                         <table class="table table-hover align-top mb-0">
@@ -828,6 +831,7 @@
                     </div>
                     {% endif %}
                 </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -886,6 +890,70 @@
         <div class="modal-footer bg-light border-top">
           <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="addCredentialModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-header bg-light">
+          <h5 class="modal-title">Add New HPC Credential</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post">
+        <style>
+            .password-field { display: none; }
+            #password_opt:checked ~ .password-field { display: block; }
+            .key-field { display: none; }
+            #ssh_keypair_opt:checked ~ .key-field { display: block; }
+        </style>
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_credential">
+        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+        <div class="modal-body p-4">
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold">Select Adaptor User:</label>
+            
+            <select name="adaptor_user" class="form-select border-light-subtle" required>
+            {% for adaptor_user in adaptor_users %}
+                <option value="{{ adaptor_user.id }}" >{{ adaptor_user.username }} (ID: {{adaptor_user.id }})</option>
+            {% endfor %}
+            </select>
+            
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold">HPC Username:</label>
+            <input type="text" class="form-control" name="username" required placeholder="e.g. hpc_jdoe01">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold">Authentication Type:</label><br>
+            <input type="radio" id="ssh_keypair_opt" name="auth_type" value="sshkeypair">
+            <label for="ssh_keypair_opt">SSH Keypair</label>
+            <input type="radio" id="password_opt" name="auth_type" value="password">
+            <label for="password_opt">Password</label>
+            <br><br>
+
+            <div class="password-field">
+                <label class="form-label small text-muted fw-semibold">Password:</label><br>
+                <input type="password" class="form-control" name="cred_password">
+            </div>
+            <div class="key-field">
+                <label class="form-label small text-muted fw-semibold">Key Generation:</label><br>
+                <input type="radio" id="generate" name="key_gen" value="generate">
+                <label for="generate">Generate New Keypair</label>
+                <input type="radio" id="upload" name="key_gen" value="upload">
+                <label for="upload">Upload Existing Private Key</label><br><br>
+                <label class="form-label small text-muted fw-semibold">Passphrase (Optional):</label>
+                <input type="password" class="form-control" name="cred_passphrase">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer bg-light border-top">
+        <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-sm btn-success fw-bold px-3">Create Credential</button>
         </div>
       </form>
     </div>
