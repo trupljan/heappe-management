@@ -478,6 +478,53 @@
             </div>
             {% endif %}
 
+            {% if project_queue_groups %}
+            <!-- Queue Groups Info Panel -->
+            <div class="card border-0 shadow-sm bg-white mb-3">
+                <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi bi-tags text-primary fs-6"></i>
+                    <span class="fw-bold text-dark small">Queue Groups</span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5 ms-1" style="font-size: 0.7rem;">{{ project_queue_groups|length }} assigned</span>
+                </div>
+                <div class="card-body p-2 px-3">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        {% for qg in project_queue_groups %}
+                        <a href="{% url 'queue_group_detail' qg.id %}" class="text-decoration-none">
+                            <div class="d-flex align-items-center gap-1.5 bg-light border border-light-subtle rounded px-2 py-1" style="font-size: 0.8rem;">
+                                <i class="bi bi-tags text-secondary" style="font-size: 0.75rem;"></i>
+                                <span class="fw-semibold text-dark">{{ qg.name }}</span>
+                                {% if qg.allocation_type %}
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5" style="font-size: 0.65rem;">{{ qg.allocation_type }}</span>
+                                {% endif %}
+                                {% if qg.allocation_amount %}
+                                <span class="text-muted ps-1" style="font-size: 0.72rem; border-left: 1px solid #dee2e6;">
+                                    <i class="bi bi-clock ms-1 me-0.5"></i>{{ qg.allocation_amount }}
+                                    {% if project.usage_type == 1 %}NodeHours{% elif project.usage_type == 2 %}CoreHours{% elif project.usage_type == 3 %}Credits{% elif project.usage_type == 4 %}QPUSeconds{% endif %}
+                                </span>
+                                {% endif %}
+                                <span class="text-muted" style="font-size: 0.72rem; border-left: 1px solid #dee2e6;">
+                                    <i class="bi bi-list-ul ms-1 me-0.5"></i>{{ qg.queue_count }} queue{{ qg.queue_count|pluralize }}
+                                </span>
+                            </div>
+                        </a>
+                        {% endfor %}
+
+                    </div>
+                </div>
+            </div>
+            {% elif setup_checklist and not setup_checklist.project_group_linked %}
+            <!-- No Queue Group assigned warning -->
+            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between py-2 px-3 mb-3 small rounded">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-tags text-warning fs-5"></i>
+                    <div>This project is <strong>not assigned to any Queue Group</strong>. Jobs may not be accounted correctly.</div>
+                </div>
+                <a href="{% url 'queue_groups' %}" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold text-decoration-none shadow-sm text-nowrap">
+                    <i class="bi bi-link me-1"></i>Assign Group
+                </a>
+            </div>
+            {% endif %}
+
             <div class="card border-0 shadow-sm bg-white mb-4">
                 <div class="card-header bg-white py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 border-bottom">
                     <div class="d-flex align-items-center gap-2">
