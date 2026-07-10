@@ -113,6 +113,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
     adaptor_users = []
     adaptor_users_not_in_project = []
     ui_features = {}
+    project_queue_groups = []
 
     # Always fetch core project details
     project_data = controller.heappe_management_project_get(Id=project_id, SessionCode=session_code).to_dict()
@@ -260,6 +261,48 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
                     nt_copy['cluster_name'] = c_obj['name']
                     all_cluster_node_types.append(nt_copy)
 
+        # Fetch which queue groups this project is assigned to (with queue counts)
+        try:
+            all_groups_raw = controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=session_code) or []
+            all_groups = [g.to_dict() for g in all_groups_raw]
+            project_aggregations_raw = controller.heappe_management_project_cluster_node_type_aggregations_get(
+                SessionCode=session_code
+            ) or []
+            # Map group_id -> allocation_amount from the assignment record
+            group_allocation_map = {
+                g.cluster_node_type_aggregation_id: (g.allocation_amount or 0)
+                for g in project_aggregations_raw
+                if g.project_id == project_id
+            }
+            assigned_group_ids_for_tab = set(group_allocation_map.keys())
+            for grp in all_groups:
+                if grp['id'] in assigned_group_ids_for_tab:
+                    # Collect queues (cluster node types) assigned to this group
+                    group_queues = [
+                        nt for nt in node_types_cache
+                        if isinstance(nt.get('cluster_node_type_aggregation'), dict)
+                        and nt['cluster_node_type_aggregation'].get('id') == grp['id']
+                    ]
+                    queue_count = len(group_queues)
+                    total_nodes = sum(nt.get('number_of_nodes', 0) or 0 for nt in group_queues)
+                    total_cores = sum(
+                        (nt.get('number_of_nodes', 0) or 0) * (nt.get('cores_per_node', 0) or 0)
+                        for nt in group_queues
+                    )
+                    project_queue_groups.append({
+                        'id': grp['id'],
+                        'name': grp['name'],
+                        'description': grp.get('description', ''),
+                        'allocation_type': grp.get('allocation_type', ''),
+                        'allocation_amount': group_allocation_map[grp['id']],
+                        'queue_count': queue_count,
+                        'total_nodes': total_nodes,
+                        'total_cores': total_cores,
+                    })
+        except Exception as e:
+            print(f"Error fetching queue groups for commandtemplates tab: {e}")
+
+
     elif tab == "accounts":
         project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(
             ProjectId=project_id, SessionCode=session_code
@@ -387,6 +430,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "node_types": node_types,
         "all_cluster_node_types": all_cluster_node_types if tab == "commandtemplates" else [],
         "preset_templates": COMMAND_TEMPLATE_PRESETS if tab == "commandtemplates" else {},
+        "project_queue_groups": project_queue_groups if tab == "commandtemplates" else [],
         "adaptor_users": adaptor_users,
         "adaptor_users_not_in_project": adaptor_users_not_in_project,
         "ui_features": ui_features,
