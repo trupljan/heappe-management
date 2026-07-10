@@ -161,20 +161,76 @@ def wait_for_container_running(container_name, timeout=60, interval=5):
     client = docker.from_env()
     start_time = time.time()
 
+    # Determine project name and service name if possible
+    # e.g., container_name is like "heappe_heappe" -> project: heappe, service: heappe
+    # or "heappe_mssql" -> project: heappe, service: mssql
+    project_name = None
+    service_name = None
+    if "_" in container_name:
+        parts = container_name.split("_", 1)
+        project_name = parts[0]
+        service_name = parts[1]
+        # Map "mssql" service name to "db" or check both if compose service is named "db"
+        if service_name == "mssql":
+            service_name_alt = "db"
+        else:
+            service_name_alt = None
+    else:
+        service_name_alt = None
+
     while time.time() - start_time < timeout:
+        container = None
+        # 1. Try to get container by exact name
         try:
             container = client.containers.get(container_name)
-            container.reload()  # Refresh status
-            status = container.status
-            print(f"Container {container_name} status: {status}")
-            if status == "running":
-                print(f"Container {container_name} is running.")
-                return True
         except docker.errors.NotFound:
-            print(f"Container {container_name} not found yet.")
+            pass
+
+        # 2. Try with common compose suffixes (e.g. _1, -1, _db_1, -db-1)
+        if not container:
+            for suffix in ["_1", "-1", "_db_1", "-db-1"]:
+                try:
+                    container = client.containers.get(f"{container_name}{suffix}")
+                    break
+                except docker.errors.NotFound:
+                    pass
+
+        # 3. Search all containers by project/service labels or name substring
+        if not container:
+            try:
+                for c in client.containers.list(all=True):
+                    c_project = c.labels.get('com.docker.compose.project')
+                    c_service = c.labels.get('com.docker.compose.service')
+                    
+                    if project_name and c_project == project_name:
+                        if c_service == service_name or (service_name_alt and c_service == service_name_alt):
+                            container = c
+                            break
+                    
+                    c_name = c.name.lower()
+                    target_lower = container_name.lower()
+                    if target_lower in c_name or c_name.replace('-', '_').startswith(target_lower):
+                        container = c
+                        break
+            except Exception as ex:
+                print(f"Error listing containers: {ex}")
+
+        if container:
+            try:
+                container.reload()  # Refresh status
+                status = container.status
+                print(f"Container {container.name} status: {status}")
+                if status == "running":
+                    print(f"Container {container.name} is running.")
+                    return True
+            except Exception as ex:
+                print(f"Error checking container status: {ex}")
+        else:
+            print(f"Container matching {container_name} not found yet.")
+            
         time.sleep(interval)
 
-    raise TimeoutError(f"Container {container_name} did not reach 'running' state in {timeout} seconds.")
+    raise TimeoutError(f"Container matching {container_name} did not reach 'running' state in {timeout} seconds.")
 
 
 import secrets
@@ -430,17 +486,37 @@ def handle_global_action(compose_dir, instance_name, action):
             return f"Failed to start database container during restart: {db_result.stderr}", 'danger'
 
         # 3. Wait for the database port to be active
+        db_container = None
+        try:
+            client = docker.from_env()
+            db_container = next((c for c in client.containers.list(all=True)
+                                 if c.labels.get('com.docker.compose.project') == instance_name
+                                 and c.labels.get('com.docker.compose.service') == 'db'), None)
+        except Exception as ex:
+            print(f"Error fetching DB container: {ex}")
+
         if mssql_port:
             port_ready = False
-            for _ in range(60):
+            for _ in range(15):  # Reduced from 60 to 15
+                if db_container:
+                    try:
+                        db_container.reload()
+                        if db_container.status != 'running':
+                            time.sleep(1)
+                            continue
+                    except Exception:
+                        pass
                 if is_port_open("127.0.0.1", mssql_port):
                     port_ready = True
                     break
                 time.sleep(1)
+            # If container is running, proceed even if port connection is blocked on host localhost interface
+            if not port_ready and db_container and db_container.status == 'running':
+                port_ready = True
             if not port_ready:
-                time.sleep(5)
+                time.sleep(2)  # Reduced from 5 to 2
         else:
-            time.sleep(10)
+            time.sleep(3)  # Reduced from 10 to 3
 
         # 4. Start Vault container (before HEAppE so it has time to initialise)
         vault_start_cmd = [
@@ -474,17 +550,37 @@ def handle_global_action(compose_dir, instance_name, action):
         if not vault_host_port:
             vault_host_port = 8200
 
-        # 6. Poll until Vault's HTTP listener is up (max 90 s)
+        # 6. Poll until Vault's HTTP listener is up (max 15 s)
+        vault_container = None
+        try:
+            client = docker.from_env()
+            vault_container = next((c for c in client.containers.list(all=True)
+                                    if c.labels.get('com.docker.compose.project') == instance_name
+                                    and c.labels.get('com.docker.compose.service') == 'vault'), None)
+        except Exception as ex:
+            print(f"Error fetching Vault container: {ex}")
+
         vault_ready = False
-        for _ in range(90):
+        for _ in range(15):  # Reduced from 90 to 15
+            if vault_container:
+                try:
+                    vault_container.reload()
+                    if vault_container.status != 'running':
+                        time.sleep(1)
+                        continue
+                except Exception:
+                    pass
             if is_port_open("127.0.0.1", vault_host_port):
                 vault_ready = True
                 break
             time.sleep(1)
+        # If container is running, proceed even if port connection is blocked on host localhost interface
+        if not vault_ready and vault_container and vault_container.status == 'running':
+            vault_ready = True
 
         # Give Vault a couple of extra seconds to finish its internal init even
         # after the port opens, so the unseal API call succeeds.
-        time.sleep(3)
+        time.sleep(2)  # Reduced from 3 to 2
 
         # 7. Run the unseal one-shot container (initVault profile).
         #    Use `up --no-deps` so we only re-create the unseal service.
@@ -501,7 +597,7 @@ def handle_global_action(compose_dir, instance_name, action):
         unseal_ok = unseal_result.returncode == 0
 
         # 8. Brief pause to let Vault propagate unsealed state to vault-agent
-        time.sleep(5)
+        time.sleep(2)  # Reduced from 5 to 2
 
         # 9. Start remaining services (HEAppE, datastaging, sshagent, telemetry …)
         up_cmd = command + ["up", "-d"]

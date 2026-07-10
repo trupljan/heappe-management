@@ -759,7 +759,7 @@ $(document).ready(function() {
                 success: function(data) {
                     if (!data || !data.containers) return;
                     const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
-                    const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited');
+                    const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                     if (heappe) {
                         $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
                     }
