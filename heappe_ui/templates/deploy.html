@@ -1863,7 +1863,9 @@ $(document).ready(function() {
         const confirmRestart = confirm("Warning: This will restart all services in the HEAppE instance. Are you sure you want to proceed?");
         if (!confirmRestart) return;
 
-        showLoading("Restarting Instance...", "Recreating containers.");
+        showLoading('Restarting Instance…', 'Stopping containers…');
+        runRestartPhases();
+
         $.ajax({
             url: window.location.href,
             type: 'POST',
@@ -1872,10 +1874,23 @@ $(document).ready(function() {
                 InstanceName: '{{ instance_name }}',
                 csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
             },
-            success: () => location.reload(),
-            error: (xhr) => { 
-                hideLoading(); 
-                alert('Restart failed: ' + (xhr.responseJSON?.message || xhr.responseText || 'Server Error')); 
+            success: function(data) {
+                hideLoading();
+                startStartupPolling();
+                const banner = document.getElementById('startup-banner');
+                if (banner) banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            },
+            error: function(xhr) {
+                hideLoading();
+                $('#restart-steps').hide();
+                RESTART_PHASES.forEach(p => {
+                    const $li = $('#' + p.id);
+                    if ($li.length > 0) {
+                        $li.find('.step-icon').html('&#9675;');
+                        $li.css({ 'opacity': 1, 'font-weight': 'normal' });
+                    }
+                });
+                alert('Restart failed: ' + (xhr.responseJSON?.message || xhr.responseText || 'Server Error'));
             }
         });
     });
