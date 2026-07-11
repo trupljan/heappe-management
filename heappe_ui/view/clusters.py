@@ -422,6 +422,19 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
         proxy_list.append(pc_dict)
 
     cluster_dict = cluster.to_dict()
+    # Retrieve raw cluster data to extract CustomConfigurationVaultToggles, which is discarded by the Swagger model
+    try:
+        raw_resp = controller.heappe_management_cluster_get(
+            Id=cluster_id, SessionCode=request.session_code, _preload_content=False
+        )
+        if raw_resp and hasattr(raw_resp, 'data') and isinstance(raw_resp.data, (bytes, str)):
+            raw_data_str = raw_resp.data.decode('utf-8') if isinstance(raw_resp.data, bytes) else raw_resp.data
+            raw_data = json.loads(raw_data_str)
+            vault_toggles = raw_data.get('CustomConfigurationVaultToggles') or raw_data.get('custom_configuration_vault_toggles') or {}
+            cluster_dict['custom_configuration_vault_toggles'] = vault_toggles
+    except Exception as e:
+        print(f"Error fetching raw cluster details for Vault Toggles: {e}")
+
     custom_config_json = request.session.pop('invalid_custom_config', None)
     if custom_config_json is None:
         if 'custom_configuration' in cluster_dict:
