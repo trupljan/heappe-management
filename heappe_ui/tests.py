@@ -2339,4 +2339,99 @@ class ApiSessionCodePatchingTests(TestCase):
         self.assertEqual(client2.configuration.api_key_prefix.get("X-Api-token"), "")
 
 
+class LogViewerJsonTests(TestCase):
+    def test_parse_json_log_line_basic(self):
+        from heappe_ui.views import parse_json_log_line
+        line = '{"timestamp":"2026-07-13T09:34:15.523Z","level":"INFO","logger":"MyLogger","message":"Hello world","requestId":"req123","userId":10,"userName":"johndoe","exception":""}'
+        parsed = parse_json_log_line(line)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed['level'], 'INFO')
+        self.assertEqual(parsed['timestamp_str'], '2026-07-13 09:34:15')
+        self.assertIn('[req123]', parsed['content'])
+        self.assertIn('johndoe(10)', parsed['content'])
+        self.assertIn('MyLogger', parsed['content'])
+        self.assertIn('Hello world', parsed['content'])
+
+    def test_parse_json_log_line_exception(self):
+        from heappe_ui.views import parse_json_log_line
+        line = '{"timestamp":"2026-07-13T09:34:15.000Z","level":"ERROR","logger":"Logger","message":"Failure","requestId":null,"userId":null,"userName":null,"exception":"Stacktrace here"}'
+        parsed = parse_json_log_line(line)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed['level'], 'ERROR')
+        self.assertIn('Failure\nStacktrace here', parsed['content'])
+        self.assertIn('[-]', parsed['content'])
+
+    def test_parse_log_line_routes_to_json(self):
+        from heappe_ui.views import parse_log_line
+        line = '{"timestamp":"2026-07-13T09:34:15.523Z","level":"WARN","logger":"Logger","message":"Warning msg","requestId":"req1"}'
+        parsed = parse_log_line(line)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed['level'], 'WARN')
+        self.assertIn('[req1]', parsed['content'])
+
+    @mock.patch('os.path.exists')
+    @mock.patch('os.listdir')
+    @mock.patch('os.path.getmtime')
+    def test_get_log_file_paths_includes_json(self, mock_getmtime, mock_listdir, mock_exists):
+        from heappe_ui.views import get_log_file_paths
+        mock_exists.return_value = True
+        mock_listdir.return_value = ['2026_07_13.log', '2026_07_13.json', '2026_07_13.json.1', 'other.log']
+        mock_getmtime.side_effect = lambda path: 10 if 'json.1' in path else 20
+        
+        paths = get_log_file_paths('test_instance', '2026-07-13')
+        self.assertEqual(len(paths), 3)
+        self.assertIn('/opt/heappe-deployment/test_instance/app/logs/API/2026_07_13.json.1', paths[0])
+
+    def test_get_log_entries_backwards_json(self):
+        from heappe_ui.views import get_log_entries_backwards
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            tmp.write('{"timestamp":"2026-07-13T09:34:15.000Z","level":"INFO","logger":"L","message":"Line 1","requestId":"r1"}\n')
+            tmp.write('{"timestamp":"2026-07-13T09:34:16.000Z","level":"WARN","logger":"L","message":"Line 2","requestId":"r2"}\n')
+            tmp_path = tmp.name
+        
+        try:
+            entries = list(get_log_entries_backwards([tmp_path], max_entries=10))
+            self.assertEqual(len(entries), 2)
+            self.assertEqual(entries[0]['level'], 'WARN')
+            self.assertIn('Line 2', entries[0]['content'])
+            self.assertEqual(entries[1]['level'], 'INFO')
+            self.assertIn('Line 1', entries[1]['content'])
+        finally:
+            import os
+            os.remove(tmp_path)
+
+    def test_fetch_new_logs_json_endpoint(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+        from heappe_ui.views import fetch_new_logs
+        
+        factory = RequestFactory()
+        user = User.objects.create_user(username='testuser_logs', password='password')
+        
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            tmp.write('{"timestamp":"2026-07-13T09:34:15.000Z","level":"INFO","logger":"L","message":"Test1"}\n')
+            incomplete_pos = tmp.tell()
+            tmp.write('{"timestamp":"2026-07-13T09:34:16.000Z","level":"WARN","logger":"L","message":"Test2"')
+            tmp_path = tmp.name
+            
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_path', return_value=tmp_path):
+                req = factory.get('/fetch-new-logs/?offset=0')
+                req.user = user
+                req.session = {'chosen_instance': 'test'}
+                resp = fetch_new_logs(req)
+                self.assertEqual(resp.status_code, 200)
+                import json as pyjson
+                data = pyjson.loads(resp.content.decode('utf-8'))
+                
+                self.assertEqual(len(data['entries']), 1)
+                self.assertEqual(data['entries'][0]['level'], 'INFO')
+                self.assertIn('Test1', data['entries'][0]['content'])
+                self.assertEqual(data['offset'], incomplete_pos)
+        finally:
+            import os
+            os.remove(tmp_path)
+            user.delete()
+
+
 

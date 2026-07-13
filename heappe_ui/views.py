@@ -1310,7 +1310,55 @@ def get_lines_backwards(file_path):
             yield remnant.decode('utf-8', errors='ignore')
 
 
+def parse_json_log_line(line):
+    try:
+        data = json.loads(line)
+        if not isinstance(data, dict):
+            return None
+        
+        timestamp_str = data.get('timestamp')
+        if timestamp_str:
+            timestamp_str = timestamp_str.replace('T', ' ').split('.')[0].rstrip('Z')
+            
+        level = data.get('level', 'INFO').upper()
+        
+        request_id = data.get('requestId')
+        conn_str = f"[{request_id}]" if request_id else "[-]"
+        
+        user_name = data.get('userName')
+        user_id = data.get('userId')
+        if user_name or user_id:
+            user_str = f"{user_name or ''}({user_id or ''})".strip()
+        else:
+            user_str = "-"
+            
+        logger = data.get('logger', '')
+        message = data.get('message', '')
+        exception = data.get('exception', '')
+        
+        if exception:
+            full_msg = f"{message}\n{exception}"
+        else:
+            full_msg = message
+            
+        formatted_content = f"{level}  {timestamp_str}  {conn_str}  {user_str}  {logger} - {full_msg}"
+        
+        return {
+            'timestamp_str': timestamp_str,
+            'level': level,
+            'content': formatted_content
+        }
+    except Exception:
+        return None
+
+
 def parse_log_line(line):
+    line_stripped = line.strip()
+    if line_stripped.startswith('{') and line_stripped.endswith('}'):
+        parsed_json = parse_json_log_line(line_stripped)
+        if parsed_json:
+            return parsed_json
+
     timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
     timestamp_str = timestamp_match.group(1) if timestamp_match else None
 
@@ -1376,33 +1424,47 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
         if not log_path or not os.path.exists(log_path):
             continue
             
-        current_entry_lines = []
+        is_json = log_path.endswith('.json') or '.json.' in os.path.basename(log_path)
         
-        for line in get_lines_backwards(log_path):
-            ts_match = timestamp_re.search(line[:30])
+        if is_json:
+            for line in get_lines_backwards(log_path):
+                line_stripped = line.strip()
+                if not line_stripped:
+                    continue
+                parsed = parse_json_log_line(line_stripped)
+                if parsed and matches_filters(parsed, level_filter, search_query, time_from, time_to):
+                    yield parsed
+                    entries_count += 1
+                    if entries_count >= max_entries:
+                        return
+        else:
+            current_entry_lines = []
             
-            if ts_match:
-                current_entry_lines.insert(0, line)
-                entry_text = "".join(current_entry_lines)
-                current_entry_lines = []
+            for line in get_lines_backwards(log_path):
+                ts_match = timestamp_re.search(line[:30])
                 
+                if ts_match:
+                    current_entry_lines.insert(0, line)
+                    entry_text = "".join(current_entry_lines)
+                    current_entry_lines = []
+                    
+                    parsed = parse_log_line(entry_text)
+                    if matches_filters(parsed, level_filter, search_query, time_from, time_to):
+                        yield parsed
+                        entries_count += 1
+                        if entries_count >= max_entries:
+                            return
+                else:
+                    current_entry_lines.insert(0, line)
+                    
+            if current_entry_lines:
+                entry_text = "".join(current_entry_lines)
                 parsed = parse_log_line(entry_text)
                 if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                     yield parsed
                     entries_count += 1
                     if entries_count >= max_entries:
                         return
-            else:
-                current_entry_lines.insert(0, line)
-                
-        if current_entry_lines:
-            entry_text = "".join(current_entry_lines)
-            parsed = parse_log_line(entry_text)
-            if matches_filters(parsed, level_filter, search_query, time_from, time_to):
-                yield parsed
-                entries_count += 1
-                if entries_count >= max_entries:
-                    return
 
 
 def get_log_file_paths(instance, date_str):
@@ -1412,8 +1474,8 @@ def get_log_file_paths(instance, date_str):
     if not os.path.exists(base_path):
         return []
 
-    # Match files like YYYY_MM_DD.log or YYYY_MM_DD.log.X
-    pattern = re.compile(rf"^{re.escape(date_formatted)}\.log(?:\.\d+)?$")
+    # Match files like YYYY_MM_DD.log/YYYY_MM_DD.json or YYYY_MM_DD.log.X/YYYY_MM_DD.json.X
+    pattern = re.compile(rf"^{re.escape(date_formatted)}\.(?:log|json)(?:\.\d+)?$")
     
     matching_files = []
     for f in os.listdir(base_path):
@@ -1507,29 +1569,52 @@ def fetch_new_logs(request):
         new_offset = f.tell()
         
     if chunk:
+        # Step back the reading offset if the last read line is incomplete
+        if not chunk.endswith(b'\n') and not chunk.endswith(b'\r'):
+            last_newline_idx = max(chunk.rfind(b'\n'), chunk.rfind(b'\r'))
+            if last_newline_idx != -1:
+                incomplete_bytes_len = len(chunk) - (last_newline_idx + 1)
+                chunk = chunk[:last_newline_idx + 1]
+                new_offset -= incomplete_bytes_len
+            else:
+                chunk = b''
+                new_offset = offset
+
+    if chunk:
         decoded = chunk.decode('utf-8', errors='ignore')
         lines = decoded.splitlines(keepends=True)
         
-        current_entry_lines = []
-        timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+        is_json = log_path.endswith('.json') or '.json.' in os.path.basename(log_path)
         
-        for line in lines:
-            if timestamp_re.search(line[:30]):
-                if current_entry_lines:
-                    entry_text = "".join(current_entry_lines)
-                    parsed = parse_log_line(entry_text)
-                    if matches_filters(parsed, level_filter, search_query, None, None):
-                        new_entries.append(parsed)
-                current_entry_lines = [line]
-            else:
-                current_entry_lines.append(line)
-                
-        if current_entry_lines:
-            entry_text = "".join(current_entry_lines)
-            parsed = parse_log_line(entry_text)
-            if matches_filters(parsed, level_filter, search_query, None, None):
-                new_entries.append(parsed)
-                
+        if is_json:
+            for line in lines:
+                line_stripped = line.strip()
+                if not line_stripped:
+                    continue
+                parsed = parse_json_log_line(line_stripped)
+                if parsed and matches_filters(parsed, level_filter, search_query, None, None):
+                    new_entries.append(parsed)
+        else:
+            current_entry_lines = []
+            timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+            
+            for line in lines:
+                if timestamp_re.search(line[:30]):
+                    if current_entry_lines:
+                        entry_text = "".join(current_entry_lines)
+                        parsed = parse_log_line(entry_text)
+                        if matches_filters(parsed, level_filter, search_query, None, None):
+                            new_entries.append(parsed)
+                    current_entry_lines = [line]
+                else:
+                    current_entry_lines.append(line)
+                    
+            if current_entry_lines:
+                entry_text = "".join(current_entry_lines)
+                parsed = parse_log_line(entry_text)
+                if matches_filters(parsed, level_filter, search_query, None, None):
+                    new_entries.append(parsed)
+                    
     return JsonResponse({
         'entries': new_entries,
         'offset': new_offset
