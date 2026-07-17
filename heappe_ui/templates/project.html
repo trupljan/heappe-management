@@ -956,7 +956,8 @@
         <div class="modal-body p-4">
           <div class="mb-3">
             <label class="form-label small text-muted fw-semibold">Select Adaptor User</label>
-            <select name="adaptor_user" class="form-select border-light-subtle bg-white" required>
+            <select name="adaptor_user" class="form-select border-light-subtle bg-white">
+                <option value="">Service Account (All Users)</option>
                 {% for u in adaptor_users %}
                     <option value="{{ u.id }}">{{ u.username }} (ID: {{ u.id }})</option>
                 {% endfor %}
@@ -969,19 +970,24 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label small text-muted fw-semibold d-block">Authentication Type</label>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="radio" name="auth_type" id="addAuthTypeSsh" value="sshkeypair" checked onchange="toggleAddAuthFields()">
-              <label class="form-check-label small text-dark" for="addAuthTypeSsh">SSH Keypair</label>
-            </div>
-            <div class="form-check form-check-inline">
-              <input class="form-check-input" type="radio" name="auth_type" id="addAuthTypePassword" value="password" onchange="toggleAddAuthFields()">
-              <label class="form-check-label small text-dark" for="addAuthTypePassword">Password</label>
-            </div>
+            <label class="form-label small text-muted fw-semibold">Authentication Type</label>
+            <select name="auth_type" id="addAuthTypeSelect" class="form-select form-select-sm border-light-subtle bg-white" required onchange="toggleAddAuthFields()">
+                <option value="" disabled selected>Select authentication type...</option>
+                <optgroup label="Without Proxy">
+                    {% for val, name in preferred_auth_types_no_proxy %}
+                        <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="With Proxy (at HEAppE Cluster)">
+                    {% for val, name in preferred_auth_types_with_proxy %}
+                        <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+            </select>
           </div>
 
           <!-- SSH Keypair Config Panel -->
-          <div id="addSshPanel" class="p-3 bg-light rounded border border-light-subtle mb-3">
+          <div id="addSshPanel" class="p-3 bg-light rounded border border-light-subtle mb-3" style="display: none;">
             <div class="mb-3">
               <label class="form-label small text-muted fw-semibold d-block">Key Generation</label>
               <div class="form-check form-check-inline">
@@ -1577,19 +1583,29 @@ function deleteCommandTemplate(actionUrl) {
 }
 
 function toggleAddAuthFields() {
-    const isSsh = document.getElementById('addAuthTypeSsh').checked;
+    const select = document.getElementById('addAuthTypeSelect');
+    const val = parseInt(select.value);
     const sshPanel = document.getElementById('addSshPanel');
     const passwordPanel = document.getElementById('addPasswordPanel');
     const passwordInput = document.getElementById('addPasswordInput');
 
+    // Private key based: 3 (pwd & key), 4 (key), 7 (pwd & key proxy), 8 (key proxy), 9 (key agent), 10 (key vault/agent)
+    const isSsh = [3, 4, 7, 8, 9, 10].includes(val);
+    // Password based: 1 (pwd), 2 (pwd interactive), 3 (pwd & key), 5 (pwd proxy), 6 (pwd interactive proxy), 7 (pwd & key proxy)
+    const isPassword = [1, 2, 3, 5, 6, 7].includes(val);
+
     if (isSsh) {
         sshPanel.style.display = 'block';
-        passwordPanel.style.display = 'none';
-        passwordInput.required = false;
     } else {
         sshPanel.style.display = 'none';
+    }
+
+    if (isPassword) {
         passwordPanel.style.display = 'block';
         passwordInput.required = true;
+    } else {
+        passwordPanel.style.display = 'none';
+        passwordInput.required = false;
     }
 }
 

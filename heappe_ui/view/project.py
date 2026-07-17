@@ -329,8 +329,11 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             for project_credential in project_credentials:
                 project_credential["auth_type_str"] = PREFERRED_AUTH_TYPE_CHOICES.get(project_credential["auth_type"], "Unknown")
                 
-                matched_users = [user["username"] for user in adaptor_users if user["id"] == project_credential["adaptor_user_id"]]
-                project_credential["adaptor_username"] = matched_users[0] if matched_users else "Unknown"
+                if project_credential.get("adaptor_user_id") is not None:
+                    matched_users = [user["username"] for user in adaptor_users if user["id"] == project_credential["adaptor_user_id"]]
+                    project_credential["adaptor_username"] = matched_users[0] if matched_users else f"Unknown (ID: {project_credential['adaptor_user_id']})"
+                else:
+                    project_credential["adaptor_username"] = "Service Account (All Users)"
                 
                 # add status safely
                 try:
@@ -1536,29 +1539,35 @@ def job_live_details_partial(request: HttpRequest, job_id: int) -> HttpResponse:
 @login_required
 def create_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     controller = hp.CredentialsApi(request.api_instance)
-    #project_id = int(request.POST.get("ProjectId"))
 
     cred_passphrase = None
     cred_password = None
     generate_new_key = None
     provided_private_key = None
 
-    auth_type_int = 0
-    auth_type = request.POST.get("auth_type")
-    if auth_type == "sshkeypair":
-        auth_type_int = 4
-        cred_passphrase = request.POST.get("cred_passphrase") 
-        generate_new_key = request.POST.get("key_gen") == "generate" 
-    elif auth_type == "password":
-        auth_type_int = 1
-        cred_password = request.POST.get("cred_password")
+    auth_type = int(request.POST.get("auth_type"))
+    
+    # Private key based: 3 (pwd & key), 4 (key), 7 (pwd & key proxy), 8 (key proxy), 9 (key agent), 10 (key vault/agent)
+    if auth_type in (3, 4, 7, 8, 9, 10):
+        cred_passphrase = request.POST.get("cred_passphrase") or None
+        generate_new_key = request.POST.get("key_gen") == "generate"
+        if not generate_new_key:
+            provided_private_key = request.POST.get("provided_private_key", "").strip() or None
+            
+    # Password based: 1 (pwd), 2 (pwd interactive), 3 (pwd & key), 5 (pwd proxy), 6 (pwd interactive proxy), 7 (pwd & key proxy)
+    if auth_type in (1, 2, 3, 5, 6, 7):
+        cred_password = request.POST.get("cred_password") or None
+
+    adaptor_user_id = request.POST.get("adaptor_user")
+    if adaptor_user_id == "" or adaptor_user_id == "None":
+        adaptor_user_id = None
 
     payload_data = {
         "ProjectId": project_id,
         "SessionCode": request.session_code,
-        "AdaptorUserId": request.POST.get("adaptor_user"),
+        "AdaptorUserId": adaptor_user_id,
         "Username": request.POST.get("username"),
-        "AuthType": auth_type_int,
+        "AuthType": auth_type,
         "GenerateNewKey": generate_new_key,
         "ProvidedPrivateKey": provided_private_key,
         "Passphrase": cred_passphrase,
@@ -1609,11 +1618,14 @@ def delete_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     controller = hp.CredentialsApi(request.api_instance)
     #project_id = int(request.POST.get("ProjectId"))
 
+    adaptor_user_id = request.POST.get("AdaptorUserId")
+    if adaptor_user_id == "" or adaptor_user_id == "None":
+        adaptor_user_id = None
+
     payload_data = {
         "ProjectId": project_id,
         "SessionCode": request.session_code,
-        #"CredentialId": request.POST.get("CredentialId"),
-        "AdaptorUserId": request.POST.get("AdaptorUserId"),
+        "AdaptorUserId": adaptor_user_id,
         "Username": request.POST.get("Username"),
     }
     payload = _create_payload(request.session_code, payload_data)
