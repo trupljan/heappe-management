@@ -33,7 +33,7 @@
         </li>
         <li class="nav-item">
             <a class="nav-link {% if active_tab == 'accounts' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=accounts">
-                <i class="bi bi-shield-lock me-1.5"></i>SSH Accounts
+                <i class="bi bi-shield-lock me-1.5"></i>{% if is_v6_4_0_plus %}Credentials{% else %}SSH Accounts{% endif %}
             </a>
         </li>
         {% if ui_features.adaptor_users %}
@@ -732,18 +732,18 @@
     </div>
 
     {% elif active_tab == 'accounts' %}
-    <!-- HPC SSH Accounts Tab -->
+    <!-- HPC Credentials Tab -->
     <div class="row justify-content-center">
         <div class="col-12">
             <div class="card border-0 shadow-sm bg-white mb-4">
                 <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
                     <div class="d-flex align-items-center gap-2">
                         <i class="bi bi-shield-lock text-primary fs-5"></i>
-                        <h5 class="h6 mb-0 fw-bold text-dark">HPC SSH Accounts</h5>
+                        <h5 class="h6 mb-0 fw-bold text-dark">{% if is_v6_4_0_plus %}HPC Credentials{% else %}HPC SSH Accounts{% endif %}</h5>
                     </div>
                     <div class="d-flex align-items-center gap-2">
-                        <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#addHpcAccountModal">
-                            <i class="bi bi-plus-lg me-1"></i>Add Account
+                        <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="{% if is_v6_4_0_plus %}#addCredentialModal{% else %}#addHpcAccountModal{% endif %}">
+                            <i class="bi bi-plus-lg me-1"></i>{% if is_v6_4_0_plus %}Add Credential{% else %}Add Account{% endif %}
                         </button>
                         <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();">
                             <i class="bi bi-arrow-clockwise"></i>
@@ -751,6 +751,9 @@
                     </div>
                 </div>
                 <div class="card-body p-0">
+                {% if is_v6_4_0_plus %}
+                    {% include "project_credentials.html" %}
+                {% else %}
                     {% if project_accounts %}
                     <div class="table-responsive">
                         <table class="table table-hover align-top mb-0">
@@ -872,6 +875,7 @@
                     </div>
                     {% endif %}
                 </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -930,6 +934,89 @@
         <div class="modal-footer bg-light border-top">
           <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
           <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="addCredentialModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_credential">
+        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+        
+        <div class="modal-header bg-light py-3">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-plus-lg me-1 text-primary"></i>Add HPC Credential</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body p-4">
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold">Select Adaptor User</label>
+            <select name="adaptor_user" class="form-select border-light-subtle bg-white" required>
+                {% for u in adaptor_users %}
+                    <option value="{{ u.id }}">{{ u.username }} (ID: {{ u.id }})</option>
+                {% endfor %}
+            </select>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold">HPC Username</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white font-monospace" name="username" required placeholder="e.g. hpc_user">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold d-block">Authentication Type</label>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="auth_type" id="addAuthTypeSsh" value="sshkeypair" checked onchange="toggleAddAuthFields()">
+              <label class="form-check-label small text-dark" for="addAuthTypeSsh">SSH Keypair</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="auth_type" id="addAuthTypePassword" value="password" onchange="toggleAddAuthFields()">
+              <label class="form-check-label small text-dark" for="addAuthTypePassword">Password</label>
+            </div>
+          </div>
+
+          <!-- SSH Keypair Config Panel -->
+          <div id="addSshPanel" class="p-3 bg-light rounded border border-light-subtle mb-3">
+            <div class="mb-3">
+              <label class="form-label small text-muted fw-semibold d-block">Key Generation</label>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="key_gen" id="addGenKeyTrue" value="generate" checked onchange="toggleAddKeyGenFields()">
+                <label class="form-check-label small text-dark" for="addGenKeyTrue">Generate New Keypair</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="key_gen" id="addGenKeyFalse" value="upload" onchange="toggleAddKeyGenFields()">
+                <label class="form-check-label small text-dark" for="addGenKeyFalse">Upload Existing Private Key</label>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small text-muted fw-semibold">Passphrase (Optional)</label>
+              <input type="password" class="form-control form-control-sm border-light-subtle bg-white" name="cred_passphrase" placeholder="Key passphrase">
+            </div>
+
+            <div id="addUploadKeyContainer" class="mb-2" style="display: none;">
+              <label class="form-label small text-muted fw-semibold">Provided Private Key</label>
+              <textarea class="form-control form-control-sm border-light-subtle bg-white font-monospace small" name="provided_private_key" rows="5" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+            </div>
+          </div>
+
+          <!-- Password Config Panel -->
+          <div id="addPasswordPanel" class="p-3 bg-light rounded border border-light-subtle mb-3" style="display: none;">
+            <div class="mb-2">
+              <label class="form-label small text-muted fw-semibold">Password</label>
+              <input type="password" id="addPasswordInput" class="form-control form-control-sm border-light-subtle bg-white" name="cred_password" placeholder="HPC Password">
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer bg-light border-top">
+            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-sm btn-success fw-bold px-3">Create Credential</button>
         </div>
       </form>
     </div>
@@ -1487,6 +1574,37 @@ function deleteCommandTemplate(actionUrl) {
     form.appendChild(csrfInput);
     document.body.appendChild(form);
     form.submit();
+}
+
+function toggleAddAuthFields() {
+    const isSsh = document.getElementById('addAuthTypeSsh').checked;
+    const sshPanel = document.getElementById('addSshPanel');
+    const passwordPanel = document.getElementById('addPasswordPanel');
+    const passwordInput = document.getElementById('addPasswordInput');
+
+    if (isSsh) {
+        sshPanel.style.display = 'block';
+        passwordPanel.style.display = 'none';
+        passwordInput.required = false;
+    } else {
+        sshPanel.style.display = 'none';
+        passwordPanel.style.display = 'block';
+        passwordInput.required = true;
+    }
+}
+
+function toggleAddKeyGenFields() {
+    const isUpload = document.getElementById('addGenKeyFalse').checked;
+    const container = document.getElementById('addUploadKeyContainer');
+    const textarea = container.querySelector('textarea');
+
+    if (isUpload) {
+        container.style.display = 'block';
+        textarea.required = true;
+    } else {
+        container.style.display = 'none';
+        textarea.required = false;
+    }
 }
 </script>
 {% endblock %}
