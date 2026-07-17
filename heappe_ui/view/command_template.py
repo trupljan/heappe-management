@@ -14,6 +14,12 @@ COMMAND_TEMPLATE_PRESETS = {
                 "Query": None
             }
         ]
+    },
+    "generic": {
+        "name": "GenericCommandTemplate",
+        "description": "Generic command template",
+        "is_generic": True,
+        "parameters": []
     }
 }
 

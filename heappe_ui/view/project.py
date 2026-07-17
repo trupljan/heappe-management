@@ -1351,33 +1351,53 @@ def _create_preset_template(request: HttpRequest, project_id: int, controller: h
         return response
 
     preset = COMMAND_TEMPLATE_PRESETS[preset_name]
-    key_scripts_dir = project_data.get('key_scripts_directory_path') or ''
-    suffix = preset['executable_file_suffix']
-    if key_scripts_dir and not key_scripts_dir.endswith('/'):
-        executable_file = f"{key_scripts_dir}/{suffix}"
+    is_generic = preset.get("is_generic", False)
+
+    if is_generic:
+        # Generic command templates use a different API endpoint
+        payload_data = {
+            "ProjectId": project_id,
+            "Name": preset["name"],
+            "Description": preset["description"],
+            "ExtendedAllocationCommand": "",
+            "PreparationScript": "",
+            "ClusterNodeTypeId": cluster_node_type_id,
+        }
+        payload = _create_payload(session_code, payload_data)
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_generic_command_template_post(**payload),
+            None,
+            "Failed to create Generic Command Template"
+        )
     else:
-        executable_file = f"{key_scripts_dir}{suffix}"
+        key_scripts_dir = project_data.get('key_scripts_directory_path') or ''
+        suffix = preset['executable_file_suffix']
+        if key_scripts_dir and not key_scripts_dir.endswith('/'):
+            executable_file = f"{key_scripts_dir}/{suffix}"
+        else:
+            executable_file = f"{key_scripts_dir}{suffix}"
 
-    # Step 1: Create template
-    payload_data = {
-        "ProjectId": project_id,
-        "Name": preset["name"],
-        "Description": preset["description"],
-        "ExtendedAllocationCommand": "",
-        "ExecutableFile": executable_file,
-        "PreparationScript": "",
-        "ClusterNodeTypeId": cluster_node_type_id,
-        "IsEnabled": True,
-        "TemplateParameters": []
-    }
+        # Step 1: Create template
+        payload_data = {
+            "ProjectId": project_id,
+            "Name": preset["name"],
+            "Description": preset["description"],
+            "ExtendedAllocationCommand": "",
+            "ExecutableFile": executable_file,
+            "PreparationScript": "",
+            "ClusterNodeTypeId": cluster_node_type_id,
+            "IsEnabled": True,
+            "TemplateParameters": []
+        }
 
-    payload = _create_payload(session_code, payload_data)
-    result = _handle_api_call(
-        request,
-        lambda: controller.heappe_management_command_template_post(**payload),
-        None,  # Do not display a generic success message
-        "Failed to create Command Template"
-    )
+        payload = _create_payload(session_code, payload_data)
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_command_template_post(**payload),
+            None,  # Do not display a generic success message
+            "Failed to create Command Template"
+        )
 
     if not result or not result.get('Id'):
         response = redirect("project_detail", project_id=project_id)
@@ -1409,10 +1429,11 @@ def _create_preset_template(request: HttpRequest, project_id: int, controller: h
     if cache_time_key in request.session:
         del request.session[cache_time_key]
 
+    template_label = "Generic Command Template" if is_generic else f"Quick Preset Template '{preset['name']}'"
     if params_ok:
-        messages.success(request, f"Quick Preset Template '{preset['name']}' created successfully with parameters!")
+        messages.success(request, f"{template_label} created successfully!" + (" with parameters!" if preset.get("parameters") else ""))
     else:
-        messages.success(request, f"Quick Preset Template '{preset['name']}' created, but some parameters failed to add.")
+        messages.success(request, f"{template_label} created, but some parameters failed to add.")
 
     response = redirect("project_detail", project_id=project_id)
     response['Location'] += "?tab=commandtemplates"

@@ -1064,7 +1064,7 @@
                 <label class="form-label small text-muted fw-semibold">Select Preset Template</label>
                 <select class="form-select border-light-subtle" id="presetSelect" name="preset_name" required>
                     {% for key, val in preset_templates.items %}
-                        <option value="{{ key }}" data-desc="{{ val.description }}" data-suffix="{{ val.executable_file_suffix }}" data-params="{% for p in val.parameters %}{{ p.Identifier }}{% if not forloop.last %}, {% endif %}{% endfor %}">
+                        <option value="{{ key }}" data-desc="{{ val.description }}" data-suffix="{{ val.executable_file_suffix|default:'' }}" data-params="{% for p in val.parameters %}{{ p.Identifier }}{% if not forloop.last %}, {% endif %}{% endfor %}" data-generic="{% if val.is_generic %}true{% else %}false{% endif %}">
                             {{ val.name }}
                         </option>
                     {% endfor %}
@@ -1090,7 +1090,7 @@
 
             <!-- Details Preview Card -->
             <div class="card bg-light border-0 rounded p-3 mb-2 small text-muted">
-                <div class="d-flex justify-content-between mb-2">
+                <div id="presetExecutableFileRow" class="d-flex justify-content-between mb-2">
                     <span class="fw-semibold text-dark">Executable File:</span>
                     <span id="presetExecutableFile" class="font-monospace text-end text-break text-primary" style="max-width: 65%;"></span>
                 </div>
@@ -1098,9 +1098,13 @@
                     <span class="fw-semibold text-dark">Description:</span>
                     <span id="presetDesc" class="text-end text-dark-emphasis" style="max-width: 65%;"></span>
                 </div>
-                <div class="d-flex justify-content-between">
+                <div id="presetParamsRow" class="d-flex justify-content-between">
                     <span class="fw-semibold text-dark">Parameters to Create:</span>
                     <span id="presetParams" class="font-monospace text-success-emphasis text-end" style="max-width: 65%;"></span>
+                </div>
+                <div id="presetGenericInfo" class="d-flex align-items-center gap-2 mt-2" style="display: none !important;">
+                    <i class="bi bi-info-circle text-info"></i>
+                    <span class="text-info-emphasis">Generic templates are created via a separate API and don't require an executable file.</span>
                 </div>
             </div>
         </div>
@@ -1244,17 +1248,32 @@ document.addEventListener('DOMContentLoaded', function () {
                 const desc = selectedOpt.getAttribute('data-desc') || '';
                 const suffix = selectedOpt.getAttribute('data-suffix') || '';
                 const params = selectedOpt.getAttribute('data-params') || 'None';
+                const isGeneric = selectedOpt.getAttribute('data-generic') === 'true';
                 
-                let fullPath = projectKeyScriptsDir;
-                if (fullPath && !fullPath.endsWith('/')) {
-                    fullPath += '/' + suffix;
+                const execRow = document.getElementById('presetExecutableFileRow');
+                const paramsRow = document.getElementById('presetParamsRow');
+                const genericInfo = document.getElementById('presetGenericInfo');
+                
+                if (isGeneric) {
+                    if (execRow) execRow.style.display = 'none';
+                    if (paramsRow) paramsRow.style.display = 'none';
+                    if (genericInfo) genericInfo.style.display = 'flex';
                 } else {
-                    fullPath += suffix;
+                    if (execRow) execRow.style.display = 'flex';
+                    if (paramsRow) paramsRow.style.display = 'flex';
+                    if (genericInfo) genericInfo.style.display = 'none';
+                    
+                    let fullPath = projectKeyScriptsDir;
+                    if (fullPath && !fullPath.endsWith('/')) {
+                        fullPath += '/' + suffix;
+                    } else {
+                        fullPath += suffix;
+                    }
+                    document.getElementById('presetExecutableFile').innerText = fullPath;
+                    document.getElementById('presetParams').innerText = params;
                 }
                 
                 document.getElementById('presetDesc').innerText = desc;
-                document.getElementById('presetExecutableFile').innerText = fullPath;
-                document.getElementById('presetParams').innerText = params;
             }
         }
         presetSelect.addEventListener('change', updatePresetPreview);
