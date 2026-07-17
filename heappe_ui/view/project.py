@@ -284,17 +284,40 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             )]
             # add adaptor_username to dictionary
             for project_credential in project_credentials:
-               project_credential["auth_type_str"] = PREFERRED_AUTH_TYPE_CHOICES[project_credential["auth_type"]]
-               project_credential["adaptor_username"] = [user["username"] for user in 
-                                                        adaptor_users if user["id"]==project_credential["adaptor_user_id"]][0]
-               # add status
-               status_results = controller.heappe_management_cluster_account_status_get(
-                        ProjectId=project_id, Username=project_credential["username"], SessionCode=session_code)
-               init_ok = sum(1 for s in status_results if s.is_initialized)
-               project_credential["status"] = "Active" if len(status_results) > 0 and init_ok == len(status_results) else "Inactive"
-               if project_accounts:
-                proj_account = next(iter([pa for pa in project_accounts if pa["username"]==project_credential["username"]]), None)
-                project_credential["key_type"] = proj_account["key_type_name"] if proj_account else None
+                project_credential["auth_type_str"] = PREFERRED_AUTH_TYPE_CHOICES.get(project_credential["auth_type"], "Unknown")
+                
+                matched_users = [user["username"] for user in adaptor_users if user["id"] == project_credential["adaptor_user_id"]]
+                project_credential["adaptor_username"] = matched_users[0] if matched_users else "Unknown"
+                
+                # add status safely
+                try:
+                    status_results = controller.heappe_management_cluster_account_status_get(
+                        ProjectId=project_id, Username=project_credential["username"], SessionCode=session_code
+                    )
+                    init_ok = sum(1 for s in status_results if s.is_initialized)
+                    project_credential["status"] = "Active" if len(status_results) > 0 and init_ok == len(status_results) else "Inactive"
+                except Exception as e:
+                    print(f"Error checking status for credential {project_credential['username']}: {e}")
+                    project_credential["status"] = "Inactive"
+                
+                # add key type and public keys safely from public_key_ext
+                pk_ext = project_credential.get("public_key_ext")
+                if pk_ext:
+                    ktype = pk_ext.get("key_type")
+                    project_credential["key_type"] = KEY_TYPE_CHOICES.get(ktype, "Unknown")
+                    project_credential["public_key_open_ssh"] = pk_ext.get("public_key_open_ssh")
+                    project_credential["public_key_pem"] = pk_ext.get("public_key_pem")
+                else:
+                    project_credential["key_type"] = None
+                    project_credential["public_key_open_ssh"] = None
+                    project_credential["public_key_pem"] = None
+
+                if not project_credential["key_type"] and project_accounts:
+                    proj_account = next(iter([pa for pa in project_accounts if pa["username"] == project_credential["username"]]), None)
+                    if proj_account:
+                        project_credential["key_type"] = proj_account.get("key_type_name")
+                        project_credential["public_key_open_ssh"] = proj_account.get("public_key_open_ssh")
+                        project_credential["public_key_pem"] = proj_account.get("public_key_pem")
 
     elif tab == "adaptor_users" and has_adaptor_users:
         try:
@@ -377,21 +400,41 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         own_templates = [t for t in project_templates if t.project_id == project_id]
         setup_checklist["command_template_exists"] = len(own_templates) > 0
 
-        # 6. SSH Account active check
-        ssh_keys = controller.heappe_management_secure_shell_keys_get(
-            ProjectId=project_id, SessionCode=session_code
-        ) or []
-        for key in ssh_keys:
+        # 6. SSH Account/Credentials active check
+        if is_v6_4_0_plus:
             try:
-                status_results = controller.heappe_management_cluster_account_status_get(
-                    ProjectId=project_id, Username=key.username, SessionCode=session_code
+                cred_ctrl = hp.CredentialsApi(request.api_instance)
+                credentials = cred_ctrl.heappe_credentials_get_credentials_get(
+                    ProjectId=project_id, SessionCode=session_code
                 ) or []
-                init_ok = sum(1 for s in status_results if s.is_initialized)
-                if len(status_results) > 0 and init_ok == len(status_results):
-                    setup_checklist["ssh_account_active"] = True
-                    break
-            except Exception:
-                pass
+                for credential in credentials:
+                    try:
+                        status_results = controller.heappe_management_cluster_account_status_get(
+                            ProjectId=project_id, Username=credential.username, SessionCode=session_code
+                        ) or []
+                        init_ok = sum(1 for s in status_results if s.is_initialized)
+                        if len(status_results) > 0 and init_ok == len(status_results):
+                            setup_checklist["ssh_account_active"] = True
+                            break
+                    except Exception:
+                        pass
+            except Exception as ex:
+                print(f"Error checking credentials in checklist: {ex}")
+        else:
+            ssh_keys = controller.heappe_management_secure_shell_keys_get(
+                ProjectId=project_id, SessionCode=session_code
+            ) or []
+            for key in ssh_keys:
+                try:
+                    status_results = controller.heappe_management_cluster_account_status_get(
+                        ProjectId=project_id, Username=key.username, SessionCode=session_code
+                    ) or []
+                    init_ok = sum(1 for s in status_results if s.is_initialized)
+                    if len(status_results) > 0 and init_ok == len(status_results):
+                        setup_checklist["ssh_account_active"] = True
+                        break
+                except Exception:
+                    pass
     except Exception as ex:
         print(f"Error computing project checklist: {ex}")
 

@@ -897,63 +897,82 @@
 </div>
 
 <div class="modal fade" id="addCredentialModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow">
-      <div class="modal-header bg-light">
-          <h5 class="modal-title">Add New HPC Credential</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
       <form method="post">
-        <style>
-            .password-field { display: none; }
-            #password_opt:checked ~ .password-field { display: block; }
-            .key-field { display: none; }
-            #ssh_keypair_opt:checked ~ .key-field { display: block; }
-        </style>
         {% csrf_token %}
         <input type="hidden" name="action" value="create_credential">
         <input type="hidden" name="ProjectId" value="{{ project.id }}">
+        
+        <div class="modal-header bg-light py-3">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-plus-lg me-1 text-primary"></i>Add HPC Credential</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        
         <div class="modal-body p-4">
           <div class="mb-3">
-            <label class="form-label small text-muted fw-semibold">Select Adaptor User:</label>
-            
-            <select name="adaptor_user" class="form-select border-light-subtle" required>
-            {% for adaptor_user in adaptor_users %}
-                <option value="{{ adaptor_user.id }}" >{{ adaptor_user.username }} (ID: {{adaptor_user.id }})</option>
-            {% endfor %}
+            <label class="form-label small text-muted fw-semibold">Select Adaptor User</label>
+            <select name="adaptor_user" class="form-select border-light-subtle bg-white" required>
+                {% for u in adaptor_users %}
+                    <option value="{{ u.id }}">{{ u.username }} (ID: {{ u.id }})</option>
+                {% endfor %}
             </select>
-            
           </div>
+          
           <div class="mb-3">
-            <label class="form-label small text-muted fw-semibold">HPC Username:</label>
-            <input type="text" class="form-control" name="username" required placeholder="e.g. hpc_jdoe01">
+            <label class="form-label small text-muted fw-semibold">HPC Username</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white font-monospace" name="username" required placeholder="e.g. hpc_user">
           </div>
-          <div class="mb-3">
-            <label class="form-label small text-muted fw-semibold">Authentication Type:</label><br>
-            <input type="radio" id="ssh_keypair_opt" name="auth_type" value="sshkeypair">
-            <label for="ssh_keypair_opt">SSH Keypair</label>
-            <input type="radio" id="password_opt" name="auth_type" value="password">
-            <label for="password_opt">Password</label>
-            <br><br>
 
-            <div class="password-field">
-                <label class="form-label small text-muted fw-semibold">Password:</label><br>
-                <input type="password" class="form-control" name="cred_password">
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold d-block">Authentication Type</label>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="auth_type" id="addAuthTypeSsh" value="sshkeypair" checked onchange="toggleAddAuthFields()">
+              <label class="form-check-label small text-dark" for="addAuthTypeSsh">SSH Keypair</label>
             </div>
-            <div class="key-field">
-                <label class="form-label small text-muted fw-semibold">Key Generation:</label><br>
-                <input type="radio" id="generate" name="key_gen" value="generate">
-                <label for="generate">Generate New Keypair</label>
-                <input type="radio" id="upload" name="key_gen" value="upload">
-                <label for="upload">Upload Existing Private Key</label><br><br>
-                <label class="form-label small text-muted fw-semibold">Passphrase (Optional):</label>
-                <input type="password" class="form-control" name="cred_passphrase">
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="auth_type" id="addAuthTypePassword" value="password" onchange="toggleAddAuthFields()">
+              <label class="form-check-label small text-dark" for="addAuthTypePassword">Password</label>
+            </div>
+          </div>
+
+          <!-- SSH Keypair Config Panel -->
+          <div id="addSshPanel" class="p-3 bg-light rounded border border-light-subtle mb-3">
+            <div class="mb-3">
+              <label class="form-label small text-muted fw-semibold d-block">Key Generation</label>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="key_gen" id="addGenKeyTrue" value="generate" checked onchange="toggleAddKeyGenFields()">
+                <label class="form-check-label small text-dark" for="addGenKeyTrue">Generate New Keypair</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="key_gen" id="addGenKeyFalse" value="upload" onchange="toggleAddKeyGenFields()">
+                <label class="form-check-label small text-dark" for="addGenKeyFalse">Upload Existing Private Key</label>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small text-muted fw-semibold">Passphrase (Optional)</label>
+              <input type="password" class="form-control form-control-sm border-light-subtle bg-white" name="cred_passphrase" placeholder="Key passphrase">
+            </div>
+
+            <div id="addUploadKeyContainer" class="mb-2" style="display: none;">
+              <label class="form-label small text-muted fw-semibold">Provided Private Key</label>
+              <textarea class="form-control form-control-sm border-light-subtle bg-white font-monospace small" name="provided_private_key" rows="5" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+            </div>
+          </div>
+
+          <!-- Password Config Panel -->
+          <div id="addPasswordPanel" class="p-3 bg-light rounded border border-light-subtle mb-3" style="display: none;">
+            <div class="mb-2">
+              <label class="form-label small text-muted fw-semibold">Password</label>
+              <input type="password" id="addPasswordInput" class="form-control form-control-sm border-light-subtle bg-white" name="cred_password" placeholder="HPC Password">
             </div>
           </div>
         </div>
+        
         <div class="modal-footer bg-light border-top">
-        <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
-        <button type="submit" class="btn btn-sm btn-success fw-bold px-3">Create Credential</button>
+            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-sm btn-success fw-bold px-3">Create Credential</button>
         </div>
       </form>
     </div>
@@ -1478,6 +1497,37 @@ function resetTemplateFilters() {
     });
     
     filterCommandTemplates();
+}
+
+function toggleAddAuthFields() {
+    const isSsh = document.getElementById('addAuthTypeSsh').checked;
+    const sshPanel = document.getElementById('addSshPanel');
+    const passwordPanel = document.getElementById('addPasswordPanel');
+    const passwordInput = document.getElementById('addPasswordInput');
+
+    if (isSsh) {
+        sshPanel.style.display = 'block';
+        passwordPanel.style.display = 'none';
+        passwordInput.required = false;
+    } else {
+        sshPanel.style.display = 'none';
+        passwordPanel.style.display = 'block';
+        passwordInput.required = true;
+    }
+}
+
+function toggleAddKeyGenFields() {
+    const isUpload = document.getElementById('addGenKeyFalse').checked;
+    const container = document.getElementById('addUploadKeyContainer');
+    const textarea = container.querySelector('textarea');
+
+    if (isUpload) {
+        container.style.display = 'block';
+        textarea.required = true;
+    } else {
+        container.style.display = 'none';
+        textarea.required = false;
+    }
 }
 </script>
 {% endblock %}
