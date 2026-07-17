@@ -1435,10 +1435,16 @@ def handle_file_action(request, container_id, action):
         elif action == 'upload':
             file_data = base64.b64decode(request.POST.get('file_data'))
             filename = request.POST.get('filename')
-            upload_path = f"{path}/{filename}"
             container.exec_run(f"mkdir -p {path}")
-            tar_stream = io.BytesIO(file_data)
-            container.put_archive(path=path, data=tar_stream.read())  # Předpokládá tar input pro upload
+            # put_archive expects a tar stream, so we build one in memory
+            import tarfile
+            tar_buffer = io.BytesIO()
+            with tarfile.open(fileobj=tar_buffer, mode='w') as tar:
+                file_info = tarfile.TarInfo(name=filename)
+                file_info.size = len(file_data)
+                tar.addfile(file_info, io.BytesIO(file_data))
+            tar_buffer.seek(0)
+            container.put_archive(path=path, data=tar_buffer)
             return JsonResponse({'status': 'success', 'message': 'Uploaded.'})
 
     except Exception as e:

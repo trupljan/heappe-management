@@ -1919,6 +1919,48 @@ $(document).ready(function() {
         }, () => alert('Saved successfully'));
     });
 
+    $('#download-btn').click(() => {
+        if (!selectedFilePath) { alert('No file selected.'); return; }
+        $.post(`${basePath}/container/${currentContainerId}/file/download/`, {
+            path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+        }, r => {
+            if (r.status === 'success' && r.data) {
+                const byteChars = atob(r.data);
+                const byteNumbers = new Array(byteChars.length);
+                for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+                const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/gzip' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = (r.filename || 'file') + '.tar.gz';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } else {
+                alert('Download failed: ' + (r.message || 'Unknown error'));
+            }
+        }).fail(() => alert('Download request failed.'));
+    });
+
+    $('#delete-file').click(() => {
+        if (!selectedFilePath) { alert('No file selected.'); return; }
+        if (!confirm(`Are you sure you want to delete ${selectedFilePath}?`)) return;
+        $.post(`${basePath}/container/${currentContainerId}/file/delete/`, {
+            path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+        }, r => {
+            if (r.status === 'success') {
+                alert('File deleted.');
+                selectedFilePath = '';
+                $('#editor-ui').hide();
+                $('#editor-placeholder').show();
+                loadFileList();
+            } else {
+                alert('Delete failed: ' + (r.message || 'Unknown error'));
+            }
+        }).fail(() => alert('Delete request failed.'));
+    });
+
     $('#upload-action-btn').click(() => {
         const files = $('#upload-input')[0].files;
         if(!files.length) return;
