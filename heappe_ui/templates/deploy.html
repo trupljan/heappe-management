@@ -1078,6 +1078,25 @@ $(document).ready(function() {
     {% if instance_name and restart_status and restart_status != 'none' and restart_status != 'done' and restart_status != 'failed' %}
         showLoading('Restarting Instance…', 'Resuming restart tracking…');
         runRestartPhases();
+        
+        const initialStatus = '{{ restart_status }}';
+        if (initialStatus === 'db') {
+            markStep('step-stop', true);
+            markStep('step-db', false);
+            $('#loading-subtext').text('Starting database…');
+        } else if (initialStatus === 'vault') {
+            markStep('step-stop', true);
+            markStep('step-db', true);
+            markStep('step-vault', false);
+            $('#loading-subtext').text('Starting & unsealing Vault…');
+        } else if (initialStatus === 'services') {
+            markStep('step-stop', true);
+            markStep('step-db', true);
+            markStep('step-vault', true);
+            markStep('step-services', false);
+            $('#loading-subtext').text('Starting remaining services…');
+        }
+        
         startStartupPolling();
     {% endif %}
 
