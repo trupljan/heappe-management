@@ -676,13 +676,10 @@
                                                             </a>
                                                         {% endif %}
                                                         <button type="button" class="btn btn-sm btn-outline-danger px-2.5"
-                                                                onclick="if(confirm('Delete template?')) { document.getElementById('del-templ-{{template.id}}').submit(); }">
+                                                                onclick="if(confirm('Delete template?')) { deleteCommandTemplate('{% url 'command_template_delete' template.id %}?project_id={{ project.id }}'); }">
                                                             <i class="bi bi-trash"></i>
                                                         </button>
                                                     </div>
-                                                    <form id="del-templ-{{template.id}}" method="post" action="{% url 'command_template_delete' template.id %}?project_id={{ project.id }}" class="d-none">
-                                                        {% csrf_token %}
-                                                    </form>
                                                 </td>
                                             </tr>
                                         {% endfor %}
@@ -1476,6 +1473,20 @@ function resetTemplateFilters() {
     });
     
     filterCommandTemplates();
+}
+
+function deleteCommandTemplate(actionUrl) {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = actionUrl;
+    form.style.display = 'none';
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrfmiddlewaretoken';
+    csrfInput.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    form.appendChild(csrfInput);
+    document.body.appendChild(form);
+    form.submit();
 }
 </script>
 {% endblock %}
