@@ -720,16 +720,13 @@ $(document).ready(function() {
 
     function runRestartPhases(callback) {
         $('#restart-steps').show();
-        let idx = 0;
-        function nextPhase() {
-            if (idx > 0) markStep(RESTART_PHASES[idx - 1].id, true);
-            if (idx >= RESTART_PHASES.length) { callback && callback(); return; }
-            const phase = RESTART_PHASES[idx++];
-            markStep(phase.id, false);
-            $('#loading-subtext').text(phase.label);
-            if (idx < RESTART_PHASES.length) setTimeout(nextPhase, phase.durationMs);
-        }
-        nextPhase();
+        RESTART_PHASES.forEach(p => {
+            const $li = $('#' + p.id);
+            if ($li.length > 0) {
+                $li.find('.step-icon').html('&#9675;');
+                $li.css({ 'opacity': 1, 'font-weight': 'normal' });
+            }
+        });
     }
 
     let startupPollInterval = null;
@@ -758,6 +755,60 @@ $(document).ready(function() {
                 },
                 success: function(data) {
                     if (!data || !data.containers) return;
+
+                    // If we have restart_status from backend, update the UI phases list
+                    if (data.restart_status && data.restart_status !== 'none') {
+                        const status = data.restart_status;
+                        
+                        if (status === 'stopping') {
+                            markStep('step-stop', false);
+                            $('#loading-subtext').text('Stopping all containers');
+                        } else if (status === 'db') {
+                            markStep('step-stop', true);
+                            markStep('step-db', false);
+                            $('#loading-subtext').text('Starting database…');
+                        } else if (status === 'vault') {
+                            markStep('step-stop', true);
+                            markStep('step-db', true);
+                            markStep('step-vault', false);
+                            $('#loading-subtext').text('Starting & unsealing Vault…');
+                        } else if (status === 'services') {
+                            markStep('step-stop', true);
+                            markStep('step-db', true);
+                            markStep('step-vault', true);
+                            markStep('step-services', false);
+                            $('#loading-subtext').text('Starting remaining services…');
+                        } else if (status === 'done') {
+                            markStep('step-stop', true);
+                            markStep('step-db', true);
+                            markStep('step-vault', true);
+                            markStep('step-services', true);
+                            markStep('step-done', false);
+                            $('#loading-subtext').text('Waiting for HEAppE to come online…');
+                            
+                            // Check if HEAppE is actually up before reloading
+                            const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                            const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
+                            if (heappe) {
+                                $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
+                            }
+                            if (heappe && heappe.status === 'running' && allUp) {
+                                markStep('step-done', true);
+                                clearInterval(startupPollInterval);
+                                hideLoading();
+                                $('#startup-phase').text('HEAppE is online — reloading…');
+                                setTimeout(() => location.reload(), 1200);
+                            }
+                        } else if (status === 'failed') {
+                            clearInterval(startupPollInterval);
+                            hideLoading();
+                            $('#restart-steps').hide();
+                            alert('Restart failed: ' + (data.restart_error || 'Unknown error'));
+                        }
+                        return;
+                    }
+
+                    // Fallback to container-only polling if no restart_status is provided
                     const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
                     const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                     if (heappe) {
@@ -765,6 +816,7 @@ $(document).ready(function() {
                     }
                     if (heappe && heappe.status === 'running' && allUp) {
                         clearInterval(startupPollInterval);
+                        hideLoading();
                         $('#startup-phase').text('HEAppE is online — reloading…');
                         setTimeout(() => location.reload(), 1200);
                     }
@@ -789,7 +841,7 @@ $(document).ready(function() {
                 csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').first().val()
             },
             success: function(data) {
-                hideLoading();
+                // Do NOT call hideLoading() here, let startStartupPolling handle it.
                 startStartupPolling();
                 const banner = document.getElementById('startup-banner');
                 if (banner) banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -808,6 +860,12 @@ $(document).ready(function() {
             }
         });
     });
+    // --- AUTOMATIC RESTART STATE ON PAGE LOAD ---
+    {% if instance_name and restart_status and restart_status != 'none' and restart_status != 'done' and restart_status != 'failed' %}
+        showLoading('Restarting Instance…', 'Resuming restart tracking…');
+        runRestartPhases();
+        startStartupPolling();
+    {% endif %}
 });
 </script>
 
