@@ -360,10 +360,12 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
                 if pk_ext:
                     ktype = pk_ext.get("key_type")
                     project_credential["key_type"] = KEY_TYPE_CHOICES.get(ktype, "Unknown")
+                    project_credential["public_key_fingerprint"] = pk_ext.get("public_key_fingerprint")
                     project_credential["public_key_open_ssh"] = pk_ext.get("public_key_open_ssh")
                     project_credential["public_key_pem"] = pk_ext.get("public_key_pem")
                 else:
                     project_credential["key_type"] = None
+                    project_credential["public_key_fingerprint"] = None
                     project_credential["public_key_open_ssh"] = None
                     project_credential["public_key_pem"] = None
 
