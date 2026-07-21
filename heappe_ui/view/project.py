@@ -33,7 +33,6 @@ PREFERRED_AUTH_TYPES_WITH_PROXY = [
     (6, "Password Interactive via Proxy"),
     (7, "Password and Private Key via Proxy"),
     (8, "Private Key via Proxy"),
-    (11, "SSH Certificate via Proxy"),
     (12, "SSH Certificate via Proxy"),
     (13, "Kerberos via Proxy"),
     (14, "FirecRest IdP via Proxy"),
@@ -1563,12 +1562,18 @@ def create_credential(request: HttpRequest, project_id: int) -> HttpResponse:
 
     auth_type = int(request.POST.get("auth_type"))
     
-    # Private key based: 3 (pwd & key), 4 (key), 7 (pwd & key proxy), 8 (key proxy), 9 (key agent), 10 (key vault/agent)
-    if auth_type in (3, 4, 7, 8, 9, 10):
+    # Private key based with key generation: 3 (pwd & key), 4 (key), 7 (pwd & key proxy), 8 (key proxy)
+    if auth_type in (3, 4, 7, 8):
         cred_passphrase = request.POST.get("cred_passphrase") or None
         generate_new_key = request.POST.get("key_gen") == "generate"
         if not generate_new_key:
             provided_private_key = request.POST.get("provided_private_key", "").strip() or None
+            
+    # SSH Certificate based (key generation is forbidden, provided private key is required): 11, 12
+    elif auth_type in (11, 12):
+        cred_passphrase = request.POST.get("cred_passphrase") or None
+        generate_new_key = None
+        provided_private_key = request.POST.get("provided_private_key", "").strip() or None
             
     # Password based: 1 (pwd), 2 (pwd interactive), 3 (pwd & key), 5 (pwd proxy), 6 (pwd interactive proxy), 7 (pwd & key proxy)
     if auth_type in (1, 2, 3, 5, 6, 7):
@@ -1603,7 +1608,6 @@ def create_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     return redirect(reload_url)
 
 
-
 @login_required
 def modify_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     controller = hp.CredentialsApi(request.api_instance)
@@ -1624,7 +1628,7 @@ def modify_credential(request: HttpRequest, project_id: int) -> HttpResponse:
         "AdaptorUserId": adaptor_user_id,
         "OldUsername": old_username,
         "NewUsername": new_username,
-        "NewPassword": request.POST.get("mod_cred_new_password")
+        "NewPassword": request.POST.get("mod_cred_new_password") or None
     }
     payload = _create_payload(request.session_code, payload_data)
     result = _handle_api_call(

@@ -988,7 +988,7 @@
 
           <!-- SSH Keypair Config Panel -->
           <div id="addSshPanel" class="p-3 bg-light rounded border border-light-subtle mb-3" style="display: none;">
-            <div class="mb-3">
+            <div class="mb-3" id="addKeyGenRadioContainer">
               <label class="form-label small text-muted fw-semibold d-block">Key Generation</label>
               <div class="form-check form-check-inline">
                 <input class="form-check-input" type="radio" name="key_gen" id="addGenKeyTrue" value="generate" checked onchange="toggleAddKeyGenFields()">
@@ -1586,23 +1586,44 @@ function toggleAddAuthFields() {
     const select = document.getElementById('addAuthTypeSelect');
     const val = parseInt(select.value);
     const sshPanel = document.getElementById('addSshPanel');
+    const keyGenContainer = document.getElementById('addKeyGenRadioContainer');
+    const uploadKeyContainer = document.getElementById('addUploadKeyContainer');
+    const uploadKeyTextarea = uploadKeyContainer.querySelector('textarea');
+    
     const passwordPanel = document.getElementById('addPasswordPanel');
     const passwordInput = document.getElementById('addPasswordInput');
 
-    // Private key based: 3 (pwd & key), 4 (key), 7 (pwd & key proxy), 8 (key proxy), 9 (key agent), 10 (key vault/agent)
-    const isSsh = [3, 4, 7, 8, 9, 10].includes(val);
-    // Password based: 1 (pwd), 2 (pwd interactive), 3 (pwd & key), 5 (pwd proxy), 6 (pwd interactive proxy), 7 (pwd & key proxy)
-    const isPassword = [1, 2, 3, 5, 6, 7].includes(val);
+    const hasSshKey = [3, 4, 7, 8, 11, 12].includes(val);
+    const canGenerateKey = [3, 4, 7, 8].includes(val);
+    const hasPassword = [1, 2, 3, 5, 6, 7].includes(val);
+    const isPasswordRequired = [1, 3, 5, 7].includes(val);
 
-    if (isSsh) {
+    if (hasSshKey) {
         sshPanel.style.display = 'block';
+        if (canGenerateKey) {
+            if (keyGenContainer) keyGenContainer.style.display = 'block';
+            toggleAddKeyGenFields(); // Let the checked radio button decide
+        } else {
+            if (keyGenContainer) keyGenContainer.style.display = 'none';
+            // Force upload mode
+            document.getElementById('addGenKeyFalse').checked = true;
+            document.getElementById('addGenKeyTrue').checked = false;
+            uploadKeyContainer.style.display = 'block';
+            uploadKeyTextarea.required = true;
+        }
     } else {
         sshPanel.style.display = 'none';
+        uploadKeyTextarea.required = false;
     }
 
-    if (isPassword) {
+    if (hasPassword) {
         passwordPanel.style.display = 'block';
-        passwordInput.required = true;
+        passwordInput.required = isPasswordRequired;
+        if (!isPasswordRequired) {
+            passwordPanel.querySelector('label').textContent = "Password (Optional)";
+        } else {
+            passwordPanel.querySelector('label').textContent = "Password";
+        }
     } else {
         passwordPanel.style.display = 'none';
         passwordInput.required = false;
