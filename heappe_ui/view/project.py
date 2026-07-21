@@ -356,7 +356,27 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
                 
                 # add key type and public keys safely from public_key_ext
                 pk_ext = project_credential.get("public_key_ext")
-                if pk_ext:
+                if pk_ext and isinstance(pk_ext, str):
+                    project_credential["public_key_open_ssh"] = pk_ext
+                    project_credential["public_key_pem"] = pk_ext
+                    project_credential["public_key_fingerprint"] = project_credential.get("public_key_fingerprint")
+                    # Try to extract key type from the OpenSSH format
+                    parts = pk_ext.split()
+                    if len(parts) > 0:
+                        key_identifier = parts[0].lower()
+                        if "rsa" in key_identifier:
+                            project_credential["key_type"] = "RSA"
+                        elif "ed25519" in key_identifier:
+                            project_credential["key_type"] = "Ed25519"
+                        elif "ecdsa" in key_identifier or "nistp256" in key_identifier:
+                            project_credential["key_type"] = "nistP256"
+                        elif "nistp521" in key_identifier:
+                            project_credential["key_type"] = "nistP521"
+                        else:
+                            project_credential["key_type"] = "Unknown"
+                    else:
+                        project_credential["key_type"] = "Unknown"
+                elif pk_ext and isinstance(pk_ext, dict):
                     ktype = pk_ext.get("key_type")
                     project_credential["key_type"] = KEY_TYPE_CHOICES.get(ktype, "Unknown")
                     project_credential["public_key_fingerprint"] = pk_ext.get("public_key_fingerprint")
