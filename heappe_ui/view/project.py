@@ -328,7 +328,16 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             # add adaptor_username to dictionary
             for project_credential in project_credentials:
                 project_credential["auth_type_str"] = PREFERRED_AUTH_TYPE_CHOICES.get(project_credential["auth_type"], "Unknown")
-                
+                 
+                # DEBUG: Log credential structure
+                print(f"[DEBUG] Credential: {project_credential.get('username')}")
+                print(f"[DEBUG] adaptor_user_id: {project_credential.get('adaptor_user_id')} (type: {type(project_credential.get('adaptor_user_id'))})")
+                print(f"[DEBUG] public_key_ext: {project_credential.get('public_key_ext')}")
+                print(f"[DEBUG] public_key_fingerprint: {project_credential.get('public_key_fingerprint')}")
+                print(f"[DEBUG] public_key_open_ssh: {project_credential.get('public_key_open_ssh')}")
+                print(f"[DEBUG] public_key_pem: {project_credential.get('public_key_pem')}")
+                print(f"[DEBUG] Full credential keys: {project_credential.keys()}")
+                 
                 if project_credential.get("adaptor_user_id") is not None:
                     matched_users = [user["username"] for user in adaptor_users if user["id"] == project_credential["adaptor_user_id"]]
                     project_credential["adaptor_username"] = matched_users[0] if matched_users else f"Unknown (ID: {project_credential['adaptor_user_id']})"
@@ -359,12 +368,17 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
                     project_credential["public_key_pem"] = None
 
                 if not project_credential["key_type"] and project_accounts:
+                    print(f"[DEBUG] Fallback lookup for {project_credential['username']}")
                     proj_account = next(iter([pa for pa in project_accounts if pa["username"] == project_credential["username"]]), None)
                     if proj_account:
+                        print(f"[DEBUG] Found proj_account: key_type_name={proj_account.get('key_type_name')}")
                         project_credential["key_type"] = proj_account.get("key_type_name")
                         project_credential["public_key_open_ssh"] = proj_account.get("public_key_open_ssh")
                         project_credential["public_key_pem"] = proj_account.get("public_key_pem")
-
+                    else:
+                        print(f"[DEBUG] No proj_account found for {project_credential['username']}")
+                        print(f"[DEBUG] Available accounts: {[pa['username'] for pa in project_accounts]}")
+                 
     elif tab == "adaptor_users" and has_adaptor_users:
         try:
             adaptor_users = [u.to_dict() for u in controller.heappe_management_adaptor_users_in_project_get(
@@ -1562,6 +1576,9 @@ def create_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     if adaptor_user_id == "" or adaptor_user_id == "None":
         adaptor_user_id = None
 
+    print(f"[DEBUG create_credential] adaptor_user from form: '{request.POST.get('adaptor_user')}'")
+    print(f"[DEBUG create_credential] adaptor_user_id after processing: {adaptor_user_id} (type: {type(adaptor_user_id)})")
+
     payload_data = {
         "ProjectId": project_id,
         "SessionCode": request.session_code,
@@ -1584,6 +1601,7 @@ def create_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     return redirect(reload_url)
 
 
+
 @login_required
 def modify_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     controller = hp.CredentialsApi(request.api_instance)
@@ -1594,10 +1612,14 @@ def modify_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     if new_username == '':
         new_username = old_username 
 
+    adaptor_user_id = request.POST.get("mod_cred_adaptor_user_id")
+    if adaptor_user_id == "" or adaptor_user_id == "None":
+        adaptor_user_id = None
+
     payload_data = {
         "ProjectId": project_id,
         "SessionCode": request.session_code,
-        "AdaptorUserId": request.POST.get("mod_cred_adaptor_user_id"),
+        "AdaptorUserId": adaptor_user_id,
         "OldUsername": old_username,
         "NewUsername": new_username,
         "NewPassword": request.POST.get("mod_cred_new_password")
