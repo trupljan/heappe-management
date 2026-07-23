@@ -866,7 +866,10 @@ $(document).ready(function() {
         runRestartPhases();
         
         const initialStatus = '{{ restart_status }}';
-        if (initialStatus === 'db') {
+        if (initialStatus === 'stopping') {
+            markStep('step-stop', false);
+            $('#loading-subtext').text('Stopping all containers');
+        } else if (initialStatus === 'db') {
             markStep('step-stop', true);
             markStep('step-db', false);
             $('#loading-subtext').text('Starting database…');
