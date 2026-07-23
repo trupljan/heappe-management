@@ -470,24 +470,10 @@ def run_bg_restart_all(compose_dir, instance_name, command, mssql_port, env_path
         if mssql_port:
             port_ready = False
             for _ in range(15):
-                if db_container:
-                    try:
-                        db_container.reload()
-                        if db_container.status != 'running':
-                            time.sleep(1)
-                            continue
-                    except Exception:
-                        pass
                 if is_port_open("127.0.0.1", mssql_port):
                     port_ready = True
                     break
-                time.sleep(1)
-            if not port_ready and db_container and db_container.status == 'running':
-                port_ready = True
-            if not port_ready:
-                time.sleep(2)
-        else:
-            time.sleep(3)
+                time.sleep(0.5)
 
         # 4. Start Vault container
         with RESTART_STATES_LOCK:
@@ -534,22 +520,12 @@ def run_bg_restart_all(compose_dir, instance_name, command, mssql_port, env_path
 
         vault_ready = False
         for _ in range(15):
-            if vault_container:
-                try:
-                    vault_container.reload()
-                    if vault_container.status != 'running':
-                        time.sleep(1)
-                        continue
-                except Exception:
-                    pass
             if is_port_open("127.0.0.1", vault_host_port):
                 vault_ready = True
                 break
-            time.sleep(1)
+            time.sleep(0.5)
         if not vault_ready and vault_container and vault_container.status == 'running':
             vault_ready = True
-
-        time.sleep(2)
 
         # 7. Unseal Vault
         unseal_cmd = [
@@ -558,10 +534,8 @@ def run_bg_restart_all(compose_dir, instance_name, command, mssql_port, env_path
             "-p", instance_name,
             "up", "--force-recreate", "--no-deps"
         ]
-        unseal_result = execute_docker_compose(unseal_cmd, compose_dir, timeout=120)
+        unseal_result = execute_docker_compose(unseal_cmd, compose_dir, timeout=60)
         unseal_ok = unseal_result.returncode == 0
-
-        time.sleep(2)
 
         # 8. Start remaining services
         with RESTART_STATES_LOCK:
