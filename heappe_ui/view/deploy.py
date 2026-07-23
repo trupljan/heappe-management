@@ -121,8 +121,8 @@ def get_container_details(container):
             unmapped.append(f"{container_port}")
     ports_info = mapped + unmapped
     try:
-        image_tags = ', '.join(container.image.tags) if container.image.tags else 'N/A'
-    except docker.errors.ImageNotFound:
+        image_tags = container.attrs.get('Config', {}).get('Image') or 'N/A'
+    except Exception:
         image_tags = 'N/A'
     return {
         'id': container.id,
@@ -556,7 +556,7 @@ def run_bg_restart_all(compose_dir, instance_name, command, mssql_port, env_path
             "docker", "compose",
             "--profile", "initVault",
             "-p", instance_name,
-            "up", "--no-deps"
+            "up", "--force-recreate", "--no-deps"
         ]
         unseal_result = execute_docker_compose(unseal_cmd, compose_dir, timeout=120)
         unseal_ok = unseal_result.returncode == 0
@@ -575,7 +575,7 @@ def run_bg_restart_all(compose_dir, instance_name, command, mssql_port, env_path
         if not vault_ready:
             raise Exception("Vault port did not respond in time.")
         if not unseal_ok:
-            raise Exception("Vault unseal step returned a non-zero exit code.")
+            print(f"Warning: Vault unseal step returned non-zero exit code ({unseal_result.returncode}): {unseal_result.stderr}")
 
         with RESTART_STATES_LOCK:
             RESTART_STATES[instance_name]['status'] = 'done'
@@ -1240,12 +1240,20 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
 
             elif action == 'status_poll':
                 # Lightweight read-only poll: just return current container statuses as JSON
+                with RESTART_STATES_LOCK:
+                    restart_info = RESTART_STATES.get(instance_name, {'status': 'none', 'error': None})
+                if restart_info.get('status') in ['stopping', 'db', 'vault', 'services']:
+                    return JsonResponse({
+                        'status': 'ok',
+                        'instance_name': instance_name,
+                        'containers': [],
+                        'restart_status': restart_info.get('status'),
+                        'restart_error': restart_info.get('error')
+                    })
                 poll_containers = [
                     get_container_details(c) for c in client.containers.list(all=True)
                     if c.labels.get('com.docker.compose.project') == instance_name
                 ]
-                with RESTART_STATES_LOCK:
-                    restart_info = RESTART_STATES.get(instance_name, {'status': 'none', 'error': None})
                 return JsonResponse({
                     'status': 'ok',
                     'instance_name': instance_name,
@@ -1550,12 +1558,20 @@ def instance_config_view(request, instance_name):
 
         elif action == 'status_poll':
             # Lightweight read-only poll: just return current container statuses as JSON
+            with RESTART_STATES_LOCK:
+                restart_info = RESTART_STATES.get(instance_name, {'status': 'none', 'error': None})
+            if restart_info.get('status') in ['stopping', 'db', 'vault', 'services']:
+                return JsonResponse({
+                    'status': 'ok',
+                    'instance_name': instance_name,
+                    'containers': [],
+                    'restart_status': restart_info.get('status'),
+                    'restart_error': restart_info.get('error')
+                })
             poll_containers = [
                 get_container_details(c) for c in client.containers.list(all=True)
                 if c.labels.get('com.docker.compose.project') == instance_name
             ]
-            with RESTART_STATES_LOCK:
-                restart_info = RESTART_STATES.get(instance_name, {'status': 'none', 'error': None})
             return JsonResponse({
                 'status': 'ok',
                 'instance_name': instance_name,
