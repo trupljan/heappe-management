@@ -3,6 +3,8 @@ services:
     build: .
     network_mode: host
     restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /opt/heappe-deployment:/opt/heappe-deployment
@@ -22,6 +24,7 @@ services:
   # remove this service instead.
   expose:
     image: alpine/socat
+    restart: unless-stopped
     entrypoint: sh
     command:
       - -c

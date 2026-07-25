@@ -33,8 +33,10 @@ The image excludes `.git` (`.dockerignore`): when the build context is a git wor
 `.git` is a file pointing at an absolute host path that doesn't exist inside the
 container, and git commands run under `/app` — including instance deployment's
 `git clone` and the tag/branch pickers, not just the version badge — fail outright if
-that path is copied in. Without `.git`, the version badge in the header just falls back
-to `v0.0.0` / `unknown`.
+that path is copied in. Without `.git`, `check_for_updates` takes its tag-fallback path and
+returns HTTP 500 (`heappe_ui/views.py:1154-1158`) instead of showing the version badge; this
+is fired on every page load for authenticated users (`base.html:676`), but it's fast and
+non-fatal — the request just fails silently, the page still loads.
 
 ### Docker Desktop (Windows/macOS)
 
@@ -55,3 +57,10 @@ exact same port conflict.
 The app's in-app self-update (the "update"/redeploy button, `deploy.sh`) restarts
 itself via `systemctl`, which assumes a systemd host — it does not work when the app
 runs as a container and is not supported in this setup.
+
+### Security
+
+The container runs as root with `/var/run/docker.sock` bind-mounted — that socket is
+root-equivalent access to the Docker host. Combined with the repo's `ALLOWED_HOSTS = ['*']`
+and checked-in `SECRET_KEY` (`adminpanel/settings.py:41,46`), do not expose this panel to an
+untrusted network.
