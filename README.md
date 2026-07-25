@@ -69,6 +69,36 @@ password** before exposing the panel to anyone else, either by setting
 docker compose exec management python manage.py changepassword admin
 ```
 
+### Instance proxy
+
+The `proxy` service (`nginx:alpine`) exposes every deployed HEAppE instance under its
+own path prefix on **`http://localhost:8081/`**, so instances don't each need their own
+published port. It's generated dynamically from
+`/opt/heappe-deployment/<name>/heappe-core/.env` (`INSTANCE_NAME`, `HOST_APP_PORT`,
+`HOST_DATA_STAGING_PORT`) by `proxy/generate-locations.sh`, which (re)writes the nginx
+location blocks and reloads nginx only when the instance set actually changed. It
+refreshes every **30 seconds** (`REFRESH_INTERVAL`), so a newly deployed (or removed)
+instance takes up to that long to appear (or disappear) behind the proxy.
+
+For an instance named `dev`:
+
+| URL prefix | Proxies to |
+| --- | --- |
+| `/dev/` | its HEAppE API (`HOST_APP_PORT`) |
+| `/dev-datastaging/` | its data-staging API (`HOST_DATA_STAGING_PORT`) |
+
+Both are stripped before forwarding (`location /dev/ { proxy_pass http://.../ ; }`),
+because HEAppE itself serves at the root of its port and only *advertises* the
+`/dev/...` prefix in Swagger (`SwaggerConfiguration.HostPostfix`). A prefix with no
+matching instance returns a plain 404 instead of a broken upstream.
+
+Like `expose`, the `proxy` container reaches the instance containers through its own
+network's default gateway (`ip route`), not `host.docker.internal`/`extra_hosts`,
+for the same reason (see the comment on `expose` in `compose.yaml`). On native Linux,
+where instance containers already publish their ports directly on the host, you can
+reach them without this sidecar too — keep it only if you want the single aggregated
+`:8081` entry point.
+
 ### Not supported in the container
 
 The app's in-app self-update (the "update"/redeploy button, `deploy.sh`) restarts
