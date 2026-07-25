@@ -92,6 +92,16 @@ because HEAppE itself serves at the root of its port and only *advertises* the
 `/dev/...` prefix in Swagger (`SwaggerConfiguration.HostPostfix`). A prefix with no
 matching instance returns a plain 404 instead of a broken upstream.
 
+A stopped/deleted instance leaves its `.env` behind, and a later instance can end up
+reusing its recorded port — a port being open is not proof it still belongs to the
+instance that recorded it. Before routing to a port, the generator confirms its
+identity by probing `/heappe/Health` and checking the returned `InstanceIdentifier`
+matches the directory's `INSTANCE_NAME`; a mismatch (or no response) means no location
+is generated for it. Consequences: an instance that is down or still starting has no
+route until it becomes healthy (a 404 rather than routing to the wrong instance), and
+a stale directory whose port has been reclaimed by another instance is never routed to
+at all — you'd see a plain 404 for its prefix instead.
+
 Like `expose`, the `proxy` container reaches the instance containers through its own
 network's default gateway (`ip route`), not `host.docker.internal`/`extra_hosts`,
 for the same reason (see the comment on `expose` in `compose.yaml`). On native Linux,

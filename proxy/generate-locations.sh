@@ -14,6 +14,21 @@ REFRESH_INTERVAL=${REFRESH_INTERVAL:-30}
 # the `expose` sidecar in compose.yaml.
 gateway=$(ip route | awk '/default/ {print $3}')
 
+# A stopped/deleted instance leaves its directory (and .env) behind, and its
+# recorded port can be reused later by an unrelated instance - a port being
+# open is not proof it still belongs to this instance. So before routing to
+# it, ask the port itself who it is via /heappe/Health and require the
+# InstanceIdentifier it reports to match the directory's name. No match (down,
+# still starting, or claimed by someone else) => no location for it this
+# round; a 404 beats silently serving the wrong instance's data.
+port_belongs_to_instance() {
+    port=$1
+    name=$2
+    health=$(wget -q -T 2 -O - "http://$gateway:$port/heappe/Health" 2>/dev/null) || return 1
+    identifier=$(printf '%s' "$health" | sed -n 's/.*"InstanceIdentifier":"\([^"]*\)".*/\1/p')
+    [ "$identifier" = "$name" ]
+}
+
 # Writes the current instance set to a temp file and swaps it in only if it
 # changed, so an unchanged instance list never triggers an nginx reload.
 regenerate_locations() {
@@ -25,6 +40,7 @@ regenerate_locations() {
         app_port=$(sed -n 's/^HOST_APP_PORT=//p' "$env_file")
         datastaging_port=$(sed -n 's/^HOST_DATA_STAGING_PORT=//p' "$env_file")
         [ -n "$name" ] && [ -n "$app_port" ] && [ -n "$datastaging_port" ] || continue
+        port_belongs_to_instance "$app_port" "$name" || continue
 
         cat >>"$tmp" <<EOF
 location /$name/ {
