@@ -29,6 +29,13 @@ Desktop, "the Docker host" is the Docker Desktop VM, not your Windows/macOS mach
 The app's own SQLite database lives on the named volume `management-db`, not in the
 image, so it survives container recreation.
 
+The image excludes `.git` (`.dockerignore`): when the build context is a git worktree,
+`.git` is a file pointing at an absolute host path that doesn't exist inside the
+container, and git commands run under `/app` — including instance deployment's
+`git clone` and the tag/branch pickers, not just the version badge — fail outright if
+that path is copied in. Without `.git`, the version badge in the header just falls back
+to `v0.0.0` / `unknown`.
+
 ### Docker Desktop (Windows/macOS)
 
 `network_mode: host` containers aren't reachable via the host's `localhost` on Docker

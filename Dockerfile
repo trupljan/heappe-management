@@ -26,7 +26,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Includes .git — context_processors.py shells out to `git describe`/`git branch` for the version badge.
+# .git is excluded (.dockerignore): a worktree checkout's .git is a file pointing at an
+# absolute host path that doesn't exist in the image, which breaks every git command run
+# under /app (badge, instance deploy `git clone`, tag/branch pickers). Those degrade
+# gracefully without it (see README) — a broken git is worse than a missing version badge.
 COPY . .
 RUN chmod +x /app/docker-entrypoint.sh
 
