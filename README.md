@@ -7,9 +7,16 @@ docker compose up -d --build
 ```
 
 This builds and starts the `management` service (Django app + gunicorn) using
-`network_mode: host`, so it binds directly to the host's port 8000. `MANAGEMENT_PROXYPASS`
-is left unset, so the app is served at the root (`http://localhost:8000/`) instead of
-under `/management` — no reverse proxy is required for the container setup.
+`network_mode: host`, so it binds directly to the Docker host's port 8000.
+`MANAGEMENT_PROXYPASS` is left unset, so the app is served at the root instead of under
+`/management` — no reverse proxy is required for the container setup.
+
+Where to point the browser depends on the platform:
+
+| Platform | URL | `expose` sidecar |
+| --- | --- | --- |
+| Native Linux | `http://localhost:8000/` | remove it from `compose.yaml` |
+| Docker Desktop (Windows/macOS) | `http://localhost:8080/` | keep it (started by default) |
 
 The container needs the host's Docker socket and CLI (`docker-ce-cli` +
 `docker-compose-plugin`) because the app itself shells out to `docker`/`docker compose`
@@ -26,7 +33,7 @@ image, so it survives container recreation.
 
 `network_mode: host` containers aren't reachable via the host's `localhost` on Docker
 Desktop, so the `expose` service (a small `socat` sidecar) forwards the app to
-**`localhost:8080`**. It is started by default. It can't reuse port 8000 itself:
+**`localhost:8080`**. It can't reuse port 8000 itself:
 `management` already holds `0.0.0.0:8000` in the Docker Desktop VM's network
 namespace (via `network_mode: host`), and Desktop's own port-publishing for a second
 container needs that same namespace, so publishing `8000:8000` a second time fails

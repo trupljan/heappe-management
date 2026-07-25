@@ -16,8 +16,9 @@ services:
   # dockerd network namespace Desktop's own port-publishing would need).
   # It reaches `management` via its own network's default gateway, which is
   # that same dockerd namespace — neither host.docker.internal nor the
-  # extra_hosts host-gateway alias work here, both point at Windows/macOS
-  # instead. On native Linux, where host mode already exposes 8000 directly,
+  # extra_hosts host-gateway alias work here, both resolve to the Windows/macOS
+  # side (192.168.65.254) and get "connection refused"; retested, still true.
+  # On native Linux, where host mode already exposes 8000 directly,
   # remove this service instead.
   expose:
     image: alpine/socat
