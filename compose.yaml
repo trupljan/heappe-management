@@ -1,0 +1,34 @@
+services:
+  management:
+    build: .
+    network_mode: host
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/heappe-deployment:/opt/heappe-deployment
+      - /var/log/otel:/var/log/otel
+      - management-db:/var/lib/heappe-management
+
+  # Docker Desktop (Windows/macOS) does not route the host's loopback into
+  # network_mode: host containers, so :8000 is unreachable from the browser.
+  # This sidecar forwards it on :8080 (:8000 itself can't be republished here
+  # — `management` already holds it via network_mode: host, in the same
+  # dockerd network namespace Desktop's own port-publishing would need).
+  # It reaches `management` via its own network's default gateway, which is
+  # that same dockerd namespace — neither host.docker.internal nor the
+  # extra_hosts host-gateway alias work here, both point at Windows/macOS
+  # instead. On native Linux, where host mode already exposes 8000 directly,
+  # remove this service instead.
+  expose:
+    image: alpine/socat
+    entrypoint: sh
+    command:
+      - -c
+      - socat tcp4-listen:8000,fork,reuseaddr tcp4-connect:$(ip route | awk '/default/ {print $3}'):8000
+    ports:
+      - "8080:8000"
+    depends_on:
+      - management
+
+volumes:
+  management-db:
