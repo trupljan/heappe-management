@@ -52,6 +52,23 @@ On native Linux, remove the `expose` service from `compose.yaml` instead: host m
 already exposes port 8000 directly there, and running `expose` too would hit the
 exact same port conflict.
 
+### Admin account
+
+`compose.yaml` sets `DJANGO_SUPERUSER_USERNAME`/`_EMAIL`/`_PASSWORD` (default
+`admin` / `admin@example.com` / `admin`) — `docker-entrypoint.sh` uses them to create a
+superuser via `manage.py createsuperuser --noinput` after `migrate`. The email must be
+a syntactically valid address or Django refuses to create the account, hence the
+`example.com` default rather than something obviously fake.
+
+This only happens on the **first** run against an empty `management-db` volume; on
+later starts the user already exists and creation is skipped. **Change the default
+password** before exposing the panel to anyone else, either by setting
+`DJANGO_SUPERUSER_PASSWORD` before the first `docker compose up`, or afterwards with:
+
+```
+docker compose exec management python manage.py changepassword admin
+```
+
 ### Not supported in the container
 
 The app's in-app self-update (the "update"/redeploy button, `deploy.sh`) restarts
