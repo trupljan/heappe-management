@@ -3,6 +3,258 @@ from django.urls import reverse
 from django.views.decorators.clickjacking import xframe_options_exempt
 from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, SCHEDULER_CHOICES, CONNECTION_PROTOCOL_CHOICES, login_view, login_required, clean_ver
 
+FALLBACK_CUSTOM_CONFIG_METADATA = [
+    {
+        "Id": 1, "Name": "CallbackUrl", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}, {"Id": 32, "Name": "QScheduler"}
+        ]
+    },
+    {
+        "Id": 2, "Name": "ClientId", "DefaultValue": "",
+        "SupportedSchedulerTypes": [{"Id": 16, "Name": "FirecRestSlurm"}]
+    },
+    {
+        "Id": 3, "Name": "ClientSecret", "DefaultValue": "",
+        "SupportedSchedulerTypes": [{"Id": 16, "Name": "FirecRestSlurm"}]
+    },
+    {
+        "Id": 4, "Name": "ClusterName", "DefaultValue": "",
+        "SupportedSchedulerTypes": [{"Id": 16, "Name": "FirecRestSlurm"}]
+    },
+    {
+        "Id": 5, "Name": "ClusterScriptsRepository", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 6, "Name": "ClusterScriptsRepositoryBranch", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 8, "Name": "EnableCallback", "DefaultValue": "false",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}, {"Id": 32, "Name": "QScheduler"}
+        ]
+    },
+    {
+        "Id": 9, "Name": "EnableGracefulTimeout", "DefaultValue": "false",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 10, "Name": "EventualConsistencyRetryCount", "DefaultValue": "5",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 11, "Name": "EventualConsistencyRetryDelayMs", "DefaultValue": "1000",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 12, "Name": "FirecrestUrl", "DefaultValue": "",
+        "SupportedSchedulerTypes": [{"Id": 16, "Name": "FirecRestSlurm"}]
+    },
+    {
+        "Id": 13, "Name": "GracefulTimeoutSeconds", "DefaultValue": "30",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 14, "Name": "IdpUrl", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 15, "Name": "InstanceIdentifierPath", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 16, "Name": "JobLogArchiveSubPath", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 17, "Name": "KeyScriptsDirectoryInRepository", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 19, "Name": "ScriptsBasePath", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 20, "Name": "SshCommandPrefix", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}
+        ]
+    },
+    {
+        "Id": 21, "Name": "SubExecutionsPath", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 22, "Name": "SubScriptsPath", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 23, "Name": "SyncScriptsViaSftp", "DefaultValue": "false",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}
+        ]
+    },
+    {
+        "Id": 24, "Name": "QSchedulerPort", "DefaultValue": "3000",
+        "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
+    },
+    {
+        "Id": 25, "Name": "QSchedulerHost", "DefaultValue": "localhost",
+        "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
+    },
+    {
+        "Id": 26, "Name": "QSchedulerNotifyToken", "DefaultValue": "",
+        "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
+    },
+    {
+        "Id": 27, "Name": "QSchedulerUseSessions", "DefaultValue": "true",
+        "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
+    },
+    {
+        "Id": 28, "Name": "HomeDirectoryTemplate", "DefaultValue": "/users/{username}",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}
+        ]
+    },
+    {
+        "Id": 29, "Name": "ExpirioSecretName", "DefaultValue": "",
+        "SupportedSchedulerTypes": [{"Id": 16, "Name": "FirecRestSlurm"}]
+    }
+]
+
+def fetch_cluster_custom_config_metadata(request) -> list:
+    """
+    Fetches custom configuration keys dictionary metadata from HEAppE API endpoint:
+    GET /heappe/Dictionary/GetClusterCustomConfigurationKeys
+    """
+    try:
+        if hasattr(request, 'api_instance') and request.api_instance:
+            data = request.api_instance.call_api(
+                '/heappe/Dictionary/GetClusterCustomConfigurationKeys',
+                'GET',
+                auth_settings=['Bearer', 'ServiceApiKey'],
+                response_type='list[object]'
+            )
+            if data and isinstance(data, list):
+                normalized = []
+                for item in data:
+                    if isinstance(item, dict):
+                        d = item
+                    elif hasattr(item, 'to_dict'):
+                        d = item.to_dict()
+                    else:
+                        d = getattr(item, '__dict__', {})
+                    
+                    name = d.get('Name') or d.get('name')
+                    if name:
+                        scheds = d.get('SupportedSchedulerTypes') or d.get('supportedSchedulerTypes') or []
+                        norm_scheds = []
+                        for s in scheds:
+                            if isinstance(s, dict):
+                                s_id = s.get('Id') if s.get('Id') is not None else s.get('id')
+                                s_name = s.get('Name') or s.get('name')
+                            else:
+                                s_id = getattr(s, 'id', getattr(s, 'Id', None))
+                                s_name = getattr(s, 'name', getattr(s, 'Name', None))
+                            if s_id is not None:
+                                norm_scheds.append({'Id': int(s_id), 'Name': str(s_name or '')})
+                        
+                        normalized.append({
+                            'Id': d.get('Id') or d.get('id'),
+                            'Name': str(name),
+                            'DefaultValue': str(d.get('DefaultValue') or d.get('defaultValue') or ''),
+                            'SupportedSchedulerTypes': norm_scheds
+                        })
+                if normalized:
+                    existing_names = {x['Name'] for x in normalized}
+                    for fb in FALLBACK_CUSTOM_CONFIG_METADATA:
+                        if fb['Name'] not in existing_names:
+                            normalized.append(fb)
+                    return normalized
+    except Exception as e:
+        print(f"[clusters] Error fetching GetClusterCustomConfigurationKeys: {e}")
+
+    return FALLBACK_CUSTOM_CONFIG_METADATA
+
+def validate_and_clean_custom_config(custom_config: dict, scheduler_type: int, metadata_list: list, old_config: dict = None) -> dict:
+    """
+    Validates custom config against metadata supportedSchedulerTypes for the given scheduler_type.
+    Also preserves Vault masked values ("********").
+    """
+    if scheduler_type is None:
+        return custom_config
+
+    meta_map = {}
+    for meta in metadata_list:
+        name = meta.get('Name')
+        sched_ids = [s.get('Id') for s in (meta.get('SupportedSchedulerTypes') or []) if s.get('Id') is not None]
+        meta_map[name] = sched_ids
+
+    cleaned = {}
+    for key, val in custom_config.items():
+        val_str = str(val)
+        
+        # Vault mask check ("********")
+        if val_str == "********" and old_config and key in old_config:
+            val_str = str(old_config[key])
+        
+        # Check supported scheduler types
+        if key in meta_map:
+            allowed_ids = meta_map[key]
+            if allowed_ids and int(scheduler_type) not in allowed_ids:
+                # Key is not supported for this scheduler type
+                continue
+        
+        cleaned[key] = val_str
+
+    return cleaned
+
 @login_required
 def cluster_list(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
@@ -71,6 +323,7 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
         return proxy_list
 
     if request.method == "GET":
+        custom_config_metadata = fetch_cluster_custom_config_metadata(request)
         return render(request, "cluster_detail.html", {
             'PROTOCOL_CHOICES': PROTOCOL_CHOICES,
             'SCHEDULER_CHOICES': SCHEDULER_CHOICES,
@@ -79,10 +332,12 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
             'active_tab': 'detail',
             'custom_configuration_json': '{}',
             'custom_configuration_vault_toggles_json': '{}',
+            'custom_config_metadata_json': json.dumps(custom_config_metadata),
             'is_v6_4_0_plus': is_v6_4_0_plus,
             'is_v6_5_0_plus': is_v6_5_0_plus,
         })
     if request.method == "POST":
+        custom_config_metadata = fetch_cluster_custom_config_metadata(request)
         payload_data = {
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),
@@ -130,6 +385,7 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                             },
                             'custom_configuration_json': custom_config_raw,
                             'custom_configuration_vault_toggles_json': custom_vault_raw,
+                            'custom_config_metadata_json': json.dumps(custom_config_metadata),
                             'is_v6_4_0_plus': is_v6_4_0_plus,
                             'is_v6_5_0_plus': is_v6_5_0_plus,
                         })
@@ -172,7 +428,11 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                             notify_token = custom_config_parsed.get("QSchedulerNotifyToken", "")
                             custom_config_parsed["QSchedulerNotifyToken"] = notify_token
 
-                    custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
+                    custom_configuration = validate_and_clean_custom_config(
+                        custom_config_parsed,
+                        payload_data.get("SchedulerType"),
+                        custom_config_metadata
+                    )
                     payload_data["CustomConfiguration"] = custom_configuration
                 except Exception as e:
                     messages.error(request, f"Invalid Custom Configuration JSON: {e}")
@@ -196,6 +456,7 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                         },
                         'custom_configuration_json': custom_config_raw,
                         'custom_configuration_vault_toggles_json': custom_vault_raw,
+                        'custom_config_metadata_json': json.dumps(custom_config_metadata),
                         'is_v6_4_0_plus': is_v6_4_0_plus,
                         'is_v6_5_0_plus': is_v6_5_0_plus,
                     })
@@ -222,6 +483,7 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                         },
                         'custom_configuration_json': "{}",
                         'custom_configuration_vault_toggles_json': custom_vault_raw,
+                        'custom_config_metadata_json': json.dumps(custom_config_metadata),
                         'is_v6_4_0_plus': is_v6_4_0_plus,
                         'is_v6_5_0_plus': is_v6_5_0_plus,
                     })
@@ -264,6 +526,8 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
     deployed_version = request.session.get("middleware_deployed_version", "")
     is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
     is_v6_5_0_plus = clean_ver(deployed_version) >= [6, 5, 0]
+
+    custom_config_metadata = fetch_cluster_custom_config_metadata(request)
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -309,6 +573,16 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
             "DomainName": request.POST.get("DomainName"),
             "ProxyConnectionId": int(request.POST.get("ProxyConnectionId")) if request.POST.get("ProxyConnectionId") else None,
         }
+
+        # Fetch existing cluster configuration to preserve Vault secrets ("********")
+        old_config = {}
+        try:
+            old_cluster = controller.heappe_management_cluster_get(Id=cluster_id, SessionCode=request.session_code)
+            if old_cluster:
+                old_cluster_dict = old_cluster.to_dict()
+                old_config = old_cluster_dict.get('custom_configuration') or {}
+        except Exception:
+            pass
 
         if is_v6_4_0_plus:
             custom_config_raw = request.POST.get("CustomConfiguration", "")
@@ -366,7 +640,12 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                             notify_token = custom_config_parsed.get("QSchedulerNotifyToken", "")
                             custom_config_parsed["QSchedulerNotifyToken"] = notify_token
 
-                    custom_configuration = {str(k): str(v) for k, v in custom_config_parsed.items()}
+                    custom_configuration = validate_and_clean_custom_config(
+                        custom_config_parsed,
+                        payload_data.get("SchedulerType"),
+                        custom_config_metadata,
+                        old_config=old_config
+                    )
                     payload_data["CustomConfiguration"] = custom_configuration
                 except Exception as e:
                     messages.error(request, f"Invalid Custom Configuration JSON: {e}")
@@ -459,6 +738,7 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
         'proxy_connections': proxy_list,
         'custom_configuration_json': custom_config_json,
         'custom_configuration_vault_toggles_json': custom_vault_toggles_json,
+        'custom_config_metadata_json': json.dumps(custom_config_metadata),
         'is_v6_4_0_plus': is_v6_4_0_plus,
         'is_v6_5_0_plus': is_v6_5_0_plus,
         'preferred_auth_types_no_proxy': PREFERRED_AUTH_TYPES_NO_PROXY,

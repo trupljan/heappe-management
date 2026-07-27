@@ -163,12 +163,73 @@
                                 {% if is_v6_5_0_plus %}
                                 <textarea name="CustomConfigurationVaultToggles" style="display: none;">{{ custom_configuration_vault_toggles_json }}</textarea>
                                 {% endif %}
+                                <script id="custom-config-metadata-script" type="application/json">{{ custom_config_metadata_json|safe }}</script>
 
                                 <div class="col-12 py-2">
                                     <div class="card border border-light-subtle bg-light bg-opacity-25 shadow-xs p-3">
                                         <div class="card-title d-flex align-items-center gap-2 mb-3 border-bottom pb-2">
                                             <i class="bi bi-sliders text-primary"></i>
                                             <h6 class="h6 mb-0 fw-bold text-dark">Custom Configuration</h6>
+                                        </div>
+
+                                        <!-- Webhook & Callback Notification Settings -->
+                                        <div id="cb-settings-section" class="mb-3">
+                                            <div class="fw-bold small text-primary mb-2">
+                                                <i class="bi bi-bell-fill me-1"></i> Webhook & Callback Notifications
+                                            </div>
+                                            <div class="row g-2 mb-3 bg-white p-3 rounded border border-light-subtle">
+                                                <div class="col-md-6 d-flex align-items-center">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input border-secondary-subtle shadow-none" type="checkbox" id="cb-EnableCallback">
+                                                        <label class="form-check-label small text-dark fw-medium" for="cb-EnableCallback">Enable Callback Notifications</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="cb-CallbackUrl">Callback URL</label>
+                                                    <input type="url" class="form-control form-control-sm border-light-subtle bg-white" id="cb-CallbackUrl" placeholder="e.g. https://my-service.com/heappe-webhook">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Push notification endpoint replacing SSH polling for job status updates.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Graceful Timeout & Checkpointing Settings -->
+                                        <div id="gt-settings-section" class="mb-3">
+                                            <div class="fw-bold small text-primary mb-2">
+                                                <i class="bi bi-hourglass-split me-1"></i> Graceful Timeout & Checkpointing
+                                            </div>
+                                            <div class="row g-2 mb-3 bg-white p-3 rounded border border-light-subtle">
+                                                <div class="col-md-6 d-flex align-items-center">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input border-secondary-subtle shadow-none" type="checkbox" id="gt-EnableGracefulTimeout">
+                                                        <label class="form-check-label small text-dark fw-medium" for="gt-EnableGracefulTimeout">Enable Graceful Timeout</label>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="gt-GracefulTimeoutSeconds">Graceful Timeout Seconds</label>
+                                                    <input type="number" class="form-control form-control-sm border-light-subtle bg-white" id="gt-GracefulTimeoutSeconds" placeholder="30" value="30" min="0">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Sends warning signal before walltime limit expires (default: 30s).</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- SSH & Command Execution Settings -->
+                                        <div id="sc-settings-section" class="mb-3">
+                                            <div class="fw-bold small text-primary mb-2">
+                                                <i class="bi bi-terminal-fill me-1"></i> SSH & Command Execution
+                                            </div>
+                                            <div class="row g-2 mb-3 bg-white p-3 rounded border border-light-subtle">
+                                                <div class="col-md-6">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="sc-SshCommandPrefix">SSH Command Prefix</label>
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="sc-SshCommandPrefix" placeholder="e.g. module load openmpi">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Commands prepended before remote job executions (e.g. module load).</div>
+                                                </div>
+                                                <div class="col-md-6 d-flex align-items-center mt-3">
+                                                    <div class="form-check form-switch">
+                                                        <input class="form-check-input border-secondary-subtle shadow-none" type="checkbox" id="sc-SyncScriptsViaSftp">
+                                                        <label class="form-check-label small text-dark fw-medium" for="sc-SyncScriptsViaSftp">Sync Adapter Scripts via SFTP</label>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
 
                                         <!-- FirecREST Specific Settings (Visible only when FirecREST scheduler type is selected) -->
@@ -203,8 +264,13 @@
                                             <div class="row g-2 mb-3 bg-white p-3 rounded border border-light-subtle">
                                                 <div class="col-md-6">
                                                     <label class="form-label small text-muted fw-semibold mb-1" for="qs-QSchedulerPort">QSchedulerPort <span class="text-danger">*</span></label>
-                                                    <input type="number" class="form-control form-control-sm border-light-subtle bg-white" id="qs-QSchedulerPort" placeholder="e.g. 3000" min="1" max="65535" value="3000">
+                                                    <input type="number" class="form-control form-control-sm border-light-subtle bg-white" id="qs-QSchedulerPort" placeholder="3000" min="1" max="65535" value="3000">
                                                     <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Port on which the QScheduler REST API service is running on the target machine.</div>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-QSchedulerHost">QSchedulerHost</label>
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="qs-QSchedulerHost" placeholder="localhost" value="localhost">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Target host name/address for QScheduler API requests.</div>
                                                 </div>
                                                 {% if is_v6_5_0_plus %}
                                                 <div class="col-md-6 d-flex align-items-center mt-3">
@@ -216,7 +282,7 @@
                                                 <div class="col-12 mt-3">
                                                     <label class="form-label small text-muted fw-semibold mb-1" for="qs-QSchedulerNotifyToken">QScheduler Callback Notify Token</label>
                                                     <input type="password" class="form-control form-control-sm border-light-subtle bg-white" id="qs-QSchedulerNotifyToken" placeholder="********">
-                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Token used for verifying secure callbacks from QScheduler. Leave as is to keep unchanged, clear to delete, or enter new value.</div>
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Token used for verifying secure callbacks from QScheduler. Leave as is (or '********') to keep unchanged.</div>
                                                 </div>
                                                 <div class="col-md-6 mt-3">
                                                     <div class="form-check">
@@ -231,7 +297,7 @@
                                          <!-- General Custom Parameters (Key-Value Dynamic Table) -->
                                          <div>
                                              <div class="fw-bold small text-secondary mb-2">
-                                                 <i class="bi bi-list-nested me-1"></i> Parameters
+                                                 <i class="bi bi-list-nested me-1"></i> Additional Parameters
                                              </div>
                                              <div id="custom-kv-container">
                                                  <!-- Dynamic rows will be inserted here by JavaScript -->
@@ -250,14 +316,19 @@
                                                  <option value="HomeDirectoryTemplate">
                                                  <option value="IdpUrl">
                                                  <option value="ExpirioSecretName">
-                                                 <option value="ExpirioClientIdKey">
-                                                 <option value="ExpirioClientSecretKey">
+                                                 <option value="EnableCallback">
+                                                 <option value="CallbackUrl">
+                                                 <option value="EnableGracefulTimeout">
+                                                 <option value="GracefulTimeoutSeconds">
+                                                 <option value="SshCommandPrefix">
+                                                 <option value="SyncScriptsViaSftp">
+                                                 <option value="QSchedulerPort">
+                                                 <option value="QSchedulerHost">
+                                                 <option value="QSchedulerNotifyToken">
                                                  <option value="SshCaSettings:UseCertificateAuthorityForAuthentication">
                                                  <option value="SshCaSettings:BaseUri">
                                                  <option value="SshCaSettings:CAName">
                                                  <option value="SshCaSettings:ConnectionTimeoutInSeconds">
-                                                 <option value="BusinessLogicSettings:SharedAccountsPoolMode">
-                                                 <option value="BusinessLogicSettings:AutoInitializeProjectCredentialsOnFirstUse">
                                              </datalist>
 
                                              <div class="d-flex flex-wrap align-items-center gap-2 mt-2 pt-2 border-top border-light-subtle">
@@ -269,7 +340,17 @@
                                                      <label class="input-group-text px-2 py-1 bg-light text-secondary border-light-subtle" style="font-size: 0.72rem;" for="select-predefined-key"><i class="bi bi-list-ul me-1"></i>Add Predefined</label>
                                                      <select id="select-predefined-key" class="form-select form-select-sm border-light-subtle bg-white text-dark" style="font-size: 0.75rem; padding-top: 0.2rem; padding-bottom: 0.2rem;">
                                                          <option value="">-- Choose Key --</option>
-                                                         <optgroup label="General & Scripts (Non-FirecREST)">
+                                                         <optgroup label="Notifications & Timeout">
+                                                             <option value="EnableCallback">EnableCallback</option>
+                                                             <option value="CallbackUrl">CallbackUrl</option>
+                                                             <option value="EnableGracefulTimeout">EnableGracefulTimeout</option>
+                                                             <option value="GracefulTimeoutSeconds">GracefulTimeoutSeconds</option>
+                                                         </optgroup>
+                                                         <optgroup label="SSH & Commands">
+                                                             <option value="SshCommandPrefix">SshCommandPrefix</option>
+                                                             <option value="SyncScriptsViaSftp">SyncScriptsViaSftp</option>
+                                                         </optgroup>
+                                                         <optgroup label="General & Scripts">
                                                              <option value="ScriptsBasePath">ScriptsBasePath</option>
                                                              <option value="ClusterScriptsRepository">ClusterScriptsRepository</option>
                                                              <option value="ClusterScriptsRepositoryBranch">ClusterScriptsRepositoryBranch</option>
@@ -280,25 +361,16 @@
                                                              <option value="JobLogArchiveSubPath">JobLogArchiveSubPath</option>
                                                              <option value="EventualConsistencyRetryCount">EventualConsistencyRetryCount</option>
                                                              <option value="EventualConsistencyRetryDelayMs">EventualConsistencyRetryDelayMs</option>
-                                                         </optgroup>
-                                                         <optgroup label="Remote Path Expansion">
                                                              <option value="HomeDirectoryTemplate">HomeDirectoryTemplate</option>
+                                                         </optgroup>
+                                                         <optgroup label="QScheduler Specific">
+                                                             <option value="QSchedulerPort">QSchedulerPort</option>
+                                                             <option value="QSchedulerHost">QSchedulerHost</option>
+                                                             <option value="QSchedulerNotifyToken">QSchedulerNotifyToken</option>
                                                          </optgroup>
                                                          <optgroup label="FirecREST Specific">
                                                              <option value="IdpUrl">IdpUrl</option>
                                                              <option value="ExpirioSecretName">ExpirioSecretName</option>
-                                                             <option value="ExpirioClientIdKey">ExpirioClientIdKey</option>
-                                                             <option value="ExpirioClientSecretKey">ExpirioClientSecretKey</option>
-                                                         </optgroup>
-                                                         <optgroup label="SSH CA Configuration Overrides">
-                                                             <option value="SshCaSettings:UseCertificateAuthorityForAuthentication">SshCaSettings:UseCertificateAuthorityForAuthentication</option>
-                                                             <option value="SshCaSettings:BaseUri">SshCaSettings:BaseUri</option>
-                                                             <option value="SshCaSettings:CAName">SshCaSettings:CAName</option>
-                                                             <option value="SshCaSettings:ConnectionTimeoutInSeconds">SshCaSettings:ConnectionTimeoutInSeconds</option>
-                                                         </optgroup>
-                                                         <optgroup label="General Business Logic Overrides">
-                                                             <option value="BusinessLogicSettings:SharedAccountsPoolMode">BusinessLogicSettings:SharedAccountsPoolMode</option>
-                                                             <option value="BusinessLogicSettings:AutoInitializeProjectCredentialsOnFirstUse">BusinessLogicSettings:AutoInitializeProjectCredentialsOnFirstUse</option>
                                                          </optgroup>
                                                      </select>
                                                  </div>
@@ -313,6 +385,26 @@
                                          const customConfigTextarea = document.querySelector('textarea[name="CustomConfiguration"]');
                                          const customConfigVaultTogglesTextarea = document.querySelector('textarea[name="CustomConfigurationVaultToggles"]');
                                          
+                                         const metaScript = document.getElementById('custom-config-metadata-script');
+                                         let metadataList = [];
+                                         try {
+                                             if (metaScript && metaScript.textContent.trim()) {
+                                                 metadataList = JSON.parse(metaScript.textContent);
+                                             }
+                                         } catch(e) { metadataList = []; }
+
+                                         const cbSettingsSection = document.getElementById('cb-settings-section');
+                                         const cbEnableCallback = document.getElementById('cb-EnableCallback');
+                                         const cbCallbackUrl = document.getElementById('cb-CallbackUrl');
+
+                                         const gtSettingsSection = document.getElementById('gt-settings-section');
+                                         const gtEnableGracefulTimeout = document.getElementById('gt-EnableGracefulTimeout');
+                                         const gtGracefulTimeoutSeconds = document.getElementById('gt-GracefulTimeoutSeconds');
+
+                                         const scSettingsSection = document.getElementById('sc-settings-section');
+                                         const scSshCommandPrefix = document.getElementById('sc-SshCommandPrefix');
+                                         const scSyncScriptsViaSftp = document.getElementById('sc-SyncScriptsViaSftp');
+
                                          const fcSettingsSection = document.getElementById('fc-settings-section');
                                          const fcIdpUrl = document.getElementById('fc-IdpUrl');
                                          const fcExpirioSecretName = document.getElementById('fc-ExpirioSecretName');
@@ -320,6 +412,7 @@
                                          
                                          const qsSettingsSection = document.getElementById('qs-settings-section');
                                          const qsQSchedulerPort = document.getElementById('qs-QSchedulerPort');
+                                         const qsQSchedulerHost = document.getElementById('qs-QSchedulerHost');
                                          const qsQSchedulerUseSessions = document.getElementById('qs-QSchedulerUseSessions');
                                          const qsQSchedulerNotifyToken = document.getElementById('qs-QSchedulerNotifyToken');
                                          const qsStoreInVault = document.getElementById('qs-StoreInVault');
@@ -330,12 +423,18 @@
                                          
                                          if (!customConfigTextarea || !schedulerSelect) return;
 
-                                         const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate'];
-                                         const RESERVED_QS_KEYS = ['QSchedulerPort', 'QSchedulerUseSessions', 'QSchedulerNotifyToken'];
+                                         const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate', 'FirecrestUrl', 'ClientId', 'ClientSecret', 'ClusterName'];
+                                         const RESERVED_QS_KEYS = ['QSchedulerPort', 'QSchedulerHost', 'QSchedulerUseSessions', 'QSchedulerNotifyToken'];
+                                         const RESERVED_GROUP_KEYS = [
+                                             'EnableCallback', 'CallbackUrl',
+                                             'EnableGracefulTimeout', 'GracefulTimeoutSeconds',
+                                             'SshCommandPrefix', 'SyncScriptsViaSftp',
+                                             ...RESERVED_FC_KEYS, ...RESERVED_QS_KEYS
+                                         ];
 
                                          const PREDEFINED_KEYS_META = {
                                              'ScriptsBasePath': {
-                                                 desc: 'Base remote path on the cluster where HEAppE internal scripts are stored. Supports $USER or ${USER} placeholders.',
+                                                 desc: 'Base remote path on the cluster where HEAppE internal scripts are stored.',
                                                  example: '/home/project/$USER/.HEAppE'
                                              },
                                              'ClusterScriptsRepository': {
@@ -347,11 +446,11 @@
                                                  example: 'main'
                                              },
                                              'KeyScriptsDirectoryInRepository': {
-                                                 desc: 'Path to the directory within the repository containing the key scripts.',
+                                                 desc: 'Path to directory within repository containing key scripts.',
                                                  example: 'pbs-pro'
                                              },
                                              'InstanceIdentifierPath': {
-                                                 desc: 'Unique sub-folder name to isolate multiple HEAppE instances on a shared file system.',
+                                                 desc: 'Unique sub-folder name to isolate multiple HEAppE instances.',
                                                  example: 'production-instance'
                                              },
                                              'SubExecutionsPath': {
@@ -367,7 +466,7 @@
                                                  example: 'logs'
                                              },
                                              'EventualConsistencyRetryCount': {
-                                                 desc: 'Number of check retries for filesystems that are eventually consistent (e.g. Lustre, GPFS).',
+                                                 desc: 'Number of check retries for filesystems that are eventually consistent.',
                                                  example: '5'
                                              },
                                              'EventualConsistencyRetryDelayMs': {
@@ -375,48 +474,40 @@
                                                  example: '1000'
                                              },
                                              'HomeDirectoryTemplate': {
-                                                 desc: 'Used to expand relative paths (~) or environment variables ($HOME, ${HOME}) for the target user. Supports {username}, {USER}, and $USER templates.',
-                                                 example: '/storage/brno2/home/{username}'
+                                                 desc: 'Template path for user home directory expansion.',
+                                                 example: '/users/{username}'
                                              },
-                                             'IdpUrl': {
-                                                 desc: 'Overrides the default identity provider (Keycloak/AAI) URL used to exchange tokens for FirecREST.',
-                                                 example: 'https://aai.my-eurohpc.eu/auth/realms/eurohpc'
-                                             },
-                                             'ExpirioSecretName': {
-                                                 desc: 'The name of the secret in the Expirio vault holding the FirecREST OIDC credentials (clientId and clientSecret).',
-                                                 example: 'discoverer-firecrest-secret'
-                                             },
-                                             'ExpirioClientIdKey': {
-                                                 desc: 'JSON property key representing client_id inside the Expirio secret (defaults to client_id).',
-                                                 example: 'firecrest_client_id'
-                                             },
-                                             'ExpirioClientSecretKey': {
-                                                 desc: 'JSON property key representing client_secret inside the Expirio secret (defaults to client_secret).',
-                                                 example: 'firecrest_client_secret'
-                                             },
-                                             'SshCaSettings:UseCertificateAuthorityForAuthentication': {
-                                                 desc: 'Override whether the SSH CA API should be used for this specific cluster (opt-in or opt-out).',
+                                             'EnableCallback': {
+                                                 desc: 'Enable push callback notifications for job status updates.',
                                                  example: 'true'
                                              },
-                                             'SshCaSettings:BaseUri': {
-                                                 desc: 'Override the SSH CA API base URL for this cluster.',
-                                                 example: 'https://sshca.other-domain.eu'
+                                             'CallbackUrl': {
+                                                 desc: 'Webhook endpoint URL for callback notifications.',
+                                                 example: 'https://my-service.com/heappe-webhook'
                                              },
-                                             'SshCaSettings:CAName': {
-                                                 desc: 'Override the SSH Certification Authority name.',
-                                                 example: 'other-ca-name'
+                                             'EnableGracefulTimeout': {
+                                                 desc: 'Enable warning signal before walltime expiration.',
+                                                 example: 'true'
                                              },
-                                             'SshCaSettings:ConnectionTimeoutInSeconds': {
-                                                 desc: 'Override the SSH CA API timeout.',
+                                             'GracefulTimeoutSeconds': {
+                                                 desc: 'Time window in seconds before walltime limit to send warning.',
                                                  example: '30'
                                              },
-                                             'BusinessLogicSettings:SharedAccountsPoolMode': {
-                                                 desc: 'Enable/disable shared account pool mode for this cluster.',
+                                             'SshCommandPrefix': {
+                                                 desc: 'Command or module pre-load prepended before execution.',
+                                                 example: 'module load openmpi'
+                                             },
+                                             'SyncScriptsViaSftp': {
+                                                 desc: 'Upload adapter scripts directly using SFTP instead of git clone.',
                                                  example: 'true'
                                              },
-                                             'BusinessLogicSettings:AutoInitializeProjectCredentialsOnFirstUse': {
-                                                 desc: 'Override whether to automatically initialize project credentials on first use.',
-                                                 example: 'true'
+                                             'QSchedulerPort': {
+                                                 desc: 'Port number for QScheduler API service.',
+                                                 example: '3000'
+                                             },
+                                             'QSchedulerHost': {
+                                                 desc: 'Host address for QScheduler API service.',
+                                                 example: 'localhost'
                                              }
                                          };
 
@@ -443,18 +534,24 @@
                                              }
                                          }
 
-                                         function addParameterRow(key = '', value = '') {
+                                         function addParameterRow(key = '', value = '', isVault = false) {
                                              const rowId = 'kv-row-' + Math.random().toString(36).substr(2, 9);
                                              const rowDiv = document.createElement('div');
                                              rowDiv.className = 'row g-2 mb-2 align-items-start';
                                              rowDiv.id = rowId;
                                              
                                              rowDiv.innerHTML = `
-                                                 <div class="col-5">
+                                                 <div class="col-4">
                                                      <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-key" placeholder="Key" value="${escapeHtml(key)}" list="predefined-keys-list">
                                                  </div>
-                                                 <div class="col-6">
+                                                 <div class="col-5">
                                                      <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-value" placeholder="Value" value="${escapeHtml(value)}">
+                                                 </div>
+                                                 <div class="col-2 pt-1 text-center">
+                                                     <div class="form-check form-check-inline m-0" title="Store value in HashiCorp Vault instead of database">
+                                                         <input class="form-check-input kv-vault-toggle border-secondary-subtle shadow-none" type="checkbox" ${isVault ? 'checked' : ''}>
+                                                         <label class="form-check-label small text-muted ms-1" style="font-size: 0.72rem;"><i class="bi bi-shield-lock text-warning"></i> Vault</label>
+                                                     </div>
                                                  </div>
                                                  <div class="col-1 text-end pt-1">
                                                      <button type="button" class="btn btn-xs btn-outline-danger btn-remove-row p-1" title="Remove parameter">
@@ -477,6 +574,7 @@
                                              
                                              const keyInput = rowDiv.querySelector('.kv-key');
                                              const valInput = rowDiv.querySelector('.kv-value');
+                                             const vaultToggle = rowDiv.querySelector('.kv-vault-toggle');
                                              const btnRemove = rowDiv.querySelector('.btn-remove-row');
                                              const descContainer = rowDiv.querySelector('.desc-container');
                                              const descText = rowDiv.querySelector('.desc-text');
@@ -500,6 +598,9 @@
                                                  serializeToJSON();
                                              });
                                              valInput.addEventListener('input', serializeToJSON);
+                                             if (vaultToggle) {
+                                                 vaultToggle.addEventListener('change', serializeToJSON);
+                                             }
                                              btnRemove.addEventListener('click', function() {
                                                  rowDiv.remove();
                                                  serializeToJSON();
@@ -531,12 +632,28 @@
 
                                          function populateUIFromJSON() {
                                              const data = getParsedJSON();
+                                             const vaultToggles = getParsedVaultTogglesJSON();
                                              
-                                             fcIdpUrl.value = data['IdpUrl'] || '';
-                                             fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
-                                             fcHomeDirectoryTemplate.value = data['HomeDirectoryTemplate'] || '/users/{username}';
+                                             // Callback Notifications
+                                             if (cbEnableCallback) cbEnableCallback.checked = data['EnableCallback'] === 'true' || data['EnableCallback'] === true;
+                                             if (cbCallbackUrl) cbCallbackUrl.value = data['CallbackUrl'] || '';
+
+                                             // Graceful Timeout
+                                             if (gtEnableGracefulTimeout) gtEnableGracefulTimeout.checked = data['EnableGracefulTimeout'] === 'true' || data['EnableGracefulTimeout'] === true;
+                                             if (gtGracefulTimeoutSeconds) gtGracefulTimeoutSeconds.value = data['GracefulTimeoutSeconds'] || '30';
+
+                                             // SSH Commands
+                                             if (scSshCommandPrefix) scSshCommandPrefix.value = data['SshCommandPrefix'] || '';
+                                             if (scSyncScriptsViaSftp) scSyncScriptsViaSftp.checked = data['SyncScriptsViaSftp'] === 'true' || data['SyncScriptsViaSftp'] === true;
+
+                                             // FirecREST
+                                             if (fcIdpUrl) fcIdpUrl.value = data['IdpUrl'] || '';
+                                             if (fcExpirioSecretName) fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
+                                             if (fcHomeDirectoryTemplate) fcHomeDirectoryTemplate.value = data['HomeDirectoryTemplate'] || '/users/{username}';
                                              
-                                             qsQSchedulerPort.value = data['QSchedulerPort'] || '3000';
+                                             // QScheduler
+                                             if (qsQSchedulerPort) qsQSchedulerPort.value = data['QSchedulerPort'] || '3000';
+                                             if (qsQSchedulerHost) qsQSchedulerHost.value = data['QSchedulerHost'] || 'localhost';
                                              if (qsQSchedulerUseSessions) {
                                                  qsQSchedulerUseSessions.checked = data['QSchedulerUseSessions'] === 'true';
                                              }
@@ -544,7 +661,6 @@
                                                  qsQSchedulerNotifyToken.value = data['QSchedulerNotifyToken'] || '';
                                              }
                                              if (qsStoreInVault) {
-                                                 const vaultToggles = getParsedVaultTogglesJSON();
                                                  qsStoreInVault.checked = !!vaultToggles['QSchedulerNotifyToken'];
                                              }
                                              
@@ -552,31 +668,48 @@
                                              
                                              let hasGeneral = false;
                                              for (const [k, v] of Object.entries(data)) {
-                                                 if (!RESERVED_FC_KEYS.includes(k) && !RESERVED_QS_KEYS.includes(k)) {
-                                                     addParameterRow(k, v);
+                                                 if (!RESERVED_GROUP_KEYS.includes(k)) {
+                                                     const isVault = !!vaultToggles[k];
+                                                     addParameterRow(k, v, isVault);
                                                      hasGeneral = true;
                                                  }
                                              }
                                              
                                              if (!hasGeneral) {
-                                                 addParameterRow('', '');
+                                                 addParameterRow('', '', false);
                                              }
                                          }
 
                                          function serializeToJSON() {
                                              const data = {};
                                              const vaultToggles = {};
+                                             const st = schedulerSelect.value;
                                              
-                                             if (schedulerSelect.value === '16') {
-                                                 if (fcIdpUrl.value.trim()) {
+                                             // Webhook & Callback Notifications
+                                             if (cbEnableCallback && cbEnableCallback.checked) {
+                                                 data['EnableCallback'] = 'true';
+                                             }
+                                             if (cbCallbackUrl && cbCallbackUrl.value.trim()) {
+                                                 data['CallbackUrl'] = cbCallbackUrl.value.trim();
+                                             }
+
+                                             if (st === '16') {
+                                                 if (fcIdpUrl && fcIdpUrl.value.trim()) {
                                                      data['IdpUrl'] = fcIdpUrl.value.trim();
                                                  }
-                                                 if (fcExpirioSecretName.value.trim()) {
+                                                 if (fcExpirioSecretName && fcExpirioSecretName.value.trim()) {
                                                      data['ExpirioSecretName'] = fcExpirioSecretName.value.trim();
                                                  }
-                                                 data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
-                                             } else if (schedulerSelect.value === '32') {
-                                                 data['QSchedulerPort'] = qsQSchedulerPort.value.trim() || '3000';
+                                                 if (fcHomeDirectoryTemplate) {
+                                                     data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
+                                                 }
+                                             } else if (st === '32') {
+                                                 if (qsQSchedulerPort) {
+                                                     data['QSchedulerPort'] = qsQSchedulerPort.value.trim() || '3000';
+                                                 }
+                                                 if (qsQSchedulerHost && qsQSchedulerHost.value.trim()) {
+                                                     data['QSchedulerHost'] = qsQSchedulerHost.value.trim();
+                                                 }
                                                  if (qsQSchedulerUseSessions) {
                                                      data['QSchedulerUseSessions'] = qsQSchedulerUseSessions.checked ? 'true' : 'false';
                                                  }
@@ -588,6 +721,24 @@
                                                      }
                                                  }
                                              }
+
+                                             if (st !== '32') {
+                                                 if (gtEnableGracefulTimeout && gtEnableGracefulTimeout.checked) {
+                                                     data['EnableGracefulTimeout'] = 'true';
+                                                 }
+                                                 if (gtGracefulTimeoutSeconds && gtGracefulTimeoutSeconds.value.trim()) {
+                                                     data['GracefulTimeoutSeconds'] = gtGracefulTimeoutSeconds.value.trim();
+                                                 }
+                                             }
+
+                                             if (['1', '2', '4', '8'].includes(st)) {
+                                                 if (scSshCommandPrefix && scSshCommandPrefix.value.trim()) {
+                                                     data['SshCommandPrefix'] = scSshCommandPrefix.value.trim();
+                                                 }
+                                                 if (scSyncScriptsViaSftp && scSyncScriptsViaSftp.checked) {
+                                                     data['SyncScriptsViaSftp'] = 'true';
+                                                 }
+                                             }
                                              
                                              const rows = kvContainer.querySelectorAll('.row');
                                              rows.forEach(row => {
@@ -596,15 +747,16 @@
                                                  const key = keyEl.value.trim();
                                                  const valEl = row.querySelector('.kv-value');
                                                  const value = valEl ? valEl.value.trim() : '';
+                                                 const vaultToggleEl = row.querySelector('.kv-vault-toggle');
                                                  
                                                  if (key) {
-                                                     if (schedulerSelect.value === '16' && RESERVED_FC_KEYS.includes(key)) {
-                                                         return;
-                                                     }
-                                                     if (schedulerSelect.value === '32' && RESERVED_QS_KEYS.includes(key)) {
+                                                     if (RESERVED_GROUP_KEYS.includes(key)) {
                                                          return;
                                                      }
                                                      data[key] = value;
+                                                     if (vaultToggleEl && vaultToggleEl.checked) {
+                                                         vaultToggles[key] = true;
+                                                     }
                                                  }
                                              });
                                              
@@ -614,37 +766,72 @@
                                              }
                                          }
 
+                                         function updatePredefinedKeysSelect(st) {
+                                             if (!selectPredefinedKey) return;
+                                             const schedId = parseInt(st) || 0;
+                                             
+                                             const options = selectPredefinedKey.querySelectorAll('option[value]');
+                                             options.forEach(opt => {
+                                                 const val = opt.value;
+                                                 if (!val) return;
+                                                 
+                                                 const meta = metadataList.find(m => (m.Name || m.name) === val);
+                                                 if (meta) {
+                                                     const supported = meta.SupportedSchedulerTypes || meta.supportedSchedulerTypes || [];
+                                                     if (supported.length > 0) {
+                                                         const isSupp = supported.some(s => (s.Id !== undefined ? s.Id : s.id) === schedId);
+                                                         opt.disabled = !isSupp;
+                                                         opt.style.display = isSupp ? '' : 'none';
+                                                     } else {
+                                                         opt.disabled = false;
+                                                         opt.style.display = '';
+                                                     }
+                                                 } else {
+                                                     opt.disabled = false;
+                                                     opt.style.display = '';
+                                                 }
+                                             });
+                                         }
+
                                          function toggleSchedulerSections() {
-                                             if (schedulerSelect.value === '16') {
+                                             const st = schedulerSelect.value;
+                                             
+                                             if (st === '16') {
                                                  fcSettingsSection.style.display = 'block';
                                                  qsSettingsSection.style.display = 'none';
-                                             } else if (schedulerSelect.value === '32') {
+                                                 gtSettingsSection.style.display = 'block';
+                                                 scSettingsSection.style.display = 'none';
+                                             } else if (st === '32') {
                                                  fcSettingsSection.style.display = 'none';
                                                  qsSettingsSection.style.display = 'block';
+                                                 gtSettingsSection.style.display = 'none';
+                                                 scSettingsSection.style.display = 'none';
                                              } else {
                                                  fcSettingsSection.style.display = 'none';
                                                  qsSettingsSection.style.display = 'none';
+                                                 gtSettingsSection.style.display = 'block';
+                                                 scSettingsSection.style.display = 'block';
                                              }
+
+                                             updatePredefinedKeysSelect(st);
                                              serializeToJSON();
                                          }
 
                                          schedulerSelect.addEventListener('change', toggleSchedulerSections);
                                          
-                                         const fcFields = [fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate];
-                                         fcFields.forEach(input => {
-                                             input.addEventListener('input', serializeToJSON);
+                                         const inputListeners = [
+                                             cbEnableCallback, cbCallbackUrl,
+                                             gtEnableGracefulTimeout, gtGracefulTimeoutSeconds,
+                                             scSshCommandPrefix, scSyncScriptsViaSftp,
+                                             fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate,
+                                             qsQSchedulerPort, qsQSchedulerHost, qsQSchedulerUseSessions, qsQSchedulerNotifyToken, qsStoreInVault
+                                         ];
+                                         inputListeners.forEach(el => {
+                                             if (el) {
+                                                 el.addEventListener('input', serializeToJSON);
+                                                 el.addEventListener('change', serializeToJSON);
+                                             }
                                          });
-                                         
-                                         qsQSchedulerPort.addEventListener('input', serializeToJSON);
-                                         if (qsQSchedulerUseSessions) {
-                                             qsQSchedulerUseSessions.addEventListener('change', serializeToJSON);
-                                         }
-                                         if (qsQSchedulerNotifyToken) {
-                                             qsQSchedulerNotifyToken.addEventListener('input', serializeToJSON);
-                                         }
-                                         if (qsStoreInVault) {
-                                             qsStoreInVault.addEventListener('change', serializeToJSON);
-                                         }
 
                                          btnAddParam.addEventListener('click', function() {
                                              addParameterRow('', '');
@@ -712,7 +899,7 @@
                                          }
 
                                          populateUIFromJSON();
-                                        toggleSchedulerSections();
+                                         toggleSchedulerSections();
 
                                         const form = customConfigTextarea.closest('form');
                                         if (form) {

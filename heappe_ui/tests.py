@@ -2434,4 +2434,129 @@ class LogViewerJsonTests(TestCase):
             user.delete()
 
 
+from django.test import SimpleTestCase
+
+class CustomConfigurationMetadataTests(SimpleTestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = mock.MagicMock()
+        self.user.username = "metadata_user"
+        self.user.is_authenticated = True
+
+    def test_fetch_cluster_custom_config_metadata_fallback(self):
+        """Test fetch_cluster_custom_config_metadata returns fallback items when API fails."""
+        from heappe_ui.view.clusters import fetch_cluster_custom_config_metadata
+        request = self.factory.get("/clusters/create/")
+        request.api_instance = mock.MagicMock()
+        request.api_instance.call_api.side_effect = Exception("API error")
+
+        metadata = fetch_cluster_custom_config_metadata(request)
+        self.assertIsInstance(metadata, list)
+        self.assertTrue(len(metadata) > 0)
+        
+        names = [m["Name"] for m in metadata]
+        self.assertIn("EnableCallback", names)
+        self.assertIn("QSchedulerPort", names)
+        self.assertIn("GracefulTimeoutSeconds", names)
+
+    def test_fetch_cluster_custom_config_metadata_success(self):
+        """Test fetch_cluster_custom_config_metadata normalizes response from HEAppE API."""
+        from heappe_ui.view.clusters import fetch_cluster_custom_config_metadata
+        request = self.factory.get("/clusters/create/")
+        request.api_instance = mock.MagicMock()
+        mock_response = [
+            {
+                "Id": 1,
+                "Name": "EnableCallback",
+                "DefaultValue": "false",
+                "SupportedSchedulerTypes": [{"Id": 4, "Name": "Slurm"}, {"Id": 32, "Name": "QScheduler"}]
+            },
+            {
+                "Id": 24,
+                "Name": "QSchedulerPort",
+                "DefaultValue": "3000",
+                "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
+            }
+        ]
+        request.api_instance.call_api.return_value = mock_response
+
+        metadata = fetch_cluster_custom_config_metadata(request)
+        self.assertIsInstance(metadata, list)
+        item_names = [item["Name"] for item in metadata]
+        self.assertIn("EnableCallback", item_names)
+        self.assertIn("QSchedulerPort", item_names)
+
+    def test_validate_and_clean_custom_config_filters_unsupported_keys(self):
+        """Test validate_and_clean_custom_config filters keys incompatible with SchedulerType."""
+        from heappe_ui.view.clusters import validate_and_clean_custom_config
+        metadata = [
+            {
+                "Name": "QSchedulerPort",
+                "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
+            },
+            {
+                "Name": "SshCommandPrefix",
+                "SupportedSchedulerTypes": [{"Id": 4, "Name": "Slurm"}]
+            }
+        ]
+
+        # For Slurm (SchedulerType=4), QSchedulerPort should be filtered out
+        config_slurm = {"QSchedulerPort": "3000", "SshCommandPrefix": "module load mpi"}
+        cleaned_slurm = validate_and_clean_custom_config(config_slurm, 4, metadata)
+        self.assertNotIn("QSchedulerPort", cleaned_slurm)
+        self.assertEqual(cleaned_slurm.get("SshCommandPrefix"), "module load mpi")
+
+        # For QScheduler (SchedulerType=32), SshCommandPrefix should be filtered out
+        config_qs = {"QSchedulerPort": "3000", "SshCommandPrefix": "module load mpi"}
+        cleaned_qs = validate_and_clean_custom_config(config_qs, 32, metadata)
+        self.assertEqual(cleaned_qs.get("QSchedulerPort"), "3000")
+        self.assertNotIn("SshCommandPrefix", cleaned_qs)
+
+    def test_validate_and_clean_custom_config_preserves_vault_masked_values(self):
+        """Test validate_and_clean_custom_config preserves original value if submitted value is '********'."""
+        from heappe_ui.view.clusters import validate_and_clean_custom_config
+        metadata = [
+            {"Name": "QSchedulerNotifyToken", "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]}
+        ]
+        old_config = {"QSchedulerNotifyToken": "real-vault-secret-12345"}
+        new_config = {"QSchedulerNotifyToken": "********"}
+
+        cleaned = validate_and_clean_custom_config(new_config, 32, metadata, old_config=old_config)
+        self.assertEqual(cleaned.get("QSchedulerNotifyToken"), "real-vault-secret-12345")
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_cluster_detail_get_passes_metadata_context(self, mock_api):
+        """Test cluster_detail GET view passes custom_config_metadata_json in template context."""
+        mock_instance = mock.MagicMock()
+        mock_api.return_value = mock_instance
+        
+        mock_cluster = mock.MagicMock()
+        mock_cluster.to_dict.return_value = {
+            "id": 1,
+            "name": "TestCluster",
+            "scheduler_type": 4,
+            "node_types": []
+        }
+        mock_instance.heappe_management_cluster_get.return_value = mock_cluster
+        mock_instance.heappe_management_cluster_proxy_connections_get.return_value = []
+        mock_instance.heappe_management_file_transfer_methods_get.return_value = []
+
+        request = self.factory.get("/clusters/1/detail/")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test",
+            "heappe_session_code": "tok",
+            "middleware_deployed_version": "6.5.0",
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "tok"
+
+        from heappe_ui.view.clusters import cluster_detail
+        response = cluster_detail(request, cluster_id=1)
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn("custom-config-metadata-script", html)
+
+
+
 
