@@ -548,7 +548,10 @@ from django.shortcuts import render
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from collections import Counter
 from datetime import datetime
-import pymssql
+try:
+    import pymssql
+except ImportError:
+    pymssql = None
 
 
 from django.shortcuts import render, redirect

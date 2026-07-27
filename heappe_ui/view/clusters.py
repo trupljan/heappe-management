@@ -225,32 +225,63 @@ def fetch_cluster_custom_config_metadata(request) -> list:
 def validate_and_clean_custom_config(custom_config: dict, scheduler_type: int, metadata_list: list, old_config: dict = None) -> dict:
     """
     Validates custom config against metadata supportedSchedulerTypes for the given scheduler_type.
-    Also preserves Vault masked values ("********").
+    Also preserves Vault masked values ("********") and normalizes/cleans boolean configuration values.
     """
-    if scheduler_type is None:
-        return custom_config
-
     meta_map = {}
-    for meta in metadata_list:
+    default_map = {}
+    for meta in (metadata_list or []):
         name = meta.get('Name')
-        sched_ids = [s.get('Id') for s in (meta.get('SupportedSchedulerTypes') or []) if s.get('Id') is not None]
-        meta_map[name] = sched_ids
+        if name:
+            sched_ids = [s.get('Id') for s in (meta.get('SupportedSchedulerTypes') or []) if s.get('Id') is not None]
+            meta_map[name] = sched_ids
+            default_map[name] = str(meta.get('DefaultValue') if meta.get('DefaultValue') is not None else '')
+
+    KNOWN_BOOLEAN_KEYS = {
+        "EnableCallback",
+        "EnableGracefulTimeout",
+        "SyncScriptsViaSftp",
+        "QSchedulerUseSessions",
+        "CheckCommandTemplatePermissions",
+        "UseBearerAuth",
+        "UseExpirioServiceForTokenExchange"
+    }
 
     cleaned = {}
     for key, val in custom_config.items():
-        val_str = str(val)
+        val_str = str(val) if val is not None else ""
         
         # Vault mask check ("********")
         if val_str == "********" and old_config and key in old_config:
             val_str = str(old_config[key])
         
         # Check supported scheduler types
-        if key in meta_map:
+        if scheduler_type is not None and key in meta_map:
             allowed_ids = meta_map[key]
             if allowed_ids and int(scheduler_type) not in allowed_ids:
                 # Key is not supported for this scheduler type
                 continue
         
+        # Boolean normalization / cleaning:
+        default_val = default_map.get(key, "").lower()
+        is_boolean_key = (
+            key in KNOWN_BOOLEAN_KEYS or
+            default_val in ("true", "false") or
+            key.startswith("Enable") or
+            key.startswith("Is") or
+            key.startswith("Use")
+        )
+
+        if is_boolean_key:
+            v_lower = val_str.strip().lower()
+            if v_lower in ("true", "1", "yes", "on"):
+                val_str = "true"
+            elif v_lower in ("false", "0", "no", "off"):
+                val_str = "false"
+            elif v_lower == "":
+                val_str = default_val if default_val in ("true", "false") else "false"
+            else:
+                val_str = default_val if default_val in ("true", "false") else "false"
+
         cleaned[key] = val_str
 
     return cleaned

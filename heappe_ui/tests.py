@@ -2524,6 +2524,33 @@ class CustomConfigurationMetadataTests(SimpleTestCase):
         cleaned = validate_and_clean_custom_config(new_config, 32, metadata, old_config=old_config)
         self.assertEqual(cleaned.get("QSchedulerNotifyToken"), "real-vault-secret-12345")
 
+    def test_validate_and_clean_custom_config_normalizes_boolean_values(self):
+        """Test validate_and_clean_custom_config converts empty/invalid values for boolean keys like EnableCallback to 'false'."""
+        from heappe_ui.view.clusters import validate_and_clean_custom_config
+        metadata = [
+            {"Name": "EnableCallback", "DefaultValue": "false", "SupportedSchedulerTypes": [{"Id": 4, "Name": "Slurm"}]},
+            {"Name": "QSchedulerUseSessions", "DefaultValue": "true", "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]}
+        ]
+
+        # Case 1: Empty string for EnableCallback -> should convert to 'false'
+        config1 = {"EnableCallback": ""}
+        cleaned1 = validate_and_clean_custom_config(config1, 4, metadata)
+        self.assertEqual(cleaned1.get("EnableCallback"), "false")
+
+        # Case 2: Boolean True / "1" / "true" -> should convert to 'true'
+        config2 = {"EnableCallback": True}
+        cleaned2 = validate_and_clean_custom_config(config2, 4, metadata)
+        self.assertEqual(cleaned2.get("EnableCallback"), "true")
+
+        config2_qs = {"QSchedulerUseSessions": "1"}
+        cleaned2_qs = validate_and_clean_custom_config(config2_qs, 32, metadata)
+        self.assertEqual(cleaned2_qs.get("QSchedulerUseSessions"), "true")
+
+        # Case 3: Empty string for QSchedulerUseSessions -> should convert to default 'true'
+        config3 = {"QSchedulerUseSessions": ""}
+        cleaned3 = validate_and_clean_custom_config(config3, 32, metadata)
+        self.assertEqual(cleaned3.get("QSchedulerUseSessions"), "true")
+
     @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
     def test_cluster_detail_get_passes_metadata_context(self, mock_api):
         """Test cluster_detail GET view passes custom_config_metadata_json in template context."""

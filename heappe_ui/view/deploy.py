@@ -800,19 +800,15 @@ def container_logs_view(request, container_id):
             'message': f"Error fetching logs: {str(e)}"
         }, status=500)
 
-import pyodbc
+try:
+    import pyodbc
+except ImportError:
+    pyodbc = None
 import time
-
-import pymssql
-import time
-
-import pymssql
-
-import pymssql
-
-import pymssql
-
-import pymssql
+try:
+    import pymssql
+except ImportError:
+    pymssql = None
 
 def initialize_database(
     server,
