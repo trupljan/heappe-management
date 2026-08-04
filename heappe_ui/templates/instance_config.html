@@ -838,6 +838,7 @@ $(document).ready(function() {
         });
     });
     // --- AUTOMATIC RESTART STATE ON PAGE LOAD ---
+    {% if instance_name and restart_status and restart_status != 'none' and restart_status != 'done' and restart_status != 'failed' %}
         runRestartPhases();
         startStartupPolling();
     {% endif %}
