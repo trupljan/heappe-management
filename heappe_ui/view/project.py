@@ -305,7 +305,6 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         except Exception as e:
             print(f"Error fetching queue groups for commandtemplates tab: {e}")
 
-
     elif tab == "accounts":
         try:
             project_accounts = [pa.to_dict() for pa in controller.heappe_management_secure_shell_keys_get(

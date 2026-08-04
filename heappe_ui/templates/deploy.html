@@ -149,6 +149,8 @@
                             <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
                                 {% if container.status == 'running' %}
                                     <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
                                 {% else %}
                                     <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
                                 {% endif %}
@@ -214,6 +216,8 @@
                             <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
                                 {% if container.status == 'running' %}
                                     <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
                                 {% else %}
                                     <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
                                 {% endif %}
@@ -274,6 +278,8 @@
                             <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
                                 {% if container.status == 'running' %}
                                     <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
                                 {% else %}
                                     <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
                                 {% endif %}
@@ -334,6 +340,8 @@
                             <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
                                 {% if container.status == 'running' %}
                                     <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
                                 {% else %}
                                     <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
                                 {% endif %}
@@ -394,6 +402,8 @@
                             <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
                                 {% if container.status == 'running' %}
                                     <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
                                 {% else %}
                                     <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
                                 {% endif %}

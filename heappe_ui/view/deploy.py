@@ -121,8 +121,8 @@ def get_container_details(container):
             unmapped.append(f"{container_port}")
     ports_info = mapped + unmapped
     try:
-        image_tags = ', '.join(container.image.tags) if container.image.tags else 'N/A'
-    except docker.errors.ImageNotFound:
+        image_tags = container.attrs.get('Config', {}).get('Image') or 'N/A'
+    except Exception:
         image_tags = 'N/A'
     return {
         'id': container.id,
@@ -1100,6 +1100,16 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
 
             elif action == 'status_poll':
                 # Lightweight read-only poll: just return current container statuses as JSON
+                with RESTART_STATES_LOCK:
+                    restart_info = RESTART_STATES.get(instance_name, {'status': 'none', 'error': None})
+                if restart_info.get('status') in ['stopping', 'db', 'vault', 'services']:
+                    return JsonResponse({
+                        'status': 'ok',
+                        'instance_name': instance_name,
+                        'containers': [],
+                        'restart_status': restart_info.get('status'),
+                        'restart_error': restart_info.get('error')
+                    })
                 poll_containers = [
                     get_container_details(c) for c in client.containers.list(all=True)
                     if c.labels.get('com.docker.compose.project') == instance_name
@@ -1416,6 +1426,16 @@ def instance_config_view(request, instance_name):
 
         elif action == 'status_poll':
             # Lightweight read-only poll: just return current container statuses as JSON
+            with RESTART_STATES_LOCK:
+                restart_info = RESTART_STATES.get(instance_name, {'status': 'none', 'error': None})
+            if restart_info.get('status') in ['stopping', 'db', 'vault', 'services']:
+                return JsonResponse({
+                    'status': 'ok',
+                    'instance_name': instance_name,
+                    'containers': [],
+                    'restart_status': restart_info.get('status'),
+                    'restart_error': restart_info.get('error')
+                })
             poll_containers = [
                 get_container_details(c) for c in client.containers.list(all=True)
                 if c.labels.get('com.docker.compose.project') == instance_name

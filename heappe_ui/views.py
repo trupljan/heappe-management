@@ -971,6 +971,7 @@ from django.conf import settings
 from django.http import JsonResponse
 
 
+@login_required
 def check_for_updates(request):
     import time
     now = time.time()
