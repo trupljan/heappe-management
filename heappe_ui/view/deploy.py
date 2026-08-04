@@ -432,124 +432,14 @@ def is_port_open(host, port, timeout=1):
         return False
 
 def run_bg_restart_all(compose_dir, instance_name, command, mssql_port, env_path):
-    import time
     try:
-        # 1. Stop all containers first
         with RESTART_STATES_LOCK:
-            RESTART_STATES[instance_name] = {'status': 'stopping', 'error': None}
-        
-        stop_cmd = command + ["stop"]
-        stop_result = execute_docker_compose(stop_cmd, compose_dir)
-        if stop_result.returncode != 0:
-            raise Exception(f"Failed to stop containers: {stop_result.stderr}")
+            RESTART_STATES[instance_name] = {'status': 'restarting', 'error': None}
 
-        # 2. Start database container only
-        with RESTART_STATES_LOCK:
-            RESTART_STATES[instance_name]['status'] = 'db'
-
-        db_start_cmd = [
-            "docker", "compose",
-            "--profile", "db",
-            "-p", instance_name,
-            "up", "-d"
-        ]
-        db_result = execute_docker_compose(db_start_cmd, compose_dir)
-        if db_result.returncode != 0:
-            raise Exception(f"Failed to start database container: {db_result.stderr}")
-
-        # 3. Wait for the database port to be active
-        db_container = None
-        try:
-            client = docker.from_env()
-            db_container = next((c for c in client.containers.list(all=True)
-                                 if c.labels.get('com.docker.compose.project') == instance_name
-                                 and c.labels.get('com.docker.compose.service') == 'db'), None)
-        except Exception as ex:
-            print(f"Error fetching DB container: {ex}")
-
-        if mssql_port:
-            port_ready = False
-            for _ in range(15):
-                if is_port_open("127.0.0.1", mssql_port):
-                    port_ready = True
-                    break
-                time.sleep(0.5)
-
-        # 4. Start Vault container
-        with RESTART_STATES_LOCK:
-            RESTART_STATES[instance_name]['status'] = 'vault'
-
-        vault_start_cmd = [
-            "docker", "compose",
-            "--profile", "vault",
-            "--profile", "vaultagent",
-            "-p", instance_name,
-            "up", "-d"
-        ]
-        vault_result = execute_docker_compose(vault_start_cmd, compose_dir)
-        if vault_result.returncode != 0:
-            raise Exception(f"Failed to start Vault: {vault_result.stderr}")
-
-        # 5. Read Vault host port from env
-        vault_host_port = None
-        if os.path.exists(env_path):
-            try:
-                with open(env_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        ls = line.strip()
-                        for key in ("HOST_VAULT_PORT=", "VAULT_PORT=", "VAULT_HOST_PORT="):
-                            if ls.startswith(key):
-                                try:
-                                    vault_host_port = int(ls.split("=", 1)[1].strip())
-                                except ValueError:
-                                    pass
-            except Exception:
-                pass
-        if not vault_host_port:
-            vault_host_port = 8200
-
-        # 6. Poll Vault
-        vault_container = None
-        try:
-            client = docker.from_env()
-            vault_container = next((c for c in client.containers.list(all=True)
-                                    if c.labels.get('com.docker.compose.project') == instance_name
-                                    and c.labels.get('com.docker.compose.service') == 'vault'), None)
-        except Exception as ex:
-            print(f"Error fetching Vault container: {ex}")
-
-        vault_ready = False
-        for _ in range(15):
-            if is_port_open("127.0.0.1", vault_host_port):
-                vault_ready = True
-                break
-            time.sleep(0.5)
-        if not vault_ready and vault_container and vault_container.status == 'running':
-            vault_ready = True
-
-        # 7. Unseal Vault
-        unseal_cmd = [
-            "docker", "compose",
-            "--profile", "initVault",
-            "-p", instance_name,
-            "up", "--force-recreate", "--no-deps"
-        ]
-        unseal_result = execute_docker_compose(unseal_cmd, compose_dir, timeout=60)
-        unseal_ok = unseal_result.returncode == 0
-
-        # 8. Start remaining services
-        with RESTART_STATES_LOCK:
-            RESTART_STATES[instance_name]['status'] = 'services'
-
-        up_cmd = command + ["up", "-d"]
-        result = execute_docker_compose(up_cmd, compose_dir)
-        if result.returncode != 0:
-            raise Exception(f"Failed to start remaining containers: {result.stderr}")
-
-        if not vault_ready:
-            raise Exception("Vault port did not respond in time.")
-        if not unseal_ok:
-            print(f"Warning: Vault unseal step returned non-zero exit code ({unseal_result.returncode}): {unseal_result.stderr}")
+        restart_cmd = command + ["restart"]
+        restart_result = execute_docker_compose(restart_cmd, compose_dir)
+        if restart_result.returncode != 0:
+            raise Exception(f"Failed to restart containers: {restart_result.stderr}")
 
         with RESTART_STATES_LOCK:
             RESTART_STATES[instance_name]['status'] = 'done'
@@ -600,10 +490,10 @@ def handle_global_action(compose_dir, instance_name, action):
     elif action == 'restart_all':
         with RESTART_STATES_LOCK:
             state = RESTART_STATES.get(instance_name)
-            if state and state.get('status') in ['stopping', 'db', 'vault', 'services']:
+            if state and state.get('status') == 'restarting':
                 return "Restart is already in progress.", 'info'
-            
-            RESTART_STATES[instance_name] = {'status': 'stopping', 'error': None}
+
+            RESTART_STATES[instance_name] = {'status': 'restarting', 'error': None}
 
         thread = threading.Thread(
             target=run_bg_restart_all,

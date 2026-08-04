@@ -743,6 +743,7 @@ $(document).ready(function() {
             return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
         }
 
+        if (startupPollInterval) clearInterval(startupPollInterval);
         startupPollInterval = setInterval(function() {
             $('#startup-elapsed').text('(' + elapsed() + ')');
             $.ajax({
@@ -756,59 +757,35 @@ $(document).ready(function() {
                 success: function(data) {
                     if (!data || !data.containers) return;
 
-                    // If we have restart_status from backend, update the UI phases list
                     if (data.restart_status && data.restart_status !== 'none') {
                         const status = data.restart_status;
-                        
-                        if (status === 'stopping') {
-                            markStep('step-stop', false);
-                            $('#loading-subtext').text('Stopping all containers');
-                        } else if (status === 'db') {
-                            markStep('step-stop', true);
-                            markStep('step-db', false);
-                            $('#loading-subtext').text('Starting database…');
-                        } else if (status === 'vault') {
-                            markStep('step-stop', true);
-                            markStep('step-db', true);
-                            markStep('step-vault', false);
-                            $('#loading-subtext').text('Starting & unsealing Vault…');
-                        } else if (status === 'services') {
-                            markStep('step-stop', true);
-                            markStep('step-db', true);
-                            markStep('step-vault', true);
-                            markStep('step-services', false);
-                            $('#loading-subtext').text('Starting remaining services…');
+
+                        if (status === 'restarting' || status === 'stopping' || status === 'db' || status === 'vault' || status === 'services') {
+                            $('#startup-phase').text('Restarting containers…');
                         } else if (status === 'done') {
-                            markStep('step-stop', true);
-                            markStep('step-db', true);
-                            markStep('step-vault', true);
-                            markStep('step-services', true);
-                            markStep('step-done', false);
-                            $('#loading-subtext').text('Waiting for HEAppE to come online…');
-                            
-                            // Check if HEAppE is actually up before reloading
+                            $('#startup-phase').text('Waiting for HEAppE to come online…');
+
                             const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
                             const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                             if (heappe) {
                                 $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
                             }
                             if (heappe && heappe.status === 'running' && allUp) {
-                                markStep('step-done', true);
                                 clearInterval(startupPollInterval);
                                 hideLoading();
                                 $('#startup-phase').text('HEAppE is online — reloading…');
-                                setTimeout(() => location.reload(), 1200);
+                                setTimeout(() => location.reload(), 1500);
                             }
                         } else if (status === 'failed') {
                             clearInterval(startupPollInterval);
                             hideLoading();
-                            $('#restart-steps').hide();
-                            alert('Restart failed: ' + (data.restart_error || 'Unknown error'));
+                            $('#startup-banner').removeClass('alert-info').addClass('alert-danger');
+                            $('#startup-phase').text('Restart failed: ' + (data.restart_error || 'Unknown error'));
                         }
                         return;
                     }
 
-                    // Fallback to container-only polling if no restart_status is provided
+                    // Fallback to container-only polling
                     const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
                     const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                     if (heappe) {
@@ -818,7 +795,7 @@ $(document).ready(function() {
                         clearInterval(startupPollInterval);
                         hideLoading();
                         $('#startup-phase').text('HEAppE is online — reloading…');
-                        setTimeout(() => location.reload(), 1200);
+                        setTimeout(() => location.reload(), 1500);
                     }
                 },
                 error: function() { /* server may still be restarting — ignore */ }
@@ -830,7 +807,7 @@ $(document).ready(function() {
         const confirmRestart = confirm("Warning: This will restart all services in the HEAppE instance. Are you sure you want to proceed?");
         if (!confirmRestart) return;
 
-        showLoading('Restarting Instance…', 'Stopping containers…');
+        showLoading('Initiating Restart…', 'Sending restart command to server…');
         runRestartPhases();
 
         $.ajax({
@@ -841,7 +818,7 @@ $(document).ready(function() {
                 csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').first().val()
             },
             success: function(data) {
-                // Do NOT call hideLoading() here, let startStartupPolling handle it.
+                hideLoading();
                 startStartupPolling();
                 const banner = document.getElementById('startup-banner');
                 if (banner) banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -861,31 +838,7 @@ $(document).ready(function() {
         });
     });
     // --- AUTOMATIC RESTART STATE ON PAGE LOAD ---
-    {% if instance_name and restart_status and restart_status != 'none' and restart_status != 'done' and restart_status != 'failed' %}
-        showLoading('Restarting Instance…', 'Resuming restart tracking…');
         runRestartPhases();
-        
-        const initialStatus = '{{ restart_status }}';
-        if (initialStatus === 'stopping') {
-            markStep('step-stop', false);
-            $('#loading-subtext').text('Stopping all containers');
-        } else if (initialStatus === 'db') {
-            markStep('step-stop', true);
-            markStep('step-db', false);
-            $('#loading-subtext').text('Starting database…');
-        } else if (initialStatus === 'vault') {
-            markStep('step-stop', true);
-            markStep('step-db', true);
-            markStep('step-vault', false);
-            $('#loading-subtext').text('Starting & unsealing Vault…');
-        } else if (initialStatus === 'services') {
-            markStep('step-stop', true);
-            markStep('step-db', true);
-            markStep('step-vault', true);
-            markStep('step-services', false);
-            $('#loading-subtext').text('Starting remaining services…');
-        }
-        
         startStartupPolling();
     {% endif %}
 });
