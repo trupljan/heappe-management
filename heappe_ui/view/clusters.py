@@ -148,8 +148,11 @@ FALLBACK_CUSTOM_CONFIG_METADATA = [
         "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
     },
     {
-        "Id": 26, "Name": "QSchedulerNotifyToken", "DefaultValue": "",
-        "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
+        "Id": 26, "Name": "ClusterCallbackNotifyToken", "DefaultValue": "",
+        "SupportedSchedulerTypes": [
+            {"Id": 1, "Name": "LinuxLocal"}, {"Id": 2, "Name": "PbsPro"}, {"Id": 4, "Name": "Slurm"},
+            {"Id": 8, "Name": "HyperQueue"}, {"Id": 16, "Name": "FirecRestSlurm"}, {"Id": 32, "Name": "QScheduler"}
+        ]
     },
     {
         "Id": 27, "Name": "QSchedulerUseSessions", "DefaultValue": "true",
@@ -253,13 +256,6 @@ def validate_and_clean_custom_config(custom_config: dict, scheduler_type: int, m
         # Vault mask check ("********")
         if val_str == "********" and old_config and key in old_config:
             val_str = str(old_config[key])
-        
-        # Check supported scheduler types
-        if scheduler_type is not None and key in meta_map:
-            allowed_ids = meta_map[key]
-            if allowed_ids and int(scheduler_type) not in allowed_ids:
-                # Key is not supported for this scheduler type
-                continue
         
         # Boolean normalization / cleaning:
         default_val = default_map.get(key, "").lower()
@@ -455,9 +451,6 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                             if use_sessions not in ("true", "false"):
                                 use_sessions = "true"
                             custom_config_parsed["QSchedulerUseSessions"] = use_sessions
-                            
-                            notify_token = custom_config_parsed.get("QSchedulerNotifyToken", "")
-                            custom_config_parsed["QSchedulerNotifyToken"] = notify_token
 
                     custom_configuration = validate_and_clean_custom_config(
                         custom_config_parsed,
@@ -520,7 +513,7 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                     })
                 elif payload_data.get("SchedulerType") == 32:
                     if is_v6_5_0_plus:
-                        payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000", "QSchedulerUseSessions": "true", "QSchedulerNotifyToken": ""}
+                        payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000", "QSchedulerUseSessions": "true"}
                         payload_data["CustomConfigurationVaultToggles"] = {}
                     else:
                         payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000"}
@@ -667,9 +660,6 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                             if use_sessions not in ("true", "false"):
                                 use_sessions = "true"
                             custom_config_parsed["QSchedulerUseSessions"] = use_sessions
-                            
-                            notify_token = custom_config_parsed.get("QSchedulerNotifyToken", "")
-                            custom_config_parsed["QSchedulerNotifyToken"] = notify_token
 
                     custom_configuration = validate_and_clean_custom_config(
                         custom_config_parsed,
@@ -691,7 +681,7 @@ def cluster_detail(request: HttpRequest, cluster_id: int, _tab: str = None) -> H
                     return redirect("cluster_detail", cluster_id=cluster_id)
                 elif payload_data.get("SchedulerType") == 32:
                     if is_v6_5_0_plus:
-                        payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000", "QSchedulerUseSessions": "true", "QSchedulerNotifyToken": ""}
+                        payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000", "QSchedulerUseSessions": "true"}
                         payload_data["CustomConfigurationVaultToggles"] = {}
                     else:
                         payload_data["CustomConfiguration"] = {"QSchedulerPort": "3000"}

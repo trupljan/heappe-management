@@ -2126,7 +2126,7 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
         cluster.update_job_state_by_service_account = False
         cluster.domain_name = "qcluster.example.com"
         cluster.node_types = []
-        cluster.custom_configuration = '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","QSchedulerNotifyToken":"secret"}'
+        cluster.custom_configuration = '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","ClusterCallbackNotifyToken":"secret"}'
         cluster.to_dict.return_value = {
             "id": 10,
             "name": "QCluster",
@@ -2140,7 +2140,7 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
             "update_job_state_by_service_account": False,
             "domain_name": "qcluster.example.com",
             "node_types": [],
-            "custom_configuration": '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","QSchedulerNotifyToken":"secret"}',
+            "custom_configuration": '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","ClusterCallbackNotifyToken":"secret"}',
         }
         return cluster
 
@@ -2154,8 +2154,8 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
         created_cluster = {"id": 10}
         mock_instance.heappe_management_cluster_post.return_value = created_cluster
 
-        custom_config = '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","QSchedulerNotifyToken":"mytoken"}'
-        vault_toggles = '{"QSchedulerNotifyToken":true}'
+        custom_config = '{"QSchedulerPort":"3000","QSchedulerUseSessions":"true","ClusterCallbackNotifyToken":"mytoken"}'
+        vault_toggles = '{"ClusterCallbackNotifyToken":true}'
 
         request = self.factory.post("/clusters/create/", {
             "Name": "NewQCluster",
@@ -2196,7 +2196,7 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
             "Expected body to have CustomConfigurationVaultToggles key"
         )
         toggles = body["CustomConfigurationVaultToggles"]
-        self.assertTrue(toggles.get("QSchedulerNotifyToken"), "Expected vault flag to be True for token")
+        self.assertTrue(toggles.get("ClusterCallbackNotifyToken"), "Expected vault flag to be True for token")
 
     @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
     def test_cluster_create_post_qscheduler_pre_v650_no_vault_toggles(self, mock_api):
@@ -2486,8 +2486,8 @@ class CustomConfigurationMetadataTests(SimpleTestCase):
         self.assertIn("EnableCallback", item_names)
         self.assertIn("QSchedulerPort", item_names)
 
-    def test_validate_and_clean_custom_config_filters_unsupported_keys(self):
-        """Test validate_and_clean_custom_config filters keys incompatible with SchedulerType."""
+    def test_validate_and_clean_custom_config_allows_any_custom_keys(self):
+        """Test validate_and_clean_custom_config allows any custom configuration keys while cleaning them."""
         from heappe_ui.view.clusters import validate_and_clean_custom_config
         metadata = [
             {
@@ -2500,29 +2500,29 @@ class CustomConfigurationMetadataTests(SimpleTestCase):
             }
         ]
 
-        # For Slurm (SchedulerType=4), QSchedulerPort should be filtered out
+        # For Slurm (SchedulerType=4), both specific and additional parameters are allowed
         config_slurm = {"QSchedulerPort": "3000", "SshCommandPrefix": "module load mpi"}
         cleaned_slurm = validate_and_clean_custom_config(config_slurm, 4, metadata)
-        self.assertNotIn("QSchedulerPort", cleaned_slurm)
+        self.assertEqual(cleaned_slurm.get("QSchedulerPort"), "3000")
         self.assertEqual(cleaned_slurm.get("SshCommandPrefix"), "module load mpi")
 
-        # For QScheduler (SchedulerType=32), SshCommandPrefix should be filtered out
+        # For QScheduler (SchedulerType=32), both specific and additional parameters are allowed
         config_qs = {"QSchedulerPort": "3000", "SshCommandPrefix": "module load mpi"}
         cleaned_qs = validate_and_clean_custom_config(config_qs, 32, metadata)
         self.assertEqual(cleaned_qs.get("QSchedulerPort"), "3000")
-        self.assertNotIn("SshCommandPrefix", cleaned_qs)
+        self.assertEqual(cleaned_qs.get("SshCommandPrefix"), "module load mpi")
 
     def test_validate_and_clean_custom_config_preserves_vault_masked_values(self):
         """Test validate_and_clean_custom_config preserves original value if submitted value is '********'."""
         from heappe_ui.view.clusters import validate_and_clean_custom_config
         metadata = [
-            {"Name": "QSchedulerNotifyToken", "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]}
+            {"Name": "ClusterCallbackNotifyToken", "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]}
         ]
-        old_config = {"QSchedulerNotifyToken": "real-vault-secret-12345"}
-        new_config = {"QSchedulerNotifyToken": "********"}
+        old_config = {"ClusterCallbackNotifyToken": "real-vault-secret-12345"}
+        new_config = {"ClusterCallbackNotifyToken": "********"}
 
         cleaned = validate_and_clean_custom_config(new_config, 32, metadata, old_config=old_config)
-        self.assertEqual(cleaned.get("QSchedulerNotifyToken"), "real-vault-secret-12345")
+        self.assertEqual(cleaned.get("ClusterCallbackNotifyToken"), "real-vault-secret-12345")
 
     def test_validate_and_clean_custom_config_normalizes_boolean_values(self):
         """Test validate_and_clean_custom_config converts empty/invalid values for boolean keys like EnableCallback to 'false'."""

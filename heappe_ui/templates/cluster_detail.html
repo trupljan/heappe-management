@@ -189,6 +189,19 @@
                                                     <input type="url" class="form-control form-control-sm border-light-subtle bg-white" id="cb-CallbackUrl" placeholder="e.g. https://my-service.com/heappe-webhook">
                                                     <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Push notification endpoint replacing SSH polling for job status updates.</div>
                                                 </div>
+                                                {% if is_v6_5_0_plus %}
+                                                <div class="col-md-8 mt-2">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="cb-ClusterCallbackNotifyToken">Cluster Callback Notify Token</label>
+                                                    <input type="password" class="form-control form-control-sm border-light-subtle bg-white" id="cb-ClusterCallbackNotifyToken" placeholder="********">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Token used for verifying secure callbacks from cluster. Leave as is (or '********') to keep unchanged.</div>
+                                                </div>
+                                                <div class="col-md-4 mt-2 d-flex align-items-center pt-3">
+                                                    <div class="form-check">
+                                                        <input class="form-check-input border-secondary-subtle shadow-none" type="checkbox" id="cb-StoreInVault">
+                                                        <label class="form-check-label small text-dark fw-medium" for="cb-StoreInVault">Store token in HashiCorp Vault</label>
+                                                    </div>
+                                                </div>
+                                                {% endif %}
                                             </div>
                                         </div>
 
@@ -273,21 +286,10 @@
                                                     <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Target host name/address for QScheduler API requests.</div>
                                                 </div>
                                                 {% if is_v6_5_0_plus %}
-                                                <div class="col-md-6 d-flex align-items-center mt-3">
+                                                <div class="col-12 mt-2">
                                                     <div class="form-check form-switch">
                                                         <input class="form-check-input border-secondary-subtle shadow-none" type="checkbox" id="qs-QSchedulerUseSessions">
                                                         <label class="form-check-label small text-dark fw-medium" for="qs-QSchedulerUseSessions">Use QScheduler Sessions by Default</label>
-                                                    </div>
-                                                </div>
-                                                <div class="col-12 mt-3">
-                                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-QSchedulerNotifyToken">QScheduler Callback Notify Token</label>
-                                                    <input type="password" class="form-control form-control-sm border-light-subtle bg-white" id="qs-QSchedulerNotifyToken" placeholder="********">
-                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Token used for verifying secure callbacks from QScheduler. Leave as is (or '********') to keep unchanged.</div>
-                                                </div>
-                                                <div class="col-md-6 mt-3">
-                                                    <div class="form-check">
-                                                        <input class="form-check-input border-secondary-subtle shadow-none" type="checkbox" id="qs-StoreInVault">
-                                                        <label class="form-check-label small text-dark fw-medium" for="qs-StoreInVault">Store QScheduler token in HashiCorp Vault</label>
                                                     </div>
                                                 </div>
                                                 {% endif %}
@@ -318,13 +320,18 @@
                                                  <option value="ExpirioSecretName">
                                                  <option value="EnableCallback">
                                                  <option value="CallbackUrl">
+                                                 <option value="ClusterCallbackNotifyToken">
                                                  <option value="EnableGracefulTimeout">
                                                  <option value="GracefulTimeoutSeconds">
                                                  <option value="SshCommandPrefix">
                                                  <option value="SyncScriptsViaSftp">
                                                  <option value="QSchedulerPort">
                                                  <option value="QSchedulerHost">
-                                                 <option value="QSchedulerNotifyToken">
+                                                 <option value="QSchedulerUseSessions">
+                                                 <option value="FirecrestUrl">
+                                                 <option value="ClientId">
+                                                 <option value="ClientSecret">
+                                                 <option value="ClusterName">
                                                  <option value="SshCaSettings:UseCertificateAuthorityForAuthentication">
                                                  <option value="SshCaSettings:BaseUri">
                                                  <option value="SshCaSettings:CAName">
@@ -343,6 +350,7 @@
                                                          <optgroup label="Notifications & Timeout">
                                                              <option value="EnableCallback">EnableCallback</option>
                                                              <option value="CallbackUrl">CallbackUrl</option>
+                                                             <option value="ClusterCallbackNotifyToken">ClusterCallbackNotifyToken</option>
                                                              <option value="EnableGracefulTimeout">EnableGracefulTimeout</option>
                                                              <option value="GracefulTimeoutSeconds">GracefulTimeoutSeconds</option>
                                                          </optgroup>
@@ -366,11 +374,21 @@
                                                          <optgroup label="QScheduler Specific">
                                                              <option value="QSchedulerPort">QSchedulerPort</option>
                                                              <option value="QSchedulerHost">QSchedulerHost</option>
-                                                             <option value="QSchedulerNotifyToken">QSchedulerNotifyToken</option>
+                                                             <option value="QSchedulerUseSessions">QSchedulerUseSessions</option>
                                                          </optgroup>
                                                          <optgroup label="FirecREST Specific">
                                                              <option value="IdpUrl">IdpUrl</option>
                                                              <option value="ExpirioSecretName">ExpirioSecretName</option>
+                                                             <option value="FirecrestUrl">FirecrestUrl</option>
+                                                             <option value="ClientId">ClientId</option>
+                                                             <option value="ClientSecret">ClientSecret</option>
+                                                             <option value="ClusterName">ClusterName</option>
+                                                         </optgroup>
+                                                         <optgroup label="SSH Certificate Authority">
+                                                             <option value="SshCaSettings:UseCertificateAuthorityForAuthentication">SshCaSettings:UseCertificateAuthorityForAuthentication</option>
+                                                             <option value="SshCaSettings:BaseUri">SshCaSettings:BaseUri</option>
+                                                             <option value="SshCaSettings:CAName">SshCaSettings:CAName</option>
+                                                             <option value="SshCaSettings:ConnectionTimeoutInSeconds">SshCaSettings:ConnectionTimeoutInSeconds</option>
                                                          </optgroup>
                                                      </select>
                                                  </div>
@@ -393,439 +411,500 @@
                                              }
                                          } catch(e) { metadataList = []; }
 
-                                         const cbSettingsSection = document.getElementById('cb-settings-section');
-                                         const cbEnableCallback = document.getElementById('cb-EnableCallback');
-                                         const cbCallbackUrl = document.getElementById('cb-CallbackUrl');
+                                          const cbSettingsSection = document.getElementById('cb-settings-section');
+                                          const cbEnableCallback = document.getElementById('cb-EnableCallback');
+                                          const cbCallbackUrl = document.getElementById('cb-CallbackUrl');
+                                          const cbClusterCallbackNotifyToken = document.getElementById('cb-ClusterCallbackNotifyToken');
+                                          const cbStoreInVault = document.getElementById('cb-StoreInVault');
 
-                                         const gtSettingsSection = document.getElementById('gt-settings-section');
-                                         const gtEnableGracefulTimeout = document.getElementById('gt-EnableGracefulTimeout');
-                                         const gtGracefulTimeoutSeconds = document.getElementById('gt-GracefulTimeoutSeconds');
+                                          const gtSettingsSection = document.getElementById('gt-settings-section');
+                                          const gtEnableGracefulTimeout = document.getElementById('gt-EnableGracefulTimeout');
+                                          const gtGracefulTimeoutSeconds = document.getElementById('gt-GracefulTimeoutSeconds');
 
-                                         const scSettingsSection = document.getElementById('sc-settings-section');
-                                         const scSshCommandPrefix = document.getElementById('sc-SshCommandPrefix');
-                                         const scSyncScriptsViaSftp = document.getElementById('sc-SyncScriptsViaSftp');
+                                          const scSettingsSection = document.getElementById('sc-settings-section');
+                                          const scSshCommandPrefix = document.getElementById('sc-SshCommandPrefix');
+                                          const scSyncScriptsViaSftp = document.getElementById('sc-SyncScriptsViaSftp');
 
-                                         const fcSettingsSection = document.getElementById('fc-settings-section');
-                                         const fcIdpUrl = document.getElementById('fc-IdpUrl');
-                                         const fcExpirioSecretName = document.getElementById('fc-ExpirioSecretName');
-                                         const fcHomeDirectoryTemplate = document.getElementById('fc-HomeDirectoryTemplate');
-                                         
-                                         const qsSettingsSection = document.getElementById('qs-settings-section');
-                                         const qsQSchedulerPort = document.getElementById('qs-QSchedulerPort');
-                                         const qsQSchedulerHost = document.getElementById('qs-QSchedulerHost');
-                                         const qsQSchedulerUseSessions = document.getElementById('qs-QSchedulerUseSessions');
-                                         const qsQSchedulerNotifyToken = document.getElementById('qs-QSchedulerNotifyToken');
-                                         const qsStoreInVault = document.getElementById('qs-StoreInVault');
-                                         
-                                         const kvContainer = document.getElementById('custom-kv-container');
-                                         const btnAddParam = document.getElementById('btn-add-param');
-                                         const selectPredefinedKey = document.getElementById('select-predefined-key');
-                                         
-                                         if (!customConfigTextarea || !schedulerSelect) return;
+                                          const fcSettingsSection = document.getElementById('fc-settings-section');
+                                          const fcIdpUrl = document.getElementById('fc-IdpUrl');
+                                          const fcExpirioSecretName = document.getElementById('fc-ExpirioSecretName');
+                                          const fcHomeDirectoryTemplate = document.getElementById('fc-HomeDirectoryTemplate');
+                                          
+                                          const qsSettingsSection = document.getElementById('qs-settings-section');
+                                          const qsQSchedulerPort = document.getElementById('qs-QSchedulerPort');
+                                          const qsQSchedulerHost = document.getElementById('qs-QSchedulerHost');
+                                          const qsQSchedulerUseSessions = document.getElementById('qs-QSchedulerUseSessions');
+                                          
+                                          const kvContainer = document.getElementById('custom-kv-container');
+                                          const btnAddParam = document.getElementById('btn-add-param');
+                                          const selectPredefinedKey = document.getElementById('select-predefined-key');
+                                          
+                                          if (!customConfigTextarea || !schedulerSelect) return;
 
-                                         const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate', 'FirecrestUrl', 'ClientId', 'ClientSecret', 'ClusterName'];
-                                         const RESERVED_QS_KEYS = ['QSchedulerPort', 'QSchedulerHost', 'QSchedulerUseSessions', 'QSchedulerNotifyToken'];
-                                         const RESERVED_GROUP_KEYS = [
-                                             'EnableCallback', 'CallbackUrl',
-                                             'EnableGracefulTimeout', 'GracefulTimeoutSeconds',
-                                             'SshCommandPrefix', 'SyncScriptsViaSftp',
-                                             ...RESERVED_FC_KEYS, ...RESERVED_QS_KEYS
-                                         ];
+                                          const RESERVED_CB_KEYS = ['EnableCallback', 'CallbackUrl', 'ClusterCallbackNotifyToken'];
+                                          const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate', 'FirecrestUrl', 'ClientId', 'ClientSecret', 'ClusterName'];
+                                          const RESERVED_QS_KEYS = ['QSchedulerPort', 'QSchedulerHost', 'QSchedulerUseSessions'];
+                                          const RESERVED_GROUP_KEYS = [
+                                              ...RESERVED_CB_KEYS,
+                                              'EnableGracefulTimeout', 'GracefulTimeoutSeconds',
+                                              'SshCommandPrefix', 'SyncScriptsViaSftp',
+                                              ...RESERVED_FC_KEYS, ...RESERVED_QS_KEYS
+                                          ];
 
-                                         const PREDEFINED_KEYS_META = {
-                                             'ScriptsBasePath': {
-                                                 desc: 'Base remote path on the cluster where HEAppE internal scripts are stored.',
-                                                 example: '/home/project/$USER/.HEAppE'
-                                             },
-                                             'ClusterScriptsRepository': {
-                                                 desc: 'Git repository URL containing scheduler adapter scripts.',
-                                                 example: 'https://github.com/it4i/heappe-scripts.git'
-                                             },
-                                             'ClusterScriptsRepositoryBranch': {
-                                                 desc: 'Git repository branch to checkout.',
-                                                 example: 'main'
-                                             },
-                                             'KeyScriptsDirectoryInRepository': {
-                                                 desc: 'Path to directory within repository containing key scripts.',
-                                                 example: 'pbs-pro'
-                                             },
-                                             'InstanceIdentifierPath': {
-                                                 desc: 'Unique sub-folder name to isolate multiple HEAppE instances.',
-                                                 example: 'production-instance'
-                                             },
-                                             'SubExecutionsPath': {
-                                                 desc: 'Folder name where job scripts are executed.',
-                                                 example: 'executions'
-                                             },
-                                             'SubScriptsPath': {
-                                                 desc: 'Folder name where job helper scripts are stored.',
-                                                 example: 'scripts'
-                                             },
-                                             'JobLogArchiveSubPath': {
-                                                 desc: 'Folder name where job execution logs are archived.',
-                                                 example: 'logs'
-                                             },
-                                             'EventualConsistencyRetryCount': {
-                                                 desc: 'Number of check retries for filesystems that are eventually consistent.',
-                                                 example: '5'
-                                             },
-                                             'EventualConsistencyRetryDelayMs': {
-                                                 desc: 'Delay in milliseconds between consistency retries.',
-                                                 example: '1000'
-                                             },
-                                             'HomeDirectoryTemplate': {
-                                                 desc: 'Template path for user home directory expansion.',
-                                                 example: '/users/{username}'
-                                             },
-                                             'EnableCallback': {
-                                                 desc: 'Enable push callback notifications for job status updates.',
-                                                 example: 'true'
-                                             },
-                                             'CallbackUrl': {
-                                                 desc: 'Webhook endpoint URL for callback notifications.',
-                                                 example: 'https://my-service.com/heappe-webhook'
-                                             },
-                                             'EnableGracefulTimeout': {
-                                                 desc: 'Enable warning signal before walltime expiration.',
-                                                 example: 'true'
-                                             },
-                                             'GracefulTimeoutSeconds': {
-                                                 desc: 'Time window in seconds before walltime limit to send warning.',
-                                                 example: '30'
-                                             },
-                                             'SshCommandPrefix': {
-                                                 desc: 'Command or module pre-load prepended before execution.',
-                                                 example: 'module load openmpi'
-                                             },
-                                             'SyncScriptsViaSftp': {
-                                                 desc: 'Upload adapter scripts directly using SFTP instead of git clone.',
-                                                 example: 'true'
-                                             },
-                                             'QSchedulerPort': {
-                                                 desc: 'Port number for QScheduler API service.',
-                                                 example: '3000'
-                                             },
-                                             'QSchedulerHost': {
-                                                 desc: 'Host address for QScheduler API service.',
-                                                 example: 'localhost'
-                                             }
-                                         };
+                                          const PREDEFINED_KEYS_META = {
+                                              'ScriptsBasePath': {
+                                                  desc: 'Base remote path on the cluster where HEAppE internal scripts are stored.',
+                                                  example: '/home/project/$USER/.HEAppE'
+                                              },
+                                              'ClusterScriptsRepository': {
+                                                  desc: 'Git repository URL containing scheduler adapter scripts.',
+                                                  example: 'https://github.com/it4i/heappe-scripts.git'
+                                              },
+                                              'ClusterScriptsRepositoryBranch': {
+                                                  desc: 'Git repository branch to checkout.',
+                                                  example: 'main'
+                                              },
+                                              'KeyScriptsDirectoryInRepository': {
+                                                  desc: 'Path to directory within repository containing key scripts.',
+                                                  example: 'pbs-pro'
+                                              },
+                                              'InstanceIdentifierPath': {
+                                                  desc: 'Unique sub-folder name to isolate multiple HEAppE instances.',
+                                                  example: 'production-instance'
+                                              },
+                                              'SubExecutionsPath': {
+                                                  desc: 'Folder name where job scripts are executed.',
+                                                  example: 'executions'
+                                              },
+                                              'SubScriptsPath': {
+                                                  desc: 'Folder name where job helper scripts are stored.',
+                                                  example: 'scripts'
+                                              },
+                                              'JobLogArchiveSubPath': {
+                                                  desc: 'Folder name where job execution logs are archived.',
+                                                  example: 'logs'
+                                              },
+                                              'EventualConsistencyRetryCount': {
+                                                  desc: 'Number of check retries for filesystems that are eventually consistent.',
+                                                  example: '5'
+                                              },
+                                              'EventualConsistencyRetryDelayMs': {
+                                                  desc: 'Delay in milliseconds between consistency retries.',
+                                                  example: '1000'
+                                              },
+                                              'HomeDirectoryTemplate': {
+                                                  desc: 'Template path for user home directory expansion.',
+                                                  example: '/users/{username}'
+                                              },
+                                              'EnableCallback': {
+                                                  desc: 'Enable push callback notifications for job status updates.',
+                                                  example: 'true'
+                                              },
+                                              'CallbackUrl': {
+                                                  desc: 'Webhook endpoint URL for callback notifications.',
+                                                  example: 'https://my-service.com/heappe-webhook'
+                                              },
+                                              'ClusterCallbackNotifyToken': {
+                                                  desc: 'Token used for verifying secure callback notifications from cluster.',
+                                                  example: 'my-callback-secret-token'
+                                              },
+                                              'EnableGracefulTimeout': {
+                                                  desc: 'Enable warning signal before walltime expiration.',
+                                                  example: 'true'
+                                              },
+                                              'GracefulTimeoutSeconds': {
+                                                  desc: 'Time window in seconds before walltime limit to send warning.',
+                                                  example: '30'
+                                              },
+                                              'SshCommandPrefix': {
+                                                  desc: 'Command or module pre-load prepended before execution.',
+                                                  example: 'module load openmpi'
+                                              },
+                                              'SyncScriptsViaSftp': {
+                                                  desc: 'Upload adapter scripts directly using SFTP instead of git clone.',
+                                                  example: 'true'
+                                              },
+                                              'QSchedulerPort': {
+                                                  desc: 'Port number for QScheduler API service.',
+                                                  example: '3000'
+                                              },
+                                              'QSchedulerHost': {
+                                                  desc: 'Host address for QScheduler API service.',
+                                                  example: 'localhost'
+                                              },
+                                              'QSchedulerUseSessions': {
+                                                  desc: 'Use QScheduler interactive/batch sessions by default.',
+                                                  example: 'true'
+                                              },
+                                              'IdpUrl': {
+                                                  desc: 'URL of Keycloak token endpoint for FirecREST Direct Authentication.',
+                                                  example: 'https://keycloak.example.cz/auth/realms/it4i/protocol/openid-connect/token'
+                                              },
+                                              'ExpirioSecretName': {
+                                                  desc: 'Name of the secret key in Expirio for FirecREST token exchange.',
+                                                  example: 'firecrest-secret-key'
+                                              },
+                                              'FirecrestUrl': {
+                                                  desc: 'Base URL of FirecREST service endpoint.',
+                                                  example: 'https://firecrest.example.com'
+                                              },
+                                              'ClientId': {
+                                                  desc: 'OAuth2 Client ID for FirecREST authentication.',
+                                                  example: 'heappe-client'
+                                              },
+                                              'ClientSecret': {
+                                                  desc: 'OAuth2 Client Secret for FirecREST authentication.',
+                                                  example: 'my-client-secret'
+                                              },
+                                              'ClusterName': {
+                                                  desc: 'Target system name configured in FirecREST.',
+                                                  example: 'daint'
+                                              },
+                                              'SshCaSettings:UseCertificateAuthorityForAuthentication': {
+                                                  desc: 'Enable SSH Certificate Authority based authentication.',
+                                                  example: 'true'
+                                              },
+                                              'SshCaSettings:BaseUri': {
+                                                  desc: 'Base URI of the SSH Certificate Authority service.',
+                                                  example: 'https://ca.example.com'
+                                              },
+                                              'SshCaSettings:CAName': {
+                                                  desc: 'Name of Certificate Authority within the service.',
+                                                  example: 'default-ca'
+                                              },
+                                              'SshCaSettings:ConnectionTimeoutInSeconds': {
+                                                  desc: 'Connection timeout in seconds for SSH CA service.',
+                                                  example: '30'
+                                              }
+                                          };
 
-                                         function getParsedJSON() {
-                                             try {
-                                                 const raw = customConfigTextarea.value.trim();
-                                                 if (!raw) return {};
-                                                 const parsed = JSON.parse(raw);
-                                                 return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
-                                             } catch (e) {
-                                                 return {};
-                                             }
-                                         }
+                                          function getParsedJSON() {
+                                              try {
+                                                  const raw = customConfigTextarea.value.trim();
+                                                  if (!raw) return {};
+                                                  const parsed = JSON.parse(raw);
+                                                  return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+                                              } catch (e) {
+                                                  return {};
+                                              }
+                                          }
 
-                                         function getParsedVaultTogglesJSON() {
-                                             if (!customConfigVaultTogglesTextarea) return {};
-                                             try {
-                                                 const raw = customConfigVaultTogglesTextarea.value.trim();
-                                                 if (!raw) return {};
-                                                 const parsed = JSON.parse(raw);
-                                                 return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
-                                             } catch (e) {
-                                                 return {};
-                                             }
-                                         }
+                                          function getParsedVaultTogglesJSON() {
+                                              if (!customConfigVaultTogglesTextarea) return {};
+                                              try {
+                                                  const raw = customConfigVaultTogglesTextarea.value.trim();
+                                                  if (!raw) return {};
+                                                  const parsed = JSON.parse(raw);
+                                                  return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : {};
+                                              } catch (e) {
+                                                  return {};
+                                              }
+                                          }
 
-                                         function addParameterRow(key = '', value = '', isVault = false) {
-                                             const rowId = 'kv-row-' + Math.random().toString(36).substr(2, 9);
-                                             const rowDiv = document.createElement('div');
-                                             rowDiv.className = 'row g-2 mb-2 align-items-start';
-                                             rowDiv.id = rowId;
-                                             
-                                             rowDiv.innerHTML = `
-                                                 <div class="col-4">
-                                                     <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-key" placeholder="Key" value="${escapeHtml(key)}" list="predefined-keys-list">
-                                                 </div>
-                                                 <div class="col-5">
-                                                     <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-value" placeholder="Value" value="${escapeHtml(value)}">
-                                                 </div>
-                                                 <div class="col-2 pt-1 text-center">
-                                                     <div class="form-check form-check-inline m-0" title="Store value in HashiCorp Vault instead of database">
-                                                         <input class="form-check-input kv-vault-toggle border-secondary-subtle shadow-none" type="checkbox" ${isVault ? 'checked' : ''}>
-                                                         <label class="form-check-label small text-muted ms-1" style="font-size: 0.72rem;"><i class="bi bi-shield-lock text-warning"></i> Vault</label>
-                                                     </div>
-                                                 </div>
-                                                 <div class="col-1 text-end pt-1">
-                                                     <button type="button" class="btn btn-xs btn-outline-danger btn-remove-row p-1" title="Remove parameter">
-                                                         <i class="bi bi-dash-lg"></i>
-                                                     </button>
-                                                 </div>
-                                                 <div class="col-12 desc-container mb-2" style="display: none; margin-top: 4px;">
-                                                     <div class="bg-white bg-opacity-75 p-2 rounded border border-light-subtle d-flex align-items-start gap-2 text-muted" style="font-size: 0.72rem; line-height: 1.35;">
-                                                         <i class="bi bi-info-circle-fill text-primary" style="margin-top: 2px;"></i>
-                                                         <div class="flex-grow-1">
-                                                             <span class="desc-text"></span>
-                                                             <div class="mt-1 d-flex align-items-center gap-2">
-                                                                 <span>Example: <code class="example-text bg-light text-dark px-1 py-0.5 rounded font-monospace" style="font-size: 0.65rem;"></code></span>
-                                                                 <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none fw-bold btn-use-example" style="font-size: 0.68rem; line-height: 1.2;">Use Example</button>
-                                                             </div>
-                                                         </div>
-                                                     </div>
-                                                 </div>
-                                             `;
-                                             
-                                             const keyInput = rowDiv.querySelector('.kv-key');
-                                             const valInput = rowDiv.querySelector('.kv-value');
-                                             const vaultToggle = rowDiv.querySelector('.kv-vault-toggle');
-                                             const btnRemove = rowDiv.querySelector('.btn-remove-row');
-                                             const descContainer = rowDiv.querySelector('.desc-container');
-                                             const descText = rowDiv.querySelector('.desc-text');
-                                             const exampleText = rowDiv.querySelector('.example-text');
-                                             const btnUseExample = rowDiv.querySelector('.btn-use-example');
+                                          function addParameterRow(key = '', value = '', isVault = false) {
+                                              const rowId = 'kv-row-' + Math.random().toString(36).substr(2, 9);
+                                              const rowDiv = document.createElement('div');
+                                              rowDiv.className = 'row g-2 mb-2 align-items-start';
+                                              rowDiv.id = rowId;
+                                              
+                                              rowDiv.innerHTML = `
+                                                  <div class="col-4">
+                                                      <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-key" placeholder="Key" value="${escapeHtml(key)}" list="predefined-keys-list">
+                                                  </div>
+                                                  <div class="col-5">
+                                                      <input type="text" class="form-control form-control-sm border-light-subtle bg-white kv-value" placeholder="Value" value="${escapeHtml(value)}">
+                                                  </div>
+                                                  <div class="col-2 pt-1 text-center">
+                                                      <div class="form-check form-check-inline m-0" title="Store value in HashiCorp Vault instead of database">
+                                                          <input class="form-check-input kv-vault-toggle border-secondary-subtle shadow-none" type="checkbox" ${isVault ? 'checked' : ''}>
+                                                          <label class="form-check-label small text-muted ms-1" style="font-size: 0.72rem;"><i class="bi bi-shield-lock text-warning"></i> Vault</label>
+                                                      </div>
+                                                  </div>
+                                                  <div class="col-1 text-end pt-1">
+                                                      <button type="button" class="btn btn-xs btn-outline-danger btn-remove-row p-1" title="Remove parameter">
+                                                          <i class="bi bi-dash-lg"></i>
+                                                      </button>
+                                                  </div>
+                                                  <div class="col-12 desc-container mb-2" style="display: none; margin-top: 4px;">
+                                                      <div class="bg-white bg-opacity-75 p-2 rounded border border-light-subtle d-flex align-items-start gap-2 text-muted" style="font-size: 0.72rem; line-height: 1.35;">
+                                                          <i class="bi bi-info-circle-fill text-primary" style="margin-top: 2px;"></i>
+                                                          <div class="flex-grow-1">
+                                                              <span class="desc-text"></span>
+                                                              <div class="mt-1 d-flex align-items-center gap-2">
+                                                                  <span>Example: <code class="example-text bg-light text-dark px-1 py-0.5 rounded font-monospace" style="font-size: 0.65rem;"></code></span>
+                                                                  <button type="button" class="btn btn-link btn-xs p-0 text-decoration-none fw-bold btn-use-example" style="font-size: 0.68rem; line-height: 1.2;">Use Example</button>
+                                                              </div>
+                                                          </div>
+                                                      </div>
+                                                  </div>
+                                              `;
+                                              
+                                              const keyInput = rowDiv.querySelector('.kv-key');
+                                              const valInput = rowDiv.querySelector('.kv-value');
+                                              const vaultToggle = rowDiv.querySelector('.kv-vault-toggle');
+                                              const btnRemove = rowDiv.querySelector('.btn-remove-row');
+                                              const descContainer = rowDiv.querySelector('.desc-container');
+                                              const descText = rowDiv.querySelector('.desc-text');
+                                              const exampleText = rowDiv.querySelector('.example-text');
+                                              const btnUseExample = rowDiv.querySelector('.btn-use-example');
 
-                                             function updateMeta() {
-                                                 const k = keyInput.value.trim();
-                                                 const meta = PREDEFINED_KEYS_META[k];
-                                                 if (meta) {
-                                                     descText.textContent = meta.desc;
-                                                     exampleText.textContent = meta.example;
-                                                     descContainer.style.display = 'block';
-                                                 } else {
-                                                     descContainer.style.display = 'none';
-                                                 }
-                                             }
-                                             
-                                             keyInput.addEventListener('input', function() {
-                                                 updateMeta();
-                                                 serializeToJSON();
-                                             });
-                                             valInput.addEventListener('input', serializeToJSON);
-                                             if (vaultToggle) {
-                                                 vaultToggle.addEventListener('change', serializeToJSON);
-                                             }
-                                             btnRemove.addEventListener('click', function() {
-                                                 rowDiv.remove();
-                                                 serializeToJSON();
-                                             });
+                                              function updateMeta() {
+                                                  const k = keyInput.value.trim();
+                                                  const meta = PREDEFINED_KEYS_META[k];
+                                                  if (meta) {
+                                                      descText.textContent = meta.desc;
+                                                      exampleText.textContent = meta.example;
+                                                      descContainer.style.display = 'block';
+                                                  } else {
+                                                      descContainer.style.display = 'none';
+                                                  }
+                                              }
+                                              
+                                              keyInput.addEventListener('input', function() {
+                                                  updateMeta();
+                                                  serializeToJSON();
+                                              });
+                                              valInput.addEventListener('input', serializeToJSON);
+                                              if (vaultToggle) {
+                                                  vaultToggle.addEventListener('change', serializeToJSON);
+                                              }
+                                              btnRemove.addEventListener('click', function() {
+                                                  rowDiv.remove();
+                                                  serializeToJSON();
+                                              });
 
-                                             btnUseExample.addEventListener('click', function(e) {
-                                                 e.preventDefault();
-                                                 const k = keyInput.value.trim();
-                                                 const meta = PREDEFINED_KEYS_META[k];
-                                                 if (meta) {
-                                                     valInput.value = meta.example;
-                                                     serializeToJSON();
-                                                     valInput.dispatchEvent(new Event('input'));
-                                                 }
-                                             });
-                                             
-                                             kvContainer.appendChild(rowDiv);
-                                             updateMeta();
-                                             return rowDiv;
-                                         }
+                                              btnUseExample.addEventListener('click', function(e) {
+                                                  e.preventDefault();
+                                                  const k = keyInput.value.trim();
+                                                  const meta = PREDEFINED_KEYS_META[k];
+                                                  if (meta) {
+                                                      valInput.value = meta.example;
+                                                      serializeToJSON();
+                                                      valInput.dispatchEvent(new Event('input'));
+                                                  }
+                                              });
+                                              
+                                              kvContainer.appendChild(rowDiv);
+                                              updateMeta();
+                                              return rowDiv;
+                                          }
 
-                                         function escapeHtml(str) {
-                                             return str.replace(/&/g, "&amp;")
-                                                       .replace(/</g, "&lt;")
-                                                       .replace(/>/g, "&gt;")
-                                                       .replace(/"/g, "&quot;")
-                                                       .replace(/'/g, "&#039;");
-                                         }
+                                          function escapeHtml(str) {
+                                              return str.replace(/&/g, "&amp;")
+                                                        .replace(/</g, "&lt;")
+                                                        .replace(/>/g, "&gt;")
+                                                        .replace(/"/g, "&quot;")
+                                                        .replace(/'/g, "&#039;");
+                                          }
 
-                                         function populateUIFromJSON() {
-                                             const data = getParsedJSON();
-                                             const vaultToggles = getParsedVaultTogglesJSON();
-                                             
-                                             // Callback Notifications
-                                             if (cbEnableCallback) cbEnableCallback.checked = data['EnableCallback'] === 'true' || data['EnableCallback'] === true;
-                                             if (cbCallbackUrl) cbCallbackUrl.value = data['CallbackUrl'] || '';
+                                          function populateUIFromJSON() {
+                                              const data = getParsedJSON();
+                                              const vaultToggles = getParsedVaultTogglesJSON();
+                                              
+                                              // Callback Notifications
+                                              if (cbEnableCallback) cbEnableCallback.checked = data['EnableCallback'] === 'true' || data['EnableCallback'] === true;
+                                              if (cbCallbackUrl) cbCallbackUrl.value = data['CallbackUrl'] || '';
+                                              if (cbClusterCallbackNotifyToken) {
+                                                  cbClusterCallbackNotifyToken.value = data['ClusterCallbackNotifyToken'] || '';
+                                              }
+                                              if (cbStoreInVault) {
+                                                  cbStoreInVault.checked = !!vaultToggles['ClusterCallbackNotifyToken'];
+                                              }
 
-                                             // Graceful Timeout
-                                             if (gtEnableGracefulTimeout) gtEnableGracefulTimeout.checked = data['EnableGracefulTimeout'] === 'true' || data['EnableGracefulTimeout'] === true;
-                                             if (gtGracefulTimeoutSeconds) gtGracefulTimeoutSeconds.value = data['GracefulTimeoutSeconds'] || '30';
+                                              // Graceful Timeout
+                                              if (gtEnableGracefulTimeout) gtEnableGracefulTimeout.checked = data['EnableGracefulTimeout'] === 'true' || data['EnableGracefulTimeout'] === true;
+                                              if (gtGracefulTimeoutSeconds) gtGracefulTimeoutSeconds.value = data['GracefulTimeoutSeconds'] || '30';
 
-                                             // SSH Commands
-                                             if (scSshCommandPrefix) scSshCommandPrefix.value = data['SshCommandPrefix'] || '';
-                                             if (scSyncScriptsViaSftp) scSyncScriptsViaSftp.checked = data['SyncScriptsViaSftp'] === 'true' || data['SyncScriptsViaSftp'] === true;
+                                              // SSH Commands
+                                              if (scSshCommandPrefix) scSshCommandPrefix.value = data['SshCommandPrefix'] || '';
+                                              if (scSyncScriptsViaSftp) scSyncScriptsViaSftp.checked = data['SyncScriptsViaSftp'] === 'true' || data['SyncScriptsViaSftp'] === true;
 
-                                             // FirecREST
-                                             if (fcIdpUrl) fcIdpUrl.value = data['IdpUrl'] || '';
-                                             if (fcExpirioSecretName) fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
-                                             if (fcHomeDirectoryTemplate) fcHomeDirectoryTemplate.value = data['HomeDirectoryTemplate'] || '/users/{username}';
-                                             
-                                             // QScheduler
-                                             if (qsQSchedulerPort) qsQSchedulerPort.value = data['QSchedulerPort'] || '3000';
-                                             if (qsQSchedulerHost) qsQSchedulerHost.value = data['QSchedulerHost'] || 'localhost';
-                                             if (qsQSchedulerUseSessions) {
-                                                 qsQSchedulerUseSessions.checked = data['QSchedulerUseSessions'] === 'true';
-                                             }
-                                             if (qsQSchedulerNotifyToken) {
-                                                 qsQSchedulerNotifyToken.value = data['QSchedulerNotifyToken'] || '';
-                                             }
-                                             if (qsStoreInVault) {
-                                                 qsStoreInVault.checked = !!vaultToggles['QSchedulerNotifyToken'];
-                                             }
-                                             
-                                             kvContainer.innerHTML = '';
-                                             
-                                             let hasGeneral = false;
-                                             for (const [k, v] of Object.entries(data)) {
-                                                 if (!RESERVED_GROUP_KEYS.includes(k)) {
-                                                     const isVault = !!vaultToggles[k];
-                                                     addParameterRow(k, v, isVault);
-                                                     hasGeneral = true;
-                                                 }
-                                             }
-                                             
-                                             if (!hasGeneral) {
-                                                 addParameterRow('', '', false);
-                                             }
-                                         }
+                                              // FirecREST
+                                              if (fcIdpUrl) fcIdpUrl.value = data['IdpUrl'] || '';
+                                              if (fcExpirioSecretName) fcExpirioSecretName.value = data['ExpirioSecretName'] || '';
+                                              if (fcHomeDirectoryTemplate) fcHomeDirectoryTemplate.value = data['HomeDirectoryTemplate'] || '/users/{username}';
+                                              
+                                              // QScheduler
+                                              if (qsQSchedulerPort) qsQSchedulerPort.value = data['QSchedulerPort'] || '3000';
+                                              if (qsQSchedulerHost) qsQSchedulerHost.value = data['QSchedulerHost'] || 'localhost';
+                                              if (qsQSchedulerUseSessions) {
+                                                  qsQSchedulerUseSessions.checked = data['QSchedulerUseSessions'] === 'true';
+                                              }
+                                              
+                                              kvContainer.innerHTML = '';
+                                              
+                                              let hasGeneral = false;
+                                              for (const [k, v] of Object.entries(data)) {
+                                                  if (!RESERVED_GROUP_KEYS.includes(k)) {
+                                                      const isVault = !!vaultToggles[k];
+                                                      addParameterRow(k, v, isVault);
+                                                      hasGeneral = true;
+                                                  }
+                                              }
+                                              
+                                              if (!hasGeneral) {
+                                                  addParameterRow('', '', false);
+                                              }
+                                          }
 
-                                         function serializeToJSON() {
-                                             const data = {};
-                                             const vaultToggles = {};
-                                             const st = schedulerSelect.value;
-                                             
-                                             // Webhook & Callback Notifications
-                                             if (cbEnableCallback) {
-                                                 data['EnableCallback'] = cbEnableCallback.checked ? 'true' : 'false';
-                                             }
-                                             if (cbCallbackUrl && cbCallbackUrl.value.trim()) {
-                                                 data['CallbackUrl'] = cbCallbackUrl.value.trim();
-                                             }
+                                          function serializeToJSON() {
+                                              const data = {};
+                                              const vaultToggles = {};
+                                              const st = schedulerSelect.value;
+                                              
+                                              // Webhook & Callback Notifications
+                                              if (cbEnableCallback) {
+                                                  data['EnableCallback'] = cbEnableCallback.checked ? 'true' : 'false';
+                                              }
+                                              if (cbCallbackUrl && cbCallbackUrl.value.trim()) {
+                                                  data['CallbackUrl'] = cbCallbackUrl.value.trim();
+                                              }
+                                              if (cbClusterCallbackNotifyToken) {
+                                                  if (cbClusterCallbackNotifyToken.value) {
+                                                      data['ClusterCallbackNotifyToken'] = cbClusterCallbackNotifyToken.value;
+                                                  }
+                                                  if (cbStoreInVault) {
+                                                      vaultToggles['ClusterCallbackNotifyToken'] = cbStoreInVault.checked;
+                                                  }
+                                              }
 
-                                             if (st === '16') {
-                                                 if (fcIdpUrl && fcIdpUrl.value.trim()) {
-                                                     data['IdpUrl'] = fcIdpUrl.value.trim();
-                                                 }
-                                                 if (fcExpirioSecretName && fcExpirioSecretName.value.trim()) {
-                                                     data['ExpirioSecretName'] = fcExpirioSecretName.value.trim();
-                                                 }
-                                                 if (fcHomeDirectoryTemplate) {
-                                                     data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
-                                                 }
-                                             } else if (st === '32') {
-                                                 if (qsQSchedulerPort) {
-                                                     data['QSchedulerPort'] = qsQSchedulerPort.value.trim() || '3000';
-                                                 }
-                                                 if (qsQSchedulerHost && qsQSchedulerHost.value.trim()) {
-                                                     data['QSchedulerHost'] = qsQSchedulerHost.value.trim();
-                                                 }
-                                                 if (qsQSchedulerUseSessions) {
-                                                     data['QSchedulerUseSessions'] = qsQSchedulerUseSessions.checked ? 'true' : 'false';
-                                                 }
-                                                 if (qsQSchedulerNotifyToken) {
-                                                     data['QSchedulerNotifyToken'] = qsQSchedulerNotifyToken.value;
-                                                     
-                                                     if (qsStoreInVault) {
-                                                         vaultToggles['QSchedulerNotifyToken'] = qsStoreInVault.checked;
-                                                     }
-                                                 }
-                                             }
+                                              if (st === '16') {
+                                                  if (fcIdpUrl && fcIdpUrl.value.trim()) {
+                                                      data['IdpUrl'] = fcIdpUrl.value.trim();
+                                                  }
+                                                  if (fcExpirioSecretName && fcExpirioSecretName.value.trim()) {
+                                                      data['ExpirioSecretName'] = fcExpirioSecretName.value.trim();
+                                                  }
+                                                  if (fcHomeDirectoryTemplate) {
+                                                      data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
+                                                  }
+                                              } else if (st === '32') {
+                                                  if (qsQSchedulerPort) {
+                                                      data['QSchedulerPort'] = qsQSchedulerPort.value.trim() || '3000';
+                                                  }
+                                                  if (qsQSchedulerHost && qsQSchedulerHost.value.trim()) {
+                                                      data['QSchedulerHost'] = qsQSchedulerHost.value.trim();
+                                                  }
+                                                  if (qsQSchedulerUseSessions) {
+                                                      data['QSchedulerUseSessions'] = qsQSchedulerUseSessions.checked ? 'true' : 'false';
+                                                  }
+                                              }
 
-                                             if (st !== '32') {
-                                                 if (gtEnableGracefulTimeout) {
-                                                     data['EnableGracefulTimeout'] = gtEnableGracefulTimeout.checked ? 'true' : 'false';
-                                                 }
-                                                 if (gtGracefulTimeoutSeconds && gtGracefulTimeoutSeconds.value.trim()) {
-                                                     data['GracefulTimeoutSeconds'] = gtGracefulTimeoutSeconds.value.trim();
-                                                 }
-                                             }
+                                              if (st !== '32') {
+                                                  if (gtEnableGracefulTimeout) {
+                                                      data['EnableGracefulTimeout'] = gtEnableGracefulTimeout.checked ? 'true' : 'false';
+                                                  }
+                                                  if (gtGracefulTimeoutSeconds && gtGracefulTimeoutSeconds.value.trim()) {
+                                                      data['GracefulTimeoutSeconds'] = gtGracefulTimeoutSeconds.value.trim();
+                                                  }
+                                              }
 
-                                             if (['1', '2', '4', '8'].includes(st)) {
-                                                 if (scSshCommandPrefix && scSshCommandPrefix.value.trim()) {
-                                                     data['SshCommandPrefix'] = scSshCommandPrefix.value.trim();
-                                                 }
-                                                 if (scSyncScriptsViaSftp) {
-                                                     data['SyncScriptsViaSftp'] = scSyncScriptsViaSftp.checked ? 'true' : 'false';
-                                                 }
-                                             }
-                                             
-                                             const rows = kvContainer.querySelectorAll('.row');
-                                             rows.forEach(row => {
-                                                 const keyEl = row.querySelector('.kv-key');
-                                                 if (!keyEl) return;
-                                                 const key = keyEl.value.trim();
-                                                 const valEl = row.querySelector('.kv-value');
-                                                 const value = valEl ? valEl.value.trim() : '';
-                                                 const vaultToggleEl = row.querySelector('.kv-vault-toggle');
-                                                 
-                                                 if (key) {
-                                                     if (RESERVED_GROUP_KEYS.includes(key)) {
-                                                         return;
-                                                     }
-                                                     data[key] = value;
-                                                     if (vaultToggleEl && vaultToggleEl.checked) {
-                                                         vaultToggles[key] = true;
-                                                     }
-                                                 }
-                                             });
-                                             
-                                             customConfigTextarea.value = JSON.stringify(data, null, 4);
-                                             if (customConfigVaultTogglesTextarea) {
-                                                 customConfigVaultTogglesTextarea.value = JSON.stringify(vaultToggles, null, 4);
-                                             }
-                                         }
+                                              if (['1', '2', '4', '8'].includes(st)) {
+                                                  if (scSshCommandPrefix && scSshCommandPrefix.value.trim()) {
+                                                      data['SshCommandPrefix'] = scSshCommandPrefix.value.trim();
+                                                  }
+                                                  if (scSyncScriptsViaSftp) {
+                                                      data['SyncScriptsViaSftp'] = scSyncScriptsViaSftp.checked ? 'true' : 'false';
+                                                  }
+                                              }
+                                              
+                                              const rows = kvContainer.querySelectorAll('.row');
+                                              rows.forEach(row => {
+                                                  const keyEl = row.querySelector('.kv-key');
+                                                  if (!keyEl) return;
+                                                  const key = keyEl.value.trim();
+                                                  const valEl = row.querySelector('.kv-value');
+                                                  const value = valEl ? valEl.value.trim() : '';
+                                                  const vaultToggleEl = row.querySelector('.kv-vault-toggle');
+                                                  
+                                                  if (key) {
+                                                      if (RESERVED_GROUP_KEYS.includes(key)) {
+                                                          return;
+                                                      }
+                                                      data[key] = value;
+                                                      if (vaultToggleEl && vaultToggleEl.checked) {
+                                                          vaultToggles[key] = true;
+                                                      }
+                                                  }
+                                              });
+                                              
+                                              customConfigTextarea.value = JSON.stringify(data, null, 4);
+                                              if (customConfigVaultTogglesTextarea) {
+                                                  customConfigVaultTogglesTextarea.value = JSON.stringify(vaultToggles, null, 4);
+                                              }
+                                          }
 
-                                         function updatePredefinedKeysSelect(st) {
-                                             if (!selectPredefinedKey) return;
-                                             const schedId = parseInt(st) || 0;
-                                             
-                                             const options = selectPredefinedKey.querySelectorAll('option[value]');
-                                             options.forEach(opt => {
-                                                 const val = opt.value;
-                                                 if (!val) return;
-                                                 
-                                                 const meta = metadataList.find(m => (m.Name || m.name) === val);
-                                                 if (meta) {
-                                                     const supported = meta.SupportedSchedulerTypes || meta.supportedSchedulerTypes || [];
-                                                     if (supported.length > 0) {
-                                                         const isSupp = supported.some(s => (s.Id !== undefined ? s.Id : s.id) === schedId);
-                                                         opt.disabled = !isSupp;
-                                                         opt.style.display = isSupp ? '' : 'none';
-                                                     } else {
-                                                         opt.disabled = false;
-                                                         opt.style.display = '';
-                                                     }
-                                                 } else {
-                                                     opt.disabled = false;
-                                                     opt.style.display = '';
-                                                 }
-                                             });
-                                         }
+                                          function updatePredefinedKeysSelect(st) {
+                                              if (!selectPredefinedKey) return;
+                                              const schedId = parseInt(st) || 0;
+                                              
+                                              const options = selectPredefinedKey.querySelectorAll('option[value]');
+                                              options.forEach(opt => {
+                                                  const val = opt.value;
+                                                  if (!val) return;
+                                                  
+                                                  if (!opt.dataset.baseText) {
+                                                      opt.dataset.baseText = opt.textContent.trim();
+                                                  }
+                                                  const base = opt.dataset.baseText;
 
-                                         function toggleSchedulerSections() {
-                                             const st = schedulerSelect.value;
-                                             
-                                             if (st === '16') {
-                                                 fcSettingsSection.style.display = 'block';
-                                                 qsSettingsSection.style.display = 'none';
-                                                 gtSettingsSection.style.display = 'block';
-                                                 scSettingsSection.style.display = 'none';
-                                             } else if (st === '32') {
-                                                 fcSettingsSection.style.display = 'none';
-                                                 qsSettingsSection.style.display = 'block';
-                                                 gtSettingsSection.style.display = 'none';
-                                                 scSettingsSection.style.display = 'none';
-                                             } else {
-                                                 fcSettingsSection.style.display = 'none';
-                                                 qsSettingsSection.style.display = 'none';
-                                                 gtSettingsSection.style.display = 'block';
-                                                 scSettingsSection.style.display = 'block';
-                                             }
+                                                  const meta = metadataList.find(m => (m.Name || m.name) === val);
+                                                  let isSupp = false;
+                                                  if (meta) {
+                                                      const supported = meta.SupportedSchedulerTypes || meta.supportedSchedulerTypes || [];
+                                                      if (supported.length > 0) {
+                                                          isSupp = supported.some(s => (s.Id !== undefined ? s.Id : s.id) === schedId);
+                                                      } else {
+                                                          isSupp = true;
+                                                      }
+                                                  } else {
+                                                      isSupp = true;
+                                                  }
+                                                  
+                                                  // All options are kept selectable and visible
+                                                  opt.disabled = false;
+                                                  opt.style.display = '';
+                                                  if (isSupp && schedId > 0) {
+                                                      opt.textContent = `${base} ✓ (Recommended)`;
+                                                  } else {
+                                                      opt.textContent = base;
+                                                  }
+                                              });
+                                          }
 
-                                             updatePredefinedKeysSelect(st);
-                                             serializeToJSON();
-                                         }
+                                          function toggleSchedulerSections() {
+                                              const st = schedulerSelect.value;
+                                              
+                                              if (st === '16') {
+                                                  fcSettingsSection.style.display = 'block';
+                                                  qsSettingsSection.style.display = 'none';
+                                                  gtSettingsSection.style.display = 'block';
+                                                  scSettingsSection.style.display = 'none';
+                                              } else if (st === '32') {
+                                                  fcSettingsSection.style.display = 'none';
+                                                  qsSettingsSection.style.display = 'block';
+                                                  gtSettingsSection.style.display = 'none';
+                                                  scSettingsSection.style.display = 'none';
+                                              } else {
+                                                  fcSettingsSection.style.display = 'none';
+                                                  qsSettingsSection.style.display = 'none';
+                                                  gtSettingsSection.style.display = 'block';
+                                                  scSettingsSection.style.display = 'block';
+                                              }
 
-                                         schedulerSelect.addEventListener('change', toggleSchedulerSections);
-                                         
-                                         const inputListeners = [
-                                             cbEnableCallback, cbCallbackUrl,
-                                             gtEnableGracefulTimeout, gtGracefulTimeoutSeconds,
-                                             scSshCommandPrefix, scSyncScriptsViaSftp,
-                                             fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate,
-                                             qsQSchedulerPort, qsQSchedulerHost, qsQSchedulerUseSessions, qsQSchedulerNotifyToken, qsStoreInVault
-                                         ];
+                                              updatePredefinedKeysSelect(st);
+                                              serializeToJSON();
+                                          }
+
+                                          schedulerSelect.addEventListener('change', toggleSchedulerSections);
+                                          
+                                          const inputListeners = [
+                                              cbEnableCallback, cbCallbackUrl, cbClusterCallbackNotifyToken, cbStoreInVault,
+                                              gtEnableGracefulTimeout, gtGracefulTimeoutSeconds,
+                                              scSshCommandPrefix, scSyncScriptsViaSftp,
+                                              fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate,
+                                              qsQSchedulerPort, qsQSchedulerHost, qsQSchedulerUseSessions
+                                          ];
                                          inputListeners.forEach(el => {
                                              if (el) {
                                                  el.addEventListener('input', serializeToJSON);
