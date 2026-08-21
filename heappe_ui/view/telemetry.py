@@ -496,6 +496,29 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         chart_success_calls.append(max(0, tc - fc))
         chart_failed_calls.append(fc)
 
+    # Build failure details for client-side inspection modal
+    # (The GetExternalServicesReport API returns aggregate stats, not individual log entries,
+    # so we embed the per-operation failure breakdown directly into the page.)
+    failure_details = {}
+    for g in grouped_services:
+        s_name = g['service_name']
+        failed_ops = []
+        for op in g['operations']:
+            op_fc = int(op.get('FailedChecks') or op.get('failed_checks') or 0)
+            op_tc = int(op.get('TotalChecks') or op.get('total_checks') or 0)
+            if op_fc > 0:
+                failed_ops.append({
+                    'operation': op.get('CommandOrPath') or op.get('command_or_path') or '-',
+                    'total_checks': op_tc,
+                    'failed_checks': op_fc,
+                    'availability': round(max(0.0, min(100.0, ((op_tc - op_fc) / op_tc * 100.0))), 1) if op_tc > 0 else 0.0,
+                    'avg_latency': float(op.get('AverageResponseTimeMs') or op.get('average_response_time_ms') or 0),
+                    'p95_latency': float(op.get('P95ResponseTimeMs') or op.get('p95_response_time_ms') or 0),
+                    'max_latency': float(op.get('MaxResponseTimeMs') or op.get('max_response_time_ms') or 0),
+                })
+        if failed_ops:
+            failure_details[s_name] = failed_ops
+
     context = {
         "live_statuses": live_statuses,
         "live_error": live_error,
@@ -518,6 +541,7 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         "chart_p95_latency_json": json.dumps(chart_p95_latency),
         "chart_success_calls_json": json.dumps(chart_success_calls),
         "chart_failed_calls_json": json.dumps(chart_failed_calls),
+        "failure_details_json": json.dumps(failure_details),
     }
     return render(request, "external_services_telemetry.html", context)
 
