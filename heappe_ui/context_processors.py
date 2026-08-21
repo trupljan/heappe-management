@@ -289,6 +289,14 @@ def middleware_update_renderer(request):
         is_v6_4_0_plus = (clean_ver(deployed_version) >= [6, 4, 0])
         is_v6_5_0_plus = (clean_ver(deployed_version) >= [6, 5, 0])
 
+    last_failed_auth = request.session.get("heappe_last_failed_auth", 0)
+    cooldown_remaining = 0
+    if last_failed_auth:
+        import time
+        elapsed = time.time() - last_failed_auth
+        if elapsed < 30:
+            cooldown_remaining = max(1, int(30 - elapsed))
+
     return {
         'caching_enabled': not disable_cache,
         'middleware_update_available': update_available,
@@ -304,5 +312,6 @@ def middleware_update_renderer(request):
         'heappe_session_code': request.session.get('heappe_session_code', ''),
         'heappe_api_key': request.session.get('heappe_api_key_header', '') or request.session.get('heappe_api_key', ''),
         'heappe_host': request.session.get('heappe_host', ''),
+        'cooldown_remaining': cooldown_remaining,
         **api_links
     }

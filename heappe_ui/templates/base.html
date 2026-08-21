@@ -549,7 +549,12 @@
                     <div>
                         <strong class="text-danger-emphasis">HEAppE Connection Offline:</strong>
                         Cannot establish a connection to the selected HEAppE instance (<code>{{ request.session.chosen_instance }}</code>).
-                        <div class="small text-muted mt-1">Host: <code>{{ request.session.heappe_host|default:"N/A" }}</code>. The service might be temporarily offline, or your credentials might be invalid.</div>
+                        {% if cooldown_remaining %}
+                        <span class="badge bg-warning text-dark ms-2 font-monospace" id="navbar-cooldown-badge">
+                            <i class="bi bi-hourglass-split me-1"></i>Cooldown: <span id="navbar-cooldown-sec">{{ cooldown_remaining }}</span>s
+                        </span>
+                        {% endif %}
+                        <div class="small text-muted mt-1">Host: <code>{{ heappe_host|default:"N/A" }}</code>. The service might be temporarily offline, or your credentials might be invalid.</div>
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2">
@@ -561,6 +566,23 @@
                     </a>
                 </div>
             </div>
+            {% if cooldown_remaining %}
+            <script>
+            (function() {
+                let sec = {{ cooldown_remaining }};
+                const secEl = document.getElementById('navbar-cooldown-sec');
+                const badgeEl = document.getElementById('navbar-cooldown-badge');
+                const timer = setInterval(() => {
+                    sec--;
+                    if (secEl) secEl.textContent = Math.max(0, sec);
+                    if (sec <= 0) {
+                        clearInterval(timer);
+                        if (badgeEl) badgeEl.innerHTML = '<i class="bi bi-check-circle me-1"></i>Ready to retry';
+                    }
+                }, 1000);
+            })();
+            </script>
+            {% endif %}
             {% endif %}
 
             <!-- Admin Panel Update Banner -->

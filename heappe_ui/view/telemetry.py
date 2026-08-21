@@ -402,6 +402,16 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         if name:
             available_service_names.add(name)
 
+    # Normalize stats_list and calculate accurate availability percentage
+    for st in stats_list:
+        tc = int(st.get('TotalChecks') or st.get('total_checks') or 0)
+        fc = int(st.get('FailedChecks') or st.get('failed_checks') or 0)
+        if tc > 0:
+            st['availability_percentage'] = round(max(0.0, min(100.0, ((tc - fc) / tc) * 100.0)), 1)
+        else:
+            raw_avail = st.get('AvailabilityPercentage') or st.get('availability_percentage')
+            st['availability_percentage'] = float(raw_avail) if raw_avail is not None else 100.0
+
     # Compute KPI Aggregates
     total_checks = sum(int(st.get('TotalChecks') or st.get('total_checks') or 0) for st in stats_list)
     total_failures = sum(int(st.get('FailedChecks') or st.get('failed_checks') or 0) for st in stats_list)
@@ -409,29 +419,80 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
     if total_checks > 0:
         avg_avail = max(0.0, min(100.0, ((total_checks - total_failures) / total_checks) * 100.0))
     elif stats_list:
-        avails = [float(st.get('AvailabilityPercentage') or st.get('availability_percentage') or 100) for st in stats_list]
+        avails = [float(st.get('availability_percentage') or 100) for st in stats_list]
         avg_avail = sum(avails) / len(avails) if avails else 100.0
 
     valid_latencies = [float(st.get('AverageResponseTimeMs') or st.get('average_response_time_ms') or 0) for st in stats_list if (st.get('AverageResponseTimeMs') or st.get('average_response_time_ms'))]
     avg_latency = (sum(valid_latencies) / len(valid_latencies)) if valid_latencies else 0.0
 
-    # Chart datasets
+    # Smart Hierarchical Grouping by Service
+    grouped_map = {}
+    for st in stats_list:
+        s_name = st.get('ServiceName') or st.get('service_name') or 'Other'
+        s_type = st.get('ServiceType') or st.get('service_type') or 'generic'
+        if s_name not in grouped_map:
+            grouped_map[s_name] = {
+                'service_name': s_name,
+                'service_type': s_type,
+                'total_checks': 0,
+                'failed_checks': 0,
+                'operations': [],
+                'latencies': [],
+                'p95_latencies': [],
+                'min_response_time_ms': 999999,
+                'max_response_time_ms': 0,
+            }
+        g = grouped_map[s_name]
+        tc = int(st.get('TotalChecks') or st.get('total_checks') or 0)
+        fc = int(st.get('FailedChecks') or st.get('failed_checks') or 0)
+        avg_rt = float(st.get('AverageResponseTimeMs') or st.get('average_response_time_ms') or 0)
+        p95_rt = float(st.get('P95ResponseTimeMs') or st.get('p95_response_time_ms') or 0)
+        min_rt = float(st.get('MinResponseTimeMs') or st.get('min_response_time_ms') or 0)
+        max_rt = float(st.get('MaxResponseTimeMs') or st.get('max_response_time_ms') or 0)
+
+        g['total_checks'] += tc
+        g['failed_checks'] += fc
+        if avg_rt > 0:
+            g['latencies'].append(avg_rt)
+        if p95_rt > 0:
+            g['p95_latencies'].append(p95_rt)
+        if min_rt > 0 and min_rt < g['min_response_time_ms']:
+            g['min_response_time_ms'] = min_rt
+        if max_rt > g['max_response_time_ms']:
+            g['max_response_time_ms'] = max_rt
+
+        g['operations'].append(st)
+
+    grouped_services = []
+    for s_name, g in grouped_map.items():
+        if g['min_response_time_ms'] == 999999:
+            g['min_response_time_ms'] = 0
+        tc = g['total_checks']
+        fc = g['failed_checks']
+        g['availability_percentage'] = round(max(0.0, min(100.0, ((tc - fc) / tc * 100.0))), 1) if tc > 0 else 100.0
+        g['average_response_time_ms'] = round(sum(g['latencies']) / len(g['latencies']), 1) if g['latencies'] else 0.0
+        g['p95_response_time_ms'] = round(max(g['p95_latencies']), 1) if g['p95_latencies'] else g['average_response_time_ms']
+        g['operations_count'] = len(g['operations'])
+        # Sort sub-operations: highest failures first
+        g['operations'].sort(key=lambda x: (int(x.get('FailedChecks') or x.get('failed_checks') or 0), int(x.get('TotalChecks') or x.get('total_checks') or 0)), reverse=True)
+        grouped_services.append(g)
+
+    # Sort services: highest failures first, then total calls
+    grouped_services.sort(key=lambda x: (x['failed_checks'], x['total_checks']), reverse=True)
+
+    # Service-level Chart datasets
     chart_labels = []
     chart_avg_latency = []
     chart_p95_latency = []
     chart_success_calls = []
     chart_failed_calls = []
 
-    for st in stats_list[:15]:
-        s_name = st.get('ServiceName') or st.get('service_name') or '-'
-        cmd = st.get('CommandOrPath') or st.get('command_or_path') or ''
-        label = f"{s_name}: {cmd[:25]}..." if len(cmd) > 25 else (f"{s_name}: {cmd}" if cmd else s_name)
-        chart_labels.append(label)
-        chart_avg_latency.append(round(float(st.get('AverageResponseTimeMs') or st.get('average_response_time_ms') or 0), 1))
-        chart_p95_latency.append(round(float(st.get('P95ResponseTimeMs') or st.get('p95_response_time_ms') or 0), 1))
-        
-        tc = int(st.get('TotalChecks') or st.get('total_checks') or 0)
-        fc = int(st.get('FailedChecks') or st.get('failed_checks') or 0)
+    for g in grouped_services[:10]:
+        chart_labels.append(g['service_name'])
+        chart_avg_latency.append(g['average_response_time_ms'])
+        chart_p95_latency.append(g['p95_response_time_ms'])
+        tc = g['total_checks']
+        fc = g['failed_checks']
         chart_success_calls.append(max(0, tc - fc))
         chart_failed_calls.append(fc)
 
@@ -439,6 +500,7 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         "live_statuses": live_statuses,
         "live_error": live_error,
         "statistics": stats_list,
+        "grouped_services": grouped_services,
         "stats_error": stats_error,
         "time_range": time_range,
         "selected_service": service_filter,

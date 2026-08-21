@@ -73,7 +73,8 @@ def patch_api_client(api_instance):
         if request:
             last_failed_auth = request.session.get("heappe_last_failed_auth", 0)
             if last_failed_auth and (time.time() - last_failed_auth < 30):
-                raise ConnectionError("HEAppE connection is offline (cooldown active).")
+                remaining = max(1, int(30 - (time.time() - last_failed_auth)))
+                raise ConnectionError(f"HEAppE connection is offline (cooldown active, auto-retry in {remaining}s).")
 
         # Inject default _request_timeout if not specified
         if bound_args.arguments.get('_request_timeout') is None:

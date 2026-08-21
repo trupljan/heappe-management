@@ -242,6 +242,15 @@
                         <span>Failures Only</span>
                     </button>
 
+                    <div class="btn-group btn-group-sm">
+                        <button type="button" id="btn-expand-all" class="btn btn-outline-secondary" title="Expand All Services">
+                            <i class="bi bi-arrows-expand me-1"></i>Expand All
+                        </button>
+                        <button type="button" id="btn-collapse-all" class="btn btn-outline-secondary" title="Collapse All Services">
+                            <i class="bi bi-arrows-collapse me-1"></i>Collapse All
+                        </button>
+                    </div>
+
                     <form id="stats-filter-form" method="get" class="d-flex flex-wrap align-items-center gap-2">
                         <!-- Range Selector -->
                         <div class="btn-group btn-group-sm" role="group" aria-label="Time range selector">
@@ -293,36 +302,43 @@
                 <table class="table table-hover align-middle mb-0" id="telemetry-stats-table">
                     <thead class="bg-light text-secondary text-uppercase small" style="font-size: 0.75rem;">
                         <tr>
-                            <th class="ps-4">Service</th>
-                            <th>Type</th>
-                            <th>Operation / Command / SQL</th>
-                            <th class="text-center">Availability</th>
-                            <th class="text-center">Avg Latency</th>
-                            <th class="text-center">Min / Max</th>
-                            <th class="text-center">P95 Latency</th>
-                            <th class="text-center">Calls</th>
-                            <th class="text-center pe-4">Failures</th>
+                            <th class="ps-4" style="width: 25%;">Service &amp; Endpoints</th>
+                            <th style="width: 10%;">Type</th>
+                            <th style="width: 15%;">Endpoints Detail</th>
+                            <th class="text-center" style="width: 12%;">Availability</th>
+                            <th class="text-center" style="width: 10%;">Avg Latency</th>
+                            <th class="text-center" style="width: 10%;">Min / Max</th>
+                            <th class="text-center" style="width: 8%;">P95</th>
+                            <th class="text-center" style="width: 5%;">Calls</th>
+                            <th class="text-center pe-4" style="width: 5%;">Failures</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% if statistics %}
-                            {% for row in statistics %}
-                            <tr>
+                        {% if grouped_services %}
+                            {% for s in grouped_services %}
+                            <!-- Parent Service Header Row -->
+                            <tr class="service-parent-row align-middle border-bottom" style="cursor: pointer; background-color: #fafbfc;" data-bs-toggle="collapse" data-bs-target="#collapse-service-{{ forloop.counter }}" aria-expanded="false">
                                 <td class="ps-4">
-                                    <div class="fw-bold text-dark">{{ row.ServiceName|default:row.service_name|default:"-" }}</div>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="bi bi-chevron-right text-primary service-chevron" id="chevron-{{ forloop.counter }}" style="font-size: 0.85rem;"></i>
+                                        <div>
+                                            <span class="fw-bold text-dark fs-6">{{ s.service_name }}</span>
+                                            <span class="badge bg-light text-secondary border font-monospace ms-1.5" style="font-size: 0.68rem;">{{ s.operations_count }} endpoint{% if s.operations_count != 1 %}s{% endif %}</span>
+                                        </div>
+                                    </div>
                                 </td>
                                 <td>
                                     <span class="badge bg-secondary-subtle text-secondary border font-monospace" style="font-size: 0.7rem;">
-                                        {{ row.ServiceType|default:row.service_type|default:"generic" }}
+                                        {{ s.service_type }}
                                     </span>
                                 </td>
-                                <td style="max-width: 320px;">
-                                    <code class="small text-dark text-truncate d-block" title="{{ row.CommandOrPath|default:row.command_or_path|default:'-' }}">
-                                        {{ row.CommandOrPath|default:row.command_or_path|default:"-" }}
-                                    </code>
+                                <td class="text-muted small">
+                                    <span class="text-truncate d-inline-block text-secondary" style="max-width: 220px;" title="Click row to expand {{ s.operations_count }} endpoint(s)">
+                                        <i class="bi bi-list-nested me-1"></i>{{ s.operations_count }} endpoint(s) &bull; click to view
+                                    </span>
                                 </td>
                                 <td class="text-center" style="min-width: 140px;">
-                                    {% with avail=row.AvailabilityPercentage|default:row.availability_percentage|default:100 %}
+                                    {% with avail=s.availability_percentage %}
                                     <div class="d-flex align-items-center justify-content-center gap-2">
                                         <div class="progress flex-grow-1" style="height: 6px; width: 60px;">
                                             <div class="progress-bar {% if avail >= 99 %}bg-success{% elif avail >= 90 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ avail }}%;"></div>
@@ -334,42 +350,127 @@
                                     {% endwith %}
                                 </td>
                                 <td class="text-center">
-                                    {% with avg=row.AverageResponseTimeMs|default:row.average_response_time_ms|default:0 %}
+                                    {% with avg=s.average_response_time_ms %}
                                     <span class="badge {% if avg < 100 %}bg-success-subtle text-success border border-success-subtle{% elif avg < 500 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace">
                                         {{ avg|floatformat:1 }} ms
                                     </span>
                                     {% endwith %}
                                 </td>
                                 <td class="text-center small font-monospace text-muted">
-                                    {{ row.MinResponseTimeMs|default:row.min_response_time_ms|default:0 }} / {{ row.MaxResponseTimeMs|default:row.max_response_time_ms|default:0 }} ms
+                                    {{ s.min_response_time_ms }} / {{ s.max_response_time_ms }} ms
                                 </td>
                                 <td class="text-center">
-                                    {% with p95=row.P95ResponseTimeMs|default:row.p95_response_time_ms|default:0 %}
+                                    {% with p95=s.p95_response_time_ms %}
                                     <span class="badge {% if p95 < 200 %}bg-light text-dark border{% elif p95 < 1000 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
                                         {{ p95|floatformat:1 }} ms
                                     </span>
                                     {% endwith %}
                                 </td>
-                                <td class="text-center font-monospace small">
-                                    {{ row.TotalChecks|default:row.total_checks|default:0 }}
+                                <td class="text-center font-monospace small fw-bold">
+                                    {{ s.total_checks }}
                                 </td>
                                 <td class="text-center pe-4 font-monospace small">
-                                    {% with failed=row.FailedChecks|default:row.failed_checks|default:0 %}
-                                    {% if failed > 0 %}
+                                    {% if s.failed_checks > 0 %}
                                     <button type="button" class="btn btn-sm p-0 border-0 btn-inspect-failure" 
-                                            data-service="{{ row.ServiceName|default:row.service_name }}" 
-                                            data-command="{{ row.CommandOrPath|default:row.command_or_path }}"
-                                            data-failed="{{ failed }}"
-                                            title="Click to view failure details for {{ row.ServiceName|default:row.service_name }}">
+                                            data-service="{{ s.service_name }}" 
+                                            data-command="All endpoints"
+                                            data-failed="{{ s.failed_checks }}"
+                                            title="Click to view failure details for {{ s.service_name }}">
                                         <span class="badge bg-danger text-white rounded-pill px-2 shadow-sm d-inline-flex align-items-center gap-1" style="cursor: pointer;">
-                                            <span>{{ failed }}</span>
+                                            <span>{{ s.failed_checks }}</span>
                                             <i class="bi bi-search" style="font-size: 0.65rem;"></i>
                                         </span>
                                     </button>
                                     {% else %}
                                     <span class="text-muted">0</span>
                                     {% endif %}
-                                    {% endwith %}
+                                </td>
+                            </tr>
+
+                            <!-- Collapsible Child Operations Sub-Table -->
+                            <tr class="service-child-row p-0 border-0">
+                                <td colspan="9" class="p-0 border-0">
+                                    <div class="collapse" id="collapse-service-{{ forloop.counter }}">
+                                        <div class="p-3 bg-light bg-opacity-75 border-bottom">
+                                            <div class="card border border-secondary-subtle shadow-xs rounded-2 bg-white">
+                                                <div class="card-header bg-white py-2 px-3 d-flex align-items-center justify-content-between border-bottom">
+                                                    <span class="small fw-bold text-secondary text-uppercase" style="font-size: 0.72rem;">Individual Operations for <strong class="text-dark">{{ s.service_name }}</strong></span>
+                                                    <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.68rem;">{{ s.operations_count }} entries</span>
+                                                </div>
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-hover mb-0 align-middle" style="font-size: 0.82rem;">
+                                                        <thead class="bg-light text-secondary text-uppercase" style="font-size: 0.68rem;">
+                                                            <tr>
+                                                                <th class="ps-3" style="width: 38%;">Endpoint / Command / Query</th>
+                                                                <th class="text-center" style="width: 14%;">Availability</th>
+                                                                <th class="text-center" style="width: 12%;">Avg Latency</th>
+                                                                <th class="text-center" style="width: 12%;">Min / Max</th>
+                                                                <th class="text-center" style="width: 10%;">P95</th>
+                                                                <th class="text-center" style="width: 7%;">Calls</th>
+                                                                <th class="text-center pe-3" style="width: 7%;">Failures</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {% for op in s.operations %}
+                                                            <tr>
+                                                                <td class="ps-3 font-monospace">
+                                                                    <code class="small text-dark text-truncate d-block" title="{{ op.CommandOrPath|default:op.command_or_path|default:'-' }}">
+                                                                        {{ op.CommandOrPath|default:op.command_or_path|default:"-" }}
+                                                                    </code>
+                                                                </td>
+                                                                <td class="text-center">
+                                                                    {% with op_avail=op.AvailabilityPercentage|default:op.availability_percentage|default:100 %}
+                                                                    <div class="d-flex align-items-center justify-content-center gap-1.5">
+                                                                        <div class="progress flex-grow-1" style="height: 5px; width: 45px;">
+                                                                            <div class="progress-bar {% if op_avail >= 99 %}bg-success{% elif op_avail >= 90 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ op_avail }}%;"></div>
+                                                                        </div>
+                                                                        <span class="small font-monospace {% if op_avail >= 99 %}text-success{% elif op_avail >= 90 %}text-warning{% else %}text-danger{% endif %}" style="font-size: 0.72rem;">
+                                                                            {{ op_avail|floatformat:1 }}%
+                                                                        </span>
+                                                                    </div>
+                                                                    {% endwith %}
+                                                                </td>
+                                                                <td class="text-center">
+                                                                    {% with op_avg=op.AverageResponseTimeMs|default:op.average_response_time_ms|default:0 %}
+                                                                    <span class="badge {% if op_avg < 100 %}bg-success-subtle text-success{% elif op_avg < 500 %}bg-warning-subtle text-warning-emphasis{% else %}bg-danger-subtle text-danger{% endif %} font-monospace py-0.5" style="font-size: 0.72rem;">
+                                                                        {{ op_avg|floatformat:1 }} ms
+                                                                    </span>
+                                                                    {% endwith %}
+                                                                </td>
+                                                                <td class="text-center font-monospace text-muted" style="font-size: 0.72rem;">
+                                                                    {{ op.MinResponseTimeMs|default:op.min_response_time_ms|default:0 }} / {{ op.MaxResponseTimeMs|default:op.max_response_time_ms|default:0 }} ms
+                                                                </td>
+                                                                <td class="text-center font-monospace" style="font-size: 0.72rem;">
+                                                                    {{ op.P95ResponseTimeMs|default:op.p95_response_time_ms|default:0|floatformat:1 }} ms
+                                                                </td>
+                                                                <td class="text-center font-monospace text-muted" style="font-size: 0.75rem;">
+                                                                    {{ op.TotalChecks|default:op.total_checks|default:0 }}
+                                                                </td>
+                                                                <td class="text-center pe-3 font-monospace">
+                                                                    {% with op_fail=op.FailedChecks|default:op.failed_checks|default:0 %}
+                                                                    {% if op_fail > 0 %}
+                                                                    <button type="button" class="btn btn-sm p-0 border-0 btn-inspect-failure" 
+                                                                            data-service="{{ s.service_name }}" 
+                                                                            data-command="{{ op.CommandOrPath|default:op.command_or_path }}"
+                                                                            data-failed="{{ op_fail }}"
+                                                                            title="Click to view failure details">
+                                                                        <span class="badge bg-danger text-white rounded-pill px-1.5 py-0.5" style="font-size: 0.68rem; cursor: pointer;">
+                                                                            {{ op_fail }} <i class="bi bi-search" style="font-size: 0.55rem;"></i>
+                                                                        </span>
+                                                                    </button>
+                                                                    {% else %}
+                                                                    <span class="text-muted" style="font-size: 0.75rem;">0</span>
+                                                                    {% endif %}
+                                                                    {% endwith %}
+                                                                </td>
+                                                            </tr>
+                                                            {% endfor %}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -860,9 +961,47 @@ document.addEventListener('DOMContentLoaded', function() {
                 toggleFailuresBtn.classList.remove('btn-danger', 'text-white', 'fw-bold');
                 toggleFailuresBtn.classList.add('btn-outline-danger');
             }
-            filterTable();
+    // Expand All / Collapse All functionality
+    const expandAllBtn = document.getElementById('btn-expand-all');
+    const collapseAllBtn = document.getElementById('btn-collapse-all');
+
+    if (expandAllBtn) {
+        expandAllBtn.addEventListener('click', function() {
+            document.querySelectorAll('.service-child-row .collapse').forEach(el => {
+                const bsCollapse = bootstrap.Collapse.getOrCreateInstance(el, { toggle: false });
+                bsCollapse.show();
+            });
         });
     }
+
+    if (collapseAllBtn) {
+        collapseAllBtn.addEventListener('click', function() {
+            document.querySelectorAll('.service-child-row .collapse').forEach(el => {
+                const bsCollapse = bootstrap.Collapse.getOrCreateInstance(el, { toggle: false });
+                bsCollapse.hide();
+            });
+        });
+    }
+
+    // Animate chevrons on collapse toggle
+    document.querySelectorAll('.service-child-row .collapse').forEach(el => {
+        el.addEventListener('show.bs.collapse', function() {
+            const parentRow = this.closest('tr').previousElementSibling;
+            if (parentRow) {
+                const chevron = parentRow.querySelector('.service-chevron');
+                if (chevron) chevron.style.transform = 'rotate(90deg)';
+                parentRow.style.backgroundColor = '#f1f5f9';
+            }
+        });
+        el.addEventListener('hide.bs.collapse', function() {
+            const parentRow = this.closest('tr').previousElementSibling;
+            if (parentRow) {
+                const chevron = parentRow.querySelector('.service-chevron');
+                if (chevron) chevron.style.transform = 'rotate(0deg)';
+                parentRow.style.backgroundColor = '#fafbfc';
+            }
+        });
+    });
 });
 </script>
 
@@ -883,6 +1022,12 @@ document.addEventListener('DOMContentLoaded', function() {
 .service-live-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 16px rgba(0,0,0,0.06) !important;
+}
+.service-chevron {
+    transition: transform 0.2s ease-in-out;
+}
+.service-parent-row:hover {
+    background-color: #f1f5f9 !important;
 }
 </style>
 {% endblock %}

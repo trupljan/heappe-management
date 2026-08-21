@@ -323,6 +323,14 @@ class HeappeExceptionMiddleware:
             'traceback': tb_str
         }
 
+        last_failed_auth = request.session.get("heappe_last_failed_auth", 0)
+        cooldown_remaining = 0
+        if last_failed_auth:
+            import time
+            elapsed = time.time() - last_failed_auth
+            if elapsed < 30:
+                cooldown_remaining = max(1, int(30 - elapsed))
+
         context = {
             "error_type": error_type,
             "error_message": error_message,
@@ -336,6 +344,7 @@ class HeappeExceptionMiddleware:
             "error_theme": error_theme,
             "traceback": tb_str,
             "debug_mode": settings.DEBUG,
+            "cooldown_remaining": cooldown_remaining,
         }
 
         # Render custom elegant error page
