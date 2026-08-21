@@ -613,3 +613,97 @@ def generate_appsettings_data_staging_v6_4_0(instance_name: str,
             port: int = 5001,
             version: str = None):
     return generate_appsettings_data_staging_v6_2_1(instance_name, sa_password, data_staging_token, port, version)
+
+def generate_appsettings_v6_5_0(
+        instance_name: str,
+        sa_password: str,
+        port: int = 5000,
+        automigrate: bool = True,
+        version: str = None,
+        deployed_ip: str = None):
+    appsettings = generate_appsettings_v6_4_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
+
+    # 1.A. Version and Metadata (ApplicationAPISettings)
+    ver_str = version or "v6.5.0"
+    if 'ApplicationAPISettings' not in appsettings:
+        appsettings['ApplicationAPISettings'] = {}
+    if 'DeploymentSettings' not in appsettings['ApplicationAPISettings']:
+        appsettings['ApplicationAPISettings']['DeploymentSettings'] = {}
+    appsettings['ApplicationAPISettings']['DeploymentSettings']['Version'] = ver_str
+
+    if 'SwaggerDocSettings' not in appsettings['ApplicationAPISettings']:
+        appsettings['ApplicationAPISettings']['SwaggerDocSettings'] = {}
+    appsettings['ApplicationAPISettings']['SwaggerDocSettings']['Description'] = f"HEAppE middleware API {ver_str}"
+
+    # 1.B. Endpoint Rate Limiting (IpRateLimiting.GeneralRules)
+    mgmt_rules = [
+        {
+            "Endpoint": "*:/heappe/Management/*",
+            "Period": "1m",
+            "Limit": 120
+        },
+        {
+            "Endpoint": "*:/heappe/UserAndLimitationManagement/*",
+            "Period": "1m",
+            "Limit": 300
+        }
+    ]
+    if 'IpRateLimiting' not in appsettings:
+        appsettings['IpRateLimiting'] = {}
+    general_rules = list(appsettings['IpRateLimiting'].get('GeneralRules', []))
+    existing_endpoints = {r.get('Endpoint') for r in general_rules if isinstance(r, dict)}
+    rules_to_prepend = [r for r in mgmt_rules if r['Endpoint'] not in existing_endpoints]
+
+    catch_all_idx = None
+    for idx, r in enumerate(general_rules):
+        if isinstance(r, dict) and r.get('Endpoint') == '*':
+            catch_all_idx = idx
+            break
+    if catch_all_idx is not None:
+        general_rules[catch_all_idx:catch_all_idx] = rules_to_prepend
+    else:
+        general_rules = rules_to_prepend + general_rules
+    appsettings['IpRateLimiting']['GeneralRules'] = general_rules
+
+    # 1.C. Scripts & HPC Callbacks (HPCConnectionFrameworkSettings.ScriptsSettings)
+    if 'HPCConnectionFrameworkSettings' not in appsettings:
+        appsettings['HPCConnectionFrameworkSettings'] = {}
+    if 'ScriptsSettings' not in appsettings['HPCConnectionFrameworkSettings']:
+        appsettings['HPCConnectionFrameworkSettings']['ScriptsSettings'] = {}
+    scripts = appsettings['HPCConnectionFrameworkSettings']['ScriptsSettings']
+    scripts['EnableCallback'] = False
+    callback_host = f"{deployed_ip}:{port}" if deployed_ip else f"localhost:{port}"
+    scripts['CallbackUrl'] = f"https://{callback_host}/heappe/JobManagement/TaskCallback"
+    scripts['EnableGracefulTimeout'] = False
+    scripts['GracefulTimeoutSeconds'] = 30
+    scripts['SshCommandPrefix'] = ""
+    scripts['SyncScriptsViaSftp'] = False
+
+    # 1.D. High-Load DB Optimization (BusinessLogicSettings)
+    if 'BusinessLogicSettings' not in appsettings:
+        appsettings['BusinessLogicSettings'] = {}
+    appsettings['BusinessLogicSettings']['SessionLastAccessTimeUpdateIntervalInSeconds'] = 60
+
+    # 1.E. Health Monitoring Service (BackGroundThreadSettings)
+    if 'BackGroundThreadSettings' not in appsettings:
+        appsettings['BackGroundThreadSettings'] = {}
+    appsettings['BackGroundThreadSettings']['ExternalServiceHealthMonitoringSettings'] = {
+        "IsEnabled": True,
+        "IntervalSeconds": 60,
+        "RetentionDays": 30
+    }
+
+    # 1.F. Migration & Backup Encryption (MigrationSettings)
+    appsettings['MigrationSettings'] = {
+        "EncryptionKey": ""
+    }
+
+    return appsettings
+
+def generate_appsettings_data_staging_v6_5_0(
+        instance_name: str,
+        sa_password: str,
+        data_staging_token: str,
+        port: int = 5001,
+        version: str = None):
+    return generate_appsettings_data_staging_v6_4_0(instance_name, sa_password, data_staging_token, port, version)

@@ -22,7 +22,7 @@ from ..models import InstanceCredentials
 
 def get_port_with_fallback(start_port=8080, max_tries=100):
     """
-    Zkusí port start_port. Pokud je obsazený, zkusí start_port + 1 atd.
+    Tries start_port. If in use, tries start_port + 1, etc.
     """
     for port in range(start_port, start_port + max_tries):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -36,7 +36,7 @@ def get_port_with_fallback(start_port=8080, max_tries=100):
             s.close()
             continue
 
-    raise OSError(f"Nepodařilo se najít volný port v rozsahu {start_port}-{start_port + max_tries}")
+    raise OSError(f"Could not find an available port in range {start_port}-{start_port + max_tries}")
 
 import subprocess
 

@@ -22,6 +22,8 @@ from heappe_ui.appsettings.generator import (
     generate_appsettings_data_staging_v6_2_1,
     generate_appsettings_v6_4_0,
     generate_appsettings_data_staging_v6_4_0,
+    generate_appsettings_v6_5_0,
+    generate_appsettings_data_staging_v6_5_0,
 )
 
 from heappe_ui.models import InstanceCredentials
@@ -358,8 +360,10 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             return generate_appsettings_v6_2_1, generate_appsettings_data_staging_v6_2_1
         elif v.startswith("6.4.0") or v.startswith("6.4."):
             return generate_appsettings_v6_4_0, generate_appsettings_data_staging_v6_4_0
+        elif v.startswith("6.5.0") or v.startswith("6.5."):
+            return generate_appsettings_v6_5_0, generate_appsettings_data_staging_v6_5_0
         else:
-            return generate_appsettings_v6_4_0, generate_appsettings_data_staging_v6_4_0
+            return generate_appsettings_v6_5_0, generate_appsettings_data_staging_v6_5_0
 
         raise ValueError(f"Unsupported version: {version}")
 
@@ -557,6 +561,23 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         for key, value in old.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
                 result[key] = self.merge_keep_old(value, result[key])  # rekurzivní merge dictů
+            elif key in result and isinstance(result[key], list) and isinstance(value, list):
+                if key == "GeneralRules":
+                    merged_list = [dict(item) if isinstance(item, dict) else item for item in value]
+                    existing_endpoints = {r.get('Endpoint') for r in merged_list if isinstance(r, dict)}
+                    new_missing_rules = [dict(r) for r in result[key] if isinstance(r, dict) and r.get('Endpoint') not in existing_endpoints]
+                    catch_all_idx = None
+                    for idx, r in enumerate(merged_list):
+                        if isinstance(r, dict) and r.get('Endpoint') == '*':
+                            catch_all_idx = idx
+                            break
+                    if catch_all_idx is not None:
+                        merged_list[catch_all_idx:catch_all_idx] = new_missing_rules
+                    else:
+                        merged_list = new_missing_rules + merged_list
+                    result[key] = merged_list
+                else:
+                    result[key] = value
             else:
                 result[key] = value  # použijeme hodnotu ze starého JSONu
         return result
@@ -587,6 +608,9 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                     if "DeploymentSettings" not in old_appsettings["ApplicationAPISettings"]:
                         old_appsettings["ApplicationAPISettings"]["DeploymentSettings"] = {}
                     old_appsettings["ApplicationAPISettings"]["DeploymentSettings"]["Version"] = version
+                    if "SwaggerDocSettings" not in old_appsettings["ApplicationAPISettings"]:
+                        old_appsettings["ApplicationAPISettings"]["SwaggerDocSettings"] = {}
+                    old_appsettings["ApplicationAPISettings"]["SwaggerDocSettings"]["Description"] = f"HEAppE middleware API {version}"
 
                 # Generate configuration files
                 appsettings_new = self.generate_appsettings_and_merge_with_old(old_appsettings, version)
@@ -603,6 +627,39 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 with open(output_path_app, "w", encoding="utf-8") as f:
                     json.dump(appsettings_new, f, indent=3)
                 self.logger.info(f"Updated appsettings file generated at: {output_path_app}")
+
+                # archive and update appsettings-data.json if exists
+                old_data_staging_path = os.path.join(self.config.base_path, instance_name, "app", "confs", "appsettings-data.json")
+                if os.path.exists(old_data_staging_path):
+                    try:
+                        with open(old_data_staging_path, "r", encoding="utf-8") as f:
+                            old_data_staging = json.load(f)
+                        old_ds_version = old_data_staging.get("ApplicationAPIConfiguration", {}).get("DeploymentConfiguration", {}).get("Version", "") or "unknown"
+                        archived_ds_path = os.path.join(self.config.base_path, instance_name, "app", "confs", f"appsettings-data_{old_ds_version}_{timestamp}.json")
+                        shutil.copy2(old_data_staging_path, archived_ds_path)
+                        self.logger.info(f"Archived old appsettings-data to: {archived_ds_path}")
+
+                        if version:
+                            if "ApplicationAPIConfiguration" not in old_data_staging:
+                                old_data_staging["ApplicationAPIConfiguration"] = {}
+                            if "DeploymentConfiguration" not in old_data_staging["ApplicationAPIConfiguration"]:
+                                old_data_staging["ApplicationAPIConfiguration"]["DeploymentConfiguration"] = {}
+                            old_data_staging["ApplicationAPIConfiguration"]["DeploymentConfiguration"]["Version"] = version
+
+                        _, data_fn = self._get_generators_for_version(version)
+                        new_ds = data_fn(
+                            instance_name=instance_name,
+                            sa_password="",
+                            data_staging_token="",
+                            port=5001,
+                            version=version
+                        )
+                        merged_ds = self.merge_keep_old(old_data_staging, new_ds)
+                        with open(old_data_staging_path, "w", encoding="utf-8") as f:
+                            json.dump(merged_ds, f, indent=3)
+                        self.logger.info(f"Updated appsettings-data.json generated at: {old_data_staging_path}")
+                    except Exception as e:
+                        self.logger.warning(f"Could not update appsettings-data.json during update_init: {e}")
 
                 # Create host directory for OpenTelemetry Collector logs during update
                 try:

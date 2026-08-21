@@ -2585,5 +2585,439 @@ class CustomConfigurationMetadataTests(SimpleTestCase):
         self.assertIn("custom-config-metadata-script", html)
 
 
+class AppSettingsV650UpgradeTests(TestCase):
+    """Tests for v6.5.0 appsettings generation and non-destructive merge upgrades."""
+
+    def test_generate_appsettings_v6_5_0_structure(self):
+        from heappe_ui.appsettings.generator import (
+            generate_appsettings_v6_5_0,
+            generate_appsettings_data_staging_v6_5_0,
+        )
+
+        appsettings = generate_appsettings_v6_5_0(
+            instance_name="my_inst",
+            sa_password="MyPassword123!",
+            port=5000,
+            automigrate=True,
+            version="v6.5.0",
+            deployed_ip="10.0.0.5"
+        )
+
+        # 1.A ApplicationAPISettings
+        self.assertEqual(
+            appsettings["ApplicationAPISettings"]["DeploymentSettings"]["Version"],
+            "v6.5.0"
+        )
+        self.assertEqual(
+            appsettings["ApplicationAPISettings"]["SwaggerDocSettings"]["Description"],
+            "HEAppE middleware API v6.5.0"
+        )
+
+        # 1.B IpRateLimiting.GeneralRules
+        rules = appsettings["IpRateLimiting"]["GeneralRules"]
+        mgmt_rule = next((r for r in rules if r.get("Endpoint") == "*:/heappe/Management/*"), None)
+        user_mgmt_rule = next((r for r in rules if r.get("Endpoint") == "*:/heappe/UserAndLimitationManagement/*"), None)
+        catch_all_rule = next((r for r in rules if r.get("Endpoint") == "*"), None)
+
+        self.assertIsNotNone(mgmt_rule)
+        self.assertEqual(mgmt_rule["Period"], "1m")
+        self.assertEqual(mgmt_rule["Limit"], 120)
+
+        self.assertIsNotNone(user_mgmt_rule)
+        self.assertEqual(user_mgmt_rule["Period"], "1m")
+        self.assertEqual(user_mgmt_rule["Limit"], 300)
+
+        # Ensure mgmt rules are placed before catch_all
+        mgmt_idx = rules.index(mgmt_rule)
+        user_mgmt_idx = rules.index(user_mgmt_rule)
+        catch_all_idx = rules.index(catch_all_rule)
+        self.assertLess(mgmt_idx, catch_all_idx)
+        self.assertLess(user_mgmt_idx, catch_all_idx)
+
+        # 1.C HPCConnectionFrameworkSettings.ScriptsSettings
+        scripts = appsettings["HPCConnectionFrameworkSettings"]["ScriptsSettings"]
+        self.assertFalse(scripts["EnableCallback"])
+        self.assertEqual(scripts["CallbackUrl"], "https://10.0.0.5:5000/heappe/JobManagement/TaskCallback")
+        self.assertFalse(scripts["EnableGracefulTimeout"])
+        self.assertEqual(scripts["GracefulTimeoutSeconds"], 30)
+        self.assertEqual(scripts["SshCommandPrefix"], "")
+        self.assertFalse(scripts["SyncScriptsViaSftp"])
+
+        # 1.D BusinessLogicSettings
+        self.assertEqual(
+            appsettings["BusinessLogicSettings"]["SessionLastAccessTimeUpdateIntervalInSeconds"],
+            60
+        )
+
+        # 1.E BackGroundThreadSettings
+        self.assertEqual(
+            appsettings["BackGroundThreadSettings"]["ExternalServiceHealthMonitoringSettings"],
+            {
+                "IsEnabled": True,
+                "IntervalSeconds": 60,
+                "RetentionDays": 30
+            }
+        )
+
+        # 1.F MigrationSettings
+        self.assertEqual(
+            appsettings["MigrationSettings"],
+            {
+                "EncryptionKey": ""
+            }
+        )
+
+        # 2. DataStagingAPI
+        ds_settings = generate_appsettings_data_staging_v6_5_0(
+            instance_name="my_inst",
+            sa_password="MyPassword123!",
+            data_staging_token="testtoken",
+            port=5001,
+            version="v6.5.0"
+        )
+        self.assertEqual(
+            ds_settings["ApplicationAPIConfiguration"]["DeploymentConfiguration"]["Version"],
+            "v6.5.0"
+        )
+
+    def test_update_init_v6_5_0_merge_preserves_secrets_and_applies_new_settings(self):
+        import tempfile
+        import json
+        import os
+        from heappe_ui.DeployService import HEAppEDeployService, HEAppEConfig
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            instance_name = "test_upgrade_inst"
+            config = HEAppEConfig(base_path=temp_dir, repo_branch="v6.5.0")
+            service = HEAppEDeployService(config)
+
+            confs_dir = os.path.join(temp_dir, instance_name, "app", "confs")
+            core_dir = os.path.join(temp_dir, instance_name, "heappe-core")
+            os.makedirs(confs_dir, exist_ok=True)
+            os.makedirs(core_dir, exist_ok=True)
+
+            # Old appsettings.json from v6.2.1
+            old_appsettings = {
+                "ConnectionStrings": {
+                    "MiddlewareContext": "Server=custom_server;Database=heappe;User=SA;Password=SecretCustomPassword!;",
+                    "Logging": "Server=custom_server;Database=heappe-monitoring;User=SA;Password=SecretCustomPassword!;"
+                },
+                "ApplicationAPISettings": {
+                    "AllowedHosts": ["http://customhost:5000"],
+                    "DeploymentSettings": {
+                        "Name": "Custom Instance",
+                        "Version": "v6.2.1",
+                        "DeployedIPAddress": "192.168.1.100",
+                        "Port": "5000"
+                    }
+                },
+                "JwtTokenIntrospectionConfiguration": {
+                    "Authority": "https://auth.custom.org",
+                    "ClientId": "custom_client_id",
+                    "ClientSecret": "custom_client_secret"
+                },
+                "VaultConnectorSettings": {
+                    "VaultBaseAddress": "http://vault.custom.org:8200"
+                },
+                "SshCaSettings": {
+                    "BaseUri": "https://custom.ca.url",
+                    "CAName": "CustomCA"
+                },
+                "IpRateLimiting": {
+                    "GeneralRules": [
+                        {"Endpoint": "*", "Period": "1h", "Limit": 50000}
+                    ]
+                }
+            }
+            with open(os.path.join(confs_dir, "appsettings.json"), "w", encoding="utf-8") as f:
+                json.dump(old_appsettings, f)
+
+            # Old appsettings-data.json
+            old_ds_settings = {
+                "ApplicationAPIConfiguration": {
+                    "AuthenticationToken": "super_secret_ds_token",
+                    "AllowedHosts": ["http://customhost:5001"],
+                    "DeploymentConfiguration": {
+                        "Version": "v6.2.1"
+                    }
+                }
+            }
+            with open(os.path.join(confs_dir, "appsettings-data.json"), "w", encoding="utf-8") as f:
+                json.dump(old_ds_settings, f)
+
+            # Run update_init
+            res = service.update_init(instance_name, "v6.5.0")
+            self.assertEqual(res["status"], "success")
+
+            # Check merged appsettings.json
+            with open(os.path.join(confs_dir, "appsettings.json"), "r", encoding="utf-8") as f:
+                merged = json.load(f)
+
+            # 1. Preserved secrets & custom values
+            self.assertEqual(
+                merged["ConnectionStrings"]["MiddlewareContext"],
+                "Server=custom_server;Database=heappe;User=SA;Password=SecretCustomPassword!;"
+            )
+            self.assertEqual(merged["ApplicationAPISettings"]["AllowedHosts"], ["http://customhost:5000"])
+            self.assertEqual(merged["JwtTokenIntrospectionConfiguration"]["ClientSecret"], "custom_client_secret")
+            self.assertEqual(merged["VaultConnectorSettings"]["VaultBaseAddress"], "http://vault.custom.org:8200")
+            self.assertEqual(merged["SshCaSettings"]["CAName"], "CustomCA")
+
+            # 2. Updated version and doc settings
+            self.assertEqual(merged["ApplicationAPISettings"]["DeploymentSettings"]["Version"], "v6.5.0")
+            self.assertEqual(merged["ApplicationAPISettings"]["SwaggerDocSettings"]["Description"], "HEAppE middleware API v6.5.0")
+
+            # 3. Merged GeneralRules: new rules prepended, custom limit preserved for catch-all
+            rules = merged["IpRateLimiting"]["GeneralRules"]
+            self.assertEqual(rules[0]["Endpoint"], "*:/heappe/Management/*")
+            self.assertEqual(rules[0]["Limit"], 120)
+            self.assertEqual(rules[1]["Endpoint"], "*:/heappe/UserAndLimitationManagement/*")
+            self.assertEqual(rules[1]["Limit"], 300)
+            self.assertEqual(rules[2]["Endpoint"], "*")
+            self.assertEqual(rules[2]["Limit"], 50000)
+
+            # 4. New v6.5.0 settings added
+            self.assertIn("MigrationSettings", merged)
+            self.assertEqual(merged["MigrationSettings"]["EncryptionKey"], "")
+            self.assertEqual(
+                merged["BusinessLogicSettings"]["SessionLastAccessTimeUpdateIntervalInSeconds"],
+                60
+            )
+            self.assertEqual(
+                merged["BackGroundThreadSettings"]["ExternalServiceHealthMonitoringSettings"]["IsEnabled"],
+                True
+            )
+            self.assertFalse(merged["HPCConnectionFrameworkSettings"]["ScriptsSettings"]["EnableCallback"])
+
+            # 5. Check appsettings-data.json updated
+            with open(os.path.join(confs_dir, "appsettings-data.json"), "r", encoding="utf-8") as f:
+                merged_ds = json.load(f)
+            self.assertEqual(merged_ds["ApplicationAPIConfiguration"]["DeploymentConfiguration"]["Version"], "v6.5.0")
+            self.assertEqual(merged_ds["ApplicationAPIConfiguration"]["AuthenticationToken"], "super_secret_ds_token")
+
+
+class TelemetryDashboardV650Tests(TestCase):
+    """Unit tests for HEAppE v6.5.0 External Services & Telemetry views and APIs."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="telemetryadmin", password="password123")
+
+    def _setup_request(self, req, deployed_version="6.5.0"):
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        req.user = self.user
+        req.session = {
+            "heappe_session_code": "test_session_123",
+            "chosen_instance": "test_instance",
+            "middleware_deployed_version": deployed_version
+        }
+        req.session_code = "test_session_123"
+        req.api_instance = mock.MagicMock()
+        setattr(req, '_messages', FallbackStorage(req))
+        return req
+
+    def test_external_services_telemetry_view_version_gated(self):
+        """Older HEAppE versions (<6.5.0) are redirected when accessing telemetry dashboard."""
+        from heappe_ui.view.telemetry import external_services_telemetry_view
+        req = self.factory.get("/monitoring/telemetry/")
+        self._setup_request(req)
+        mock_health = mock.MagicMock()
+        mock_health.version = "v6.4.0"
+        with mock.patch("py4heappe.heappe_v6.core.HealthApi.heappe_health_get", return_value=mock_health):
+            with mock.patch("heappe_ui.view.utils.messages"):
+                res = external_services_telemetry_view(req)
+        self.assertEqual(res.status_code, 302)
+
+    def test_external_services_telemetry_view_renders_successfully(self):
+        """v6.5.0+ renders telemetry dashboard with live status and aggregated statistics."""
+        from heappe_ui.view.telemetry import external_services_telemetry_view
+        req = self.factory.get("/monitoring/telemetry/?range=24h")
+        self._setup_request(req)
+
+        mock_health = mock.MagicMock()
+        mock_health.version = "v6.5.0"
+
+        def mock_call_api(resource_path, method="GET", *args, **kwargs):
+            if "GetExternalServicesLiveStatus" in resource_path:
+                return [
+                    {"ServiceName": "Keycloak", "ServiceType": "identity", "IsAvailable": True, "ResponseTimeMs": 42},
+                    {"ServiceName": "HashiCorp Vault", "ServiceType": "keymanagement", "IsAvailable": True, "ResponseTimeMs": 15},
+                    {"ServiceName": "Database", "ServiceType": "database", "IsAvailable": True, "ResponseTimeMs": 5},
+                ]
+            elif "GetExternalServicesStatistics" in resource_path:
+                return [
+                    {
+                        "ServiceName": "Keycloak",
+                        "ServiceType": "identity",
+                        "CommandOrPath": "/auth/realms/heappe",
+                        "AvailabilityPercentage": 99.9,
+                        "AverageResponseTimeMs": 45.2,
+                        "MinResponseTimeMs": 20,
+                        "MaxResponseTimeMs": 180,
+                        "P95ResponseTimeMs": 65.0,
+                        "TotalChecks": 1440,
+                        "FailedChecks": 1
+                    }
+                ]
+            return []
+
+        req.api_instance.call_api.side_effect = mock_call_api
+
+        with mock.patch("py4heappe.heappe_v6.core.HealthApi.heappe_health_get", return_value=mock_health):
+            with mock.patch("py4heappe.heappe_v6.core.ClusterInformationApi.heappe_cluster_information_list_available_clusters_get", return_value=[]):
+                res = external_services_telemetry_view(req)
+
+        self.assertEqual(res.status_code, 200)
+        content = res.content.decode("utf-8")
+        self.assertIn("External Services &amp; Telemetry", content)
+        self.assertIn("Keycloak", content)
+        self.assertIn("HashiCorp Vault", content)
+
+    def test_external_services_live_status_api(self):
+        """Live status AJAX API returns JSON with probe results."""
+        from heappe_ui.view.telemetry import external_services_live_status_api
+        req = self.factory.get("/monitoring/telemetry/live-status/")
+        self._setup_request(req, deployed_version="6.5.0")
+
+        req.api_instance.call_api.return_value = [
+            {"ServiceName": "Slurm", "IsAvailable": True, "ResponseTimeMs": 85}
+        ]
+
+        res = external_services_live_status_api(req)
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.content.decode("utf-8"))
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(len(data["data"]), 1)
+        self.assertEqual(data["data"][0]["ServiceName"], "Slurm")
+
+    def test_external_services_statistics_api(self):
+        """Statistics AJAX API returns filtered telemetry data."""
+        from heappe_ui.view.telemetry import external_services_statistics_api
+        req = self.factory.get("/monitoring/telemetry/statistics/?range=7d&service=Keycloak")
+        self._setup_request(req, deployed_version="6.5.0")
+
+        req.api_instance.call_api.return_value = [
+            {"ServiceName": "Keycloak", "AvailabilityPercentage": 100.0, "AverageResponseTimeMs": 30.0}
+        ]
+
+        res = external_services_statistics_api(req)
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.content.decode("utf-8"))
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["data"][0]["ServiceName"], "Keycloak")
+
+    def test_job_external_service_logs_api(self):
+        """Job-specific external logs API returns telemetry logs for the job ID."""
+        from heappe_ui.view.telemetry import job_external_service_logs_api
+        req = self.factory.get("/monitoring/telemetry/job/101/logs/")
+        self._setup_request(req, deployed_version="6.5.0")
+
+        req.api_instance.call_api.return_value = [
+            {"ServiceName": "Hashicorp Vault", "DurationMs": 25, "StatusCode": 200, "RequestId": "req-xyz-123"}
+        ]
+
+        res = job_external_service_logs_api(req, job_id=101)
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.content.decode("utf-8"))
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["data"][0]["RequestId"], "req-xyz-123")
+
+
+class QuantumAndQSchedulerV650Tests(TestCase):
+    """Unit tests for Quantum Computing and QScheduler endpoints in HEAppE v6.5.0."""
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="quantumadmin", password="password123")
+
+    def _setup_request(self, req):
+        req.user = self.user
+        req.session = {
+            "heappe_session_code": "test_session_quantum",
+            "chosen_instance": "test_instance",
+            "middleware_deployed_version": "6.5.0"
+        }
+        req.session_code = "test_session_quantum"
+        req.api_instance = mock.MagicMock()
+        return req
+
+    def test_cluster_quantum_architecture_api(self):
+        """Test retrieving quantum machine architecture."""
+        from heappe_ui.view.clusters import cluster_quantum_architecture_api
+        req = self.factory.get("/clusters/1/quantum/architecture/")
+        self._setup_request(req)
+
+        req.api_instance.call_api.return_value = {
+            "QubitsCount": 5,
+            "BasisGates": ["cx", "id", "rz", "sx", "x"],
+            "CouplingMap": [[0, 1], [1, 2], [2, 3], [3, 4]]
+        }
+
+        res = cluster_quantum_architecture_api(req, cluster_id=1)
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.content.decode("utf-8"))
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["data"]["QubitsCount"], 5)
+
+    def test_cluster_quantum_calibration_api(self):
+        """Test retrieving quantum machine calibration parameters."""
+        from heappe_ui.view.clusters import cluster_quantum_calibration_api
+        req = self.factory.get("/clusters/1/quantum/calibration/")
+        self._setup_request(req)
+
+        req.api_instance.call_api.return_value = {
+            "LastCalibratedAt": "2026-08-21T08:00:00Z",
+            "QubitsCalibration": [{"Qubit": 0, "T1_us": 120.5, "T2_us": 85.2, "ReadoutError": 0.012}]
+        }
+
+        res = cluster_quantum_calibration_api(req, cluster_id=1)
+        self.assertEqual(res.status_code, 200)
+        data = json.loads(res.content.decode("utf-8"))
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(len(data["data"]["QubitsCalibration"]), 1)
+
+    def test_qscheduler_sessions_and_lifecycle_api(self):
+        """Test listing, opening, and closing QScheduler sessions."""
+        from heappe_ui.view.clusters import (
+            qscheduler_sessions_api,
+            qscheduler_open_session_api,
+            qscheduler_close_session_api
+        )
+
+        # 1. List sessions
+        req_list = self.factory.get("/clusters/1/qscheduler/sessions/")
+        self._setup_request(req_list)
+        req_list.api_instance.call_api.return_value = [
+            {"Id": 501, "MachineName": "quantum_qpu_1", "State": "Open"}
+        ]
+        res_list = qscheduler_sessions_api(req_list, cluster_id=1)
+        self.assertEqual(res_list.status_code, 200)
+        data_list = json.loads(res_list.content.decode("utf-8"))
+        self.assertEqual(data_list["data"][0]["Id"], 501)
+
+        # 2. Open session
+        req_open = self.factory.post("/clusters/qscheduler/sessions/open/", {
+            "ClusterId": 1,
+            "MachineName": "quantum_qpu_1",
+            "MaxDurationSeconds": 3600
+        })
+        self._setup_request(req_open)
+        req_open.api_instance.call_api.return_value = {"SessionId": 502, "State": "Active"}
+        res_open = qscheduler_open_session_api(req_open)
+        self.assertEqual(res_open.status_code, 200)
+        data_open = json.loads(res_open.content.decode("utf-8"))
+        self.assertEqual(data_open["data"]["SessionId"], 502)
+
+        # 3. Close session
+        req_close = self.factory.post("/clusters/qscheduler/sessions/502/close/")
+        self._setup_request(req_close)
+        req_close.api_instance.call_api.return_value = {"Status": "Closed"}
+        res_close = qscheduler_close_session_api(req_close, session_id=502)
+        self.assertEqual(res_close.status_code, 200)
+        data_close = json.loads(res_close.content.decode("utf-8"))
+        self.assertEqual(data_close["status"], "success")
+
+
+
 
 

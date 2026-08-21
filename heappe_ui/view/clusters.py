@@ -2141,3 +2141,144 @@ def jaeger_proxy(request: HttpRequest, path: str = "") -> HttpResponse:
         return HttpResponse(f"Error connecting to Jaeger service: {e}", status=502)
 
 
+# ==========================================
+# Quantum & QScheduler Management (v6.5.0+)
+# ==========================================
+
+@login_required
+def cluster_quantum_architecture_api(request: HttpRequest, cluster_id: int) -> JsonResponse:
+    """Fetch Quantum Machine Architecture (qubits, topology, basis gates)."""
+    try:
+        data = request.api_instance.call_api(
+            '/heappe/ClusterInformation/MachineArchitecture',
+            'GET',
+            query_params=[('ClusterId', cluster_id), ('SessionCode', request.session_code)],
+            auth_settings=['Bearer', 'ServiceApiKey'],
+            response_type='object'
+        )
+        if isinstance(data, tuple):
+            data = data[0]
+        if hasattr(data, 'to_dict'):
+            data = data.to_dict()
+        return JsonResponse({"status": "success", "data": data or {}})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@login_required
+def cluster_quantum_calibration_api(request: HttpRequest, cluster_id: int) -> JsonResponse:
+    """Fetch Quantum Machine Calibration (T1, T2, error rates)."""
+    try:
+        data = request.api_instance.call_api(
+            '/heappe/ClusterInformation/MachineCalibration',
+            'GET',
+            query_params=[('ClusterId', cluster_id), ('SessionCode', request.session_code)],
+            auth_settings=['Bearer', 'ServiceApiKey'],
+            response_type='object'
+        )
+        if isinstance(data, tuple):
+            data = data[0]
+        if hasattr(data, 'to_dict'):
+            data = data.to_dict()
+        return JsonResponse({"status": "success", "data": data or {}})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@login_required
+def qscheduler_sessions_api(request: HttpRequest, cluster_id: int) -> JsonResponse:
+    """List active QScheduler sessions for a cluster."""
+    try:
+        data = request.api_instance.call_api(
+            '/heappe/JobManagement/ListQSchedulerSessions',
+            'GET',
+            query_params=[('ClusterId', cluster_id), ('SessionCode', request.session_code)],
+            auth_settings=['Bearer', 'ServiceApiKey'],
+            response_type='list[object]'
+        )
+        if isinstance(data, tuple):
+            data = data[0]
+        if isinstance(data, list):
+            res = [x.to_dict() if hasattr(x, 'to_dict') else x for x in data]
+        else:
+            res = []
+        return JsonResponse({"status": "success", "data": res})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@login_required
+def qscheduler_open_session_api(request: HttpRequest) -> JsonResponse:
+    """Open a new interactive/batch QScheduler session."""
+    if request.method != "POST":
+        return JsonResponse({"status": "error", "message": "Method not allowed"}, status=405)
+    try:
+        cluster_id = request.POST.get("ClusterId") or request.POST.get("cluster_id")
+        machine_name = request.POST.get("MachineName") or request.POST.get("machine_name", "")
+        max_duration_seconds = request.POST.get("MaxDurationSeconds", 3600)
+        
+        body = {
+            "SessionCode": request.session_code,
+            "ClusterId": int(cluster_id) if cluster_id else None,
+            "MachineName": machine_name,
+            "MaxDurationSeconds": int(max_duration_seconds)
+        }
+        res = request.api_instance.call_api(
+            '/heappe/JobManagement/OpenQSchedulerSession',
+            'POST',
+            body=body,
+            auth_settings=['Bearer', 'ServiceApiKey'],
+            response_type='object'
+        )
+        if isinstance(res, tuple):
+            res = res[0]
+        if hasattr(res, 'to_dict'):
+            res = res.to_dict()
+        return JsonResponse({"status": "success", "data": res or {}})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@login_required
+def qscheduler_close_session_api(request: HttpRequest, session_id: int) -> JsonResponse:
+    """Close an active QScheduler session."""
+    if request.method != "POST" and request.method != "DELETE":
+        return JsonResponse({"status": "error", "message": "Method not allowed"}, status=405)
+    try:
+        body = {
+            "SessionCode": request.session_code,
+            "QSchedulerSessionId": int(session_id)
+        }
+        res = request.api_instance.call_api(
+            '/heappe/JobManagement/CloseQSchedulerSession',
+            'DELETE',
+            body=body,
+            auth_settings=['Bearer', 'ServiceApiKey'],
+            response_type='object'
+        )
+        return JsonResponse({"status": "success", "message": "Session closed successfully"})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+@login_required
+def qscheduler_task_result_api(request: HttpRequest, task_id: int) -> JsonResponse:
+    """Fetch quantum execution task results."""
+    try:
+        res = request.api_instance.call_api(
+            '/heappe/JobManagement/GetQSchedulerTaskResult',
+            'GET',
+            query_params=[('SubmittedTaskInfoId', task_id), ('SessionCode', request.session_code)],
+            auth_settings=['Bearer', 'ServiceApiKey'],
+            response_type='object'
+        )
+        if isinstance(res, tuple):
+            res = res[0]
+        if hasattr(res, 'to_dict'):
+            res = res.to_dict()
+        return JsonResponse({"status": "success", "data": res or {}})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+
+

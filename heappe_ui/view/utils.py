@@ -163,11 +163,11 @@ def login_view(request):
         username = request.POST.get("username")
         password = request.POST.get("password")
 
-        # Autentizace uživatele pomocí Django autentizačního systému
+        # Authenticate user using Django authentication system
         user = authenticate(request, username=username, password=password)
         if user is not None:
             login(request, user)
-            return redirect("home")  # Přesměrování na domovskou stránku po úspěšném přihlášení
+            return redirect("home")  # Redirect to home page upon successful login
         else:
             return render(request, "login.html", {"error": "Invalid credentials"})
 

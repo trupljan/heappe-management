@@ -746,10 +746,18 @@ def submit_job_view(request, command_template_id:int):
 @login_required
 def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
     controller = hp.JobManagementApi(request.api_instance)
+    force_direct = request.GET.get("force_direct") in ("1", "true", "True")
+
+    kwargs = {
+        "SubmittedJobInfoId": job_id,
+        "SessionCode": request.session_code
+    }
+    if force_direct:
+        kwargs["ForceDirectQuery"] = True
 
     result = _handle_api_call(
         request,
-        lambda: controller.heappe_job_management_current_info_for_job_get(SubmittedJobInfoId=job_id, SessionCode=request.session_code),
+        lambda: controller.heappe_job_management_current_info_for_job_get(**kwargs),
         "OK",
         "FAIL"
     )
@@ -783,7 +791,8 @@ def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
     context = {
         "job": result,
         "project": project,
-        "changed_files": []
+        "changed_files": [],
+        "job_external_logs": []
     }
 
     # Fetch changed files list from cluster
@@ -797,6 +806,20 @@ def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
             context["changed_files"] = changed_files_res
     except Exception as e:
         print(f"Error fetching changed files for job {job_id}: {e}")
+
+    # Fetch external service telemetry logs (v6.5.0+)
+    try:
+        from .telemetry import _call_telemetry_api
+        logs = _call_telemetry_api(
+            request,
+            '/heappe/Management/GetJobExternalServiceLogs',
+            'POST',
+            body={"SessionCode": request.session_code, "SubmittedJobInfoId": int(job_id)}
+        )
+        if logs and isinstance(logs, list):
+            context["job_external_logs"] = [l for l in logs if isinstance(l, dict)]
+    except Exception as e:
+        print(f"Error fetching external service logs for job {job_id}: {e}")
 
     return render(request, "job_status.html", context)
 
@@ -861,10 +884,18 @@ def download_job_file_view(request: HttpRequest, job_id: int) -> HttpResponse:
 @login_required
 def job_status_partial_view(request: HttpRequest, job_id: int) -> HttpResponse:
     controller = hp.JobManagementApi(request.api_instance)
+    force_direct = request.GET.get("force_direct") in ("1", "true", "True")
+
+    kwargs = {
+        "SubmittedJobInfoId": job_id,
+        "SessionCode": request.session_code
+    }
+    if force_direct:
+        kwargs["ForceDirectQuery"] = True
 
     result = _handle_api_call(
         request,
-        lambda: controller.heappe_job_management_current_info_for_job_get(SubmittedJobInfoId=job_id, SessionCode=request.session_code),
+        lambda: controller.heappe_job_management_current_info_for_job_get(**kwargs),
         None,
         None,
         silent=True
@@ -908,10 +939,25 @@ def job_status_partial_view(request: HttpRequest, job_id: int) -> HttpResponse:
     except Exception:
         pass
 
+    job_external_logs = []
+    try:
+        from .telemetry import _call_telemetry_api
+        logs = _call_telemetry_api(
+            request,
+            '/heappe/Management/GetJobExternalServiceLogs',
+            'POST',
+            body={"SessionCode": request.session_code, "SubmittedJobInfoId": int(job_id)}
+        )
+        if logs and isinstance(logs, list):
+            job_external_logs = [l for l in logs if isinstance(l, dict)]
+    except Exception:
+        pass
+
     context = {
         "job": result,
         "project": project,
-        "changed_files": changed_files
+        "changed_files": changed_files,
+        "job_external_logs": job_external_logs
     }
     return render(request, "job_status_content.html", context)
 

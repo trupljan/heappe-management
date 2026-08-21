@@ -124,4 +124,19 @@ urlpatterns = [
     path('jaeger/', views.jaeger_page, name='jaeger_page'),
     path('jaeger-proxy/', views.jaeger_proxy, name='jaeger_proxy_root'),
     path('jaeger-proxy/<path:path>', views.jaeger_proxy, name='jaeger_proxy'),
+
+    # Telemetry & Monitoring Dashboard (v6.5.0+)
+    path('monitoring/telemetry/', views.external_services_telemetry_view, name='external_services_telemetry_view'),
+    path('monitoring/telemetry/live-status/', views.external_services_live_status_api, name='external_services_live_status_api'),
+    path('monitoring/telemetry/statistics/', views.external_services_statistics_api, name='external_services_statistics_api'),
+    path('monitoring/telemetry/report/', views.external_services_report_api, name='external_services_report_api'),
+    path('monitoring/telemetry/job/<int:job_id>/logs/', views.job_external_service_logs_api, name='job_external_service_logs_api'),
+
+    # Quantum & QScheduler Management (v6.5.0+)
+    path('clusters/<int:cluster_id>/quantum/architecture/', views.cluster_quantum_architecture_api, name='cluster_quantum_architecture_api'),
+    path('clusters/<int:cluster_id>/quantum/calibration/', views.cluster_quantum_calibration_api, name='cluster_quantum_calibration_api'),
+    path('clusters/<int:cluster_id>/qscheduler/sessions/', views.qscheduler_sessions_api, name='qscheduler_sessions_api'),
+    path('clusters/qscheduler/sessions/open/', views.qscheduler_open_session_api, name='qscheduler_open_session_api'),
+    path('clusters/qscheduler/sessions/<int:session_id>/close/', views.qscheduler_close_session_api, name='qscheduler_close_session_api'),
+    path('clusters/qscheduler/tasks/<int:task_id>/result/', views.qscheduler_task_result_api, name='qscheduler_task_result_api'),
 ]

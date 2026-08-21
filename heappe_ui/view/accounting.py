@@ -130,7 +130,7 @@ def accounting_view(request, project_id:int):
                                         validity_from == active_accounting.validity_from and accounting.id > active_accounting.id):
                             active_accounting = accounting
 
-                # označení aktivního
+                # Mark active
                 for accounting in project_agg.group.accountings:
                     accounting.is_active = accounting == active_accounting
 
@@ -187,7 +187,7 @@ def assign_queue_group_to_project(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def unassign_queue_group_from_project(request: HttpRequest) -> HttpResponse:
-    """mapping_id je Id záznamu ProjectClusterNodeTypeAggregation"""
+    """mapping_id is the Id of ProjectClusterNodeTypeAggregation record"""
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
     mapping_id = int(request.POST.get("MappingId"))

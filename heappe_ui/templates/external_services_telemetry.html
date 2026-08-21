@@ -1,0 +1,496 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block title %}External Services &amp; Telemetry{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">External Services &amp; Telemetry</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+    <!-- Header Banner -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-2 border-bottom">
+        <div class="d-flex align-items-center gap-3">
+            <div class="p-2.5 bg-primary bg-opacity-10 text-primary rounded-3">
+                <i class="bi bi-activity fs-3"></i>
+            </div>
+            <div>
+                <h4 class="mb-0 fw-bold text-dark">External Services &amp; Telemetry</h4>
+                <span class="text-muted small">Live health probes, response latencies, and aggregated reliability statistics across middleware external integrations</span>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" id="btn-refresh-live-status" class="btn btn-sm btn-outline-primary d-flex align-items-center gap-1.5 fw-semibold shadow-sm">
+                <i class="bi bi-arrow-clockwise" id="refresh-icon"></i>
+                <span>Refresh Health Probes</span>
+            </button>
+            <button type="button" id="btn-download-report" class="btn btn-sm btn-light border d-flex align-items-center gap-1.5 fw-semibold text-secondary shadow-sm">
+                <i class="bi bi-download"></i>
+                <span>Export Report</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- SECTION 1: Live Health Status (Cards) -->
+    <div class="mb-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <div class="d-flex align-items-center gap-2">
+                <h6 class="fw-bold text-uppercase text-secondary small mb-0" style="letter-spacing: 0.05em;">Live Health Probes</h6>
+                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.72rem;">Real-time</span>
+            </div>
+            <span class="text-muted small" id="live-last-updated">Updated: Just now</span>
+        </div>
+
+        {% if live_error %}
+        <div class="alert alert-warning d-flex align-items-center gap-2 border-warning-subtle shadow-sm mb-3">
+            <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+            <div>
+                <strong>Failed to load live status:</strong> {{ live_error }}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="row g-3" id="live-status-container">
+            {% if live_statuses %}
+                {% for item in live_statuses %}
+                <div class="col-xl-3 col-lg-4 col-md-6">
+                    <div class="card border-0 shadow-sm rounded-3 h-100 bg-white service-live-card transition-all" style="border-left: 4px solid {% if item.IsAvailable or item.is_available %}#198754{% else %}#dc3545{% endif %} !important;">
+                        <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                                    <div>
+                                        <h6 class="fw-bold text-dark mb-0">{{ item.ServiceName|default:item.service_name|default:"Service" }}</h6>
+                                        <span class="badge bg-light text-muted border font-monospace mt-1" style="font-size: 0.68rem;">{{ item.ServiceType|default:item.service_type|default:"external" }}</span>
+                                    </div>
+                                    {% if item.IsAvailable or item.is_available %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                        <span class="spinner-grow spinner-grow-sm text-success" style="width: 0.45rem; height: 0.45rem;" role="status"></span>
+                                        Available
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                        <i class="bi bi-x-circle-fill"></i>
+                                        Unavailable
+                                    </span>
+                                    {% endif %}
+                                </div>
+
+                                <div class="small text-muted mb-2">
+                                    <div class="text-truncate" title="{{ item.Protocol|default:'' }}://{{ item.Host|default:item.host|default:'' }}:{{ item.Port|default:item.port|default:'' }}">
+                                        <i class="bi bi-hdd-network me-1"></i>
+                                        <span class="font-monospace text-dark">{{ item.Protocol|default:item.protocol|default:"http" }}://{{ item.Host|default:item.host|default:"-" }}{% if item.Port or item.port %}:{{ item.Port|default:item.port }}{% endif %}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-2">
+                                <div class="d-flex align-items-center gap-1.5">
+                                    <i class="bi bi-stopwatch text-secondary"></i>
+                                    <span class="small text-muted">Latency:</span>
+                                    {% with rt=item.ResponseTimeMs|default:item.response_time_ms|default:0 %}
+                                    <span class="badge {% if rt < 150 %}bg-success-subtle text-success border border-success-subtle{% elif rt < 1000 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
+                                        {{ rt }} ms
+                                    </span>
+                                    {% endwith %}
+                                </div>
+                                {% if item.ErrorMessage or item.error_message %}
+                                <button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-semibold btn-show-error" data-service="{{ item.ServiceName|default:item.service_name }}" data-error="{{ item.ErrorMessage|default:item.error_message }}">
+                                    <i class="bi bi-info-circle me-0.5"></i>Error
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm rounded-3 bg-white p-4 text-center">
+                        <i class="bi bi-broadcast text-muted fs-2 mb-2"></i>
+                        <h6 class="text-secondary fw-semibold mb-1">No live health probe data available</h6>
+                        <p class="text-muted small mb-0">Ensure the HEAppE background health monitoring worker is running in appsettings.json.</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- SECTION 2: Aggregated Telemetry Statistics -->
+    <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+        <div class="card-header bg-white border-bottom p-3.5">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                    <h5 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+                        <i class="bi bi-bar-chart-line-fill text-primary"></i>
+                        Aggregated Telemetry &amp; Latency Statistics
+                    </h5>
+                    <span class="text-muted small">Comprehensive breakdown of all external HTTP, SSH, CA, Vault, and SQL database queries</span>
+                </div>
+                <!-- Filters -->
+                <form id="stats-filter-form" method="get" class="d-flex flex-wrap align-items-center gap-2">
+                    <!-- Range Selector -->
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Time range selector">
+                        <a href="?range=1h{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '1h' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">1h</a>
+                        <a href="?range=24h{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '24h' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">24h</a>
+                        <a href="?range=7d{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '7d' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">7d</a>
+                        <a href="?range=30d{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '30d' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">30d</a>
+                    </div>
+
+                    <!-- Service Selector -->
+                    <select name="service" class="form-select form-select-sm border-secondary-subtle" style="width: auto;" onchange="document.getElementById('stats-filter-form').submit();">
+                        <option value="">All Services</option>
+                        {% for sname in service_names %}
+                        <option value="{{ sname }}" {% if selected_service == sname %}selected{% endif %}>{{ sname }}</option>
+                        {% endfor %}
+                    </select>
+
+                    <!-- Cluster Selector -->
+                    {% if clusters %}
+                    <select name="cluster_id" class="form-select form-select-sm border-secondary-subtle" style="width: auto;" onchange="document.getElementById('stats-filter-form').submit();">
+                        <option value="">All Clusters</option>
+                        {% for c in clusters %}
+                        <option value="{{ c.Id|default:c.id }}" {% if selected_cluster_id|stringformat:"s" == c.Id|default:c.id|stringformat:"s" %}selected{% endif %}>{{ c.Name|default:c.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+
+                    {% if selected_service or selected_cluster_id or time_range != '24h' %}
+                    <a href="{% url 'external_services_telemetry_view' %}" class="btn btn-sm btn-outline-danger" title="Clear Filters">
+                        <i class="bi bi-x-lg"></i>
+                    </a>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            {% if stats_error %}
+            <div class="p-3">
+                <div class="alert alert-danger mb-0 d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-circle-fill"></i>
+                    <span>Failed to retrieve telemetry statistics: {{ stats_error }}</span>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="telemetry-stats-table">
+                    <thead class="bg-light text-secondary text-uppercase small" style="font-size: 0.75rem;">
+                        <tr>
+                            <th class="ps-4">Service</th>
+                            <th>Type</th>
+                            <th>Operation / Command / SQL</th>
+                            <th class="text-center">Availability</th>
+                            <th class="text-center">Avg Latency</th>
+                            <th class="text-center">Min / Max</th>
+                            <th class="text-center">P95 Latency</th>
+                            <th class="text-center">Calls</th>
+                            <th class="text-center pe-4">Failures</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if statistics %}
+                            {% for row in statistics %}
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold text-dark">{{ row.ServiceName|default:row.service_name|default:"-" }}</div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary-subtle text-secondary border font-monospace" style="font-size: 0.7rem;">
+                                        {{ row.ServiceType|default:row.service_type|default:"generic" }}
+                                    </span>
+                                </td>
+                                <td style="max-width: 320px;">
+                                    <code class="small text-dark text-truncate d-block" title="{{ row.CommandOrPath|default:row.command_or_path|default:'-' }}">
+                                        {{ row.CommandOrPath|default:row.command_or_path|default:"-" }}
+                                    </code>
+                                </td>
+                                <td class="text-center" style="min-width: 140px;">
+                                    {% with avail=row.AvailabilityPercentage|default:row.availability_percentage|default:100 %}
+                                    <div class="d-flex align-items-center justify-content-center gap-2">
+                                        <div class="progress flex-grow-1" style="height: 6px; width: 60px;">
+                                            <div class="progress-bar {% if avail >= 99 %}bg-success{% elif avail >= 90 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ avail }}%;"></div>
+                                        </div>
+                                        <span class="small font-monospace fw-bold {% if avail >= 99 %}text-success{% elif avail >= 90 %}text-warning{% else %}text-danger{% endif %}">
+                                            {{ avail|floatformat:1 }}%
+                                        </span>
+                                    </div>
+                                    {% endwith %}
+                                </td>
+                                <td class="text-center">
+                                    {% with avg=row.AverageResponseTimeMs|default:row.average_response_time_ms|default:0 %}
+                                    <span class="badge {% if avg < 100 %}bg-success-subtle text-success border border-success-subtle{% elif avg < 500 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace">
+                                        {{ avg|floatformat:1 }} ms
+                                    </span>
+                                    {% endwith %}
+                                </td>
+                                <td class="text-center small font-monospace text-muted">
+                                    {{ row.MinResponseTimeMs|default:row.min_response_time_ms|default:0 }} / {{ row.MaxResponseTimeMs|default:row.max_response_time_ms|default:0 }} ms
+                                </td>
+                                <td class="text-center">
+                                    {% with p95=row.P95ResponseTimeMs|default:row.p95_response_time_ms|default:0 %}
+                                    <span class="badge {% if p95 < 200 %}bg-light text-dark border{% elif p95 < 1000 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
+                                        {{ p95|floatformat:1 }} ms
+                                    </span>
+                                    {% endwith %}
+                                </td>
+                                <td class="text-center font-monospace small">
+                                    {{ row.TotalChecks|default:row.total_checks|default:0 }}
+                                </td>
+                                <td class="text-center pe-4 font-monospace small">
+                                    {% with failed=row.FailedChecks|default:row.failed_checks|default:0 %}
+                                    {% if failed > 0 %}
+                                    <span class="badge bg-danger text-white rounded-pill px-2">{{ failed }}</span>
+                                    {% else %}
+                                    <span class="text-muted">0</span>
+                                    {% endif %}
+                                    {% endwith %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="text-center py-5 text-muted">
+                                    <i class="bi bi-bar-chart fs-2 d-block mb-2 text-secondary opacity-50"></i>
+                                    <span>No telemetry data found for the selected filter and time range.</span>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Error Detail Modal -->
+<div class="modal fade" id="errorDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger text-white">
+                <h6 class="modal-title fw-bold d-flex align-items-center gap-2">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span id="modalErrorService">Service Error</span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-secondary small mb-2">Probe failure diagnostic message returned by HEAppE Core:</p>
+                <div class="bg-light p-3 rounded-3 border">
+                    <code class="small text-danger font-monospace" id="modalErrorMessage" style="word-break: break-all; white-space: pre-wrap;"></code>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0 py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Report Export Modal -->
+<div class="modal fade" id="reportExportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-primary text-white">
+                <h6 class="modal-title fw-bold d-flex align-items-center gap-2">
+                    <i class="bi bi-file-earmark-spreadsheet-fill"></i>
+                    <span>Export Telemetry &amp; Health Report</span>
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="report-loading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="text-muted small mt-2">Generating telemetry report...</p>
+                </div>
+                <div id="report-content" class="d-none">
+                    <div class="alert alert-success border-success-subtle small d-flex align-items-center gap-2 mb-3">
+                        <i class="bi bi-check-circle-fill"></i>
+                        <span>Report generated successfully! You can view the raw payload or download as JSON.</span>
+                    </div>
+                    <pre class="bg-dark text-light p-3 rounded font-monospace small" id="report-json-view" style="max-height: 350px; overflow-y: auto;"></pre>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0 py-2">
+                <button type="button" id="btn-save-report-json" class="btn btn-sm btn-primary fw-bold" disabled>
+                    <i class="bi bi-download me-1"></i>Download JSON
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Error modal trigger
+    const errorModal = new bootstrap.Modal(document.getElementById('errorDetailModal'));
+    document.querySelectorAll('.btn-show-error').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.getElementById('modalErrorService').textContent = this.getAttribute('data-service') + ' Error Details';
+            document.getElementById('modalErrorMessage').textContent = this.getAttribute('data-error');
+            errorModal.show();
+        });
+    });
+
+    // Refresh Live Status via AJAX
+    const refreshBtn = document.getElementById('btn-refresh-live-status');
+    const refreshIcon = document.getElementById('refresh-icon');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function() {
+            refreshIcon.classList.add('spin-animation');
+            refreshBtn.disabled = true;
+
+            fetch("{% url 'external_services_live_status_api' %}")
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success' && data.data) {
+                        renderLiveStatus(data.data);
+                        document.getElementById('live-last-updated').textContent = 'Updated: ' + new Date().toLocaleTimeString();
+                    } else {
+                        alert('Failed to refresh health probes: ' + (data.message || 'Unknown error'));
+                    }
+                })
+                .catch(err => {
+                    alert('Network error while refreshing live status: ' + err);
+                })
+                .finally(() => {
+                    refreshIcon.classList.remove('spin-animation');
+                    refreshBtn.disabled = false;
+                });
+        });
+    }
+
+    function renderLiveStatus(statuses) {
+        const container = document.getElementById('live-status-container');
+        if (!statuses || statuses.length === 0) {
+            return;
+        }
+        let html = '';
+        statuses.forEach(item => {
+            const isAvail = item.IsAvailable || item.is_available;
+            const sName = item.ServiceName || item.service_name || 'Service';
+            const sType = item.ServiceType || item.service_type || 'external';
+            const proto = item.Protocol || item.protocol || 'http';
+            const host = item.Host || item.host || '-';
+            const port = item.Port || item.port ? `:${item.Port || item.port}` : '';
+            const rt = item.ResponseTimeMs || item.response_time_ms || 0;
+            const errMsg = item.ErrorMessage || item.error_message || '';
+            const borderColor = isAvail ? '#198754' : '#dc3545';
+            
+            let rtBadgeClass = 'bg-success-subtle text-success border border-success-subtle';
+            if (rt >= 1000) rtBadgeClass = 'bg-danger-subtle text-danger border border-danger-subtle';
+            else if (rt >= 150) rtBadgeClass = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+
+            html += `
+            <div class="col-xl-3 col-lg-4 col-md-6">
+                <div class="card border-0 shadow-sm rounded-3 h-100 bg-white service-live-card" style="border-left: 4px solid ${borderColor} !important;">
+                    <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                        <div>
+                            <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-0">${sName}</h6>
+                                    <span class="badge bg-light text-muted border font-monospace mt-1" style="font-size: 0.68rem;">${sType}</span>
+                                </div>
+                                ${isAvail ? `
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                    <span class="spinner-grow spinner-grow-sm text-success" style="width: 0.45rem; height: 0.45rem;" role="status"></span>
+                                    Available
+                                </span>` : `
+                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                    <i class="bi bi-x-circle-fill"></i> Unavailable
+                                </span>`}
+                            </div>
+                            <div class="small text-muted mb-2">
+                                <div class="text-truncate">
+                                    <i class="bi bi-hdd-network me-1"></i>
+                                    <span class="font-monospace text-dark">${proto}://${host}${port}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-2">
+                            <div class="d-flex align-items-center gap-1.5">
+                                <i class="bi bi-stopwatch text-secondary"></i>
+                                <span class="small text-muted">Latency:</span>
+                                <span class="badge ${rtBadgeClass} font-monospace fw-bold">${rt} ms</span>
+                            </div>
+                            ${errMsg ? `<button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-semibold btn-show-error" data-service="${sName}" data-error="${errMsg}"><i class="bi bi-info-circle me-0.5"></i>Error</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        });
+        container.innerHTML = html;
+
+        // Rebind error buttons
+        document.querySelectorAll('.btn-show-error').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.getElementById('modalErrorService').textContent = this.getAttribute('data-service') + ' Error Details';
+                document.getElementById('modalErrorMessage').textContent = this.getAttribute('data-error');
+                errorModal.show();
+            });
+        });
+    }
+
+    // Report Export Handling
+    const reportBtn = document.getElementById('btn-download-report');
+    const reportModal = new bootstrap.Modal(document.getElementById('reportExportModal'));
+    let currentReportData = null;
+
+    if (reportBtn) {
+        reportBtn.addEventListener('click', function() {
+            reportModal.show();
+            document.getElementById('report-loading').classList.remove('d-none');
+            document.getElementById('report-content').classList.add('d-none');
+            document.getElementById('btn-save-report-json').disabled = true;
+
+            fetch("{% url 'external_services_report_api' %}")
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('report-loading').classList.add('d-none');
+                    document.getElementById('report-content').classList.remove('d-none');
+                    currentReportData = data.data || data;
+                    document.getElementById('report-json-view').textContent = JSON.stringify(currentReportData, null, 2);
+                    document.getElementById('btn-save-report-json').disabled = false;
+                })
+                .catch(err => {
+                    document.getElementById('report-loading').classList.add('d-none');
+                    alert('Error generating report: ' + err);
+                });
+        });
+    }
+
+    document.getElementById('btn-save-report-json').addEventListener('click', function() {
+        if (!currentReportData) return;
+        const blob = new Blob([JSON.stringify(currentReportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `heappe_telemetry_report_${new Date().toISOString().slice(0,10)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+});
+</script>
+
+<style>
+.spin-animation {
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+.service-live-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.service-live-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.06) !important;
+}
+</style>
+{% endblock %}

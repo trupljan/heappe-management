@@ -14,6 +14,7 @@ from heappe_ui.view.backups import *
 from heappe_ui.view.admin_users import *
 from heappe_ui.view.docs import *
 from heappe_ui.view.integration import *
+from heappe_ui.view.telemetry import *
 
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
