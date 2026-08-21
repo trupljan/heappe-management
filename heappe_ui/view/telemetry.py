@@ -91,9 +91,15 @@ def _call_telemetry_api(request, endpoint: str, method: str = 'POST', body: dict
         raise RuntimeError("No HEAppE API instance connected.")
 
     session_code = getattr(request, 'session_code', None) or request.session.get('heappe_session_code', '')
-    
-    if body is not None and isinstance(body, dict):
-        if 'SessionCode' not in body and 'session_code' not in body:
+
+    # Special handling for GetExternalServicesLiveStatus which expects SessionCode in query string without a body
+    if 'GetExternalServicesLiveStatus' in endpoint:
+        query_params = query_params or {}
+        if 'SessionCode' not in query_params and session_code:
+            query_params['SessionCode'] = session_code
+        body = None
+    elif body is not None and isinstance(body, dict):
+        if 'SessionCode' not in body and 'session_code' not in body and session_code:
             body['SessionCode'] = session_code
 
     call_kwargs = {
@@ -125,14 +131,26 @@ def _call_telemetry_api(request, endpoint: str, method: str = 'POST', body: dict
             import requests as req_lib
             base_url = request.api_instance.configuration.host.rstrip('/')
             url = f"{base_url}{endpoint}"
-            headers = {'Content-Type': 'application/json'}
+            headers = {}
             if session_code:
                 headers['SessionCode'] = session_code
+                headers['Authorization'] = f"Bearer {session_code}"
                 
+            req_params = dict(query_params or {})
+            if session_code and 'SessionCode' not in req_params:
+                req_params['SessionCode'] = session_code
+
             if method.upper() == 'POST':
-                resp = req_lib.post(url, json=body or {}, headers=headers, timeout=20, verify=False)
+                if body is not None:
+                    headers['Content-Type'] = 'application/json'
+                    resp = req_lib.post(url, params=req_params, json=body, headers=headers, timeout=20, verify=False)
+                else:
+                    resp = req_lib.post(url, params=req_params, headers=headers, timeout=20, verify=False)
+
+                if resp.status_code in (404, 405, 500) and ('SessionCodeModel' in resp.text or resp.status_code == 405):
+                    resp = req_lib.get(url, params=req_params, headers=headers, timeout=20, verify=False)
             else:
-                resp = req_lib.get(url, params=query_params or {}, headers=headers, timeout=20, verify=False)
+                resp = req_lib.get(url, params=req_params, headers=headers, timeout=20, verify=False)
                 
             if resp.status_code == 200:
                 data = resp.json()
@@ -158,9 +176,9 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
 
     time_range = request.GET.get('range', '24h')
     service_filter = request.GET.get('service', '').strip()
-    cluster_filter = request.GET.get('cluster_id', '').strip()
+    cluster_filter = request.GET.get('cluster', '').strip()
 
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
     if time_range == '1h':
         from_dt = now - timedelta(hours=1)
     elif time_range == '7d':
@@ -178,7 +196,7 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
             request,
             '/heappe/Management/GetExternalServicesLiveStatus',
             'POST',
-            body={"SessionCode": request.session_code}
+            query_params={"SessionCode": request.session_code}
         )
     except Exception as e:
         live_error = str(e)
@@ -253,7 +271,7 @@ def external_services_live_status_api(request: HttpRequest) -> JsonResponse:
             request,
             '/heappe/Management/GetExternalServicesLiveStatus',
             'POST',
-            body={"SessionCode": request.session_code}
+            query_params={"SessionCode": request.session_code}
         )
         return JsonResponse({"status": "success", "data": statuses})
     except Exception as e:
