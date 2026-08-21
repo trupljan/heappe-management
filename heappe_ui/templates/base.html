@@ -1353,9 +1353,9 @@
 <!-- Live Events WebSocket Client -->
 <script>
 (function() {
-    const sessionCode = "{{ request.session.heappe_session_code|default:'' }}";
-    const apiKey = "{{ request.session.heappe_api_key_header|default:request.session.heappe_api_key|default:'' }}";
-    let rawHost = "{{ request.session.heappe_host|default:'' }}";
+    const sessionCode = "{{ heappe_session_code|default:'' }}";
+    const apiKey = "{{ heappe_api_key|default:'' }}";
+    let rawHost = "{{ heappe_host|default:'' }}";
     if (!rawHost) return;
     if (!sessionCode && !apiKey) return;
 

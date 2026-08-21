@@ -301,5 +301,8 @@ def middleware_update_renderer(request):
         'jaeger_port': jaeger_port,
         'otel_disabled': otel_disabled,
         'otel_active': otel_active,
+        'heappe_session_code': request.session.get('heappe_session_code', ''),
+        'heappe_api_key': request.session.get('heappe_api_key_header', '') or request.session.get('heappe_api_key', ''),
+        'heappe_host': request.session.get('heappe_host', ''),
         **api_links
     }
