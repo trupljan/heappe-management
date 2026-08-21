@@ -18,7 +18,7 @@
             </div>
             <div>
                 <h4 class="mb-0 fw-bold text-dark">External Services &amp; Telemetry</h4>
-                <span class="text-muted small">Live health probes, response latencies, and aggregated reliability statistics across middleware external integrations</span>
+                <span class="text-muted small">Live health probes, response latencies, and aggregated reliability statistics for middleware services &amp; HPC clusters</span>
             </div>
         </div>
         <div class="d-flex align-items-center gap-2">
@@ -56,7 +56,7 @@
                     <div>
                         <span class="text-muted small text-uppercase fw-semibold" style="letter-spacing: 0.05em; font-size: 0.72rem;">Overall Availability</span>
                         <h3 class="fw-bold {% if avg_avail >= 99 %}text-success{% elif avg_avail >= 90 %}text-warning{% else %}text-danger{% endif %} mb-1 mt-1">{{ avg_avail|floatformat:1 }}%</h3>
-                        <span class="text-muted small" style="font-size: 0.75rem;">Reliability rate across services</span>
+                        <span class="text-muted small" style="font-size: 0.75rem;">Reliability rate across system</span>
                     </div>
                     <div class="p-3 {% if avg_avail >= 99 %}bg-success{% elif avg_avail >= 90 %}bg-warning{% else %}bg-danger{% endif %} bg-opacity-10 {% if avg_avail >= 99 %}text-success{% elif avg_avail >= 90 %}text-warning{% else %}text-danger{% endif %} rounded-3">
                         <i class="bi bi-shield-check fs-3"></i>
@@ -101,7 +101,7 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link active fw-semibold d-flex align-items-center gap-2 py-2 px-3.5" id="stats-tab" data-bs-toggle="pill" data-bs-target="#stats-content" type="button" role="tab">
                 <i class="bi bi-table"></i>
-                <span>Aggregated Service Statistics</span>
+                <span>Aggregated Statistics</span>
                 <span class="badge bg-secondary-subtle text-secondary rounded-pill font-monospace ms-1">{{ grouped_services|length|default:0 }}</span>
             </button>
         </li>
@@ -122,406 +122,776 @@
 
     <!-- Tab Contents -->
     <div class="tab-content" id="telemetryTabsContent">
-        <!-- TAB 1: Aggregated Service Statistics (Accordion) -->
+        <!-- TAB 1: Aggregated Service & Cluster Statistics -->
         <div class="tab-pane fade show active" id="stats-content" role="tabpanel">
             <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
-        <div class="card-header bg-white border-bottom p-3.5">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-                <div>
-                    <h5 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
-                        <i class="bi bi-table text-primary"></i>
-                        Aggregated Telemetry &amp; Latency Statistics
-                    </h5>
-                    <span class="text-muted small">Comprehensive breakdown of all external HTTP, SSH, CA, Vault, and SQL database queries</span>
+                <div class="card-header bg-white border-bottom p-3.5">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div>
+                            <h5 class="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+                                <i class="bi bi-table text-primary"></i>
+                                Telemetry Statistics Breakdown
+                            </h5>
+                            <span class="text-muted small">Separated overview of infrastructure services and HPC compute clusters</span>
+                        </div>
+                        <!-- Filters & Search -->
+                        <div class="d-flex flex-wrap align-items-center gap-2">
+                            <!-- Section Switcher Pills -->
+                            <div class="btn-group btn-group-sm me-1" role="group" aria-label="Category filter">
+                                <button type="button" class="btn btn-primary fw-semibold btn-cat-filter active" data-cat="all">
+                                    <i class="bi bi-layers-half me-1"></i>All
+                                </button>
+                                <button type="button" class="btn btn-outline-primary fw-semibold btn-cat-filter" data-cat="services">
+                                    <i class="bi bi-gear-wide-connected me-1"></i>Services ({{ grouped_services_only|length }})
+                                </button>
+                                <button type="button" class="btn btn-outline-success fw-semibold btn-cat-filter" data-cat="clusters">
+                                    <i class="bi bi-cpu-fill me-1"></i>Clusters ({{ grouped_clusters_only|length }})
+                                </button>
+                            </div>
+
+                            <div class="input-group input-group-sm" style="width: 180px;">
+                                <span class="input-group-text bg-light border-secondary-subtle"><i class="bi bi-search text-muted"></i></span>
+                                <input type="text" id="telemetry-table-search" class="form-control border-secondary-subtle" placeholder="Filter tables...">
+                            </div>
+
+                            <button type="button" id="btn-toggle-failures-only" class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1">
+                                <i class="bi bi-funnel"></i>
+                                <span>Failures Only</span>
+                            </button>
+
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" id="btn-expand-all" class="btn btn-outline-secondary" title="Expand All">
+                                    <i class="bi bi-arrows-expand me-1"></i>Expand All
+                                </button>
+                                <button type="button" id="btn-collapse-all" class="btn btn-outline-secondary" title="Collapse All">
+                                    <i class="bi bi-arrows-collapse me-1"></i>Collapse All
+                                </button>
+                            </div>
+
+                            <form id="stats-filter-form" method="get" class="d-flex flex-wrap align-items-center gap-2">
+                                <!-- Range Selector -->
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Time range selector">
+                                    <a href="?range=1h{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '1h' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">1h</a>
+                                    <a href="?range=24h{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '24h' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">24h</a>
+                                    <a href="?range=7d{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '7d' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">7d</a>
+                                    <a href="?range=30d{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '30d' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">30d</a>
+                                </div>
+
+                                <!-- Service Selector -->
+                                <select name="service" class="form-select form-select-sm border-secondary-subtle" style="width: auto;" onchange="document.getElementById('stats-filter-form').submit();">
+                                    <option value="">All Services</option>
+                                    {% for sname in service_names %}
+                                    <option value="{{ sname }}" {% if selected_service == sname %}selected{% endif %}>{{ sname }}</option>
+                                    {% endfor %}
+                                </select>
+
+                                <!-- Cluster Selector -->
+                                {% if clusters %}
+                                <select name="cluster_id" class="form-select form-select-sm border-secondary-subtle" style="width: auto;" onchange="document.getElementById('stats-filter-form').submit();">
+                                    <option value="">All Clusters</option>
+                                    {% for c in clusters %}
+                                    <option value="{{ c.Id|default:c.id }}" {% if selected_cluster_id|stringformat:"s" == c.Id|default:c.id|stringformat:"s" %}selected{% endif %}>{{ c.Name|default:c.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% endif %}
+
+                                {% if selected_service or selected_cluster_id or time_range != '24h' %}
+                                <a href="{% url 'external_services_telemetry_view' %}" class="btn btn-sm btn-outline-danger" title="Clear Filters">
+                                    <i class="bi bi-x-lg"></i>
+                                </a>
+                                {% endif %}
+                            </form>
+                        </div>
+                    </div>
                 </div>
-                <!-- Filters & Search -->
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <div class="input-group input-group-sm" style="width: 200px;">
-                        <span class="input-group-text bg-light border-secondary-subtle"><i class="bi bi-search text-muted"></i></span>
-                        <input type="text" id="telemetry-table-search" class="form-control border-secondary-subtle" placeholder="Filter table...">
+
+                <div class="card-body p-3">
+                    {% if stats_error %}
+                    <div class="alert alert-danger mb-3 d-flex align-items-center gap-2">
+                        <i class="bi bi-exclamation-circle-fill"></i>
+                        <span>Failed to retrieve telemetry statistics: {{ stats_error }}</span>
                     </div>
+                    {% endif %}
 
-                    <button type="button" id="btn-toggle-failures-only" class="btn btn-sm btn-outline-danger d-flex align-items-center gap-1">
-                        <i class="bi bi-funnel"></i>
-                        <span>Failures Only</span>
-                    </button>
-
-                    <div class="btn-group btn-group-sm">
-                        <button type="button" id="btn-expand-all" class="btn btn-outline-secondary" title="Expand All Services">
-                            <i class="bi bi-arrows-expand me-1"></i>Expand All
-                        </button>
-                        <button type="button" id="btn-collapse-all" class="btn btn-outline-secondary" title="Collapse All Services">
-                            <i class="bi bi-arrows-collapse me-1"></i>Collapse All
-                        </button>
-                    </div>
-
-                    <form id="stats-filter-form" method="get" class="d-flex flex-wrap align-items-center gap-2">
-                        <!-- Range Selector -->
-                        <div class="btn-group btn-group-sm" role="group" aria-label="Time range selector">
-                            <a href="?range=1h{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '1h' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">1h</a>
-                            <a href="?range=24h{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '24h' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">24h</a>
-                            <a href="?range=7d{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '7d' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">7d</a>
-                            <a href="?range=30d{% if selected_service %}&service={{ selected_service }}{% endif %}{% if selected_cluster_id %}&cluster_id={{ selected_cluster_id }}{% endif %}" class="btn {% if time_range == '30d' %}btn-primary fw-bold{% else %}btn-outline-secondary{% endif %}">30d</a>
+                    <!-- SECTION 1: SERVICES TABLE (Infrastructure & Middleware Services) -->
+                    <div id="stats-section-services" class="mb-4">
+                        <div class="d-flex align-items-center justify-content-between p-2.5 bg-light rounded-top border border-bottom-0">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-gear-wide-connected text-primary fs-5"></i>
+                                <h6 class="fw-bold text-dark mb-0">Infrastructure &amp; Middleware Services</h6>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.7rem;">
+                                    {{ grouped_services_only|length }} services
+                                </span>
+                            </div>
+                            <span class="text-muted small">Vault, Database, Authentication, Internal APIs</span>
                         </div>
 
-                        <!-- Service Selector -->
-                        <select name="service" class="form-select form-select-sm border-secondary-subtle" style="width: auto;" onchange="document.getElementById('stats-filter-form').submit();">
-                            <option value="">All Services</option>
-                            {% for sname in service_names %}
-                            <option value="{{ sname }}" {% if selected_service == sname %}selected{% endif %}>{{ sname }}</option>
-                            {% endfor %}
-                        </select>
+                        <div class="table-responsive border rounded-bottom">
+                            <table class="table table-hover align-middle mb-0 telemetry-stats-table" id="table-services-only" style="table-layout: fixed;">
+                                <thead class="bg-light text-secondary text-uppercase small" style="font-size: 0.72rem;">
+                                    <tr>
+                                        <th class="ps-3" style="width: 30%;">Service</th>
+                                        <th class="text-center" style="width: 14%;">Type</th>
+                                        <th class="text-center" style="width: 16%;">Availability</th>
+                                        <th class="text-center" style="width: 14%;">Avg Latency</th>
+                                        <th class="text-center" style="width: 14%;">P95 Latency</th>
+                                        <th class="text-center" style="width: 12%;">Total Calls</th>
+                                        <th class="text-center pe-3" style="width: 12%;">Failures</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if grouped_services_only %}
+                                        {% for s in grouped_services_only %}
+                                        <!-- Parent Service Row -->
+                                        <tr class="service-parent-row align-middle border-bottom" style="cursor: pointer; background-color: #fafbfc;" data-bs-toggle="collapse" data-bs-target="#collapse-srv-{{ forloop.counter }}" aria-expanded="false">
+                                            <td class="ps-3">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="bi bi-chevron-right text-primary service-chevron" id="chevron-srv-{{ forloop.counter }}" style="font-size: 0.8rem;"></i>
+                                                    <div>
+                                                        <span class="fw-bold text-dark">{{ s.service_name }}</span>
+                                                        <div class="d-flex align-items-center gap-1.5 mt-0.5">
+                                                            <span class="badge bg-secondary-subtle text-secondary border font-monospace" style="font-size: 0.62rem;">{{ s.service_type }}</span>
+                                                            <span class="text-muted" style="font-size: 0.68rem;">{{ s.operations_count }} endpoint{% if s.operations_count != 1 %}s{% endif %}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="badge bg-light text-secondary border font-monospace" style="font-size: 0.7rem;">
+                                                    {{ s.service_type }}
+                                                </span>
+                                            </td>
+                                            <td class="text-center">
+                                                {% with avail=s.availability_percentage %}
+                                                <div class="d-flex align-items-center justify-content-center gap-2">
+                                                    <div class="progress flex-grow-1" style="height: 6px; width: 60px;">
+                                                        <div class="progress-bar {% if avail >= 99 %}bg-success{% elif avail >= 90 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ avail }}%;"></div>
+                                                    </div>
+                                                    <span class="small font-monospace fw-bold {% if avail >= 99 %}text-success{% elif avail >= 90 %}text-warning{% else %}text-danger{% endif %}">
+                                                        {{ avail|floatformat:1 }}%
+                                                    </span>
+                                                </div>
+                                                {% endwith %}
+                                            </td>
+                                            <td class="text-center">
+                                                {% with avg=s.average_response_time_ms %}
+                                                <span class="badge {% if avg < 100 %}bg-success-subtle text-success border border-success-subtle{% elif avg < 500 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace">
+                                                    {{ avg|floatformat:1 }} ms
+                                                </span>
+                                                {% endwith %}
+                                            </td>
+                                            <td class="text-center">
+                                                {% with p95=s.p95_response_time_ms %}
+                                                <span class="badge {% if p95 < 200 %}bg-light text-dark border{% elif p95 < 1000 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
+                                                    {{ p95|floatformat:1 }} ms
+                                                </span>
+                                                {% endwith %}
+                                            </td>
+                                            <td class="text-center font-monospace small fw-bold">
+                                                {{ s.total_checks }}
+                                            </td>
+                                            <td class="text-center pe-3 font-monospace small">
+                                                {% if s.failed_checks > 0 %}
+                                                <button type="button" class="btn btn-sm p-0 border-0 btn-inspect-failure" 
+                                                        data-service="{{ s.service_name }}" 
+                                                        data-command="All endpoints"
+                                                        data-failed="{{ s.failed_checks }}"
+                                                        title="Click to view failure details for {{ s.service_name }}">
+                                                    <span class="badge bg-danger text-white rounded-pill px-2 shadow-sm d-inline-flex align-items-center gap-1" style="cursor: pointer;">
+                                                        <span>{{ s.failed_checks }}</span>
+                                                        <i class="bi bi-search" style="font-size: 0.65rem;"></i>
+                                                    </span>
+                                                </button>
+                                                {% else %}
+                                                <span class="text-muted">0</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
 
-                        <!-- Cluster Selector -->
-                        {% if clusters %}
-                        <select name="cluster_id" class="form-select form-select-sm border-secondary-subtle" style="width: auto;" onchange="document.getElementById('stats-filter-form').submit();">
-                            <option value="">All Clusters</option>
-                            {% for c in clusters %}
-                            <option value="{{ c.Id|default:c.id }}" {% if selected_cluster_id|stringformat:"s" == c.Id|default:c.id|stringformat:"s" %}selected{% endif %}>{{ c.Name|default:c.name }}</option>
-                            {% endfor %}
-                        </select>
-                        {% endif %}
+                                        <!-- Collapsible Child Operations Sub-Table -->
+                                        <tr class="service-child-row p-0 border-0">
+                                            <td colspan="7" class="p-0 border-0">
+                                                <div class="collapse" id="collapse-srv-{{ forloop.counter }}">
+                                                    <div class="p-3 bg-light bg-opacity-75 border-bottom">
+                                                        <div class="card border border-secondary-subtle shadow-xs rounded-2 bg-white">
+                                                            <div class="card-header bg-white py-2 px-3 d-flex align-items-center justify-content-between border-bottom">
+                                                                <span class="small fw-bold text-secondary text-uppercase" style="font-size: 0.72rem;">Endpoints for <strong class="text-dark">{{ s.service_name }}</strong></span>
+                                                                <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.68rem;">{{ s.operations_count }} entries</span>
+                                                            </div>
+                                                            <div class="table-responsive">
+                                                                <table class="table table-sm table-hover mb-0 align-middle" style="font-size: 0.82rem;">
+                                                                    <thead class="bg-light text-secondary text-uppercase" style="font-size: 0.65rem;">
+                                                                        <tr>
+                                                                            <th class="ps-3" style="width: 40%;">Endpoint / Query</th>
+                                                                            <th class="text-center" style="width: 15%;">Availability</th>
+                                                                            <th class="text-center" style="width: 15%;">Avg / P95</th>
+                                                                            <th class="text-center" style="width: 15%;">Calls</th>
+                                                                            <th class="text-center pe-3" style="width: 15%;">Failures</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {% for op in s.operations %}
+                                                                        <tr>
+                                                                            <td class="ps-3">
+                                                                                <code class="small text-dark d-block" style="word-break: break-all; white-space: normal; user-select: all;">{{ op.CommandOrPath|default:op.command_or_path|default:"-" }}</code>
+                                                                            </td>
+                                                                            <td class="text-center">
+                                                                                {% with op_avail=op.availability_percentage %}
+                                                                                <span class="font-monospace fw-bold {% if op_avail >= 99 %}text-success{% elif op_avail >= 90 %}text-warning{% else %}text-danger{% endif %}" style="font-size: 0.75rem;">
+                                                                                    {{ op_avail|floatformat:1 }}%
+                                                                                </span>
+                                                                                {% endwith %}
+                                                                            </td>
+                                                                            <td class="text-center font-monospace text-muted" style="font-size: 0.72rem;">
+                                                                                {% with op_avg=op.AverageResponseTimeMs|default:op.average_response_time_ms|default:0 %}
+                                                                                {% with op_p95=op.P95ResponseTimeMs|default:op.p95_response_time_ms|default:0 %}
+                                                                                {{ op_avg|floatformat:0 }} / {{ op_p95|floatformat:0 }} ms
+                                                                                {% endwith %}
+                                                                                {% endwith %}
+                                                                            </td>
+                                                                            <td class="text-center font-monospace" style="font-size: 0.75rem;">
+                                                                                {{ op.TotalChecks|default:op.total_checks|default:0 }}
+                                                                            </td>
+                                                                            <td class="text-center pe-3">
+                                                                                {% with op_fail=op.FailedChecks|default:op.failed_checks|default:0 %}
+                                                                                {% if op_fail > 0 %}
+                                                                                <button type="button" class="btn btn-sm p-0 border-0 btn-inspect-failure" 
+                                                                                        data-service="{{ s.service_name }}" 
+                                                                                        data-command="{{ op.CommandOrPath|default:op.command_or_path }}"
+                                                                                        data-failed="{{ op_fail }}"
+                                                                                        title="Click to view failure details">
+                                                                                    <span class="badge bg-danger text-white rounded-pill px-1.5" style="font-size: 0.68rem; cursor: pointer;">
+                                                                                        {{ op_fail }} <i class="bi bi-search" style="font-size: 0.5rem;"></i>
+                                                                                    </span>
+                                                                                </button>
+                                                                                {% else %}
+                                                                                <span class="text-muted" style="font-size: 0.75rem;">0</span>
+                                                                                {% endif %}
+                                                                                {% endwith %}
+                                                                            </td>
+                                                                        </tr>
+                                                                        {% endfor %}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="7" class="text-center py-4 text-muted">
+                                                <i class="bi bi-hdd-network fs-3 d-block mb-1 text-secondary opacity-50"></i>
+                                                <span>No infrastructure service telemetry recorded in this time window.</span>
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
 
-                        {% if selected_service or selected_cluster_id or time_range != '24h' %}
-                        <a href="{% url 'external_services_telemetry_view' %}" class="btn btn-sm btn-outline-danger" title="Clear Filters">
-                            <i class="bi bi-x-lg"></i>
-                        </a>
-                        {% endif %}
-                    </form>
+                    <!-- SECTION 2: CLUSTERS TABLE (HPC Clusters & Compute Resources) -->
+                    <div id="stats-section-clusters" class="mb-2">
+                        <div class="d-flex align-items-center justify-content-between p-2.5 bg-light rounded-top border border-bottom-0">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-cpu-fill text-success fs-5"></i>
+                                <h6 class="fw-bold text-dark mb-0">HPC Clusters &amp; Compute Resources</h6>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.7rem;">
+                                    {{ grouped_clusters_only|length }} clusters
+                                </span>
+                            </div>
+                            <span class="text-muted small">Slurm, PBS, Karolina, Barbora, Lumi, IT4I SSH connections</span>
+                        </div>
+
+                        <div class="table-responsive border rounded-bottom">
+                            <table class="table table-hover align-middle mb-0 telemetry-stats-table" id="table-clusters-only" style="table-layout: fixed;">
+                                <thead class="bg-light text-secondary text-uppercase small" style="font-size: 0.72rem;">
+                                    <tr>
+                                        <th class="ps-3" style="width: 30%;">HPC Cluster Name</th>
+                                        <th class="text-center" style="width: 14%;">Type</th>
+                                        <th class="text-center" style="width: 16%;">Availability</th>
+                                        <th class="text-center" style="width: 14%;">Avg Latency</th>
+                                        <th class="text-center" style="width: 14%;">P95 Latency</th>
+                                        <th class="text-center" style="width: 12%;">Total Checks</th>
+                                        <th class="text-center pe-3" style="width: 12%;">Failures</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if grouped_clusters_only %}
+                                        {% for c in grouped_clusters_only %}
+                                        <!-- Parent Cluster Row -->
+                                        <tr class="service-parent-row align-middle border-bottom" style="cursor: pointer; background-color: #fafbfc;" data-bs-toggle="collapse" data-bs-target="#collapse-cls-{{ forloop.counter }}" aria-expanded="false">
+                                            <td class="ps-3">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="bi bi-chevron-right text-success service-chevron" id="chevron-cls-{{ forloop.counter }}" style="font-size: 0.8rem;"></i>
+                                                    <div>
+                                                        <span class="fw-bold text-dark">{{ c.service_name }}</span>
+                                                        <div class="d-flex align-items-center gap-1.5 mt-0.5">
+                                                            <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace" style="font-size: 0.62rem;">HPC Cluster</span>
+                                                            <span class="text-muted" style="font-size: 0.68rem;">{{ c.operations_count }} check{% if c.operations_count != 1 %}s{% endif %}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace" style="font-size: 0.7rem;">
+                                                    cluster
+                                                </span>
+                                            </td>
+                                            <td class="text-center">
+                                                {% with avail=c.availability_percentage %}
+                                                <div class="d-flex align-items-center justify-content-center gap-2">
+                                                    <div class="progress flex-grow-1" style="height: 6px; width: 60px;">
+                                                        <div class="progress-bar {% if avail >= 99 %}bg-success{% elif avail >= 90 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ avail }}%;"></div>
+                                                    </div>
+                                                    <span class="small font-monospace fw-bold {% if avail >= 99 %}text-success{% elif avail >= 90 %}text-warning{% else %}text-danger{% endif %}">
+                                                        {{ avail|floatformat:1 }}%
+                                                    </span>
+                                                </div>
+                                                {% endwith %}
+                                            </td>
+                                            <td class="text-center">
+                                                {% with avg=c.average_response_time_ms %}
+                                                <span class="badge {% if avg < 100 %}bg-success-subtle text-success border border-success-subtle{% elif avg < 500 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace">
+                                                    {{ avg|floatformat:1 }} ms
+                                                </span>
+                                                {% endwith %}
+                                            </td>
+                                            <td class="text-center">
+                                                {% with p95=c.p95_response_time_ms %}
+                                                <span class="badge {% if p95 < 200 %}bg-light text-dark border{% elif p95 < 1000 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
+                                                    {{ p95|floatformat:1 }} ms
+                                                </span>
+                                                {% endwith %}
+                                            </td>
+                                            <td class="text-center font-monospace small fw-bold">
+                                                {{ c.total_checks }}
+                                            </td>
+                                            <td class="text-center pe-3 font-monospace small">
+                                                {% if c.failed_checks > 0 %}
+                                                <button type="button" class="btn btn-sm p-0 border-0 btn-inspect-failure" 
+                                                        data-service="{{ c.service_name }}" 
+                                                        data-command="Cluster Probes"
+                                                        data-failed="{{ c.failed_checks }}"
+                                                        title="Click to view failure details for {{ c.service_name }}">
+                                                    <span class="badge bg-danger text-white rounded-pill px-2 shadow-sm d-inline-flex align-items-center gap-1" style="cursor: pointer;">
+                                                        <span>{{ c.failed_checks }}</span>
+                                                        <i class="bi bi-search" style="font-size: 0.65rem;"></i>
+                                                    </span>
+                                                </button>
+                                                {% else %}
+                                                <span class="text-muted">0</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+
+                                        <!-- Collapsible Child Cluster Operations Sub-Table -->
+                                        <tr class="service-child-row p-0 border-0">
+                                            <td colspan="7" class="p-0 border-0">
+                                                <div class="collapse" id="collapse-cls-{{ forloop.counter }}">
+                                                    <div class="p-3 bg-light bg-opacity-75 border-bottom">
+                                                        <div class="card border border-secondary-subtle shadow-xs rounded-2 bg-white">
+                                                            <div class="card-header bg-white py-2 px-3 d-flex align-items-center justify-content-between border-bottom">
+                                                                <span class="small fw-bold text-secondary text-uppercase" style="font-size: 0.72rem;">Cluster Operations for <strong class="text-dark">{{ c.service_name }}</strong></span>
+                                                                <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.68rem;">{{ c.operations_count }} entries</span>
+                                                            </div>
+                                                            <div class="table-responsive">
+                                                                <table class="table table-sm table-hover mb-0 align-middle" style="font-size: 0.82rem;">
+                                                                    <thead class="bg-light text-secondary text-uppercase" style="font-size: 0.65rem;">
+                                                                        <tr>
+                                                                            <th class="ps-3" style="width: 40%;">SSH Command / Probe</th>
+                                                                            <th class="text-center" style="width: 15%;">Availability</th>
+                                                                            <th class="text-center" style="width: 15%;">Avg / P95</th>
+                                                                            <th class="text-center" style="width: 15%;">Calls</th>
+                                                                            <th class="text-center pe-3" style="width: 15%;">Failures</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody>
+                                                                        {% for op in c.operations %}
+                                                                        <tr>
+                                                                            <td class="ps-3">
+                                                                                <code class="small text-dark d-block" style="word-break: break-all; white-space: normal; user-select: all;">{{ op.CommandOrPath|default:op.command_or_path|default:"-" }}</code>
+                                                                            </td>
+                                                                            <td class="text-center">
+                                                                                {% with op_avail=op.availability_percentage %}
+                                                                                <span class="font-monospace fw-bold {% if op_avail >= 99 %}text-success{% elif op_avail >= 90 %}text-warning{% else %}text-danger{% endif %}" style="font-size: 0.75rem;">
+                                                                                    {{ op_avail|floatformat:1 }}%
+                                                                                </span>
+                                                                                {% endwith %}
+                                                                            </td>
+                                                                            <td class="text-center font-monospace text-muted" style="font-size: 0.72rem;">
+                                                                                {% with op_avg=op.AverageResponseTimeMs|default:op.average_response_time_ms|default:0 %}
+                                                                                {% with op_p95=op.P95ResponseTimeMs|default:op.p95_response_time_ms|default:0 %}
+                                                                                {{ op_avg|floatformat:0 }} / {{ op_p95|floatformat:0 }} ms
+                                                                                {% endwith %}
+                                                                                {% endwith %}
+                                                                            </td>
+                                                                            <td class="text-center font-monospace" style="font-size: 0.75rem;">
+                                                                                {{ op.TotalChecks|default:op.total_checks|default:0 }}
+                                                                            </td>
+                                                                            <td class="text-center pe-3">
+                                                                                {% with op_fail=op.FailedChecks|default:op.failed_checks|default:0 %}
+                                                                                {% if op_fail > 0 %}
+                                                                                <button type="button" class="btn btn-sm p-0 border-0 btn-inspect-failure" 
+                                                                                        data-service="{{ c.service_name }}" 
+                                                                                        data-command="{{ op.CommandOrPath|default:op.command_or_path }}"
+                                                                                        data-failed="{{ op_fail }}"
+                                                                                        title="Click to view failure details">
+                                                                                    <span class="badge bg-danger text-white rounded-pill px-1.5" style="font-size: 0.68rem; cursor: pointer;">
+                                                                                        {{ op_fail }} <i class="bi bi-search" style="font-size: 0.5rem;"></i>
+                                                                                    </span>
+                                                                                </button>
+                                                                                {% else %}
+                                                                                <span class="text-muted" style="font-size: 0.75rem;">0</span>
+                                                                                {% endif %}
+                                                                                {% endwith %}
+                                                                            </td>
+                                                                        </tr>
+                                                                        {% endfor %}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="7" class="text-center py-4 text-muted">
+                                                <i class="bi bi-cpu fs-3 d-block mb-1 text-secondary opacity-50"></i>
+                                                <span>No HPC cluster telemetry recorded in this time window.</span>
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="card-body p-0">
-            {% if stats_error %}
-            <div class="p-3">
-                <div class="alert alert-danger mb-0 d-flex align-items-center gap-2">
-                    <i class="bi bi-exclamation-circle-fill"></i>
-                    <span>Failed to retrieve telemetry statistics: {{ stats_error }}</span>
+        <!-- TAB 2: Visual Charts -->
+        <div class="tab-pane fade" id="charts-content" role="tabpanel">
+            <!-- Category Chart Switcher -->
+            <div class="d-flex align-items-center justify-content-between mb-3 bg-white p-2.5 rounded-3 shadow-sm border">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-bar-chart-line-fill text-primary"></i>
+                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Chart Category View:</span>
+                </div>
+                <div class="btn-group btn-group-sm" id="chart-cat-group">
+                    <button type="button" class="btn btn-primary fw-semibold btn-chart-switch active" data-target-chart="services">
+                        <i class="bi bi-gear-wide-connected me-1"></i>Infrastructure Services
+                    </button>
+                    <button type="button" class="btn btn-outline-success fw-semibold btn-chart-switch" data-target-chart="clusters">
+                        <i class="bi bi-cpu-fill me-1"></i>HPC Clusters
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary fw-semibold btn-chart-switch" data-target-chart="combined">
+                        <i class="bi bi-layers-half me-1"></i>Combined Overview
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chart Pane 1: Services -->
+            <div id="chart-pane-services" class="chart-category-pane">
+                <div class="row g-3 mb-4">
+                    <div class="col-lg-7">
+                        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-speedometer2 text-primary"></i>
+                                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Services Latency Benchmark (Avg vs P95)</span>
+                                </div>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size: 0.7rem;">Services Only</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div style="position: relative; height: 320px; width: 100%;">
+                                    <canvas id="servicesLatencyChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-5">
+                        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-pie-chart-fill text-primary"></i>
+                                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Services Call Volume &amp; Reliability</span>
+                                </div>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size: 0.7rem;">Success vs Failures</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div style="position: relative; height: 320px; width: 100%;">
+                                    <canvas id="servicesVolumeChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Pane 2: Clusters -->
+            <div id="chart-pane-clusters" class="chart-category-pane d-none">
+                <div class="row g-3 mb-4">
+                    <div class="col-lg-7">
+                        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-speedometer2 text-success"></i>
+                                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">HPC Clusters Latency Benchmark (Avg vs P95)</span>
+                                </div>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace" style="font-size: 0.7rem;">HPC Clusters</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div style="position: relative; height: 320px; width: 100%;">
+                                    <canvas id="clustersLatencyChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-5">
+                        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-pie-chart-fill text-success"></i>
+                                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Clusters Checks &amp; Reliability</span>
+                                </div>
+                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace" style="font-size: 0.7rem;">Success vs Failures</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div style="position: relative; height: 320px; width: 100%;">
+                                    <canvas id="clustersVolumeChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Pane 3: Combined -->
+            <div id="chart-pane-combined" class="chart-category-pane d-none">
+                <div class="row g-3 mb-4">
+                    <div class="col-lg-7">
+                        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-speedometer2 text-secondary"></i>
+                                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Combined Response Time Benchmark</span>
+                                </div>
+                                <span class="badge bg-light text-muted border font-monospace" style="font-size: 0.7rem;">Top 10 Overall</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div style="position: relative; height: 320px; width: 100%;">
+                                    <canvas id="latencyChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-5">
+                        <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                            <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-pie-chart-fill text-secondary"></i>
+                                    <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Combined Volume Distribution</span>
+                                </div>
+                                <span class="badge bg-light text-muted border font-monospace" style="font-size: 0.7rem;">Top 10 Overall</span>
+                            </div>
+                            <div class="card-body p-3">
+                                <div style="position: relative; height: 320px; width: 100%;">
+                                    <canvas id="volumeChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: Live Health Probes (Divided into Services & Clusters) -->
+        <div class="tab-pane fade" id="probes-content" role="tabpanel">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+                <div class="d-flex align-items-center gap-2">
+                    <h6 class="fw-bold text-uppercase text-secondary small mb-0" style="letter-spacing: 0.05em;">Real-Time Health Probes</h6>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.72rem;">Live Daemon</span>
+                </div>
+                <span class="text-muted small" id="live-last-updated">Updated: Just now</span>
+            </div>
+
+            {% if live_error %}
+            <div class="alert alert-warning d-flex align-items-center gap-2 border-warning-subtle shadow-sm mb-3">
+                <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+                <div>
+                    <strong>Failed to load live status:</strong> {{ live_error }}
                 </div>
             </div>
             {% endif %}
 
-            <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0" id="telemetry-stats-table">
-                    <thead class="bg-light text-secondary text-uppercase small" style="font-size: 0.75rem;">
-                        <tr>
-                            <th class="ps-4" style="width: 25%;">Service &amp; Endpoints</th>
-                            <th style="width: 10%;">Type</th>
-                            <th style="width: 15%;">Endpoints Detail</th>
-                            <th class="text-center" style="width: 12%;">Availability</th>
-                            <th class="text-center" style="width: 10%;">Avg Latency</th>
-                            <th class="text-center" style="width: 10%;">Min / Max</th>
-                            <th class="text-center" style="width: 8%;">P95</th>
-                            <th class="text-center" style="width: 5%;">Calls</th>
-                            <th class="text-center pe-4" style="width: 5%;">Failures</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% if grouped_services %}
-                            {% for s in grouped_services %}
-                            <!-- Parent Service Header Row -->
-                            <tr class="service-parent-row align-middle border-bottom" style="cursor: pointer; background-color: #fafbfc;" data-bs-toggle="collapse" data-bs-target="#collapse-service-{{ forloop.counter }}" aria-expanded="false">
-                                <td class="ps-4">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <i class="bi bi-chevron-right text-primary service-chevron" id="chevron-{{ forloop.counter }}" style="font-size: 0.85rem;"></i>
-                                        <div>
-                                            <span class="fw-bold text-dark fs-6">{{ s.service_name }}</span>
-                                            <span class="badge bg-light text-secondary border font-monospace ms-1.5" style="font-size: 0.68rem;">{{ s.operations_count }} endpoint{% if s.operations_count != 1 %}s{% endif %}</span>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="badge bg-secondary-subtle text-secondary border font-monospace" style="font-size: 0.7rem;">
-                                        {{ s.service_type }}
-                                    </span>
-                                </td>
-                                <td class="text-muted small">
-                                    <span class="text-truncate d-inline-block text-secondary" style="max-width: 220px;" title="Click row to expand {{ s.operations_count }} endpoint(s)">
-                                        <i class="bi bi-list-nested me-1"></i>{{ s.operations_count }} endpoint(s) &bull; click to view
-                                    </span>
-                                </td>
-                                <td class="text-center" style="min-width: 140px;">
-                                    {% with avail=s.availability_percentage %}
-                                    <div class="d-flex align-items-center justify-content-center gap-2">
-                                        <div class="progress flex-grow-1" style="height: 6px; width: 60px;">
-                                            <div class="progress-bar {% if avail >= 99 %}bg-success{% elif avail >= 90 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ avail }}%;"></div>
-                                        </div>
-                                        <span class="small font-monospace fw-bold {% if avail >= 99 %}text-success{% elif avail >= 90 %}text-warning{% else %}text-danger{% endif %}">
-                                            {{ avail|floatformat:1 }}%
-                                        </span>
-                                    </div>
-                                    {% endwith %}
-                                </td>
-                                <td class="text-center">
-                                    {% with avg=s.average_response_time_ms %}
-                                    <span class="badge {% if avg < 100 %}bg-success-subtle text-success border border-success-subtle{% elif avg < 500 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace">
-                                        {{ avg|floatformat:1 }} ms
-                                    </span>
-                                    {% endwith %}
-                                </td>
-                                <td class="text-center small font-monospace text-muted">
-                                    {{ s.min_response_time_ms }} / {{ s.max_response_time_ms }} ms
-                                </td>
-                                <td class="text-center">
-                                    {% with p95=s.p95_response_time_ms %}
-                                    <span class="badge {% if p95 < 200 %}bg-light text-dark border{% elif p95 < 1000 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
-                                        {{ p95|floatformat:1 }} ms
-                                    </span>
-                                    {% endwith %}
-                                </td>
-                                <td class="text-center font-monospace small fw-bold">
-                                    {{ s.total_checks }}
-                                </td>
-                                <td class="text-center pe-4 font-monospace small">
-                                    {% if s.failed_checks > 0 %}
-                                    <button type="button" class="btn btn-sm p-0 border-0 btn-inspect-failure" 
-                                            data-service="{{ s.service_name }}" 
-                                            data-command="All endpoints"
-                                            data-failed="{{ s.failed_checks }}"
-                                            title="Click to view failure details for {{ s.service_name }}">
-                                        <span class="badge bg-danger text-white rounded-pill px-2 shadow-sm d-inline-flex align-items-center gap-1" style="cursor: pointer;">
-                                            <span>{{ s.failed_checks }}</span>
-                                            <i class="bi bi-search" style="font-size: 0.65rem;"></i>
-                                        </span>
-                                    </button>
-                                    {% else %}
-                                    <span class="text-muted">0</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
+            <!-- Infrastructure & Middleware Services Probes -->
+            <div class="mb-4">
+                <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
+                    <i class="bi bi-gear-wide-connected text-primary fs-5"></i>
+                    <h6 class="fw-bold text-dark mb-0">Infrastructure &amp; Middleware Services</h6>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill font-monospace" style="font-size: 0.7rem;">
+                        {{ live_services_only|length }} probes
+                    </span>
+                </div>
 
-                            <!-- Collapsible Child Operations Sub-Table -->
-                            <tr class="service-child-row p-0 border-0">
-                                <td colspan="9" class="p-0 border-0">
-                                    <div class="collapse" id="collapse-service-{{ forloop.counter }}">
-                                        <div class="p-3 bg-light bg-opacity-75 border-bottom">
-                                            <div class="card border border-secondary-subtle shadow-xs rounded-2 bg-white">
-                                                <div class="card-header bg-white py-2 px-3 d-flex align-items-center justify-content-between border-bottom">
-                                                    <span class="small fw-bold text-secondary text-uppercase" style="font-size: 0.72rem;">Individual Operations for <strong class="text-dark">{{ s.service_name }}</strong></span>
-                                                    <span class="badge bg-secondary-subtle text-secondary" style="font-size: 0.68rem;">{{ s.operations_count }} entries</span>
-                                                </div>
-                                                <div class="table-responsive">
-                                                    <table class="table table-sm table-hover mb-0 align-middle" style="font-size: 0.82rem;">
-                                                        <thead class="bg-light text-secondary text-uppercase" style="font-size: 0.68rem;">
-                                                            <tr>
-                                                                <th class="ps-3" style="width: 38%;">Endpoint / Command / Query</th>
-                                                                <th class="text-center" style="width: 14%;">Availability</th>
-                                                                <th class="text-center" style="width: 12%;">Avg Latency</th>
-                                                                <th class="text-center" style="width: 12%;">Min / Max</th>
-                                                                <th class="text-center" style="width: 10%;">P95</th>
-                                                                <th class="text-center" style="width: 7%;">Calls</th>
-                                                                <th class="text-center pe-3" style="width: 7%;">Failures</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {% for op in s.operations %}
-                                                            <tr>
-                                                                <td class="ps-3 font-monospace">
-                                                                    <code class="small text-dark text-truncate d-block" title="{{ op.CommandOrPath|default:op.command_or_path|default:'-' }}">
-                                                                        {{ op.CommandOrPath|default:op.command_or_path|default:"-" }}
-                                                                    </code>
-                                                                </td>
-                                                                <td class="text-center">
-                                                                    {% with op_avail=op.AvailabilityPercentage|default:op.availability_percentage|default:100 %}
-                                                                    <div class="d-flex align-items-center justify-content-center gap-1.5">
-                                                                        <div class="progress flex-grow-1" style="height: 5px; width: 45px;">
-                                                                            <div class="progress-bar {% if op_avail >= 99 %}bg-success{% elif op_avail >= 90 %}bg-warning{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ op_avail }}%;"></div>
-                                                                        </div>
-                                                                        <span class="small font-monospace {% if op_avail >= 99 %}text-success{% elif op_avail >= 90 %}text-warning{% else %}text-danger{% endif %}" style="font-size: 0.72rem;">
-                                                                            {{ op_avail|floatformat:1 }}%
-                                                                        </span>
-                                                                    </div>
-                                                                    {% endwith %}
-                                                                </td>
-                                                                <td class="text-center">
-                                                                    {% with op_avg=op.AverageResponseTimeMs|default:op.average_response_time_ms|default:0 %}
-                                                                    <span class="badge {% if op_avg < 100 %}bg-success-subtle text-success{% elif op_avg < 500 %}bg-warning-subtle text-warning-emphasis{% else %}bg-danger-subtle text-danger{% endif %} font-monospace py-0.5" style="font-size: 0.72rem;">
-                                                                        {{ op_avg|floatformat:1 }} ms
-                                                                    </span>
-                                                                    {% endwith %}
-                                                                </td>
-                                                                <td class="text-center font-monospace text-muted" style="font-size: 0.72rem;">
-                                                                    {{ op.MinResponseTimeMs|default:op.min_response_time_ms|default:0 }} / {{ op.MaxResponseTimeMs|default:op.max_response_time_ms|default:0 }} ms
-                                                                </td>
-                                                                <td class="text-center font-monospace" style="font-size: 0.72rem;">
-                                                                    {{ op.P95ResponseTimeMs|default:op.p95_response_time_ms|default:0|floatformat:1 }} ms
-                                                                </td>
-                                                                <td class="text-center font-monospace text-muted" style="font-size: 0.75rem;">
-                                                                    {{ op.TotalChecks|default:op.total_checks|default:0 }}
-                                                                </td>
-                                                                <td class="text-center pe-3 font-monospace">
-                                                                    {% with op_fail=op.FailedChecks|default:op.failed_checks|default:0 %}
-                                                                    {% if op_fail > 0 %}
-                                                                    <button type="button" class="btn btn-sm p-0 border-0 btn-inspect-failure" 
-                                                                            data-service="{{ s.service_name }}" 
-                                                                            data-command="{{ op.CommandOrPath|default:op.command_or_path }}"
-                                                                            data-failed="{{ op_fail }}"
-                                                                            title="Click to view failure details">
-                                                                        <span class="badge bg-danger text-white rounded-pill px-1.5 py-0.5" style="font-size: 0.68rem; cursor: pointer;">
-                                                                            {{ op_fail }} <i class="bi bi-search" style="font-size: 0.55rem;"></i>
-                                                                        </span>
-                                                                    </button>
-                                                                    {% else %}
-                                                                    <span class="text-muted" style="font-size: 0.75rem;">0</span>
-                                                                    {% endif %}
-                                                                    {% endwith %}
-                                                                </td>
-                                                            </tr>
-                                                            {% endfor %}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
+                <div class="row g-3" id="live-services-container">
+                    {% if live_services_only %}
+                        {% for item in live_services_only %}
+                        <div class="col-xl-3 col-lg-4 col-md-6">
+                            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white service-live-card transition-all" style="border-left: 4px solid {% if item.IsAvailable or item.is_available %}#198754{% else %}#dc3545{% endif %} !important;">
+                                <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                                    <div>
+                                        <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                                            <div>
+                                                <h6 class="fw-bold text-dark mb-0">{{ item.ServiceName|default:item.service_name|default:"Service" }}</h6>
+                                                <span class="badge bg-light text-muted border font-monospace mt-1" style="font-size: 0.68rem;">{{ item.ServiceType|default:item.service_type|default:"external" }}</span>
+                                            </div>
+                                            {% if item.IsAvailable or item.is_available %}
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                                <span class="spinner-grow spinner-grow-sm text-success" style="width: 0.45rem; height: 0.45rem;" role="status"></span>
+                                                Available
+                                            </span>
+                                            {% else %}
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                                <i class="bi bi-x-circle-fill"></i> Unavailable
+                                            </span>
+                                            {% endif %}
+                                        </div>
+
+                                        {% if item.Host and item.Host != '-' %}
+                                        <div class="small text-muted mb-2">
+                                            <div class="text-truncate" title="{{ item.Protocol|default:'http' }}://{{ item.Host }}{% if item.Port %}:{{ item.Port }}{% endif %}">
+                                                <i class="bi bi-hdd-network me-1 text-secondary"></i>
+                                                <span class="font-monospace text-dark">{{ item.Protocol|default:"http" }}://{{ item.Host }}{% if item.Port %}:{{ item.Port }}{% endif %}</span>
                                             </div>
                                         </div>
+                                        {% else %}
+                                        <div class="small text-muted mb-2">
+                                            <i class="bi bi-hdd-network me-1 text-secondary"></i>
+                                            <span class="text-muted">Integrated Middleware Subsystem</span>
+                                        </div>
+                                        {% endif %}
                                     </div>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="9" class="text-center py-5 text-muted">
-                                    <i class="bi bi-bar-chart fs-2 d-block mb-2 text-secondary opacity-50"></i>
-                                    <span>No telemetry data found for the selected filter and time range.</span>
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- TAB 2: Visual Charts -->
-<div class="tab-pane fade" id="charts-content" role="tabpanel">
-    <div class="row g-3 mb-4">
-        <!-- Latency Benchmark Chart -->
-        <div class="col-lg-7">
-            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
-                <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-speedometer2 text-primary"></i>
-                        <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Response Time Benchmark (Avg vs. P95 Latency)</span>
-                    </div>
-                    <span class="badge bg-light text-muted border font-monospace" style="font-size: 0.7rem;">Milliseconds (ms)</span>
-                </div>
-                <div class="card-body p-3">
-                    <div style="position: relative; height: 320px; width: 100%;">
-                        <canvas id="latencyChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Call Volume & Error Distribution Chart -->
-        <div class="col-lg-5">
-            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
-                <div class="card-header bg-white border-bottom p-3 d-flex align-items-center justify-content-between">
-                    <div class="d-flex align-items-center gap-2">
-                        <i class="bi bi-pie-chart-fill text-primary"></i>
-                        <span class="fw-bold text-dark small text-uppercase" style="letter-spacing: 0.05em;">Calls &amp; Reliability Distribution</span>
-                    </div>
-                    <span class="badge bg-light text-muted border font-monospace" style="font-size: 0.7rem;">Success vs. Failures</span>
-                </div>
-                <div class="card-body p-3">
-                    <div style="position: relative; height: 320px; width: 100%;">
-                        <canvas id="volumeChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- TAB 3: Live Health Probes -->
-<div class="tab-pane fade" id="probes-content" role="tabpanel">
-    <div class="d-flex align-items-center justify-content-between mb-3">
-        <div class="d-flex align-items-center gap-2">
-            <h6 class="fw-bold text-uppercase text-secondary small mb-0" style="letter-spacing: 0.05em;">Real-Time Health Probes</h6>
-            <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style="font-size: 0.72rem;">Live Daemon</span>
-        </div>
-        <span class="text-muted small" id="live-last-updated">Updated: Just now</span>
-    </div>
-
-    {% if live_error %}
-    <div class="alert alert-warning d-flex align-items-center gap-2 border-warning-subtle shadow-sm mb-3">
-        <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
-        <div>
-            <strong>Failed to load live status:</strong> {{ live_error }}
-        </div>
-    </div>
-    {% endif %}
-
-    <div class="row g-3" id="live-status-container">
-        {% if live_statuses %}
-            {% for item in live_statuses %}
-            <div class="col-xl-3 col-lg-4 col-md-6">
-                <div class="card border-0 shadow-sm rounded-3 h-100 bg-white service-live-card transition-all" style="border-left: 4px solid {% if item.IsAvailable or item.is_available %}#198754{% else %}#dc3545{% endif %} !important;">
-                    <div class="card-body p-3.5 d-flex flex-column justify-content-between">
-                        <div>
-                            <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
-                                <div>
-                                    <h6 class="fw-bold text-dark mb-0">{{ item.ServiceName|default:item.service_name|default:"Service" }}</h6>
-                                    <span class="badge bg-light text-muted border font-monospace mt-1" style="font-size: 0.68rem;">{{ item.ServiceType|default:item.service_type|default:"external" }}</span>
-                                </div>
-                                {% if item.IsAvailable or item.is_available %}
-                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
-                                    <span class="spinner-grow spinner-grow-sm text-success" style="width: 0.45rem; height: 0.45rem;" role="status"></span>
-                                    Available
-                                </span>
-                                {% else %}
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
-                                    <i class="bi bi-x-circle-fill"></i>
-                                    Unavailable
-                                </span>
-                                {% endif %}
-                            </div>
-
-                            {% if item.Host and item.Host != '-' %}
-                            <div class="small text-muted mb-2">
-                                <div class="text-truncate" title="{{ item.Protocol|default:'http' }}://{{ item.Host }}{% if item.Port %}:{{ item.Port }}{% endif %}">
-                                    <i class="bi bi-hdd-network me-1 text-secondary"></i>
-                                    <span class="font-monospace text-dark">{{ item.Protocol|default:"http" }}://{{ item.Host }}{% if item.Port %}:{{ item.Port }}{% endif %}</span>
+                                    <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-2">
+                                        <div class="d-flex align-items-center gap-1.5">
+                                            <i class="bi bi-stopwatch text-secondary"></i>
+                                            <span class="small text-muted">Latency:</span>
+                                            {% with rt=item.ResponseTimeMs|default:item.response_time_ms|default:0 %}
+                                            <span class="badge {% if rt < 150 %}bg-success-subtle text-success border border-success-subtle{% elif rt < 1000 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
+                                                {{ rt }} ms
+                                            </span>
+                                            {% endwith %}
+                                        </div>
+                                        {% if item.ErrorMessage or item.error_message %}
+                                        <button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-semibold btn-show-error" data-service="{{ item.ServiceName|default:item.service_name }}" data-error="{{ item.ErrorMessage|default:item.error_message }}">
+                                            <i class="bi bi-info-circle me-0.5"></i>Error
+                                        </button>
+                                        {% endif %}
+                                    </div>
                                 </div>
                             </div>
-                            {% else %}
-                            <div class="small text-muted mb-2">
-                                <i class="bi bi-hdd-network me-1 text-secondary"></i>
-                                <span class="text-muted">Integrated Middleware Subsystem</span>
-                            </div>
-                            {% endif %}
                         </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="col-12">
+                            <div class="card border-0 shadow-sm rounded-3 bg-white p-3 text-center text-muted">
+                                <span class="small">No active live health probes for infrastructure services.</span>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
 
-                        <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-2">
-                            <div class="d-flex align-items-center gap-1.5">
-                                <i class="bi bi-stopwatch text-secondary"></i>
-                                <span class="small text-muted">Latency:</span>
-                                {% with rt=item.ResponseTimeMs|default:item.response_time_ms|default:0 %}
-                                <span class="badge {% if rt < 150 %}bg-success-subtle text-success border border-success-subtle{% elif rt < 1000 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
-                                    {{ rt }} ms
-                                </span>
-                                {% endwith %}
+            <!-- HPC Clusters Probes -->
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-2 pb-1 border-bottom">
+                    <i class="bi bi-cpu-fill text-success fs-5"></i>
+                    <h6 class="fw-bold text-dark mb-0">HPC Clusters &amp; Compute Nodes</h6>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill font-monospace" style="font-size: 0.7rem;">
+                        {{ live_clusters_only|length }} probes
+                    </span>
+                </div>
+
+                <div class="row g-3" id="live-clusters-container">
+                    {% if live_clusters_only %}
+                        {% for item in live_clusters_only %}
+                        <div class="col-xl-3 col-lg-4 col-md-6">
+                            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white service-live-card transition-all" style="border-left: 4px solid {% if item.IsAvailable or item.is_available %}#198754{% else %}#dc3545{% endif %} !important;">
+                                <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                                    <div>
+                                        <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                                            <div>
+                                                <h6 class="fw-bold text-dark mb-0">{{ item.ServiceName|default:item.service_name|default:"Cluster" }}</h6>
+                                                <span class="badge bg-success-subtle text-success border border-success-subtle font-monospace mt-1" style="font-size: 0.68rem;">HPC Cluster</span>
+                                            </div>
+                                            {% if item.IsAvailable or item.is_available %}
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                                <span class="spinner-grow spinner-grow-sm text-success" style="width: 0.45rem; height: 0.45rem;" role="status"></span>
+                                                Available
+                                            </span>
+                                            {% else %}
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                                <i class="bi bi-x-circle-fill"></i> Unavailable
+                                            </span>
+                                            {% endif %}
+                                        </div>
+
+                                        {% if item.Host and item.Host != '-' %}
+                                        <div class="small text-muted mb-2">
+                                            <div class="text-truncate" title="{{ item.Protocol|default:'ssh' }}://{{ item.Host }}{% if item.Port %}:{{ item.Port }}{% endif %}">
+                                                <i class="bi bi-terminal me-1 text-secondary"></i>
+                                                <span class="font-monospace text-dark">{{ item.Protocol|default:"ssh" }}://{{ item.Host }}{% if item.Port %}:{{ item.Port }}{% endif %}</span>
+                                            </div>
+                                        </div>
+                                        {% else %}
+                                        <div class="small text-muted mb-2">
+                                            <i class="bi bi-terminal me-1 text-secondary"></i>
+                                            <span class="text-muted">SSH Cluster Probe</span>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+
+                                    <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-2">
+                                        <div class="d-flex align-items-center gap-1.5">
+                                            <i class="bi bi-stopwatch text-secondary"></i>
+                                            <span class="small text-muted">Latency:</span>
+                                            {% with rt=item.ResponseTimeMs|default:item.response_time_ms|default:0 %}
+                                            <span class="badge {% if rt < 150 %}bg-success-subtle text-success border border-success-subtle{% elif rt < 1000 %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% else %}bg-danger-subtle text-danger border border-danger-subtle{% endif %} font-monospace fw-bold">
+                                                {{ rt }} ms
+                                            </span>
+                                            {% endwith %}
+                                        </div>
+                                        {% if item.ErrorMessage or item.error_message %}
+                                        <button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-semibold btn-show-error" data-service="{{ item.ServiceName|default:item.service_name }}" data-error="{{ item.ErrorMessage|default:item.error_message }}">
+                                            <i class="bi bi-info-circle me-0.5"></i>Error
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
                             </div>
-                            {% if item.ErrorMessage or item.error_message %}
-                            <button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-semibold btn-show-error" data-service="{{ item.ServiceName|default:item.service_name }}" data-error="{{ item.ErrorMessage|default:item.error_message }}">
-                                <i class="bi bi-info-circle me-0.5"></i>Error
-                            </button>
-                            {% endif %}
                         </div>
-                    </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="col-12">
+                            <div class="card border-0 shadow-sm rounded-3 bg-white p-3 text-center text-muted">
+                                <span class="small">No active live health probes for HPC clusters.</span>
+                            </div>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
-            {% endfor %}
-        {% else %}
-            <div class="col-12">
-                <div class="card border-0 shadow-sm rounded-3 bg-white p-4 text-center">
-                    <i class="bi bi-broadcast text-muted fs-2 mb-2"></i>
-                    <h6 class="text-secondary fw-semibold mb-1">No live health probe data available</h6>
-                    <p class="text-muted small mb-0">Ensure the HEAppE background health monitoring worker is running in appsettings.json.</p>
-                </div>
-            </div>
-        {% endif %}
+        </div>
     </div>
 </div>
 
@@ -638,6 +1008,55 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Category View Filtering for Tables (All / Services / Clusters)
+    document.querySelectorAll('.btn-cat-filter').forEach(btn => {
+        btn.onclick = function() {
+            document.querySelectorAll('.btn-cat-filter').forEach(b => {
+                b.classList.remove('btn-primary', 'btn-success', 'active');
+                if (b.getAttribute('data-cat') === 'services') b.className = 'btn btn-outline-primary fw-semibold btn-cat-filter';
+                else if (b.getAttribute('data-cat') === 'clusters') b.className = 'btn btn-outline-success fw-semibold btn-cat-filter';
+                else b.className = 'btn btn-outline-secondary fw-semibold btn-cat-filter';
+            });
+            const cat = this.getAttribute('data-cat');
+            if (cat === 'services') {
+                this.className = 'btn btn-primary fw-semibold btn-cat-filter active';
+                document.getElementById('stats-section-services').classList.remove('d-none');
+                document.getElementById('stats-section-clusters').classList.add('d-none');
+            } else if (cat === 'clusters') {
+                this.className = 'btn btn-success fw-semibold btn-cat-filter active';
+                document.getElementById('stats-section-services').classList.add('d-none');
+                document.getElementById('stats-section-clusters').classList.remove('d-none');
+            } else {
+                this.className = 'btn btn-primary fw-semibold btn-cat-filter active';
+                document.getElementById('stats-section-services').classList.remove('d-none');
+                document.getElementById('stats-section-clusters').classList.remove('d-none');
+            }
+        };
+    });
+
+    // Chart Category Switcher
+    document.querySelectorAll('.btn-chart-switch').forEach(btn => {
+        btn.onclick = function() {
+            document.querySelectorAll('.btn-chart-switch').forEach(b => {
+                b.classList.remove('btn-primary', 'btn-success', 'btn-secondary', 'active');
+                const t = b.getAttribute('data-target-chart');
+                if (t === 'services') b.className = 'btn btn-outline-primary fw-semibold btn-chart-switch';
+                else if (t === 'clusters') b.className = 'btn btn-outline-success fw-semibold btn-chart-switch';
+                else b.className = 'btn btn-outline-secondary fw-semibold btn-chart-switch';
+            });
+
+            const target = this.getAttribute('data-target-chart');
+            if (target === 'services') this.className = 'btn btn-primary fw-semibold btn-chart-switch active';
+            else if (target === 'clusters') this.className = 'btn btn-success fw-semibold btn-chart-switch active';
+            else this.className = 'btn btn-secondary fw-semibold btn-chart-switch active';
+
+            document.querySelectorAll('.chart-category-pane').forEach(p => p.classList.add('d-none'));
+            const activePane = document.getElementById('chart-pane-' + target);
+            if (activePane) activePane.classList.remove('d-none');
+            setTimeout(initCharts, 50);
+        };
+    });
+
     // Error modal trigger
     let errorModal = null;
     const errorModalEl = document.getElementById('errorDetailModal');
@@ -656,7 +1075,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     bindErrorButtons();
 
-    // Inspect failures modal trigger — uses embedded failure breakdown data
+    // Inspect failures modal trigger
     let inspectModal = null;
     const inspectModalEl = document.getElementById('failureInspectModal');
     if (inspectModalEl && typeof bootstrap !== 'undefined') {
@@ -669,7 +1088,6 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.onclick = function(e) {
             e.stopPropagation();
             const service = this.getAttribute('data-service');
-            const command = this.getAttribute('data-command');
             const failedCount = this.getAttribute('data-failed');
 
             document.getElementById('inspectModalTitle').textContent = `Failure Breakdown: ${service}`;
@@ -736,64 +1154,90 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
-    function renderLiveStatus(statuses) {
-        const container = document.getElementById('live-status-container');
-        if (!statuses || statuses.length === 0 || !container) return;
-        let html = '';
-        statuses.forEach(item => {
-            const isAvail = item.IsAvailable || item.is_available;
-            const sName = item.ServiceName || item.service_name || 'Service';
-            const sType = item.ServiceType || item.service_type || 'external';
-            const proto = item.Protocol || item.protocol || 'http';
-            const host = item.Host || item.host || '-';
-            const port = item.Port || item.port ? `:${item.Port || item.port}` : '';
-            const rt = item.ResponseTimeMs || item.response_time_ms || 0;
-            const errMsg = item.ErrorMessage || item.error_message || '';
-            const borderColor = isAvail ? '#198754' : '#dc3545';
-            
-            let rtBadgeClass = 'bg-success-subtle text-success border border-success-subtle';
-            if (rt >= 1000) rtBadgeClass = 'bg-danger-subtle text-danger border border-danger-subtle';
-            else if (rt >= 150) rtBadgeClass = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+    function isCluster(item) {
+        if (!item) return false;
+        const stype = (item.ServiceType || item.service_type || '').toLowerCase();
+        if (stype === 'cluster') return true;
+        const sname = (item.ServiceName || item.service_name || item.name || '').toLowerCase();
+        return ['cluster', 'slurm', 'karolina', 'barbora', 'lumi', 'pbs', 'salomon', 'supercomputer', 'it4i'].some(c => sname.includes(c));
+    }
 
-            let hostHtml = `<div class="small text-muted mb-2"><i class="bi bi-hdd-network me-1 text-secondary"></i><span class="text-muted">Integrated Middleware Subsystem</span></div>`;
-            if (host && host !== '-') {
-                hostHtml = `<div class="small text-muted mb-2"><div class="text-truncate" title="${proto}://${host}${port}"><i class="bi bi-hdd-network me-1 text-secondary"></i><span class="font-monospace text-dark">${proto}://${host}${port}</span></div></div>`;
-            }
+    function createProbeCardHtml(item, defaultType) {
+        const isAvail = item.IsAvailable || item.is_available;
+        const sName = item.ServiceName || item.service_name || 'Service';
+        const sType = item.ServiceType || item.service_type || defaultType;
+        const proto = item.Protocol || item.protocol || (sType === 'cluster' ? 'ssh' : 'http');
+        const host = item.Host || item.host || '-';
+        const port = item.Port || item.port ? `:${item.Port || item.port}` : '';
+        const rt = item.ResponseTimeMs || item.response_time_ms || 0;
+        const errMsg = item.ErrorMessage || item.error_message || '';
+        const borderColor = isAvail ? '#198754' : '#dc3545';
+        
+        let rtBadgeClass = 'bg-success-subtle text-success border border-success-subtle';
+        if (rt >= 1000) rtBadgeClass = 'bg-danger-subtle text-danger border border-danger-subtle';
+        else if (rt >= 150) rtBadgeClass = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
 
-            html += `
-            <div class="col-xl-3 col-lg-4 col-md-6">
-                <div class="card border-0 shadow-sm rounded-3 h-100 bg-white service-live-card" style="border-left: 4px solid ${borderColor} !important;">
-                    <div class="card-body p-3.5 d-flex flex-column justify-content-between">
-                        <div>
-                            <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
-                                <div>
-                                    <h6 class="fw-bold text-dark mb-0">${sName}</h6>
-                                    <span class="badge bg-light text-muted border font-monospace mt-1" style="font-size: 0.68rem;">${sType}</span>
-                                </div>
-                                ${isAvail ? `
-                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
-                                    <span class="spinner-grow spinner-grow-sm text-success" style="width: 0.45rem; height: 0.45rem;" role="status"></span>
-                                    Available
-                                </span>` : `
-                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
-                                    <i class="bi bi-x-circle-fill"></i> Unavailable
-                                </span>`}
+        let hostHtml = `<div class="small text-muted mb-2"><i class="bi bi-hdd-network me-1 text-secondary"></i><span class="text-muted">${sType === 'cluster' ? 'SSH Cluster Probe' : 'Integrated Middleware Subsystem'}</span></div>`;
+        if (host && host !== '-') {
+            hostHtml = `<div class="small text-muted mb-2"><div class="text-truncate" title="${proto}://${host}${port}"><i class="bi ${sType === 'cluster' ? 'bi-terminal' : 'bi-hdd-network'} me-1 text-secondary"></i><span class="font-monospace text-dark">${proto}://${host}${port}</span></div></div>`;
+        }
+
+        return `
+        <div class="col-xl-3 col-lg-4 col-md-6">
+            <div class="card border-0 shadow-sm rounded-3 h-100 bg-white service-live-card" style="border-left: 4px solid ${borderColor} !important;">
+                <div class="card-body p-3.5 d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex align-items-start justify-content-between gap-2 mb-2">
+                            <div>
+                                <h6 class="fw-bold text-dark mb-0">${sName}</h6>
+                                <span class="badge ${sType === 'cluster' ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-light text-muted border'} font-monospace mt-1" style="font-size: 0.68rem;">${sType}</span>
                             </div>
-                            ${hostHtml}
+                            ${isAvail ? `
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                <span class="spinner-grow spinner-grow-sm text-success" style="width: 0.45rem; height: 0.45rem;" role="status"></span>
+                                Available
+                            </span>` : `
+                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1 fw-bold d-flex align-items-center gap-1">
+                                <i class="bi bi-x-circle-fill"></i> Unavailable
+                            </span>`}
                         </div>
-                        <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-2">
-                            <div class="d-flex align-items-center gap-1.5">
-                                <i class="bi bi-stopwatch text-secondary"></i>
-                                <span class="small text-muted">Latency:</span>
-                                <span class="badge ${rtBadgeClass} font-monospace fw-bold">${rt} ms</span>
-                            </div>
-                            ${errMsg ? `<button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-semibold btn-show-error" data-service="${sName}" data-error="${errMsg}"><i class="bi bi-info-circle me-0.5"></i>Error</button>` : ''}
+                        ${hostHtml}
+                    </div>
+                    <div class="pt-2 border-top d-flex align-items-center justify-content-between mt-2">
+                        <div class="d-flex align-items-center gap-1.5">
+                            <i class="bi bi-stopwatch text-secondary"></i>
+                            <span class="small text-muted">Latency:</span>
+                            <span class="badge ${rtBadgeClass} font-monospace fw-bold">${rt} ms</span>
                         </div>
+                        ${errMsg ? `<button type="button" class="btn btn-sm btn-link text-danger p-0 text-decoration-none fw-semibold btn-show-error" data-service="${sName}" data-error="${errMsg}"><i class="bi bi-info-circle me-0.5"></i>Error</button>` : ''}
                     </div>
                 </div>
-            </div>`;
-        });
-        container.innerHTML = html;
+            </div>
+        </div>`;
+    }
+
+    function renderLiveStatus(statuses) {
+        const srvContainer = document.getElementById('live-services-container');
+        const clsContainer = document.getElementById('live-clusters-container');
+        if (!statuses || statuses.length === 0) return;
+
+        const services = statuses.filter(s => !isCluster(s));
+        const clusters = statuses.filter(s => isCluster(s));
+
+        if (srvContainer) {
+            if (services.length > 0) {
+                srvContainer.innerHTML = services.map(s => createProbeCardHtml(s, 'external')).join('');
+            } else {
+                srvContainer.innerHTML = `<div class="col-12"><div class="card border-0 shadow-sm rounded-3 bg-white p-3 text-center text-muted"><span class="small">No active live health probes for infrastructure services.</span></div></div>`;
+            }
+        }
+        if (clsContainer) {
+            if (clusters.length > 0) {
+                clsContainer.innerHTML = clusters.map(c => createProbeCardHtml(c, 'cluster')).join('');
+            } else {
+                clsContainer.innerHTML = `<div class="col-12"><div class="card border-0 shadow-sm rounded-3 bg-white p-3 text-center text-muted"><span class="small">No active live health probes for HPC clusters.</span></div></div>`;
+            }
+        }
         bindErrorButtons();
     }
 
@@ -845,106 +1289,128 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
-    // Initialize Chart.js Graphs
-    let latencyChartInstance = null;
-    let volumeChartInstance = null;
+    // Initialize Chart.js Graphs for Services, Clusters, and Combined
+    const chartInstances = {};
+
+    function createBarChart(canvasId, labels, avgData, p95Data, titleColor) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+        chartInstances[canvasId] = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Avg Latency (ms)',
+                        data: avgData,
+                        backgroundColor: titleColor === 'success' ? 'rgba(25, 135, 84, 0.85)' : 'rgba(13, 110, 253, 0.8)',
+                        borderColor: titleColor === 'success' ? '#198754' : '#0d6efd',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'P95 Tail Latency (ms)',
+                        data: p95Data,
+                        backgroundColor: 'rgba(255, 193, 7, 0.85)',
+                        borderColor: '#ffc107',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { font: { size: 11, weight: 'bold' } } },
+                    y: { beginAtZero: true, title: { display: true, text: 'Milliseconds (ms)' } }
+                },
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    function createVolumeChart(canvasId, labels, successData, failedData) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+        chartInstances[canvasId] = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Success Calls',
+                        data: successData,
+                        backgroundColor: 'rgba(25, 135, 84, 0.85)',
+                        borderRadius: 4,
+                        stack: 'Stack 0'
+                    },
+                    {
+                        label: 'Failed Calls',
+                        data: failedData,
+                        backgroundColor: 'rgba(220, 53, 69, 0.9)',
+                        borderRadius: 4,
+                        stack: 'Stack 0'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { font: { size: 11, weight: 'bold' } } },
+                    y: { beginAtZero: true, stacked: true, title: { display: true, text: 'Call Volume' } }
+                },
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
+                }
+            }
+        });
+    }
 
     function initCharts() {
-        if (typeof Chart === 'undefined') {
-            console.warn('Chart.js is still loading...');
-            return;
+        if (typeof Chart === 'undefined') return;
+
+        // Services Charts
+        const sLabels = {{ chart_services_labels_json|safe }};
+        const sAvg = {{ chart_services_avg_latency_json|safe }};
+        const sP95 = {{ chart_services_p95_latency_json|safe }};
+        const sSucc = {{ chart_services_success_calls_json|safe }};
+        const sFail = {{ chart_services_failed_calls_json|safe }};
+        if (sLabels && sLabels.length > 0) {
+            createBarChart('servicesLatencyChart', sLabels, sAvg, sP95, 'primary');
+            createVolumeChart('servicesVolumeChart', sLabels, sSucc, sFail);
         }
 
+        // Clusters Charts
+        const cLabels = {{ chart_clusters_labels_json|safe }};
+        const cAvg = {{ chart_clusters_avg_latency_json|safe }};
+        const cP95 = {{ chart_clusters_p95_latency_json|safe }};
+        const cSucc = {{ chart_clusters_success_calls_json|safe }};
+        const cFail = {{ chart_clusters_failed_calls_json|safe }};
+        if (cLabels && cLabels.length > 0) {
+            createBarChart('clustersLatencyChart', cLabels, cAvg, cP95, 'success');
+            createVolumeChart('clustersVolumeChart', cLabels, cSucc, cFail);
+        }
+
+        // Combined Charts
         const chartLabels = {{ chart_labels_json|safe }};
-        const chartAvgLatency = {{ chart_avg_latency_json|safe }};
-        const chartP95Latency = {{ chart_p95_latency_json|safe }};
-        const chartSuccessCalls = {{ chart_success_calls_json|safe }};
-        const chartFailedCalls = {{ chart_failed_calls_json|safe }};
-
+        const chartAvg = {{ chart_avg_latency_json|safe }};
+        const chartP95 = {{ chart_p95_latency_json|safe }};
+        const chartSucc = {{ chart_success_calls_json|safe }};
+        const chartFail = {{ chart_failed_calls_json|safe }};
         if (chartLabels && chartLabels.length > 0) {
-            // Latency Chart
-            const latencyCanvas = document.getElementById('latencyChart');
-            if (latencyCanvas) {
-                if (latencyChartInstance) latencyChartInstance.destroy();
-                latencyChartInstance = new Chart(latencyCanvas.getContext('2d'), {
-                    type: 'bar',
-                    data: {
-                        labels: chartLabels,
-                        datasets: [
-                            {
-                                label: 'Avg Latency (ms)',
-                                data: chartAvgLatency,
-                                backgroundColor: 'rgba(13, 110, 253, 0.8)',
-                                borderColor: '#0d6efd',
-                                borderWidth: 1,
-                                borderRadius: 4
-                            },
-                            {
-                                label: 'P95 Tail Latency (ms)',
-                                data: chartP95Latency,
-                                backgroundColor: 'rgba(255, 193, 7, 0.85)',
-                                borderColor: '#ffc107',
-                                borderWidth: 1,
-                                borderRadius: 4
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            x: { ticks: { font: { size: 11, weight: 'bold' } } },
-                            y: { beginAtZero: true, title: { display: true, text: 'Milliseconds (ms)' } }
-                        },
-                        plugins: {
-                            legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
-                        }
-                    }
-                });
-            }
-
-            // Volume & Errors Chart
-            const volumeCanvas = document.getElementById('volumeChart');
-            if (volumeCanvas) {
-                if (volumeChartInstance) volumeChartInstance.destroy();
-                volumeChartInstance = new Chart(volumeCanvas.getContext('2d'), {
-                    type: 'bar',
-                    data: {
-                        labels: chartLabels,
-                        datasets: [
-                            {
-                                label: 'Success Calls',
-                                data: chartSuccessCalls,
-                                backgroundColor: 'rgba(25, 135, 84, 0.85)',
-                                borderRadius: 4,
-                                stack: 'Stack 0'
-                            },
-                            {
-                                label: 'Failed Calls',
-                                data: chartFailedCalls,
-                                backgroundColor: 'rgba(220, 53, 69, 0.9)',
-                                borderRadius: 4,
-                                stack: 'Stack 0'
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            x: { ticks: { font: { size: 11, weight: 'bold' } } },
-                            y: { beginAtZero: true, stacked: true, title: { display: true, text: 'Call Volume' } }
-                        },
-                        plugins: {
-                            legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } }
-                        }
-                    }
-                });
-            }
+            createBarChart('latencyChart', chartLabels, chartAvg, chartP95, 'primary');
+            createVolumeChart('volumeChart', chartLabels, chartSucc, chartFail);
         }
     }
 
-    // Run charts init
     setTimeout(initCharts, 100);
     const chartsTabBtn = document.getElementById('charts-tab');
     if (chartsTabBtn) {
@@ -953,14 +1419,14 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Client-side quick filter and search in table
+    // Client-side quick search and failure filter
     const searchInput = document.getElementById('telemetry-table-search');
     const toggleFailuresBtn = document.getElementById('btn-toggle-failures-only');
     let failuresOnlyActive = false;
 
     function filterTable() {
         const query = (searchInput ? searchInput.value : '').toLowerCase().trim();
-        const parentRows = document.querySelectorAll('#telemetry-stats-table tbody tr.service-parent-row');
+        const parentRows = document.querySelectorAll('.telemetry-stats-table tbody tr.service-parent-row');
 
         parentRows.forEach(pRow => {
             const childRow = pRow.nextElementSibling;
@@ -991,9 +1457,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    if (searchInput) {
-        searchInput.addEventListener('input', filterTable);
-    }
+    if (searchInput) searchInput.addEventListener('input', filterTable);
 
     if (toggleFailuresBtn) {
         toggleFailuresBtn.onclick = function() {
@@ -1009,7 +1473,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
     }
 
-    // Expand All / Collapse All functionality
+    // Expand All / Collapse All functionality across both tables
     const expandAllBtn = document.getElementById('btn-expand-all');
     const collapseAllBtn = document.getElementById('btn-collapse-all');
 

@@ -480,21 +480,37 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
     # Sort services: highest failures first, then total calls
     grouped_services.sort(key=lambda x: (x['failed_checks'], x['total_checks']), reverse=True)
 
-    # Service-level Chart datasets
-    chart_labels = []
-    chart_avg_latency = []
-    chart_p95_latency = []
-    chart_success_calls = []
-    chart_failed_calls = []
+    # Separate grouped_services into Services and Clusters
+    def _is_cluster_item(item):
+        if not item:
+            return False
+        stype = str(item.get('service_type') or item.get('ServiceType') or '').lower()
+        if stype == 'cluster':
+            return True
+        sname = str(item.get('service_name') or item.get('ServiceName') or item.get('name') or '').lower()
+        return any(c in sname for c in ['cluster', 'slurm', 'karolina', 'barbora', 'lumi', 'pbs', 'salomon', 'supercomputer', 'it4i'])
 
-    for g in grouped_services[:10]:
-        chart_labels.append(g['service_name'])
-        chart_avg_latency.append(g['average_response_time_ms'])
-        chart_p95_latency.append(g['p95_response_time_ms'])
-        tc = g['total_checks']
-        fc = g['failed_checks']
-        chart_success_calls.append(max(0, tc - fc))
-        chart_failed_calls.append(fc)
+    grouped_services_only = [g for g in grouped_services if not _is_cluster_item(g)]
+    grouped_clusters_only = [g for g in grouped_services if _is_cluster_item(g)]
+
+    live_services_only = [s for s in live_statuses if not _is_cluster_item(s)] if live_statuses else []
+    live_clusters_only = [s for s in live_statuses if _is_cluster_item(s)] if live_statuses else []
+
+    # Chart datasets helper
+    def _build_chart_data(group_list):
+        labels, avg_lat, p95_lat, succ_calls, fail_calls = [], [], [], [], []
+        for g in group_list[:10]:
+            labels.append(g['service_name'])
+            avg_lat.append(g['average_response_time_ms'])
+            p95_lat.append(g['p95_response_time_ms'])
+            tc = g['total_checks']
+            fc = g['failed_checks']
+            succ_calls.append(max(0, tc - fc))
+            fail_calls.append(fc)
+        return labels, avg_lat, p95_lat, succ_calls, fail_calls
+
+    c_s_lbls, c_s_avg, c_s_p95, c_s_succ, c_s_fail = _build_chart_data(grouped_services_only)
+    c_c_lbls, c_c_avg, c_c_p95, c_c_succ, c_c_fail = _build_chart_data(grouped_clusters_only)
 
     # Build failure details for client-side inspection modal
     # (The GetExternalServicesReport API returns aggregate stats, not individual log entries,
@@ -507,23 +523,30 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
             op_fc = int(op.get('FailedChecks') or op.get('failed_checks') or 0)
             op_tc = int(op.get('TotalChecks') or op.get('total_checks') or 0)
             if op_fc > 0:
+                err_msg = op.get('ErrorMessage') or op.get('error_message') or ''
                 failed_ops.append({
                     'operation': op.get('CommandOrPath') or op.get('command_or_path') or '-',
                     'total_checks': op_tc,
                     'failed_checks': op_fc,
+                    'success_checks': max(0, op_tc - op_fc),
                     'availability': round(max(0.0, min(100.0, ((op_tc - op_fc) / op_tc * 100.0))), 1) if op_tc > 0 else 0.0,
                     'avg_latency': float(op.get('AverageResponseTimeMs') or op.get('average_response_time_ms') or 0),
                     'p95_latency': float(op.get('P95ResponseTimeMs') or op.get('p95_response_time_ms') or 0),
                     'max_latency': float(op.get('MaxResponseTimeMs') or op.get('max_response_time_ms') or 0),
+                    'error_message': str(err_msg)[:500] if err_msg else '',
                 })
         if failed_ops:
             failure_details[s_name] = failed_ops
 
     context = {
         "live_statuses": live_statuses,
+        "live_services_only": live_services_only,
+        "live_clusters_only": live_clusters_only,
         "live_error": live_error,
         "statistics": stats_list,
         "grouped_services": grouped_services,
+        "grouped_services_only": grouped_services_only,
+        "grouped_clusters_only": grouped_clusters_only,
         "stats_error": stats_error,
         "time_range": time_range,
         "selected_service": service_filter,
@@ -541,6 +564,16 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         "chart_p95_latency_json": json.dumps(chart_p95_latency),
         "chart_success_calls_json": json.dumps(chart_success_calls),
         "chart_failed_calls_json": json.dumps(chart_failed_calls),
+        "chart_services_labels_json": json.dumps(c_s_lbls),
+        "chart_services_avg_latency_json": json.dumps(c_s_avg),
+        "chart_services_p95_latency_json": json.dumps(c_s_p95),
+        "chart_services_success_calls_json": json.dumps(c_s_succ),
+        "chart_services_failed_calls_json": json.dumps(c_s_fail),
+        "chart_clusters_labels_json": json.dumps(c_c_lbls),
+        "chart_clusters_avg_latency_json": json.dumps(c_c_avg),
+        "chart_clusters_p95_latency_json": json.dumps(c_c_p95),
+        "chart_clusters_success_calls_json": json.dumps(c_c_succ),
+        "chart_clusters_failed_calls_json": json.dumps(c_c_fail),
         "failure_details_json": json.dumps(failure_details),
     }
     return render(request, "external_services_telemetry.html", context)
