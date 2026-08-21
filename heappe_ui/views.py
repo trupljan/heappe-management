@@ -380,6 +380,23 @@ def dashboard_health_partial(request: HttpRequest) -> HttpResponse:
         except Exception as e:
             print(f"Error getting instance API links: {e}")
 
+    # Fetch quick external telemetry summary
+    telemetry_summary = None
+    try:
+        from heappe_ui.view.telemetry import _get_live_statuses
+        live_statuses, _ = _get_live_statuses(request)
+        if live_statuses:
+            avail_count = sum(1 for s in live_statuses if s.get('IsAvailable') or s.get('is_available'))
+            total_count = len(live_statuses)
+            telemetry_summary = {
+                'available': avail_count,
+                'total': total_count,
+                'all_healthy': (avail_count == total_count)
+            }
+    except Exception:
+        pass
+    context["telemetry_summary"] = telemetry_summary
+
     return render(request, "partials/dashboard_health.html", context)
 
 

@@ -84,4 +84,24 @@
                 </div>
             </div>
         </div>
+
+        {% if is_v6_5_0_plus %}
+        <!-- External Telemetry Probes Card -->
+        <div class="col-6 col-lg">
+            <a href="{% url 'external_services_telemetry_view' %}" class="card border-0 shadow-sm text-decoration-none h-100 transition-hover bg-white" style="border-left: 3px solid #0d6efd !important;">
+                <div class="card-body p-3 d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="bg-primary bg-opacity-10 text-primary rounded p-2.5 d-inline-flex">
+                            <i class="bi bi-activity fs-5"></i>
+                        </div>
+                        <div>
+                            <span class="text-muted small d-block fw-semibold text-uppercase tracking-wider" style="font-size: 0.7rem;">Telemetry</span>
+                            <h4 class="mb-0 fw-bold text-dark mt-0.5" style="font-size: 1.05rem;">Live Probes</h4>
+                        </div>
+                    </div>
+                    <i class="bi bi-chevron-right text-muted small"></i>
+                </div>
+            </a>
+        </div>
+        {% endif %}
     </div>
