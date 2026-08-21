@@ -333,7 +333,12 @@
                                                                         {% for op in s.operations %}
                                                                         <tr>
                                                                             <td class="ps-3">
-                                                                                <code class="small text-dark d-block" style="word-break: break-all; white-space: normal; user-select: all;">{{ op.CommandOrPath|default:op.command_or_path|default:"-" }}</code>
+                                                                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                                                                    <code class="small text-dark d-block text-break font-monospace code-text-to-copy" style="word-break: break-all; white-space: normal; user-select: all;">{{ op.CommandOrPath|default:op.command_or_path|default:"-" }}</code>
+                                                                                    <button type="button" class="btn btn-xs btn-outline-secondary btn-copy-cmd flex-shrink-0 ms-1 p-1" title="Copy full text to clipboard" onclick="copyToClipboard(this)">
+                                                                                        <i class="bi bi-clipboard"></i>
+                                                                                    </button>
+                                                                                </div>
                                                                             </td>
                                                                             <td class="text-center">
                                                                                 {% with op_avail=op.availability_percentage %}
@@ -513,7 +518,12 @@
                                                                         {% for op in c.operations %}
                                                                         <tr>
                                                                             <td class="ps-3">
-                                                                                <code class="small text-dark d-block" style="word-break: break-all; white-space: normal; user-select: all;">{{ op.CommandOrPath|default:op.command_or_path|default:"-" }}</code>
+                                                                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                                                                    <code class="small text-dark d-block text-break font-monospace code-text-to-copy" style="word-break: break-all; white-space: normal; user-select: all;">{{ op.CommandOrPath|default:op.command_or_path|default:"-" }}</code>
+                                                                                    <button type="button" class="btn btn-xs btn-outline-secondary btn-copy-cmd flex-shrink-0 ms-1 p-1" title="Copy full text to clipboard" onclick="copyToClipboard(this)">
+                                                                                        <i class="bi bi-clipboard"></i>
+                                                                                    </button>
+                                                                                </div>
                                                                             </td>
                                                                             <td class="text-center">
                                                                                 {% with op_avail=op.availability_percentage %}
@@ -1108,7 +1118,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     const tr = document.createElement('tr');
                     const availClass = op.availability >= 99 ? 'text-success' : (op.availability >= 90 ? 'text-warning' : 'text-danger');
                     tr.innerHTML = `
-                        <td><code class="text-dark small" style="word-break: break-all;">${op.operation}</code></td>
+                        <td>
+                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                <code class="text-dark small code-text-to-copy" style="word-break: break-all;">${op.operation}</code>
+                                <button type="button" class="btn btn-xs btn-outline-secondary btn-copy-cmd flex-shrink-0 ms-1 p-1" title="Copy text to clipboard" onclick="copyToClipboard(this)">
+                                    <i class="bi bi-clipboard"></i>
+                                </button>
+                            </div>
+                        </td>
                         <td class="text-center"><span class="badge bg-danger-subtle text-danger border border-danger-subtle font-monospace">${op.failed_checks}</span></td>
                         <td class="text-center font-monospace text-muted">${op.total_checks}</td>
                         <td class="text-center"><span class="fw-bold ${availClass} font-monospace">${op.availability}%</span></td>
@@ -1523,11 +1540,68 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
+function copyToClipboard(btn) {
+    if (!btn) return;
+    const parentContainer = btn.closest('.d-flex') || btn.parentElement;
+    const codeEl = parentContainer ? parentContainer.querySelector('.code-text-to-copy, code') : null;
+    const textToCopy = codeEl ? (codeEl.getAttribute('data-full-text') || codeEl.innerText || codeEl.textContent) : '';
+    
+    if (!textToCopy) return;
+
+    function showSuccess() {
+        const icon = btn.querySelector('i');
+        const origClass = icon ? icon.className : '';
+        if (icon) icon.className = 'bi bi-check2 text-success fw-bold';
+        btn.classList.add('btn-outline-success');
+        btn.classList.remove('btn-outline-secondary');
+        setTimeout(() => {
+            if (icon) icon.className = origClass || 'bi bi-clipboard';
+            btn.classList.remove('btn-outline-success');
+            btn.classList.add('btn-outline-secondary');
+        }, 1800);
+    }
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(textToCopy.trim()).then(showSuccess).catch(() => fallbackCopy(textToCopy, showSuccess));
+    } else {
+        fallbackCopy(textToCopy, showSuccess);
+    }
+}
+
+function fallbackCopy(text, callback) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text.trim();
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+        document.execCommand('copy');
+        if (callback) callback();
+    } catch (e) {
+        console.error('Fallback copy failed', e);
+    }
+    document.body.removeChild(textarea);
+}
 </script>
 {% endblock %}
 
 {% block extra_css %}
 <style>
+.btn-xs {
+    padding: 0.12rem 0.35rem;
+    font-size: 0.72rem;
+    line-height: 1;
+    border-radius: 0.2rem;
+}
+.btn-copy-cmd {
+    opacity: 0.7;
+    transition: opacity 0.15s ease;
+}
+.btn-copy-cmd:hover {
+    opacity: 1;
+}
 .spin-animation {
     animation: spin 0.8s linear infinite;
 }
