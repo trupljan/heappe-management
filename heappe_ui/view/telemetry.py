@@ -93,14 +93,42 @@ def _call_telemetry_api(request, endpoint: str, method: str = 'POST', body: dict
     session_code = getattr(request, 'session_code', None) or request.session.get('heappe_session_code', '')
     use_api_key = request.session.get('heappe_use_api_key', False)
 
-    # For GetExternalServicesLiveStatus, SessionCode (if used) goes into query string, no request body
+    # For GetExternalServicesLiveStatus, invoke directly without application/json Content-Type to prevent abstract SessionCodeModel deserialization error
     if 'GetExternalServicesLiveStatus' in endpoint:
-        body = None
-        if not use_api_key and session_code:
-            query_params = query_params or {}
-            if 'SessionCode' not in query_params:
-                query_params['SessionCode'] = session_code
-    elif body is not None and isinstance(body, dict):
+        try:
+            import requests as req_lib
+            base_url = request.api_instance.configuration.host.rstrip('/')
+            url = f"{base_url}{endpoint}"
+            headers = {}
+            if hasattr(request.api_instance, 'configuration') and hasattr(request.api_instance.configuration, 'api_key'):
+                for key_name, key_val in (request.api_instance.configuration.api_key or {}).items():
+                    if key_val:
+                        pfx = ""
+                        if hasattr(request.api_instance.configuration, 'api_key_prefix') and request.api_instance.configuration.api_key_prefix.get(key_name):
+                            pfx = f"{request.api_instance.configuration.api_key_prefix[key_name]} "
+                        headers[key_name] = f"{pfx}{key_val}"
+            
+            if session_code and not use_api_key:
+                headers.setdefault('SessionCode', session_code)
+                headers.setdefault('Authorization', f"Bearer {session_code}")
+
+            req_params = dict(query_params or {})
+            if session_code and not use_api_key and 'SessionCode' not in req_params:
+                req_params['SessionCode'] = session_code
+
+            resp = req_lib.post(url, params=req_params, headers=headers, timeout=20, verify=False)
+            if resp.status_code == 405:
+                resp = req_lib.get(url, params=req_params, headers=headers, timeout=20, verify=False)
+
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    return [_normalize_item(x) for x in data]
+                return _normalize_item(data)
+        except Exception:
+            pass
+
+    if body is not None and isinstance(body, dict):
         if not use_api_key and session_code:
             if 'SessionCode' not in body and 'session_code' not in body:
                 body['SessionCode'] = session_code
@@ -129,6 +157,23 @@ def _call_telemetry_api(request, endpoint: str, method: str = 'POST', body: dict
             return _normalize_item(raw_res)
         return [] if 'list' in call_kwargs['response_type'] else {}
     except Exception as e:
+        # If GET failed with 405 (Method Not Allowed), retry call_api with POST
+        if method.upper() == 'GET' and hasattr(e, 'status') and getattr(e, 'status') == 405:
+            try:
+                raw_res = request.api_instance.call_api(
+                    endpoint,
+                    'POST',
+                    **call_kwargs
+                )
+                if isinstance(raw_res, tuple):
+                    raw_res = raw_res[0]
+                if isinstance(raw_res, list):
+                    return [_normalize_item(x) for x in raw_res]
+                elif raw_res:
+                    return _normalize_item(raw_res)
+            except Exception:
+                pass
+
         # Fallback to direct HTTP request using requests
         try:
             import requests as req_lib
@@ -153,7 +198,11 @@ def _call_telemetry_api(request, endpoint: str, method: str = 'POST', body: dict
             if session_code and not use_api_key and 'SessionCode' not in req_params and 'GetExternalServicesLiveStatus' in endpoint:
                 req_params['SessionCode'] = session_code
 
-            if method.upper() == 'POST':
+            if method.upper() == 'GET':
+                resp = req_lib.get(url, params=req_params, headers=headers, timeout=20, verify=False)
+                if resp.status_code == 405:
+                    resp = req_lib.post(url, params=req_params, headers=headers, timeout=20, verify=False)
+            else:
                 if body is not None:
                     headers['Content-Type'] = 'application/json'
                     resp = req_lib.post(url, params=req_params, json=body, headers=headers, timeout=20, verify=False)
@@ -162,8 +211,6 @@ def _call_telemetry_api(request, endpoint: str, method: str = 'POST', body: dict
 
                 if resp.status_code in (404, 405, 500) and ('SessionCodeModel' in resp.text or resp.status_code == 405):
                     resp = req_lib.get(url, params=req_params, headers=headers, timeout=20, verify=False)
-            else:
-                resp = req_lib.get(url, params=req_params, headers=headers, timeout=20, verify=False)
                 
             if resp.status_code == 200:
                 data = resp.json()
@@ -208,7 +255,7 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         live_statuses = _call_telemetry_api(
             request,
             '/heappe/Management/GetExternalServicesLiveStatus',
-            'POST'
+            'GET'
         )
     except Exception as e:
         live_error = str(e)
@@ -284,7 +331,7 @@ def external_services_live_status_api(request: HttpRequest) -> JsonResponse:
         statuses = _call_telemetry_api(
             request,
             '/heappe/Management/GetExternalServicesLiveStatus',
-            'POST'
+            'GET'
         )
         return JsonResponse({"status": "success", "data": statuses})
     except Exception as e:
