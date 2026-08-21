@@ -1354,8 +1354,10 @@
 <script>
 (function() {
     const sessionCode = "{{ request.session.heappe_session_code|default:'' }}";
+    const apiKey = "{{ request.session.heappe_api_key_header|default:request.session.heappe_api_key|default:'' }}";
     let rawHost = "{{ request.session.heappe_host|default:'' }}";
-    if (!sessionCode || !rawHost) return;
+    if (!rawHost) return;
+    if (!sessionCode && !apiKey) return;
 
     let wsBase = rawHost;
     if (wsBase.startsWith('http://')) {
@@ -1366,7 +1368,12 @@
         wsBase = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + wsBase;
     }
     wsBase = wsBase.replace(/\/+$/, '');
-    const wsUrl = `${wsBase}/heappe/Events?sessionCode=${encodeURIComponent(sessionCode)}`;
+    let wsUrl = `${wsBase}/heappe/Events`;
+    if (sessionCode) {
+        wsUrl += `?sessionCode=${encodeURIComponent(sessionCode)}`;
+    } else if (apiKey) {
+        wsUrl += `?apiKey=${encodeURIComponent(apiKey)}`;
+    }
 
     let ws = null;
     let reconnectTimeout = null;
