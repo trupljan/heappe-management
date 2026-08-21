@@ -86,24 +86,27 @@ def _normalize_item(item):
 
 
 def _call_telemetry_api(request, endpoint: str, method: str = 'POST', body: dict = None, query_params: dict = None):
-    """Safely call HEAppE telemetry endpoints using request.api_instance."""
+    """Safely call HEAppE telemetry endpoints using request.api_instance supporting X-API-KEY and SessionCode."""
     if not hasattr(request, 'api_instance') or not request.api_instance:
         raise RuntimeError("No HEAppE API instance connected.")
 
     session_code = getattr(request, 'session_code', None) or request.session.get('heappe_session_code', '')
+    use_api_key = request.session.get('heappe_use_api_key', False)
 
-    # Special handling for GetExternalServicesLiveStatus which expects SessionCode in query string without a body
+    # For GetExternalServicesLiveStatus, SessionCode (if used) goes into query string, no request body
     if 'GetExternalServicesLiveStatus' in endpoint:
-        query_params = query_params or {}
-        if 'SessionCode' not in query_params and session_code:
-            query_params['SessionCode'] = session_code
         body = None
+        if not use_api_key and session_code:
+            query_params = query_params or {}
+            if 'SessionCode' not in query_params:
+                query_params['SessionCode'] = session_code
     elif body is not None and isinstance(body, dict):
-        if 'SessionCode' not in body and 'session_code' not in body and session_code:
-            body['SessionCode'] = session_code
+        if not use_api_key and session_code:
+            if 'SessionCode' not in body and 'session_code' not in body:
+                body['SessionCode'] = session_code
 
     call_kwargs = {
-        'auth_settings': ['Bearer', 'ServiceApiKey'],
+        'auth_settings': ['Bearer', 'ServiceApiKey', 'ApiKeyAuth', 'X-API-Key'],
         'response_type': 'list[object]' if 'Statistics' in endpoint or 'Logs' in endpoint or 'Status' in endpoint else 'object'
     }
     if body is not None:
@@ -126,18 +129,28 @@ def _call_telemetry_api(request, endpoint: str, method: str = 'POST', body: dict
             return _normalize_item(raw_res)
         return [] if 'list' in call_kwargs['response_type'] else {}
     except Exception as e:
-        # Fallback to direct HTTP request using requests if call_api raises unexpected serialization issue
+        # Fallback to direct HTTP request using requests
         try:
             import requests as req_lib
             base_url = request.api_instance.configuration.host.rstrip('/')
             url = f"{base_url}{endpoint}"
             headers = {}
-            if session_code:
-                headers['SessionCode'] = session_code
-                headers['Authorization'] = f"Bearer {session_code}"
+            
+            # Pass all configured API keys from ApiClient configuration (e.g. X-API-Key, ServiceApiKey, etc.)
+            if hasattr(request.api_instance, 'configuration') and hasattr(request.api_instance.configuration, 'api_key'):
+                for key_name, key_val in (request.api_instance.configuration.api_key or {}).items():
+                    if key_val:
+                        pfx = ""
+                        if hasattr(request.api_instance.configuration, 'api_key_prefix') and request.api_instance.configuration.api_key_prefix.get(key_name):
+                            pfx = f"{request.api_instance.configuration.api_key_prefix[key_name]} "
+                        headers[key_name] = f"{pfx}{key_val}"
+
+            if session_code and not use_api_key:
+                headers.setdefault('SessionCode', session_code)
+                headers.setdefault('Authorization', f"Bearer {session_code}")
                 
             req_params = dict(query_params or {})
-            if session_code and 'SessionCode' not in req_params:
+            if session_code and not use_api_key and 'SessionCode' not in req_params and 'GetExternalServicesLiveStatus' in endpoint:
                 req_params['SessionCode'] = session_code
 
             if method.upper() == 'POST':
@@ -195,8 +208,7 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         live_statuses = _call_telemetry_api(
             request,
             '/heappe/Management/GetExternalServicesLiveStatus',
-            'POST',
-            query_params={"SessionCode": request.session_code}
+            'POST'
         )
     except Exception as e:
         live_error = str(e)
@@ -204,10 +216,12 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
     stats_list = []
     stats_error = None
     stats_body = {
-        "SessionCode": request.session_code,
         "From": from_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "To": now.strftime("%Y-%m-%dT%H:%M:%SZ")
     }
+    if not request.session.get('heappe_use_api_key', False) and getattr(request, 'session_code', None):
+        stats_body["SessionCode"] = request.session_code
+
     if service_filter:
         stats_body["ServiceName"] = service_filter
     if cluster_filter:
@@ -230,7 +244,7 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
     try:
         clusters_controller = hp.ClusterInformationApi(request.api_instance)
         clusters_data = clusters_controller.heappe_cluster_information_list_available_clusters_get(
-            SessionCode=request.session_code
+            SessionCode=getattr(request, 'session_code', None) or 'ignore'
         )
         if clusters_data:
             clusters_list = [_normalize_item(c) for c in clusters_data]
@@ -270,8 +284,7 @@ def external_services_live_status_api(request: HttpRequest) -> JsonResponse:
         statuses = _call_telemetry_api(
             request,
             '/heappe/Management/GetExternalServicesLiveStatus',
-            'POST',
-            query_params={"SessionCode": request.session_code}
+            'POST'
         )
         return JsonResponse({"status": "success", "data": statuses})
     except Exception as e:
