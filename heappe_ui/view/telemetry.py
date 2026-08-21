@@ -97,35 +97,46 @@ def _call_telemetry_api(request, endpoint: str, method: str = 'POST', body: dict
     if 'GetExternalServicesLiveStatus' in endpoint:
         try:
             import requests as req_lib
-            base_url = request.api_instance.configuration.host.rstrip('/')
-            url = f"{base_url}{endpoint}"
-            headers = {}
-            if hasattr(request.api_instance, 'configuration') and hasattr(request.api_instance.configuration, 'api_key'):
-                for key_name, key_val in (request.api_instance.configuration.api_key or {}).items():
-                    if key_val:
-                        pfx = ""
-                        if hasattr(request.api_instance.configuration, 'api_key_prefix') and request.api_instance.configuration.api_key_prefix.get(key_name):
-                            pfx = f"{request.api_instance.configuration.api_key_prefix[key_name]} "
-                        headers[key_name] = f"{pfx}{key_val}"
-            
-            if session_code and not use_api_key:
-                headers.setdefault('SessionCode', session_code)
-                headers.setdefault('Authorization', f"Bearer {session_code}")
+            raw_host = getattr(getattr(request.api_instance, 'configuration', None), 'host', '')
+            if isinstance(raw_host, str) and raw_host.strip():
+                base_url = raw_host.strip().rstrip('/')
+                if not base_url.startswith('http'):
+                    base_url = 'http://' + base_url
+                url = f"{base_url}{endpoint}"
+                headers = {}
+                if hasattr(request.api_instance, 'default_headers') and request.api_instance.default_headers:
+                    headers.update(request.api_instance.default_headers)
+                if hasattr(request.api_instance, 'configuration') and hasattr(request.api_instance.configuration, 'api_key'):
+                    for key_name, key_val in (request.api_instance.configuration.api_key or {}).items():
+                        if key_val and isinstance(key_val, str):
+                            pfx = ""
+                            if hasattr(request.api_instance.configuration, 'api_key_prefix') and request.api_instance.configuration.api_key_prefix.get(key_name):
+                                pfx = f"{request.api_instance.configuration.api_key_prefix[key_name]} "
+                            headers[key_name] = f"{pfx}{key_val}"
+                
+                if session_code and not use_api_key:
+                    headers.setdefault('SessionCode', session_code)
+                    headers.setdefault('Authorization', f"Bearer {session_code}")
 
-            req_params = dict(query_params or {})
-            if session_code and not use_api_key and 'SessionCode' not in req_params:
-                req_params['SessionCode'] = session_code
+                req_params = dict(query_params or {})
+                if session_code and not use_api_key and 'SessionCode' not in req_params:
+                    req_params['SessionCode'] = session_code
 
-            resp = req_lib.post(url, params=req_params, headers=headers, timeout=20, verify=False)
-            if resp.status_code == 405:
-                resp = req_lib.get(url, params=req_params, headers=headers, timeout=20, verify=False)
-
-            if resp.status_code == 200:
-                data = resp.json()
-                if isinstance(data, list):
-                    return [_normalize_item(x) for x in data]
-                return _normalize_item(data)
-        except Exception:
+                resp = req_lib.post(url, params=req_params, headers=headers, timeout=20, verify=False)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if isinstance(data, list):
+                        return [_normalize_item(x) for x in data]
+                    return _normalize_item(data)
+                else:
+                    if resp.status_code == 500 and 'SessionCodeModel' in resp.text:
+                        resp = req_lib.post(url, params=req_params, data="", headers=headers, timeout=20, verify=False)
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            if isinstance(data, list):
+                                return [_normalize_item(x) for x in data]
+                            return _normalize_item(data)
+        except Exception as ex:
             pass
 
     if body is not None and isinstance(body, dict):
@@ -255,7 +266,7 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         live_statuses = _call_telemetry_api(
             request,
             '/heappe/Management/GetExternalServicesLiveStatus',
-            'GET'
+            'POST'
         )
     except Exception as e:
         live_error = str(e)
@@ -331,7 +342,7 @@ def external_services_live_status_api(request: HttpRequest) -> JsonResponse:
         statuses = _call_telemetry_api(
             request,
             '/heappe/Management/GetExternalServicesLiveStatus',
-            'GET'
+            'POST'
         )
         return JsonResponse({"status": "success", "data": statuses})
     except Exception as e:
