@@ -509,6 +509,7 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
             fail_calls.append(fc)
         return labels, avg_lat, p95_lat, succ_calls, fail_calls
 
+    chart_labels, chart_avg_latency, chart_p95_latency, chart_success_calls, chart_failed_calls = _build_chart_data(grouped_services)
     c_s_lbls, c_s_avg, c_s_p95, c_s_succ, c_s_fail = _build_chart_data(grouped_services_only)
     c_c_lbls, c_c_avg, c_c_p95, c_c_succ, c_c_fail = _build_chart_data(grouped_clusters_only)
 
