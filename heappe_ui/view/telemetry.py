@@ -402,6 +402,39 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         if name:
             available_service_names.add(name)
 
+    # Compute KPI Aggregates
+    total_checks = sum(int(st.get('TotalChecks') or st.get('total_checks') or 0) for st in stats_list)
+    total_failures = sum(int(st.get('FailedChecks') or st.get('failed_checks') or 0) for st in stats_list)
+    avg_avail = 100.0
+    if total_checks > 0:
+        avg_avail = max(0.0, min(100.0, ((total_checks - total_failures) / total_checks) * 100.0))
+    elif stats_list:
+        avails = [float(st.get('AvailabilityPercentage') or st.get('availability_percentage') or 100) for st in stats_list]
+        avg_avail = sum(avails) / len(avails) if avails else 100.0
+
+    valid_latencies = [float(st.get('AverageResponseTimeMs') or st.get('average_response_time_ms') or 0) for st in stats_list if (st.get('AverageResponseTimeMs') or st.get('average_response_time_ms'))]
+    avg_latency = (sum(valid_latencies) / len(valid_latencies)) if valid_latencies else 0.0
+
+    # Chart datasets
+    chart_labels = []
+    chart_avg_latency = []
+    chart_p95_latency = []
+    chart_success_calls = []
+    chart_failed_calls = []
+
+    for st in stats_list[:15]:
+        s_name = st.get('ServiceName') or st.get('service_name') or '-'
+        cmd = st.get('CommandOrPath') or st.get('command_or_path') or ''
+        label = f"{s_name}: {cmd[:25]}..." if len(cmd) > 25 else (f"{s_name}: {cmd}" if cmd else s_name)
+        chart_labels.append(label)
+        chart_avg_latency.append(round(float(st.get('AverageResponseTimeMs') or st.get('average_response_time_ms') or 0), 1))
+        chart_p95_latency.append(round(float(st.get('P95ResponseTimeMs') or st.get('p95_response_time_ms') or 0), 1))
+        
+        tc = int(st.get('TotalChecks') or st.get('total_checks') or 0)
+        fc = int(st.get('FailedChecks') or st.get('failed_checks') or 0)
+        chart_success_calls.append(max(0, tc - fc))
+        chart_failed_calls.append(fc)
+
     context = {
         "live_statuses": live_statuses,
         "live_error": live_error,
@@ -414,6 +447,15 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         "service_names": sorted(list(available_service_names)),
         "from_dt": from_dt,
         "to_dt": now,
+        "total_checks": total_checks,
+        "total_failures": total_failures,
+        "avg_avail": round(avg_avail, 1),
+        "avg_latency": round(avg_latency, 1),
+        "chart_labels_json": json.dumps(chart_labels),
+        "chart_avg_latency_json": json.dumps(chart_avg_latency),
+        "chart_p95_latency_json": json.dumps(chart_p95_latency),
+        "chart_success_calls_json": json.dumps(chart_success_calls),
+        "chart_failed_calls_json": json.dumps(chart_failed_calls),
     }
     return render(request, "external_services_telemetry.html", context)
 
@@ -486,20 +528,32 @@ def external_services_report_api(request: HttpRequest) -> JsonResponse:
     """Fetch external services comprehensive telemetry report."""
     from_param = request.GET.get('from', '').strip()
     to_param = request.GET.get('to', '').strip()
+    service_filter = request.GET.get('service', '').strip()
+    cluster_filter = request.GET.get('cluster_id', '').strip()
+
     now = datetime.now(timezone.utc)
     from_str = from_param or (now - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%SZ")
     to_str = to_param or now.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    body = {
+        "SessionCode": request.session_code,
+        "From": from_str,
+        "To": to_str
+    }
+    if service_filter:
+        body["ServiceName"] = service_filter
+    if cluster_filter:
+        try:
+            body["ClusterId"] = int(cluster_filter)
+        except ValueError:
+            pass
 
     try:
         report = _call_telemetry_api(
             request,
             '/heappe/Management/GetExternalServicesReport',
             'POST',
-            body={
-                "SessionCode": request.session_code,
-                "From": from_str,
-                "To": to_str
-            }
+            body=body
         )
         return JsonResponse({"status": "success", "data": report})
     except Exception as e:
