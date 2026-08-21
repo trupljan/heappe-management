@@ -477,8 +477,19 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         g['operations'].sort(key=lambda x: (int(x.get('FailedChecks') or x.get('failed_checks') or 0), int(x.get('TotalChecks') or x.get('total_checks') or 0)), reverse=True)
         grouped_services.append(g)
 
-    # Sort services: highest failures first, then total calls
-    grouped_services.sort(key=lambda x: (x['failed_checks'], x['total_checks']), reverse=True)
+    # Smart Metric Sorting for Telemetry:
+    # 1. Unhealthy/Failing services first (highest failed_checks descending)
+    # 2. Worst availability percentage first (ascending: 0% -> 90% -> 100%)
+    # 3. Highest average latency first (average_response_time_ms descending)
+    # 4. Total call volume (total_checks descending)
+    def _metric_sort_key(x):
+        fc = int(x.get('failed_checks') or 0)
+        avail = float(x.get('availability_percentage') if x.get('availability_percentage') is not None else 100.0)
+        avg_rt = float(x.get('average_response_time_ms') or 0)
+        tc = int(x.get('total_checks') or 0)
+        return (-fc, avail, -avg_rt, -tc)
+
+    grouped_services.sort(key=_metric_sort_key)
 
     # Separate grouped_services into Services and Clusters
     def _is_cluster_item(item):
@@ -493,8 +504,19 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
     grouped_services_only = [g for g in grouped_services if not _is_cluster_item(g)]
     grouped_clusters_only = [g for g in grouped_services if _is_cluster_item(g)]
 
+    grouped_services_only.sort(key=_metric_sort_key)
+    grouped_clusters_only.sort(key=_metric_sort_key)
+
+    def _live_sort_key(s):
+        is_avail = bool(s.get('IsAvailable') or s.get('is_available'))
+        rt = float(s.get('ResponseTimeMs') or s.get('response_time_ms') or 0)
+        return (is_avail, -rt)
+
     live_services_only = [s for s in live_statuses if not _is_cluster_item(s)] if live_statuses else []
     live_clusters_only = [s for s in live_statuses if _is_cluster_item(s)] if live_statuses else []
+
+    live_services_only.sort(key=_live_sort_key)
+    live_clusters_only.sort(key=_live_sort_key)
 
     # Chart datasets helper
     def _build_chart_data(group_list):
