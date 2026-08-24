@@ -1617,6 +1617,24 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
     project_data = None
     adaptor_users_in_project = []
     available_users = []
+    all_adaptor_users = []
+
+    try:
+        raw_adaptor_users = controller.heappe_management_adaptor_users_get(SessionCode=session_code)
+        all_adaptor_users = [u.to_dict() for u in raw_adaptor_users] if raw_adaptor_users else []
+    except Exception as e:
+        print(f"Error fetching adaptor users: {e}")
+
+    for u in all_adaptor_users:
+        proj_roles = []
+        for group in u.get("adaptor_user_groups", []) or []:
+            g_proj = group.get("project")
+            pname = g_proj.get("name") if g_proj else None
+            for r in group.get("roles", []):
+                role_str = f"{pname} ({r})" if pname else str(r)
+                if role_str not in proj_roles:
+                    proj_roles.append(role_str)
+        u["proj_roles"] = proj_roles
 
     if project_id:
         project_data = next((p for p in all_projects if p['id'] == project_id), None)
@@ -1645,9 +1663,6 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
             except Exception as e:
                 print(f"Error fetching adaptor users in project: {e}")
 
-
-            all_adaptor_users = [u.to_dict() for u in
-                                 controller.heappe_management_adaptor_users_get(SessionCode=session_code)]
             existing_usernames = {u['username'] for u in adaptor_users_in_project}
             available_users = [u for u in all_adaptor_users if u['username'] not in existing_usernames]
 
@@ -1696,6 +1711,7 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
         "all_projects": all_projects,
         "adaptor_users": adaptor_users_in_project,
         "available_users": available_users,
+        "all_adaptor_users": all_adaptor_users,
         "roles_mapping": ADAPTOR_USER_STR_TO_INT
     })
 

@@ -4,7 +4,7 @@
 
 {% block breadcrumbs %}
     <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
-    <li class="breadcrumb-item"><a href="{% url 'manage_project_adaptor_users_base' %}" class="text-decoration-none text-secondary">User Management</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'manage_project_adaptor_users_base' %}" class="text-decoration-none text-secondary">Project User Management</a></li>
     <li class="breadcrumb-item active" aria-current="page">{{ adaptor_user.username }}</li>
 {% endblock %}
 

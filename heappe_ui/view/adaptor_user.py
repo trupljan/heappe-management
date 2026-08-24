@@ -75,7 +75,8 @@ def adaptor_user_create(request: HttpRequest) -> HttpResponse:
         if result:
             return redirect("adaptor_user_detail", adaptor_user_username=result['Username'])
         else:
-            return redirect("adaptor_user_create")
+            next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("manage_project_adaptor_users_base")
+            return redirect(next_url)
 
 
 @login_required
