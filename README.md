@@ -4,7 +4,7 @@ Django web application for administration and management of HEAppE middleware.
 
 ---
 
-## 🚀 Quickstart (Local Development)
+## Quickstart (Local Development)
 
 ### Requirements
 - **Python 3.12** (Recommended, min. Python 3.10+)
@@ -42,7 +42,7 @@ The application will be accessible at:
 
 ---
 
-## 🛠️ Running in PyCharm
+## Running in PyCharm
 
 ### 1. Configure Python Interpreter
 1. Open **Settings -> Project: heappe-management -> Python Interpreter** in PyCharm.
@@ -57,7 +57,7 @@ The application will be accessible at:
 
 ---
 
-## 🖥️ Server Deployment
+## Server Deployment
 
 For deploying on a production or test Linux server, use the included deployment script `deploy.sh`:
 
