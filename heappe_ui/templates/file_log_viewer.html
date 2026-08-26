@@ -266,6 +266,58 @@
     .hide-conn .log-conn { display: none !important; }
     .hide-user .log-user { display: none !important; }
     .hide-logger .log-logger { display: none !important; }
+    .hide-service .log-service { display: none !important; }
+
+    .log-service {
+        display: inline-block;
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 4px;
+        margin-right: 8px;
+        text-transform: uppercase;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .log-service-api {
+        background-color: #f1f5f9;
+        color: #475569;
+        border: 1px solid #cbd5e1;
+    }
+    .log-service-datastaging {
+        background-color: #e0f2fe;
+        color: #0369a1;
+        border: 1px solid #bae6fd;
+    }
+    .log-service-ratelimit-api {
+        background-color: #f3e8ff;
+        color: #6b21a8;
+        border: 1px solid #e9d5ff;
+    }
+    .log-service-ratelimit-datastaging {
+        background-color: #cff4fc;
+        color: #055160;
+        border: 1px solid #9eeaf9;
+    }
+    .log-service-vault {
+        background-color: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+    }
+    .log-service-deploy {
+        background-color: #dcfce7;
+        color: #15803d;
+        border: 1px solid #bbf7d0;
+    }
+    .log-service-update {
+        background-color: #ffedd5;
+        color: #c2410c;
+        border: 1px solid #fed7aa;
+    }
+    .log-service-default {
+        background-color: #f8fafc;
+        color: #334155;
+        border: 1px solid #e2e8f0;
+    }
 </style>
 
 <div class="container-fluid py-2 log-viewer-container">
@@ -288,6 +340,20 @@
     <!-- Top Control Bar -->
     <div class="card filter-card p-3 bg-white mb-3">
         <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="filter-label">Log Source</label>
+                <select name="service" class="form-select form-control-custom form-control-sm w-100" style="padding-top: 0.35rem; padding-bottom: 0.35rem; height: 33px; font-size: 0.82rem;">
+                    <option value="ALL" {% if service_filter == "ALL" or not service_filter %}selected{% endif %}>ALL LOGS</option>
+                    <option value="API" {% if service_filter == "API" %}selected{% endif %}>HEAppE API</option>
+                    <option value="DATASTAGING" {% if service_filter == "DATASTAGING" %}selected{% endif %}>DataStaging API</option>
+                    <option value="RATELIMIT-API" {% if service_filter == "RATELIMIT-API" %}selected{% endif %}>RateLimit API</option>
+                    <option value="RATELIMIT-DATASTAGING" {% if service_filter == "RATELIMIT-DATASTAGING" %}selected{% endif %}>RateLimit DataStaging</option>
+                    <option value="VAULT" {% if service_filter == "VAULT" %}selected{% endif %}>Vault Logs</option>
+                    <option value="DEPLOY" {% if service_filter == "DEPLOY" %}selected{% endif %}>Deploy Log</option>
+                    <option value="UPDATE" {% if service_filter == "UPDATE" %}selected{% endif %}>Update Log</option>
+                </select>
+            </div>
+
             <div class="col-md-2">
                 <label class="filter-label">Date <span class="text-primary fw-bold" style="font-size:0.65rem;">(UTC)</span></label>
                 <input type="date" name="date" class="form-control form-control-custom form-control-sm w-100" value="{{ selected_date }}">
@@ -319,11 +385,11 @@
                 <input type="text" name="search" class="form-control form-control-custom form-control-sm w-100" placeholder="Filter..." value="{{ search_query }}">
             </div>
             
-            <div class="col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm fw-bold px-3 py-1.5 w-100 shadow-sm" style="border-radius: 8px;">
+            <div class="col-md-1 d-flex flex-column gap-1">
+                <button type="submit" class="btn btn-primary btn-sm fw-bold px-2 py-1 w-100 shadow-sm" style="border-radius: 8px;">
                     <i class="bi bi-funnel me-1"></i>Apply
                 </button>
-                <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-sm fw-semibold px-3 py-1.5 w-100" style="border-radius: 8px;">
+                <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-sm fw-semibold px-2 py-0.5 w-100" style="border-radius: 6px; font-size:0.75rem;">
                     Reset
                 </a>
             </div>
@@ -355,6 +421,10 @@
                     <!-- Metadata Toggles -->
                     <div class="d-flex align-items-center gap-2.5 border-end pe-3 text-secondary me-1" style="font-size: 0.72rem;">
                         <span class="fw-bold text-uppercase text-muted" style="font-size: 0.65rem; letter-spacing: 0.03em;">Show:</span>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input metadata-toggle-cb" type="checkbox" id="toggle-service" checked data-class="hide-service" style="cursor: pointer;">
+                            <label class="form-check-label font-monospace" for="toggle-service" style="cursor: pointer; user-select: none;">Source</label>
+                        </div>
                         <div class="form-check form-check-inline mb-0">
                             <input class="form-check-input metadata-toggle-cb" type="checkbox" id="toggle-timestamp" checked data-class="hide-timestamp" style="cursor: pointer;">
                             <label class="form-check-label font-monospace" for="toggle-timestamp" style="cursor: pointer; user-select: none;">Time</label>
@@ -495,10 +565,43 @@
         return result;
     }
 
-    function formatLogEntry(content, level) {
+    function getServiceBadge(service) {
+        const svcUpper = (service || 'API').toUpperCase();
+        let badgeClass = 'log-service-default';
+        let label = service || 'API';
+
+        if (svcUpper.includes('RATELIMIT-API')) {
+            badgeClass = 'log-service-ratelimit-api';
+            label = 'RateLimit API';
+        } else if (svcUpper.includes('RATELIMIT-DATASTAGING')) {
+            badgeClass = 'log-service-ratelimit-datastaging';
+            label = 'RateLimit DS';
+        } else if (svcUpper.includes('DATASTAGING')) {
+            badgeClass = 'log-service-datastaging';
+            label = 'DataStaging';
+        } else if (svcUpper.includes('VAULT')) {
+            badgeClass = 'log-service-vault';
+            label = 'Vault';
+        } else if (svcUpper.includes('DEPLOY')) {
+            badgeClass = 'log-service-deploy';
+            label = 'Deploy';
+        } else if (svcUpper.includes('UPDATE')) {
+            badgeClass = 'log-service-update';
+            label = 'Update';
+        } else if (svcUpper.includes('API')) {
+            badgeClass = 'log-service-api';
+            label = 'HEAppE API';
+        }
+
+        return `<span class="log-service ${badgeClass}">${escapeHtml(label)}</span>`;
+    }
+
+    function formatLogEntry(content, level, service) {
         const prefixRegex = /^(DEBUG|INFO|WARN|ERROR|FATAL)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\s+[A-Z]+)?)\s+(\[[^\]]+\])\s+(.*?)\s+([a-zA-Z0-9._-]+)\s+-\s+([\s\S]*)$/;
         const match = content.match(prefixRegex);
         
+        const serviceTag = getServiceBadge(service);
+
         if (match) {
             const matchedLevel = match[1];
             const timestamp = match[2];
@@ -516,7 +619,8 @@
                 timeOnly += ' UTC';
             }
             
-            return `<span class="log-level log-level-${matchedLevel.toLowerCase()}">${escapeHtml(matchedLevel)}</span>` +
+            return serviceTag +
+                   `<span class="log-level log-level-${matchedLevel.toLowerCase()}">${escapeHtml(matchedLevel)}</span>` +
                    `<span class="log-timestamp" title="${escapeHtml(timestamp)}">${escapeHtml(timeOnly)}</span>` +
                    `<span class="log-conn">${escapeHtml(connId)}</span>` +
                    `<span class="log-user">${escapeHtml(userInfo)}</span>` +
@@ -525,13 +629,13 @@
                    `<span class="log-msg">${highlightedMessage}</span>`;
         } else {
             let highlighted = highlightJsonInText(content);
-            return `<span class="log-msg-fallback">${highlighted}</span>`;
+            return serviceTag + `<span class="log-msg-fallback">${highlighted}</span>`;
         }
     }
 
     function createLogEntryHtml(entry) {
-        const levelLower = entry.level.toLowerCase();
-        const formatted = formatLogEntry(entry.content, entry.level);
+        const levelLower = (entry.level || 'INFO').toLowerCase();
+        const formatted = formatLogEntry(entry.content, entry.level, entry.service);
         return `<div class="log-entry log-entry-${levelLower}">${formatted}</div>`;
     }
 
@@ -553,8 +657,9 @@
         try {
             const baseUrl = "{% url 'fetch_new_logs' %}";
             const levelVal = document.querySelector('select[name="level"]').value;
+            const serviceVal = document.querySelector('select[name="service"]').value;
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
-            const response = await fetch(`${baseUrl}?offset=${logOffset}&level=${levelVal}&search=${searchVal}`);
+            const response = await fetch(`${baseUrl}?offset=${logOffset}&level=${levelVal}&search=${searchVal}&service=${serviceVal}`);
             const data = await response.json();
             
             if (data.entries && data.entries.length > 0) {
@@ -597,8 +702,9 @@
         if (checked) {
             const baseUrl = "{% url 'fetch_new_logs' %}";
             const levelVal = document.querySelector('select[name="level"]').value;
+            const serviceVal = document.querySelector('select[name="service"]').value;
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
-            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}`).then(r => r.json()).then(data => {
+            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}`).then(r => r.json()).then(data => {
                 logOffset = data.offset;
                 
                 const activeHtml = '<span class="pulse-dot"></span>Active';
