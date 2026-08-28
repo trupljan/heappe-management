@@ -28,22 +28,51 @@
         font-weight: 700;
         letter-spacing: 0.05em;
         text-transform: uppercase;
-        color: #6c757d;
+        color: #64748b;
         margin-bottom: 0.35rem;
         display: block;
+        white-space: nowrap;
     }
 
-    .form-control-custom {
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 0.4rem 0.75rem;
-        font-size: 0.85rem;
-        transition: all 0.2s ease;
+    .filter-card .form-control-custom,
+    .filter-card .form-select {
+        height: 38px !important;
+        font-size: 0.82rem !important;
+        border-radius: 8px !important;
+        border: 1px solid #cbd5e1 !important;
+        background-color: #ffffff !important;
+        padding: 0.35rem 0.65rem !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
-    .form-control-custom:focus {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+
+    .filter-card .form-control-custom:focus,
+    .filter-card .form-select:focus {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
         outline: none;
+    }
+
+    .btn-filter-apply {
+        height: 38px;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        box-shadow: 0 1px 2px rgba(13, 110, 253, 0.2);
+    }
+
+    .btn-filter-reset {
+        height: 38px;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
     }
 
     /* Light Console Card styles */
@@ -266,6 +295,58 @@
     .hide-conn .log-conn { display: none !important; }
     .hide-user .log-user { display: none !important; }
     .hide-logger .log-logger { display: none !important; }
+    .hide-service .log-service { display: none !important; }
+
+    .log-service {
+        display: inline-block;
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 4px;
+        margin-right: 8px;
+        text-transform: uppercase;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .log-service-api {
+        background-color: #f1f5f9;
+        color: #475569;
+        border: 1px solid #cbd5e1;
+    }
+    .log-service-datastaging {
+        background-color: #e0f2fe;
+        color: #0369a1;
+        border: 1px solid #bae6fd;
+    }
+    .log-service-ratelimit-api {
+        background-color: #f3e8ff;
+        color: #6b21a8;
+        border: 1px solid #e9d5ff;
+    }
+    .log-service-ratelimit-datastaging {
+        background-color: #cff4fc;
+        color: #055160;
+        border: 1px solid #9eeaf9;
+    }
+    .log-service-vault {
+        background-color: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+    }
+    .log-service-deploy {
+        background-color: #dcfce7;
+        color: #15803d;
+        border: 1px solid #bbf7d0;
+    }
+    .log-service-update {
+        background-color: #ffedd5;
+        color: #c2410c;
+        border: 1px solid #fed7aa;
+    }
+    .log-service-default {
+        background-color: #f8fafc;
+        color: #334155;
+        border: 1px solid #e2e8f0;
+    }
 </style>
 
 <div class="container-fluid py-2 log-viewer-container">
@@ -278,7 +359,10 @@
                 <span class="text-muted small">Instance Context: <strong class="text-secondary font-monospace">{{ instance|upper }}</strong></span>
             </div>
         </div>
-        <div>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-white text-secondary border shadow-sm px-3 py-2 fw-semibold d-flex align-items-center gap-1.5" style="border-radius: 8px;" id="utcClockHint">
+                <i class="bi bi-clock text-primary"></i> UTC: <span class="font-monospace text-dark fw-bold">--:--:--</span>
+            </span>
             <span class="badge bg-white text-secondary border shadow-sm px-3 py-2 fw-semibold" style="border-radius: 8px;">
                 Entries: <span id="entryCount" class="text-primary font-monospace fw-bold">{{ logs_count }}</span>
             </span>
@@ -287,25 +371,38 @@
 
     <!-- Top Control Bar -->
     <div class="card filter-card p-3 bg-white mb-3">
-        <form method="GET" class="row g-3 align-items-end">
-            <div class="col-md-2">
-                <label class="filter-label">Date <span class="text-primary fw-bold" style="font-size:0.65rem;">(UTC)</span></label>
-                <input type="date" name="date" class="form-control form-control-custom form-control-sm w-100" value="{{ selected_date }}">
-            </div>
-            
-            <div class="col-md-3">
-                <label class="filter-label">Time Window <span class="text-primary fw-bold" style="font-size:0.65rem;">(UTC)</span></label>
-                <div class="d-flex gap-1.5 align-items-center">
-                    <input type="time" name="time_from" class="form-control form-control-custom form-control-sm w-100" value="{{ time_from }}" id="timeFromInput">
-                    <span class="text-muted small">to</span>
-                    <input type="time" name="time_to" class="form-control form-control-custom form-control-sm w-100" value="{{ time_to }}" id="timeToInput">
-                </div>
-                <div class="mt-1" id="utcClockHint" style="font-size:0.68rem; color:#6c757d;"></div>
+        <form method="GET" class="d-flex flex-wrap align-items-end gap-2.5">
+            <div class="flex-grow-1" style="min-width: 150px; flex-basis: 0;">
+                <label class="filter-label">Log Source</label>
+                <select name="service" class="form-select form-control-custom w-100">
+                    <option value="ALL" {% if service_filter == "ALL" or not service_filter %}selected{% endif %}>ALL LOGS</option>
+                    <option value="API" {% if service_filter == "API" %}selected{% endif %}>HEAppE API</option>
+                    <option value="DATASTAGING" {% if service_filter == "DATASTAGING" %}selected{% endif %}>DataStaging API</option>
+                    <option value="RATELIMIT-API" {% if service_filter == "RATELIMIT-API" %}selected{% endif %}>RateLimit API</option>
+                    <option value="RATELIMIT-DATASTAGING" {% if service_filter == "RATELIMIT-DATASTAGING" %}selected{% endif %}>RateLimit DataStaging</option>
+                    <option value="VAULT" {% if service_filter == "VAULT" %}selected{% endif %}>Vault Logs</option>
+                    <option value="DEPLOY" {% if service_filter == "DEPLOY" %}selected{% endif %}>Deploy Log</option>
+                    <option value="UPDATE" {% if service_filter == "UPDATE" %}selected{% endif %}>Update Log</option>
+                </select>
             </div>
 
-            <div class="col-md-2">
+            <div class="flex-grow-1" style="min-width: 135px; flex-basis: 0;">
+                <label class="filter-label">Date <span class="text-primary fw-normal" style="font-size:0.65rem;">(UTC)</span></label>
+                <input type="date" name="date" class="form-control form-control-custom w-100" value="{{ selected_date }}">
+            </div>
+            
+            <div class="flex-grow-1" style="min-width: 200px; flex-basis: 0;">
+                <label class="filter-label">Time Window <span class="text-primary fw-normal" style="font-size:0.65rem;">(UTC)</span></label>
+                <div class="d-flex gap-1.5 align-items-center">
+                    <input type="time" name="time_from" class="form-control form-control-custom w-100" value="{{ time_from }}" id="timeFromInput">
+                    <span class="text-muted small px-1">to</span>
+                    <input type="time" name="time_to" class="form-control form-control-custom w-100" value="{{ time_to }}" id="timeToInput">
+                </div>
+            </div>
+
+            <div class="flex-grow-1" style="min-width: 125px; flex-basis: 0;">
                 <label class="filter-label">Log Level</label>
-                <select name="level" class="form-select form-control-custom form-control-sm w-100" style="padding-top: 0.35rem; padding-bottom: 0.35rem; height: 33px; font-size: 0.82rem;">
+                <select name="level" class="form-select form-control-custom w-100">
                     <option value="" {% if not level_filter %}selected{% endif %}>ALL LEVELS</option>
                     <option value="DEBUG" {% if level_filter == "DEBUG" %}selected{% endif %}>DEBUG</option>
                     <option value="INFO" {% if level_filter == "INFO" %}selected{% endif %}>INFO</option>
@@ -314,30 +411,18 @@
                 </select>
             </div>
             
-            <div class="col-md-2">
+            <div class="flex-grow-1" style="min-width: 150px; flex-basis: 0;">
                 <label class="filter-label">Search Text</label>
-                <input type="text" name="search" class="form-control form-control-custom form-control-sm w-100" placeholder="Filter..." value="{{ search_query }}">
+                <input type="text" name="search" class="form-control form-control-custom w-100" placeholder="Filter..." value="{{ search_query }}">
             </div>
             
-            <div class="col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm fw-bold px-3 py-1.5 w-100 shadow-sm" style="border-radius: 8px;">
-                    <i class="bi bi-funnel me-1"></i>Apply
+            <div class="d-flex gap-2 ms-auto" style="min-width: 160px; flex-basis: 0;">
+                <button type="submit" class="btn btn-primary btn-filter-apply w-100">
+                    <i class="bi bi-funnel-fill me-1"></i>Apply
                 </button>
-                <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-sm fw-semibold px-3 py-1.5 w-100" style="border-radius: 8px;">
+                <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-filter-reset w-100">
                     Reset
                 </a>
-            </div>
-
-            <div class="col-md-1">
-                <label class="filter-label">Live Tail</label>
-                <div class="d-flex align-items-center gap-1.5 py-1">
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="liveStreamToggle" style="cursor: pointer;">
-                    </div>
-                    <span id="liveStatus" class="small text-muted d-flex align-items-center gap-1 fst-italic" style="font-size: 0.7rem; white-space: nowrap;">
-                        Off
-                    </span>
-                </div>
             </div>
         </form>
     </div>
@@ -355,6 +440,10 @@
                     <!-- Metadata Toggles -->
                     <div class="d-flex align-items-center gap-2.5 border-end pe-3 text-secondary me-1" style="font-size: 0.72rem;">
                         <span class="fw-bold text-uppercase text-muted" style="font-size: 0.65rem; letter-spacing: 0.03em;">Show:</span>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input metadata-toggle-cb" type="checkbox" id="toggle-service" checked data-class="hide-service" style="cursor: pointer;">
+                            <label class="form-check-label font-monospace" for="toggle-service" style="cursor: pointer; user-select: none;">Source</label>
+                        </div>
                         <div class="form-check form-check-inline mb-0">
                             <input class="form-check-input metadata-toggle-cb" type="checkbox" id="toggle-timestamp" checked data-class="hide-timestamp" style="cursor: pointer;">
                             <label class="form-check-label font-monospace" for="toggle-timestamp" style="cursor: pointer; user-select: none;">Time</label>
@@ -495,10 +584,43 @@
         return result;
     }
 
-    function formatLogEntry(content, level) {
+    function getServiceBadge(service) {
+        const svcUpper = (service || 'API').toUpperCase();
+        let badgeClass = 'log-service-default';
+        let label = service || 'API';
+
+        if (svcUpper.includes('RATELIMIT-API')) {
+            badgeClass = 'log-service-ratelimit-api';
+            label = 'RateLimit API';
+        } else if (svcUpper.includes('RATELIMIT-DATASTAGING')) {
+            badgeClass = 'log-service-ratelimit-datastaging';
+            label = 'RateLimit DS';
+        } else if (svcUpper.includes('DATASTAGING')) {
+            badgeClass = 'log-service-datastaging';
+            label = 'DataStaging';
+        } else if (svcUpper.includes('VAULT')) {
+            badgeClass = 'log-service-vault';
+            label = 'Vault';
+        } else if (svcUpper.includes('DEPLOY')) {
+            badgeClass = 'log-service-deploy';
+            label = 'Deploy';
+        } else if (svcUpper.includes('UPDATE')) {
+            badgeClass = 'log-service-update';
+            label = 'Update';
+        } else if (svcUpper.includes('API')) {
+            badgeClass = 'log-service-api';
+            label = 'HEAppE API';
+        }
+
+        return `<span class="log-service ${badgeClass}">${escapeHtml(label)}</span>`;
+    }
+
+    function formatLogEntry(content, level, service) {
         const prefixRegex = /^(DEBUG|INFO|WARN|ERROR|FATAL)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\s+[A-Z]+)?)\s+(\[[^\]]+\])\s+(.*?)\s+([a-zA-Z0-9._-]+)\s+-\s+([\s\S]*)$/;
         const match = content.match(prefixRegex);
         
+        const serviceTag = getServiceBadge(service);
+
         if (match) {
             const matchedLevel = match[1];
             const timestamp = match[2];
@@ -516,7 +638,8 @@
                 timeOnly += ' UTC';
             }
             
-            return `<span class="log-level log-level-${matchedLevel.toLowerCase()}">${escapeHtml(matchedLevel)}</span>` +
+            return serviceTag +
+                   `<span class="log-level log-level-${matchedLevel.toLowerCase()}">${escapeHtml(matchedLevel)}</span>` +
                    `<span class="log-timestamp" title="${escapeHtml(timestamp)}">${escapeHtml(timeOnly)}</span>` +
                    `<span class="log-conn">${escapeHtml(connId)}</span>` +
                    `<span class="log-user">${escapeHtml(userInfo)}</span>` +
@@ -525,13 +648,13 @@
                    `<span class="log-msg">${highlightedMessage}</span>`;
         } else {
             let highlighted = highlightJsonInText(content);
-            return `<span class="log-msg-fallback">${highlighted}</span>`;
+            return serviceTag + `<span class="log-msg-fallback">${highlighted}</span>`;
         }
     }
 
     function createLogEntryHtml(entry) {
-        const levelLower = entry.level.toLowerCase();
-        const formatted = formatLogEntry(entry.content, entry.level);
+        const levelLower = (entry.level || 'INFO').toLowerCase();
+        const formatted = formatLogEntry(entry.content, entry.level, entry.service);
         return `<div class="log-entry log-entry-${levelLower}">${formatted}</div>`;
     }
 
@@ -553,8 +676,9 @@
         try {
             const baseUrl = "{% url 'fetch_new_logs' %}";
             const levelVal = document.querySelector('select[name="level"]').value;
+            const serviceVal = document.querySelector('select[name="service"]').value;
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
-            const response = await fetch(`${baseUrl}?offset=${logOffset}&level=${levelVal}&search=${searchVal}`);
+            const response = await fetch(`${baseUrl}?offset=${logOffset}&level=${levelVal}&search=${searchVal}&service=${serviceVal}`);
             const data = await response.json();
             
             if (data.entries && data.entries.length > 0) {
@@ -597,8 +721,9 @@
         if (checked) {
             const baseUrl = "{% url 'fetch_new_logs' %}";
             const levelVal = document.querySelector('select[name="level"]').value;
+            const serviceVal = document.querySelector('select[name="service"]').value;
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
-            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}`).then(r => r.json()).then(data => {
+            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}`).then(r => r.json()).then(data => {
                 logOffset = data.offset;
                 
                 const activeHtml = '<span class="pulse-dot"></span>Active';
@@ -797,7 +922,7 @@
         const pad = n => String(n).padStart(2, '0');
         const utcTime = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
         const utcDate = `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())}`;
-        hint.innerHTML = `<i class="bi bi-clock me-1"></i>Now UTC: <strong class="font-monospace text-dark">${utcDate} ${utcTime}</strong>`;
+        hint.innerHTML = `<i class="bi bi-clock text-primary me-1"></i> UTC: <span class="font-monospace text-dark fw-bold ms-1">${utcDate} ${utcTime}</span>`;
     }
     updateUtcClock();
     setInterval(updateUtcClock, 1000);

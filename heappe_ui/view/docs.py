@@ -231,8 +231,8 @@ def interactive_docs_view(request: HttpRequest) -> HttpResponse:
         },
         {
             "id": "user_management",
-            "category": "User Management",
-            "title": "User Management (Adaptor Users)",
+            "category": "Project User Management",
+            "title": "Project User Management (Adaptor Users)",
             "route": "/manage-external-users/",
             "icon": "bi-people",
             "description": "Create and manage Adaptor Users, who represent external researchers or API clients authorized to submit jobs to HEAppE.",
@@ -243,7 +243,7 @@ def interactive_docs_view(request: HttpRequest) -> HttpResponse:
                 {"name": "heappe_management_assign_adaptor_user_to_project_post", "description": "Grants an adaptor user permission to access a project under a specific role (Admin, User, Auditor)."}
             ],
             "walkthrough": [
-                "Go to User Management to list all registered external users.",
+                "Go to Project User Management to list all registered external users.",
                 "Click 'Create User' to add an account with password credentials.",
                 "Select a Project and associate the user with a role (e.g., Standard User) to allow them to submit tasks."
             ],

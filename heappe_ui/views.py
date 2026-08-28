@@ -1333,7 +1333,7 @@ def get_lines_backwards(file_path):
             yield remnant.decode('utf-8', errors='ignore')
 
 
-def parse_json_log_line(line):
+def parse_json_log_line(line, service="API"):
     try:
         data = json.loads(line)
         if not isinstance(data, dict):
@@ -1369,16 +1369,17 @@ def parse_json_log_line(line):
         return {
             'timestamp_str': timestamp_str,
             'level': level,
+            'service': service,
             'content': formatted_content
         }
     except Exception:
         return None
 
 
-def parse_log_line(line):
+def parse_log_line(line, service="API"):
     line_stripped = line.strip()
     if line_stripped.startswith('{') and line_stripped.endswith('}'):
-        parsed_json = parse_json_log_line(line_stripped)
+        parsed_json = parse_json_log_line(line_stripped, service=service)
         if parsed_json:
             return parsed_json
 
@@ -1411,9 +1412,14 @@ def parse_log_line(line):
         elif "DEBUG" in line:
             level = "DEBUG"
 
+    svc = service
+    if "datastaging" in line.lower():
+        svc = "DATASTAGING"
+
     return {
         'timestamp_str': timestamp_str,
         'level': level,
+        'service': svc,
         'content': line
     }
 
@@ -1443,7 +1449,17 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
     timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
     entries_count = 0
     
-    for log_path in reversed(log_paths):
+    normalized = []
+    for item in log_paths:
+        if isinstance(item, tuple):
+            normalized.append(item)
+        else:
+            svc = 'DATASTAGING' if 'datastaging' in str(item).lower() else 'API'
+            normalized.append((item, svc))
+
+    all_entries = []
+
+    for log_path, default_svc in reversed(normalized):
         if not log_path or not os.path.exists(log_path):
             continue
             
@@ -1454,12 +1470,12 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                 line_stripped = line.strip()
                 if not line_stripped:
                     continue
-                parsed = parse_json_log_line(line_stripped)
+                parsed = parse_json_log_line(line_stripped, service=default_svc)
                 if parsed and matches_filters(parsed, level_filter, search_query, time_from, time_to):
-                    yield parsed
+                    all_entries.append(parsed)
                     entries_count += 1
-                    if entries_count >= max_entries:
-                        return
+                    if entries_count >= max_entries * 2:
+                        break
         else:
             current_entry_lines = []
             
@@ -1471,49 +1487,95 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                     entry_text = "".join(current_entry_lines)
                     current_entry_lines = []
                     
-                    parsed = parse_log_line(entry_text)
+                    parsed = parse_log_line(entry_text, service=default_svc)
                     if matches_filters(parsed, level_filter, search_query, time_from, time_to):
-                        yield parsed
+                        all_entries.append(parsed)
                         entries_count += 1
-                        if entries_count >= max_entries:
-                            return
+                        if entries_count >= max_entries * 2:
+                            break
                 else:
                     current_entry_lines.insert(0, line)
                     
             if current_entry_lines:
                 entry_text = "".join(current_entry_lines)
-                parsed = parse_log_line(entry_text)
+                parsed = parse_log_line(entry_text, service=default_svc)
                 if matches_filters(parsed, level_filter, search_query, time_from, time_to):
-                    yield parsed
+                    all_entries.append(parsed)
                     entries_count += 1
-                    if entries_count >= max_entries:
-                        return
+
+    all_entries.sort(key=lambda x: x.get('timestamp_str') or '', reverse=True)
+    for entry in all_entries[:max_entries]:
+        yield entry
 
 
-def get_log_file_paths(instance, date_str):
-    base_path = f"/opt/heappe-deployment/{instance}/app/logs/API/"
+def get_log_file_paths(instance, date_str, service="ALL"):
+    base_logs_dir = f"/opt/heappe-deployment/{instance}/app/logs"
     date_formatted = date_str.replace("-", "_")
 
-    if not os.path.exists(base_path):
+    if not os.path.exists(base_logs_dir):
         return []
 
-    # Match files like YYYY_MM_DD.log/YYYY_MM_DD.json or YYYY_MM_DD.log.X/YYYY_MM_DD.json.X
-    pattern = re.compile(rf"^{re.escape(date_formatted)}\.(?:log|json)(?:\.\d+)?$")
-    
+    service_upper = (service or "ALL").upper()
     matching_files = []
-    for f in os.listdir(base_path):
-        if pattern.match(f):
-            matching_files.append(os.path.join(base_path, f))
-            
-    # Sort files chronologically by modification time (oldest first)
-    matching_files.sort(key=os.path.getmtime)
+
+    date_pattern = re.compile(rf"^(?:[a-zA-Z0-9_\-]*?_)?{re.escape(date_formatted)}\.(?:log|json)(?:\.\d+)?$", re.IGNORECASE)
+
+    def scan_dir(dir_path, svc_tag):
+        if os.path.exists(dir_path):
+            for f in os.listdir(dir_path):
+                filepath = os.path.join(dir_path, f)
+                if os.path.isfile(filepath):
+                    if date_pattern.match(f) or f.endswith(".log") or f.endswith(".json"):
+                        if (filepath, svc_tag) not in matching_files:
+                            matching_files.append((filepath, svc_tag))
+
+    service_map = {
+        "API": (["API", "api", "HEAppE"], []),
+        "DATASTAGING": (["DataStaging-API", "DataStaging", "DataStagingAPI", "datastaging", "datastagingapi", "DataStaging_API"], []),
+        "RATELIMIT-API": (["RateLimit-API", "ratelimit-api", "RateLimit_API"], []),
+        "RATELIMIT-DATASTAGING": (["RateLimit-DataStaging", "ratelimit-datastaging", "RateLimit_DataStaging"], []),
+        "VAULT": (["Vault", "vault"], []),
+        "DEPLOY": ([], ["deploy.log"]),
+        "UPDATE": ([], ["update.log"]),
+    }
+
+    if service_upper == "ALL":
+        target_services = list(service_map.keys())
+    elif service_upper in service_map:
+        target_services = [service_upper]
+    else:
+        target_services = [service_upper]
+        service_map[service_upper] = ([service], [])
+
+    for s in target_services:
+        folders, root_files = service_map.get(s, ([s], []))
+        for folder in folders:
+            scan_dir(os.path.join(base_logs_dir, folder), s)
+        for root_file in root_files:
+            filepath = os.path.join(base_logs_dir, root_file)
+            if os.path.exists(filepath) and os.path.isfile(filepath):
+                if (filepath, s) not in matching_files:
+                    matching_files.append((filepath, s))
+
+    if service_upper == "ALL":
+        for entry in os.listdir(base_logs_dir):
+            full_path = os.path.join(base_logs_dir, entry)
+            if os.path.isdir(full_path):
+                tag_name = entry.upper()
+                scan_dir(full_path, tag_name)
+            elif os.path.isfile(full_path) and (entry.endswith(".log") or entry.endswith(".json")):
+                file_tag = entry.rsplit(".", 1)[0].upper()
+                if (full_path, file_tag) not in matching_files:
+                    matching_files.append((full_path, file_tag))
+
+    matching_files.sort(key=lambda x: os.path.getmtime(x[0]))
     return matching_files
 
 
-def get_log_file_path(instance, date_str):
-    paths = get_log_file_paths(instance, date_str)
+def get_log_file_path(instance, date_str, service="ALL"):
+    paths = get_log_file_paths(instance, date_str, service=service)
     if paths:
-        return paths[-1]
+        return paths[-1][0] if isinstance(paths[-1], tuple) else paths[-1]
     return None
 
 
@@ -1526,8 +1588,9 @@ def log_viewer_view(request):
     time_to = request.GET.get('time_to', '')
     search_query = request.GET.get('search', '').lower()
     level_filter = request.GET.get('level', '').upper()
+    service_filter = request.GET.get('service', 'ALL').upper()
 
-    log_paths = get_log_file_paths(instance, selected_date)
+    log_paths = get_log_file_paths(instance, selected_date, service=service_filter)
     
     try:
         entries = list(get_log_entries_backwards(
@@ -1543,6 +1606,7 @@ def log_viewer_view(request):
         entries = [{
             'timestamp_str': None,
             'level': 'ERROR',
+            'service': 'API',
             'content': f"Error reading logs: {str(e)}"
         }]
 
@@ -1556,6 +1620,7 @@ def log_viewer_view(request):
         'time_to': time_to,
         'search_query': search_query,
         'level_filter': level_filter,
+        'service_filter': service_filter,
         'instance': instance
     })
 
@@ -1564,7 +1629,7 @@ def log_viewer_view(request):
 def fetch_new_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
     today = datetime.now().strftime('%Y-%m-%d')
-    log_path = get_log_file_path(instance, today)
+    service_filter = request.GET.get('service', 'ALL').upper()
     level_filter = request.GET.get('level', '').upper()
     search_query = request.GET.get('search', '').lower()
 
@@ -1573,74 +1638,76 @@ def fetch_new_logs(request):
     except ValueError:
         offset = 0
 
-    if not log_path or not os.path.exists(log_path):
+    log_paths = get_log_file_paths(instance, today, service=service_filter)
+
+    if not log_paths:
         return JsonResponse({'entries': [], 'offset': offset})
 
-    file_size = os.path.getsize(log_path)
+    new_entries = []
+    max_offset = offset
+
+    for item in log_paths:
+        log_path = item[0] if isinstance(item, tuple) else item
+        svc_tag = item[1] if isinstance(item, tuple) else 'API'
+
+        if not os.path.exists(log_path):
+            continue
+
+        file_size = os.path.getsize(log_path)
+        if offset == -1:
+            max_offset = max(max_offset, file_size)
+            continue
+
+        read_offset = 0 if offset > file_size else offset
+
+        with open(log_path, 'rb') as f:
+            f.seek(read_offset)
+            chunk = f.read()
+            max_offset = max(max_offset, f.tell())
+
+        if chunk:
+            decoded = chunk.decode('utf-8', errors='ignore')
+            lines = decoded.splitlines(keepends=True)
+
+            is_json = log_path.endswith('.json') or '.json.' in os.path.basename(log_path)
+
+            if is_json:
+                for line in lines:
+                    line_stripped = line.strip()
+                    if not line_stripped:
+                        continue
+                    parsed = parse_json_log_line(line_stripped, service=svc_tag)
+                    if parsed and matches_filters(parsed, level_filter, search_query, None, None):
+                        new_entries.append(parsed)
+            else:
+                current_entry_lines = []
+                timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+
+                for line in lines:
+                    if timestamp_re.search(line[:30]):
+                        if current_entry_lines:
+                            entry_text = "".join(current_entry_lines)
+                            parsed = parse_log_line(entry_text, service=svc_tag)
+                            if matches_filters(parsed, level_filter, search_query, None, None):
+                                new_entries.append(parsed)
+                        current_entry_lines = [line]
+                    else:
+                        current_entry_lines.append(line)
+
+                if current_entry_lines:
+                    entry_text = "".join(current_entry_lines)
+                    parsed = parse_log_line(entry_text, service=svc_tag)
+                    if matches_filters(parsed, level_filter, search_query, None, None):
+                        new_entries.append(parsed)
 
     if offset == -1:
-        return JsonResponse({'entries': [], 'offset': file_size})
+        return JsonResponse({'entries': [], 'offset': max_offset})
 
-    if offset > file_size:
-        offset = 0
+    new_entries.sort(key=lambda x: x.get('timestamp_str') or '')
 
-    new_entries = []
-    
-    with open(log_path, 'rb') as f:
-        f.seek(offset)
-        chunk = f.read()
-        new_offset = f.tell()
-        
-    if chunk:
-        # Step back the reading offset if the last read line is incomplete
-        if not chunk.endswith(b'\n') and not chunk.endswith(b'\r'):
-            last_newline_idx = max(chunk.rfind(b'\n'), chunk.rfind(b'\r'))
-            if last_newline_idx != -1:
-                incomplete_bytes_len = len(chunk) - (last_newline_idx + 1)
-                chunk = chunk[:last_newline_idx + 1]
-                new_offset -= incomplete_bytes_len
-            else:
-                chunk = b''
-                new_offset = offset
-
-    if chunk:
-        decoded = chunk.decode('utf-8', errors='ignore')
-        lines = decoded.splitlines(keepends=True)
-        
-        is_json = log_path.endswith('.json') or '.json.' in os.path.basename(log_path)
-        
-        if is_json:
-            for line in lines:
-                line_stripped = line.strip()
-                if not line_stripped:
-                    continue
-                parsed = parse_json_log_line(line_stripped)
-                if parsed and matches_filters(parsed, level_filter, search_query, None, None):
-                    new_entries.append(parsed)
-        else:
-            current_entry_lines = []
-            timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
-            
-            for line in lines:
-                if timestamp_re.search(line[:30]):
-                    if current_entry_lines:
-                        entry_text = "".join(current_entry_lines)
-                        parsed = parse_log_line(entry_text)
-                        if matches_filters(parsed, level_filter, search_query, None, None):
-                            new_entries.append(parsed)
-                    current_entry_lines = [line]
-                else:
-                    current_entry_lines.append(line)
-                    
-            if current_entry_lines:
-                entry_text = "".join(current_entry_lines)
-                parsed = parse_log_line(entry_text)
-                if matches_filters(parsed, level_filter, search_query, None, None):
-                    new_entries.append(parsed)
-                    
     return JsonResponse({
         'entries': new_entries,
-        'offset': new_offset
+        'offset': max_offset
     })
 
 @login_required
@@ -1725,6 +1792,24 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
     project_data = None
     adaptor_users_in_project = []
     available_users = []
+    all_adaptor_users = []
+
+    try:
+        raw_adaptor_users = controller.heappe_management_adaptor_users_get(SessionCode=session_code)
+        all_adaptor_users = [u.to_dict() for u in raw_adaptor_users] if raw_adaptor_users else []
+    except Exception as e:
+        print(f"Error fetching adaptor users: {e}")
+
+    for u in all_adaptor_users:
+        proj_roles = []
+        for group in u.get("adaptor_user_groups", []) or []:
+            g_proj = group.get("project")
+            pname = g_proj.get("name") if g_proj else None
+            for r in group.get("roles", []):
+                role_str = f"{pname} ({r})" if pname else str(r)
+                if role_str not in proj_roles:
+                    proj_roles.append(role_str)
+        u["proj_roles"] = proj_roles
 
     if project_id:
         project_data = next((p for p in all_projects if p['id'] == project_id), None)
@@ -1753,9 +1838,6 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
             except Exception as e:
                 print(f"Error fetching adaptor users in project: {e}")
 
-
-            all_adaptor_users = [u.to_dict() for u in
-                                 controller.heappe_management_adaptor_users_get(SessionCode=session_code)]
             existing_usernames = {u['username'] for u in adaptor_users_in_project}
             available_users = [u for u in all_adaptor_users if u['username'] not in existing_usernames]
 
@@ -1804,6 +1886,7 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
         "all_projects": all_projects,
         "adaptor_users": adaptor_users_in_project,
         "available_users": available_users,
+        "all_adaptor_users": all_adaptor_users,
         "roles_mapping": ADAPTOR_USER_STR_TO_INT
     })
 

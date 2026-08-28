@@ -1285,12 +1285,19 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import docker
 
-client = docker.from_env()
+def get_docker_client():
+    try:
+        return docker.from_env()
+    except Exception:
+        return None
 
 @login_required
 def handle_file_action(request, container_id, action):
     """Handle file operations in container."""
     try:
+        client = get_docker_client()
+        if not client:
+            return JsonResponse({'status': 'danger', 'message': 'Docker environment not accessible.'}, status=500)
         container = client.containers.get(container_id)
         if container.labels.get('com.docker.compose.project') != request.POST.get('instance_name'):
             return JsonResponse({'status': 'danger', 'message': 'Unauthorized access.'}, status=403)
