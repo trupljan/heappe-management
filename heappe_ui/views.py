@@ -476,14 +476,78 @@ def dashboard_jobs_distribution_partial(request: HttpRequest) -> HttpResponse:
 @login_required
 def dashboard_jobs_history_partial(request: HttpRequest) -> HttpResponse:
     context = {}
-    jr_controller = hp.JobReportingApi(request.api_instance)
+
+    job_states = request.GET.get('job_states', '').strip()
+    search = request.GET.get('search', '').strip()
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except (ValueError, TypeError):
+        page = 1
 
     try:
-        # Set default time range: TimeTo=Now, TimeFrom=Now-1day (using UTC timezone-aware datetimes)
+        limit = max(1, int(request.GET.get('limit', 10)))
+    except (ValueError, TypeError):
+        limit = 10
+
+    offset = (page - 1) * limit
+
+    context["job_states"] = job_states
+    context["search"] = search
+    context["page"] = page
+    context["limit"] = limit
+
+    # Check HEAppE Core version (ListDetailedJobsForAdmin requires >= 6.5.0)
+    use_admin_api = False
+    try:
+        health_api = hp.HealthApi(request.api_instance)
+        health_info = health_api.heappe_health_get()
+        current_version = health_info.version.lstrip("vV") if health_info and getattr(health_info, 'version', None) else "0.0.0"
+        if clean_ver(current_version) >= clean_ver("6.5.0"):
+            use_admin_api = True
+    except Exception as e:
+        print(f"[dashboard_jobs_history] Version check error: {e}")
+        use_admin_api = False
+
+    if use_admin_api:
+        try:
+            jm_api = hp.JobManagementApi(request.api_instance)
+            kwargs = {
+                'session_code': request.session_code,
+                'limit': limit,
+                'offset': offset,
+            }
+            if job_states:
+                kwargs['job_states'] = job_states
+            if search:
+                kwargs['search'] = search
+
+            res = jm_api.heappe_job_management_list_detailed_jobs_for_admin_get(**kwargs)
+            
+            items = getattr(res, 'items', []) or []
+            total_count = getattr(res, 'total_count', 0) or 0
+            
+            import math
+            total_pages = max(1, math.ceil(total_count / limit)) if total_count > 0 else 1
+
+            context["job_details"] = items
+            context["total_count"] = total_count
+            context["total_pages"] = total_pages
+            context["has_previous"] = page > 1
+            context["has_next"] = page < total_pages
+            context["previous_page_number"] = page - 1
+            context["next_page_number"] = page + 1
+            context["page_range"] = list(range(1, total_pages + 1))
+            context["is_admin_api"] = True
+            return render(request, "partials/dashboard_jobs_history.html", context)
+        except Exception as e:
+            print(f"[dashboard_jobs_history] ListDetailedJobsForAdmin failed: {e}. Falling back to legacy JobReportingApi.")
+
+    # Legacy fallback logic using JobReportingApi
+    jr_controller = hp.JobReportingApi(request.api_instance)
+    try:
         time_to_str = request.GET.get('time_to', datetime.now(dt_timezone.utc).isoformat())
         time_from_str = request.GET.get('time_from', (datetime.now(dt_timezone.utc) - timedelta(days=1)).isoformat())
 
-        # Convert string dates to datetime if needed by API, ensuring they are timezone-aware in UTC
         try:
             time_to = datetime.fromisoformat(time_to_str)
             if time_to.tzinfo is None:
@@ -495,7 +559,6 @@ def dashboard_jobs_history_partial(request: HttpRequest) -> HttpResponse:
             time_to = datetime.now(dt_timezone.utc)
             time_from = datetime.now(dt_timezone.utc) - timedelta(days=1)
 
-        # Enforce maximum scope of 90 days back and maximum range of 90 days
         now = datetime.now(dt_timezone.utc)
         min_allowed_date = now - timedelta(days=90)
 
@@ -512,11 +575,9 @@ def dashboard_jobs_history_partial(request: HttpRequest) -> HttpResponse:
         if (time_to - time_from) > timedelta(days=90):
             time_from = time_to - timedelta(days=90)
 
-        # Store for template
         context["time_to"] = time_to.strftime('%Y-%m-%dT%H:%M')
         context["time_from"] = time_from.strftime('%Y-%m-%dT%H:%M')
 
-        # Get job details from API with date filters
         job_details_raw = jr_controller.heappe_job_reporting_jobs_detailed_report_get(
             SessionCode=request.session_code,
             TimeFrom=time_from,
@@ -538,21 +599,32 @@ def dashboard_jobs_history_partial(request: HttpRequest) -> HttpResponse:
                         for job_item in node_type.jobs:
                             if job_item and getattr(job_item, 'id', None) is not None:
                                 if job_item.id not in seen_job_ids:
+                                    if job_states:
+                                        allowed_states = [int(s) for s in job_states.split(',') if s.strip().isdigit()]
+                                        if getattr(job_item, 'state', None) not in allowed_states:
+                                            continue
+                                    if search:
+                                        job_name = str(getattr(job_item, 'name', '') or '').lower()
+                                        job_id = str(getattr(job_item, 'id', '') or '').lower()
+                                        if search.lower() not in job_name and search.lower() not in job_id:
+                                            continue
                                     seen_job_ids.add(job_item.id)
                                     all_jobs.append(job_item)
         all_jobs.sort(key=lambda x: x.id or 0, reverse=True)
 
-        # Paginator
-        paginator = Paginator(all_jobs, 10)  # 10 jobs per page
-        page_number = request.GET.get('page', 1)
-        page_obj = paginator.get_page(page_number)
+        paginator = Paginator(all_jobs, limit)
+        page_obj = paginator.get_page(page)
 
         context["job_details"] = page_obj.object_list
         context["page_obj"] = page_obj
+        context["total_count"] = len(all_jobs)
+        context["is_admin_api"] = False
     except Exception as e:
         print(f"Error fetching job details: {e}")
         context["job_details"] = []
         context["page_obj"] = None
+        context["total_count"] = 0
+        context["is_admin_api"] = False
 
     return render(request, "partials/dashboard_jobs_history.html", context)
 
