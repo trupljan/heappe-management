@@ -6,12 +6,12 @@
         <table class="table table-hover align-middle mb-0" id="submittedJobsTable">
             <thead class="table-light">
                 <tr style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em;">
-                    <th class="ps-4 text-secondary py-3" style="width: 25%;">Job Name &amp; ID</th>
+                    <th class="ps-4 text-secondary py-3" style="width: 22%;">Job Name &amp; ID</th>
                     <th class="text-secondary py-3" style="width: 12%;">State</th>
                     <th class="text-secondary py-3" style="width: 20%;">Submitter</th>
-                    <th class="text-secondary py-3" style="width: 15%;">HPC Account</th>
-                    <th class="text-secondary py-3" style="width: 18%;">Project</th>
-                    <th class="text-secondary py-3" style="width: 10%;">Tasks</th>
+                    <th class="text-secondary py-3" style="width: 14%;">HPC Account</th>
+                    <th class="text-secondary py-3" style="width: 14%;">Project</th>
+                    <th class="text-secondary py-3" style="width: 8%;">Tasks</th>
                     <th class="text-end pe-4 text-secondary py-3" style="width: 10%;">Actions</th>
                 </tr>
             </thead>
@@ -113,287 +113,6 @@
                         </div>
                     </td>
                 </tr>
-
-                <!-- Job Detail Modal (Redesigned with Admin & Task Parameters) -->
-                <div class="modal fade" id="jobModal{{ job_item.id }}" tabindex="-1" aria-labelledby="jobModalLabel{{ job_item.id }}" aria-hidden="true">
-                    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
-                        <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
-                            <div class="modal-header bg-white border-bottom py-3 px-4">
-                                <h5 class="modal-title fw-bold text-dark d-flex align-items-center" id="jobModalLabel{{ job_item.id }}">
-                                    <i class="bi bi-info-circle text-primary me-2 fs-5"></i>
-                                    Job Details
-                                    <span class="text-muted font-monospace small ms-2 bg-light border px-2 py-0.5 rounded">#{{ job_item.id }}</span>
-                                </h5>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                            </div>
-                            <div class="modal-body p-4">
-                                <!-- Metadata Grid -->
-                                <div class="bg-light p-3.5 rounded-3 border border-light-subtle mb-4">
-                                    <div class="row g-3">
-                                        <!-- Column 1: Core Job Info -->
-                                        <div class="col-md-4 d-flex flex-column gap-2 border-end pe-3">
-                                            <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
-                                                <i class="bi bi-card-checklist text-primary me-1"></i>Basic Information
-                                            </h6>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Job Name:</span>
-                                                <span class="fw-bold text-dark text-end" style="font-size: 0.85rem;">{{ job_item.name }}</span>
-                                            </div>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">State:</span>
-                                                <div>
-                                                    {% if job_item.state == 1 %}<span class="badge bg-secondary-subtle text-secondary border">Configuring</span>
-                                                    {% elif job_item.state == 2 %}<span class="badge bg-info-subtle text-info border">Submitted</span>
-                                                    {% elif job_item.state == 4 %}<span class="badge bg-primary-subtle text-primary border">Queued</span>
-                                                    {% elif job_item.state == 8 %}<span class="badge bg-warning-subtle text-warning-emphasis border">Running</span>
-                                                    {% elif job_item.state == 16 %}<span class="badge bg-success-subtle text-success border">Finished</span>
-                                                    {% elif job_item.state == 32 %}<span class="badge bg-danger-subtle text-danger border">Failed</span>
-                                                    {% elif job_item.state == 64 %}<span class="badge bg-dark-subtle text-dark border">Canceled</span>
-                                                    {% elif job_item.state == 128 %}<span class="badge bg-secondary-subtle text-secondary border">Waiting</span>
-                                                    {% elif job_item.state == 256 %}<span class="badge bg-secondary-subtle text-secondary border">Deleted</span>
-                                                    {% else %}<span class="badge bg-secondary-subtle text-secondary border">{{ job_item.state }}</span>
-                                                    {% endif %}
-                                                </div>
-                                            </div>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Creation Time:</span>
-                                                <span class="text-dark small text-end">{{ job_item.creation_time|format_datetime|default:"N/A" }}</span>
-                                            </div>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Start Time:</span>
-                                                <span class="text-dark small text-end">{{ job_item.start_time|format_datetime|default:"N/A" }}</span>
-                                            </div>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">End Time:</span>
-                                                <span class="text-dark small text-end">{{ job_item.end_time|format_datetime|default:"N/A" }}</span>
-                                            </div>
-                                        </div>
-
-                                        <!-- Column 2: Submitter & HPC Account -->
-                                        <div class="col-md-4 d-flex flex-column gap-2 border-end px-3">
-                                            <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
-                                                <i class="bi bi-person-badge text-primary me-1"></i>Submitter &amp; HPC Account
-                                            </h6>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Submitter:</span>
-                                                <span class="fw-semibold text-dark font-monospace small text-end">{{ job_item.submitter.username|default:job_item.submitter|default:"N/A" }}</span>
-                                            </div>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Email:</span>
-                                                <span class="text-dark small text-end text-break" style="max-width: 65%;">{{ job_item.submitter.email|default:"N/A" }}</span>
-                                            </div>
-                                            {% if job_item.submitter.idp_sid %}
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">IDP SID:</span>
-                                                <span class="font-monospace text-muted text-end text-break" style="font-size: 0.72rem; max-width: 65%;">{{ job_item.submitter.idp_sid }}</span>
-                                            </div>
-                                            {% endif %}
-                                            <div class="d-flex justify-content-between align-items-center mt-1">
-                                                <span class="text-muted small">HPC Username:</span>
-                                                <span class="badge bg-dark bg-opacity-10 text-dark border font-monospace">{{ job_item.cluster_username|default:"N/A" }}</span>
-                                            </div>
-                                            {% if job_item.cluster_authentication_type %}
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">HPC Auth Type:</span>
-                                                <span class="text-dark small text-end">{{ job_item.cluster_authentication_type }}</span>
-                                            </div>
-                                            {% endif %}
-                                        </div>
-
-                                        <!-- Column 3: Project & Reservation -->
-                                        <div class="col-md-4 d-flex flex-column gap-2 ps-3">
-                                            <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
-                                                <i class="bi bi-folder2-open text-primary me-1"></i>Project &amp; Reservation
-                                            </h6>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Project:</span>
-                                                <span class="fw-semibold text-dark small text-end">{{ job_item.project_name|default:job_item.project_id|default:"N/A" }}</span>
-                                            </div>
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">SubProject ID:</span>
-                                                <span class="text-dark small text-end">{{ job_item.sub_project_identifier|default:"N/A" }}</span>
-                                            </div>
-                                            {% if job_item.reservation %}
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Reservation:</span>
-                                                <span class="badge bg-warning bg-opacity-20 text-warning-emphasis border font-monospace">{{ job_item.reservation }}</span>
-                                            </div>
-                                            {% endif %}
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Total Tasks:</span>
-                                                <span class="badge bg-light text-secondary border fw-bold">{{ job_item.tasks|length }}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Tasks Checklist Section -->
-                                <h6 class="fw-bold text-dark mb-3 d-flex align-items-center">
-                                    <i class="bi bi-cpu text-primary me-2 fs-5"></i>Tasks &amp; Submitted Template Parameters
-                                </h6>
-
-                                <div class="accordion" id="tasksAccordion{{ job_item.id }}">
-                                    {% for task in job_item.tasks %}
-                                    <div class="accordion-item mb-2 border border-light-subtle rounded-3 overflow-hidden shadow-sm">
-                                        <h2 class="accordion-header" id="headingTask{{ task.id }}">
-                                            <button class="accordion-button {% if not forloop.first %}collapsed{% endif %} bg-white py-2.5 px-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTask{{ task.id }}" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" aria-controls="collapseTask{{ task.id }}">
-                                                <div class="d-flex align-items-center justify-content-between w-100 me-3">
-                                                    <div class="d-flex align-items-center gap-2">
-                                                        <strong class="text-dark me-1">{{ task.name }}</strong>
-                                                        <span class="text-muted font-monospace small bg-light border px-1.5 py-0.5 rounded" style="font-size: 0.72rem;">ID: {{ task.id }}</span>
-                                                    </div>
-                                                    <div>
-                                                        {% if task.state == 1 %}<span class="badge bg-secondary-subtle text-secondary border">Configuring</span>
-                                                        {% elif task.state == 2 %}<span class="badge bg-info-subtle text-info border">Submitted</span>
-                                                        {% elif task.state == 4 %}<span class="badge bg-primary-subtle text-primary border">Queued</span>
-                                                        {% elif task.state == 8 %}<span class="badge bg-warning-subtle text-warning-emphasis border">Running</span>
-                                                        {% elif task.state == 16 %}<span class="badge bg-success-subtle text-success border">Finished</span>
-                                                        {% elif task.state == 32 %}<span class="badge bg-danger-subtle text-danger border">Failed</span>
-                                                        {% elif task.state == 64 %}<span class="badge bg-dark-subtle text-dark border">Canceled</span>
-                                                        {% elif task.state == 128 %}<span class="badge bg-secondary-subtle text-secondary border">Waiting</span>
-                                                        {% elif task.state == 256 %}<span class="badge bg-secondary-subtle text-secondary border">Deleted</span>
-                                                        {% else %}<span class="badge bg-secondary-subtle text-secondary border">{{ task.state }}</span>
-                                                        {% endif %}
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        </h2>
-                                        <div id="collapseTask{{ task.id }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" aria-labelledby="headingTask{{ task.id }}" data-bs-parent="#tasksAccordion{{ job_item.id }}">
-                                            <div class="accordion-body p-3 bg-light bg-opacity-30">
-                                                
-                                                <!-- Resource Limits & Files summary -->
-                                                <div class="row g-3 mb-3">
-                                                    <!-- Resources -->
-                                                    <div class="col-md-6">
-                                                        <div class="card border border-light-subtle shadow-none h-100">
-                                                            <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
-                                                                <i class="bi bi-speedometer2 text-primary me-1"></i>TASK RESOURCES
-                                                            </div>
-                                                            <div class="card-body p-2.5" style="font-size: 0.78rem;">
-                                                                <div class="d-flex justify-content-between mb-1">
-                                                                    <span class="text-muted">CPU Cores (Min/Max):</span>
-                                                                    <span class="fw-semibold text-dark">{{ task.min_cores|default:"1" }} / {{ task.max_cores|default:"1" }}</span>
-                                                                </div>
-                                                                <div class="d-flex justify-content-between mb-1">
-                                                                    <span class="text-muted">GPU Cores / Nodes:</span>
-                                                                    <span class="fw-semibold text-dark">{{ task.gpu_cores|default:"0" }} / {{ task.gpu_nodes|default:"0" }}</span>
-                                                                </div>
-                                                                <div class="d-flex justify-content-between mb-1">
-                                                                    <span class="text-muted">Walltime Limit:</span>
-                                                                    <span class="fw-semibold text-dark">{{ task.walltime_limit|default:"-" }} s</span>
-                                                                </div>
-                                                                <div class="d-flex justify-content-between">
-                                                                    <span class="text-muted">Memory:</span>
-                                                                    <span class="fw-semibold text-dark">{{ task.memory|default:"-" }} MB</span>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    <!-- Task Files -->
-                                                    <div class="col-md-6">
-                                                        <div class="card border border-light-subtle shadow-none h-100">
-                                                            <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
-                                                                <i class="bi bi-file-earmark-code text-primary me-1"></i>FILES &amp; DIRECTORY
-                                                            </div>
-                                                            <div class="card-body p-2.5 font-monospace" style="font-size: 0.75rem;">
-                                                                <div class="text-truncate mb-1" title="Standard Input File">
-                                                                    <span class="text-muted">StdIn:</span> {{ task.standard_input_file|default:"-" }}
-                                                                </div>
-                                                                <div class="text-truncate mb-1" title="Standard Output File">
-                                                                    <span class="text-muted">StdOut:</span> {{ task.standard_output_file|default:"-" }}
-                                                                </div>
-                                                                <div class="text-truncate mb-1" title="Standard Error File">
-                                                                    <span class="text-muted">StdErr:</span> {{ task.standard_error_file|default:"-" }}
-                                                                </div>
-                                                                <div class="text-truncate" title="Cluster Subdirectory">
-                                                                    <span class="text-muted">Subdir:</span> {{ task.cluster_task_subdirectory|default:"-" }}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Submitted Template Parameters (TemplateParameterValues) -->
-                                                <div class="card border border-light-subtle shadow-none mb-3">
-                                                    <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
-                                                        <span class="fw-bold text-dark small"><i class="bi bi-sliders text-primary me-1.5"></i>Submitted Template Parameters (TemplateParameterValues)</span>
-                                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle" style="font-size: 0.7rem;">{{ task.template_parameter_values|length }} items</span>
-                                                    </div>
-                                                    <div class="card-body p-0">
-                                                        {% if task.template_parameter_values %}
-                                                        <div class="table-responsive">
-                                                            <table class="table table-sm table-striped mb-0" style="font-size: 0.78rem;">
-                                                                <thead class="table-light">
-                                                                    <tr>
-                                                                        <th class="ps-3" style="width: 40%;">CommandParameterIdentifier</th>
-                                                                        <th class="pe-3" style="width: 60%;">ParameterValue</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {% for param in task.template_parameter_values %}
-                                                                    <tr>
-                                                                        <td class="ps-3 font-monospace fw-semibold text-primary">{{ param.command_parameter_identifier }}</td>
-                                                                        <td class="pe-3 font-monospace text-dark text-break">{{ param.parameter_value }}</td>
-                                                                    </tr>
-                                                                    {% endfor %}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                        {% else %}
-                                                        <div class="p-3 text-center text-muted small">
-                                                            No template parameters submitted for this task.
-                                                        </div>
-                                                        {% endif %}
-                                                    </div>
-                                                </div>
-
-                                                <!-- Environment variables (EnvironmentVariables) -->
-                                                <div class="card border border-light-subtle shadow-none">
-                                                    <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
-                                                        <span class="fw-bold text-dark small"><i class="bi bi-terminal-split text-primary me-1.5"></i>Environment Variables (EnvironmentVariables)</span>
-                                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle" style="font-size: 0.7rem;">{{ task.environment_variables|length }} items</span>
-                                                    </div>
-                                                    <div class="card-body p-0">
-                                                        {% if task.environment_variables %}
-                                                        <div class="table-responsive">
-                                                            <table class="table table-sm table-striped mb-0" style="font-size: 0.78rem;">
-                                                                <thead class="table-light">
-                                                                    <tr>
-                                                                        <th class="ps-3" style="width: 40%;">Variable Name (Name)</th>
-                                                                        <th class="pe-3" style="width: 60%;">Value</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    {% for env_var in task.environment_variables %}
-                                                                    <tr>
-                                                                        <td class="ps-3 font-monospace fw-semibold text-dark">{{ env_var.name }}</td>
-                                                                        <td class="pe-3 font-monospace text-muted text-break">{{ env_var.value }}</td>
-                                                                    </tr>
-                                                                    {% endfor %}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                        {% else %}
-                                                        <div class="p-3 text-center text-muted small">
-                                                            No environment variables defined for this task.
-                                                        </div>
-                                                        {% endif %}
-                                                    </div>
-                                                </div>
-
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            <div class="modal-footer bg-light border-top">
-                                <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Close</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 {% empty %}
                 <tr>
                     <td colspan="7" class="text-center py-5 text-muted">
@@ -405,6 +124,289 @@
             </tbody>
         </table>
     </div>
+
+    <!-- Modals Container (Placed outside <table> for valid HTML syntax) -->
+    {% for job_item in job_details %}
+    <div class="modal fade" id="jobModal{{ job_item.id }}" tabindex="-1" aria-labelledby="jobModalLabel{{ job_item.id }}" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+                <div class="modal-header bg-white border-bottom py-3 px-4">
+                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center" id="jobModalLabel{{ job_item.id }}">
+                        <i class="bi bi-info-circle text-primary me-2 fs-5"></i>
+                        Job Details
+                        <span class="text-muted font-monospace small ms-2 bg-light border px-2 py-0.5 rounded">#{{ job_item.id }}</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <!-- Metadata Grid -->
+                    <div class="bg-light p-3.5 rounded-3 border border-light-subtle mb-4">
+                        <div class="row g-3">
+                            <!-- Column 1: Core Job Info -->
+                            <div class="col-md-4 d-flex flex-column gap-2 border-end pe-3">
+                                <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
+                                    <i class="bi bi-card-checklist text-primary me-1"></i>Basic Information
+                                </h6>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">Job Name:</span>
+                                    <span class="fw-bold text-dark text-end" style="font-size: 0.85rem;">{{ job_item.name }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">State:</span>
+                                    <div>
+                                        {% if job_item.state == 1 %}<span class="badge bg-secondary-subtle text-secondary border">Configuring</span>
+                                        {% elif job_item.state == 2 %}<span class="badge bg-info-subtle text-info border">Submitted</span>
+                                        {% elif job_item.state == 4 %}<span class="badge bg-primary-subtle text-primary border">Queued</span>
+                                        {% elif job_item.state == 8 %}<span class="badge bg-warning-subtle text-warning-emphasis border">Running</span>
+                                        {% elif job_item.state == 16 %}<span class="badge bg-success-subtle text-success border">Finished</span>
+                                        {% elif job_item.state == 32 %}<span class="badge bg-danger-subtle text-danger border">Failed</span>
+                                        {% elif job_item.state == 64 %}<span class="badge bg-dark-subtle text-dark border">Canceled</span>
+                                        {% elif job_item.state == 128 %}<span class="badge bg-secondary-subtle text-secondary border">Waiting</span>
+                                        {% elif job_item.state == 256 %}<span class="badge bg-secondary-subtle text-secondary border">Deleted</span>
+                                        {% else %}<span class="badge bg-secondary-subtle text-secondary border">{{ job_item.state }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">Creation Time:</span>
+                                    <span class="text-dark small text-end">{{ job_item.creation_time|format_datetime|default:"N/A" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">Start Time:</span>
+                                    <span class="text-dark small text-end">{{ job_item.start_time|format_datetime|default:"N/A" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">End Time:</span>
+                                    <span class="text-dark small text-end">{{ job_item.end_time|format_datetime|default:"N/A" }}</span>
+                                </div>
+                            </div>
+
+                            <!-- Column 2: Submitter & HPC Account -->
+                            <div class="col-md-4 d-flex flex-column gap-2 border-end px-3">
+                                <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
+                                    <i class="bi bi-person-badge text-primary me-1"></i>Submitter &amp; HPC Account
+                                </h6>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">Submitter:</span>
+                                    <span class="fw-semibold text-dark font-monospace small text-end">{{ job_item.submitter.username|default:job_item.submitter|default:"N/A" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">Email:</span>
+                                    <span class="text-dark small text-end text-break" style="max-width: 65%;">{{ job_item.submitter.email|default:"N/A" }}</span>
+                                </div>
+                                {% if job_item.submitter.idp_sid %}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">IDP SID:</span>
+                                    <span class="font-monospace text-muted text-end text-break" style="font-size: 0.72rem; max-width: 65%;">{{ job_item.submitter.idp_sid }}</span>
+                                </div>
+                                {% endif %}
+                                <div class="d-flex justify-content-between align-items-center mt-1">
+                                    <span class="text-muted small">HPC Username:</span>
+                                    <span class="badge bg-dark bg-opacity-10 text-dark border font-monospace">{{ job_item.cluster_username|default:"N/A" }}</span>
+                                </div>
+                                {% if job_item.cluster_authentication_type %}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">HPC Auth Type:</span>
+                                    <span class="text-dark small text-end">{{ job_item.cluster_authentication_type }}</span>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Column 3: Project & Reservation -->
+                            <div class="col-md-4 d-flex flex-column gap-2 ps-3">
+                                <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
+                                    <i class="bi bi-folder2-open text-primary me-1"></i>Project &amp; Reservation
+                                </h6>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">Project:</span>
+                                    <span class="fw-semibold text-dark small text-end">{{ job_item.project_name|default:job_item.project_id|default:"N/A" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">SubProject ID:</span>
+                                    <span class="text-dark small text-end">{{ job_item.sub_project_identifier|default:"N/A" }}</span>
+                                </div>
+                                {% if job_item.reservation %}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">Reservation:</span>
+                                    <span class="badge bg-warning bg-opacity-20 text-warning-emphasis border font-monospace">{{ job_item.reservation }}</span>
+                                </div>
+                                {% endif %}
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="text-muted small">Total Tasks:</span>
+                                    <span class="badge bg-light text-secondary border fw-bold">{{ job_item.tasks|length }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tasks Checklist Section -->
+                    <h6 class="fw-bold text-dark mb-3 d-flex align-items-center">
+                        <i class="bi bi-cpu text-primary me-2 fs-5"></i>Tasks &amp; Submitted Template Parameters
+                    </h6>
+
+                    <div class="accordion" id="tasksAccordion{{ job_item.id }}">
+                        {% for task in job_item.tasks %}
+                        <div class="accordion-item mb-2 border border-light-subtle rounded-3 overflow-hidden shadow-sm">
+                            <h2 class="accordion-header" id="headingTask{{ task.id }}">
+                                <button class="accordion-button {% if not forloop.first %}collapsed{% endif %} bg-white py-2.5 px-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTask{{ task.id }}" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" aria-controls="collapseTask{{ task.id }}">
+                                    <div class="d-flex align-items-center justify-content-between w-100 me-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <strong class="text-dark me-1">{{ task.name }}</strong>
+                                            <span class="text-muted font-monospace small bg-light border px-1.5 py-0.5 rounded" style="font-size: 0.72rem;">ID: {{ task.id }}</span>
+                                        </div>
+                                        <div>
+                                            {% if task.state == 1 %}<span class="badge bg-secondary-subtle text-secondary border">Configuring</span>
+                                            {% elif task.state == 2 %}<span class="badge bg-info-subtle text-info border">Submitted</span>
+                                            {% elif task.state == 4 %}<span class="badge bg-primary-subtle text-primary border">Queued</span>
+                                            {% elif task.state == 8 %}<span class="badge bg-warning-subtle text-warning-emphasis border">Running</span>
+                                            {% elif task.state == 16 %}<span class="badge bg-success-subtle text-success border">Finished</span>
+                                            {% elif task.state == 32 %}<span class="badge bg-danger-subtle text-danger border">Failed</span>
+                                            {% elif task.state == 64 %}<span class="badge bg-dark-subtle text-dark border">Canceled</span>
+                                            {% elif task.state == 128 %}<span class="badge bg-secondary-subtle text-secondary border">Waiting</span>
+                                            {% elif task.state == 256 %}<span class="badge bg-secondary-subtle text-secondary border">Deleted</span>
+                                            {% else %}<span class="badge bg-secondary-subtle text-secondary border">{{ task.state }}</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </button>
+                            </h2>
+                            <div id="collapseTask{{ task.id }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" aria-labelledby="headingTask{{ task.id }}" data-bs-parent="#tasksAccordion{{ job_item.id }}">
+                                <div class="accordion-body p-3 bg-light bg-opacity-30">
+                                    
+                                    <!-- Resource Limits & Files summary -->
+                                    <div class="row g-3 mb-3">
+                                        <!-- Resources -->
+                                        <div class="col-md-6">
+                                            <div class="card border border-light-subtle shadow-none h-100">
+                                                <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-speedometer2 text-primary me-1"></i>TASK RESOURCES
+                                                </div>
+                                                <div class="card-body p-2.5" style="font-size: 0.78rem;">
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">CPU Cores (Min/Max):</span>
+                                                        <span class="fw-semibold text-dark">{{ task.min_cores|default:"1" }} / {{ task.max_cores|default:"1" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">GPU Cores / Nodes:</span>
+                                                        <span class="fw-semibold text-dark">{{ task.gpu_cores|default:"0" }} / {{ task.gpu_nodes|default:"0" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Walltime Limit:</span>
+                                                        <span class="fw-semibold text-dark">{{ task.walltime_limit|default:"-" }} s</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="text-muted">Memory:</span>
+                                                        <span class="fw-semibold text-dark">{{ task.memory|default:"-" }} MB</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Task Files -->
+                                        <div class="col-md-6">
+                                            <div class="card border border-light-subtle shadow-none h-100">
+                                                <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-file-earmark-code text-primary me-1"></i>FILES &amp; DIRECTORY
+                                                </div>
+                                                <div class="card-body p-2.5 font-monospace" style="font-size: 0.75rem;">
+                                                    <div class="text-truncate mb-1" title="Standard Input File">
+                                                        <span class="text-muted">StdIn:</span> {{ task.standard_input_file|default:"-" }}
+                                                    </div>
+                                                    <div class="text-truncate mb-1" title="Standard Output File">
+                                                        <span class="text-muted">StdOut:</span> {{ task.standard_output_file|default:"-" }}
+                                                    </div>
+                                                    <div class="text-truncate mb-1" title="Standard Error File">
+                                                        <span class="text-muted">StdErr:</span> {{ task.standard_error_file|default:"-" }}
+                                                    </div>
+                                                    <div class="text-truncate" title="Cluster Subdirectory">
+                                                        <span class="text-muted">Subdir:</span> {{ task.cluster_task_subdirectory|default:"-" }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Submitted Template Parameters (TemplateParameterValues) -->
+                                    <div class="card border border-light-subtle shadow-none mb-3">
+                                        <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
+                                            <span class="fw-bold text-dark small"><i class="bi bi-sliders text-primary me-1.5"></i>Submitted Template Parameters (TemplateParameterValues)</span>
+                                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle" style="font-size: 0.7rem;">{{ task.template_parameter_values|length }} items</span>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            {% if task.template_parameter_values %}
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-striped mb-0" style="font-size: 0.78rem;">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th class="ps-3" style="width: 40%;">CommandParameterIdentifier</th>
+                                                            <th class="pe-3" style="width: 60%;">ParameterValue</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for param in task.template_parameter_values %}
+                                                        <tr>
+                                                            <td class="ps-3 font-monospace fw-semibold text-primary">{{ param.command_parameter_identifier }}</td>
+                                                            <td class="pe-3 font-monospace text-dark text-break">{{ param.parameter_value }}</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            {% else %}
+                                            <div class="p-3 text-center text-muted small">
+                                                No template parameters submitted for this task.
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <!-- Environment variables (EnvironmentVariables) -->
+                                    <div class="card border border-light-subtle shadow-none">
+                                        <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
+                                            <span class="fw-bold text-dark small"><i class="bi bi-terminal-split text-primary me-1.5"></i>Environment Variables (EnvironmentVariables)</span>
+                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle" style="font-size: 0.7rem;">{{ task.environment_variables|length }} items</span>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            {% if task.environment_variables %}
+                                            <div class="table-responsive">
+                                                <table class="table table-sm table-striped mb-0" style="font-size: 0.78rem;">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th class="ps-3" style="width: 40%;">Variable Name (Name)</th>
+                                                            <th class="pe-3" style="width: 60%;">Value</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for env_var in task.environment_variables %}
+                                                        <tr>
+                                                            <td class="ps-3 font-monospace fw-semibold text-dark">{{ env_var.name }}</td>
+                                                            <td class="pe-3 font-monospace text-muted text-break">{{ env_var.value }}</td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            {% else %}
+                                            <div class="p-3 text-center text-muted small">
+                                                No environment variables defined for this task.
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top">
+                    <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
 
     <!-- Pagination Component -->
     {% if total_pages and total_pages > 1 %}
