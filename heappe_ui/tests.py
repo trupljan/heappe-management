@@ -810,6 +810,26 @@ class JobStatusViewTests(TestCase):
         self.assertIn(b"Execution State", response.content)
         self.assertIn(b"Changed Files", response.content)
 
+    def test_job_state_source_filters(self):
+        from heappe_ui.templatetags.custom_filters import get_job_state_source, get_job_state_updated_at
+
+        # Test dictionary formats
+        job_dict_0 = {"state_source": 0, "state_updated_at": "2026-08-31T09:00:00"}
+        job_dict_3 = {"state_source": 3, "StateUpdatedAt": "2026-08-31T09:10:00"}
+        
+        self.assertEqual(get_job_state_source(job_dict_0), "Standard")
+        self.assertEqual(get_job_state_source(job_dict_3), "DirectQuery")
+        self.assertEqual(get_job_state_updated_at(job_dict_0), "2026-08-31T09:00:00")
+        self.assertEqual(get_job_state_updated_at(job_dict_3), "2026-08-31T09:10:00")
+
+        # Test object format
+        class ObjJob:
+            state_source = 1
+            state_updated_at = "2026-08-31T09:20:00"
+
+        self.assertEqual(get_job_state_source(ObjJob()), "ServiceAccount")
+        self.assertEqual(get_job_state_updated_at(ObjJob()), "2026-08-31T09:20:00")
+
 
 class SubmitJobTests(TestCase):
     def setUp(self):

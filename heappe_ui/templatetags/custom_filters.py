@@ -72,6 +72,49 @@ def instance_links(instance_name):
         return {}
 
 
+@register.filter
+def get_job_state_source(job):
+    if not job:
+        return None
+    val = None
+    if isinstance(job, dict):
+        if 'state_source' in job and job['state_source'] is not None:
+            val = job['state_source']
+        elif 'StateSource' in job and job['StateSource'] is not None:
+            val = job['StateSource']
+    else:
+        val = getattr(job, 'state_source', getattr(job, 'StateSource', None))
+
+    if val is None:
+        return None
+
+    mapping = {
+        0: "Standard",
+        1: "ServiceAccount",
+        2: "Callback",
+        3: "DirectQuery",
+        "0": "Standard",
+        "1": "ServiceAccount",
+        "2": "Callback",
+        "3": "DirectQuery",
+    }
+    return mapping.get(val, str(val))
+
+
+@register.filter
+def get_job_state_updated_at(job):
+    if not job:
+        return None
+    if isinstance(job, dict):
+        if 'state_updated_at' in job and job['state_updated_at'] is not None:
+            return job['state_updated_at']
+        elif 'StateUpdatedAt' in job and job['StateUpdatedAt'] is not None:
+            return job['StateUpdatedAt']
+        return None
+    return getattr(job, 'state_updated_at', getattr(job, 'StateUpdatedAt', None))
+
+
+
 
 
 
