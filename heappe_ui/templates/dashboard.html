@@ -86,19 +86,19 @@
                         <!-- State filter toggle -->
                         <div style="flex: 1 1 auto; max-width: 300px; min-width: 200px;">
                             <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-light-subtle text-secondary fw-semibold" style="font-size: 0.75rem;"><i class="bi bi-funnel me-1 text-primary"></i>Stav</span>
+                                <span class="input-group-text bg-white border-light-subtle text-secondary fw-semibold" style="font-size: 0.75rem;"><i class="bi bi-funnel me-1 text-primary"></i>State</span>
                                 <select class="form-select border-light-subtle bg-white text-dark" id="input_job_states" style="font-size: 0.78rem;" onchange="loadJobsHistory(1)">
-                                    <option value="">Všechny stavy</option>
-                                    <option value="1,2,4,8,128">Pouze běží / ve frontě</option>
-                                    <option value="16,32,64">Dokončené / Stornované / Chyba</option>
+                                    <option value="">All states</option>
+                                    <option value="1,2,4,8,128">Running / Queued only</option>
+                                    <option value="16,32,64">Finished / Canceled / Failed</option>
                                 </select>
                             </div>
                         </div>
                         <!-- Search bar -->
                         <div style="flex: 1 1 auto; max-width: 360px; min-width: 220px;">
                             <div class="input-group input-group-sm">
-                                <span class="input-group-text bg-white border-light-subtle text-secondary fw-semibold" style="font-size: 0.75rem;"><i class="bi bi-search me-1 text-primary"></i>Hledat</span>
-                                <input type="text" class="form-control border-light-subtle bg-white text-dark" id="input_job_search" placeholder="Hledat v název jobů/tasků..." style="font-size: 0.78rem;">
+                                <span class="input-group-text bg-white border-light-subtle text-secondary fw-semibold" style="font-size: 0.75rem;"><i class="bi bi-search me-1 text-primary"></i>Search</span>
+                                <input type="text" class="form-control border-light-subtle bg-white text-dark" id="input_job_search" placeholder="Search in job/task names..." style="font-size: 0.78rem;">
                                 <button class="btn btn-outline-primary fw-bold px-2.5 shadow-sm d-flex align-items-center" type="button" id="btn_search_jobs" onclick="loadJobsHistory(1)">
                                     <i class="bi bi-arrow-right-short fs-6"></i>
                                 </button>

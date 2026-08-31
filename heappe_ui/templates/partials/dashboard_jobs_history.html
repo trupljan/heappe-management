@@ -133,14 +133,14 @@
                                         <!-- Column 1: Core Job Info -->
                                         <div class="col-md-4 d-flex flex-column gap-2 border-end pe-3">
                                             <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
-                                                <i class="bi bi-card-checklist text-primary me-1"></i>Základní informace
+                                                <i class="bi bi-card-checklist text-primary me-1"></i>Basic Information
                                             </h6>
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Název jobu:</span>
+                                                <span class="text-muted small">Job Name:</span>
                                                 <span class="fw-bold text-dark text-end" style="font-size: 0.85rem;">{{ job_item.name }}</span>
                                             </div>
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Stav:</span>
+                                                <span class="text-muted small">State:</span>
                                                 <div>
                                                     {% if job_item.state == 1 %}<span class="badge bg-secondary-subtle text-secondary border">Configuring</span>
                                                     {% elif job_item.state == 2 %}<span class="badge bg-info-subtle text-info border">Submitted</span>
@@ -156,15 +156,15 @@
                                                 </div>
                                             </div>
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Čas vytvoření:</span>
+                                                <span class="text-muted small">Creation Time:</span>
                                                 <span class="text-dark small text-end">{{ job_item.creation_time|format_datetime|default:"N/A" }}</span>
                                             </div>
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Čas spuštění:</span>
+                                                <span class="text-muted small">Start Time:</span>
                                                 <span class="text-dark small text-end">{{ job_item.start_time|format_datetime|default:"N/A" }}</span>
                                             </div>
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Čas ukončení:</span>
+                                                <span class="text-muted small">End Time:</span>
                                                 <span class="text-dark small text-end">{{ job_item.end_time|format_datetime|default:"N/A" }}</span>
                                             </div>
                                         </div>
@@ -172,7 +172,7 @@
                                         <!-- Column 2: Submitter & HPC Account -->
                                         <div class="col-md-4 d-flex flex-column gap-2 border-end px-3">
                                             <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
-                                                <i class="bi bi-person-badge text-primary me-1"></i>Submitter &amp; HPC Účet
+                                                <i class="bi bi-person-badge text-primary me-1"></i>Submitter &amp; HPC Account
                                             </h6>
                                             <div class="d-flex justify-content-between align-items-center">
                                                 <span class="text-muted small">Submitter:</span>
@@ -203,10 +203,10 @@
                                         <!-- Column 3: Project & Reservation -->
                                         <div class="col-md-4 d-flex flex-column gap-2 ps-3">
                                             <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
-                                                <i class="bi bi-folder2-open text-primary me-1"></i>Projekt &amp; Rezervace
+                                                <i class="bi bi-folder2-open text-primary me-1"></i>Project &amp; Reservation
                                             </h6>
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Projekt:</span>
+                                                <span class="text-muted small">Project:</span>
                                                 <span class="fw-semibold text-dark small text-end">{{ job_item.project_name|default:job_item.project_id|default:"N/A" }}</span>
                                             </div>
                                             <div class="d-flex justify-content-between align-items-center">
@@ -215,12 +215,12 @@
                                             </div>
                                             {% if job_item.reservation %}
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Rezervace:</span>
+                                                <span class="text-muted small">Reservation:</span>
                                                 <span class="badge bg-warning bg-opacity-20 text-warning-emphasis border font-monospace">{{ job_item.reservation }}</span>
                                             </div>
                                             {% endif %}
                                             <div class="d-flex justify-content-between align-items-center">
-                                                <span class="text-muted small">Počet tasků:</span>
+                                                <span class="text-muted small">Total Tasks:</span>
                                                 <span class="badge bg-light text-secondary border fw-bold">{{ job_item.tasks|length }}</span>
                                             </div>
                                         </div>
@@ -229,7 +229,7 @@
 
                                 <!-- Tasks Checklist Section -->
                                 <h6 class="fw-bold text-dark mb-3 d-flex align-items-center">
-                                    <i class="bi bi-cpu text-primary me-2 fs-5"></i>Tasky a zadané parametry šablony
+                                    <i class="bi bi-cpu text-primary me-2 fs-5"></i>Tasks &amp; Submitted Template Parameters
                                 </h6>
 
                                 <div class="accordion" id="tasksAccordion{{ job_item.id }}">
@@ -267,7 +267,7 @@
                                                     <div class="col-md-6">
                                                         <div class="card border border-light-subtle shadow-none h-100">
                                                             <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
-                                                                <i class="bi bi-speedometer2 text-primary me-1"></i>ZDROJE TASKU
+                                                                <i class="bi bi-speedometer2 text-primary me-1"></i>TASK RESOURCES
                                                             </div>
                                                             <div class="card-body p-2.5" style="font-size: 0.78rem;">
                                                                 <div class="d-flex justify-content-between mb-1">
@@ -283,7 +283,7 @@
                                                                     <span class="fw-semibold text-dark">{{ task.walltime_limit|default:"-" }} s</span>
                                                                 </div>
                                                                 <div class="d-flex justify-content-between">
-                                                                    <span class="text-muted">Paměť (Memory):</span>
+                                                                    <span class="text-muted">Memory:</span>
                                                                     <span class="fw-semibold text-dark">{{ task.memory|default:"-" }} MB</span>
                                                                 </div>
                                                             </div>
@@ -294,7 +294,7 @@
                                                     <div class="col-md-6">
                                                         <div class="card border border-light-subtle shadow-none h-100">
                                                             <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
-                                                                <i class="bi bi-file-earmark-code text-primary me-1"></i>SOUBORY A ADRESÁŘ
+                                                                <i class="bi bi-file-earmark-code text-primary me-1"></i>FILES &amp; DIRECTORY
                                                             </div>
                                                             <div class="card-body p-2.5 font-monospace" style="font-size: 0.75rem;">
                                                                 <div class="text-truncate mb-1" title="Standard Input File">
@@ -314,11 +314,11 @@
                                                     </div>
                                                 </div>
 
-                                                <!-- Zadané parametry šablony (TemplateParameterValues) -->
+                                                <!-- Submitted Template Parameters (TemplateParameterValues) -->
                                                 <div class="card border border-light-subtle shadow-none mb-3">
                                                     <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
-                                                        <span class="fw-bold text-dark small"><i class="bi bi-sliders text-primary me-1.5"></i>Zadané parametry šablony (TemplateParameterValues)</span>
-                                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle" style="font-size: 0.7rem;">{{ task.template_parameter_values|length }} položek</span>
+                                                        <span class="fw-bold text-dark small"><i class="bi bi-sliders text-primary me-1.5"></i>Submitted Template Parameters (TemplateParameterValues)</span>
+                                                        <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle" style="font-size: 0.7rem;">{{ task.template_parameter_values|length }} items</span>
                                                     </div>
                                                     <div class="card-body p-0">
                                                         {% if task.template_parameter_values %}
@@ -342,7 +342,7 @@
                                                         </div>
                                                         {% else %}
                                                         <div class="p-3 text-center text-muted small">
-                                                            Žádné uživatelské parametry šablony nebyly pro tento task zadané.
+                                                            No template parameters submitted for this task.
                                                         </div>
                                                         {% endif %}
                                                     </div>
@@ -351,8 +351,8 @@
                                                 <!-- Environment variables (EnvironmentVariables) -->
                                                 <div class="card border border-light-subtle shadow-none">
                                                     <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
-                                                        <span class="fw-bold text-dark small"><i class="bi bi-terminal-split text-primary me-1.5"></i>Proměnné prostředí (EnvironmentVariables)</span>
-                                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle" style="font-size: 0.7rem;">{{ task.environment_variables|length }} položek</span>
+                                                        <span class="fw-bold text-dark small"><i class="bi bi-terminal-split text-primary me-1.5"></i>Environment Variables (EnvironmentVariables)</span>
+                                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle" style="font-size: 0.7rem;">{{ task.environment_variables|length }} items</span>
                                                     </div>
                                                     <div class="card-body p-0">
                                                         {% if task.environment_variables %}
@@ -360,8 +360,8 @@
                                                             <table class="table table-sm table-striped mb-0" style="font-size: 0.78rem;">
                                                                 <thead class="table-light">
                                                                     <tr>
-                                                                        <th class="ps-3" style="width: 40%;">Název proměnné (Name)</th>
-                                                                        <th class="pe-3" style="width: 60%;">Hodnota (Value)</th>
+                                                                        <th class="ps-3" style="width: 40%;">Variable Name (Name)</th>
+                                                                        <th class="pe-3" style="width: 60%;">Value</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
@@ -376,7 +376,7 @@
                                                         </div>
                                                         {% else %}
                                                         <div class="p-3 text-center text-muted small">
-                                                            Žádné proměnné prostředí nebyly pro tento task definovány.
+                                                            No environment variables defined for this task.
                                                         </div>
                                                         {% endif %}
                                                     </div>
@@ -410,8 +410,8 @@
     {% if total_pages and total_pages > 1 %}
     <nav aria-label="Page navigation" class="py-3 mt-0 border-top">
         <div class="d-flex align-items-center justify-content-between px-4 mb-2">
-            <span class="text-muted small">Celkem záznamů: <strong>{{ total_count }}</strong></span>
-            <span class="text-muted small">Stránka <strong>{{ page }}</strong> z <strong>{{ total_pages }}</strong></span>
+            <span class="text-muted small">Total records: <strong>{{ total_count }}</strong></span>
+            <span class="text-muted small">Page <strong>{{ page }}</strong> of <strong>{{ total_pages }}</strong></span>
         </div>
         <ul class="pagination justify-content-center mb-0">
             {% if has_previous %}
