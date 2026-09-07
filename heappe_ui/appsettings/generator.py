@@ -614,7 +614,7 @@ def generate_appsettings_data_staging_v6_4_0(instance_name: str,
             version: str = None):
     return generate_appsettings_data_staging_v6_2_1(instance_name, sa_password, data_staging_token, port, version)
 
-def generate_appsettings_v6_5_0(
+def generate_appsettings_v6_4_17(
         instance_name: str,
         sa_password: str,
         port: int = 5000,
@@ -624,7 +624,7 @@ def generate_appsettings_v6_5_0(
     appsettings = generate_appsettings_v6_4_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
 
     # 1.A. Version and Metadata (ApplicationAPISettings)
-    ver_str = version or "v6.5.0"
+    ver_str = version or "v6.4.17"
     if 'ApplicationAPISettings' not in appsettings:
         appsettings['ApplicationAPISettings'] = {}
     if 'DeploymentSettings' not in appsettings['ApplicationAPISettings']:
@@ -633,9 +633,23 @@ def generate_appsettings_v6_5_0(
 
     if 'SwaggerDocSettings' not in appsettings['ApplicationAPISettings']:
         appsettings['ApplicationAPISettings']['SwaggerDocSettings'] = {}
+    appsettings['ApplicationAPISettings']['SwaggerDocSettings']['DictionaryTitle'] = "Dictionary API"
     appsettings['ApplicationAPISettings']['SwaggerDocSettings']['Description'] = f"HEAppE middleware API {ver_str}"
 
-    # 1.B. Endpoint Rate Limiting (IpRateLimiting.GeneralRules)
+    # 1.B. BackGroundThreadSettings
+    if 'BackGroundThreadSettings' not in appsettings:
+        appsettings['BackGroundThreadSettings'] = {}
+    appsettings['BackGroundThreadSettings']['ClusterProjectCredentialsCheckConfiguration'] = {
+        "IsEnabled": False,
+        "IntervalMinutes": 60
+    }
+    appsettings['BackGroundThreadSettings']['ExternalServiceHealthMonitoringSettings'] = {
+        "IsEnabled": True,
+        "IntervalSeconds": 60,
+        "RetentionDays": 30
+    }
+
+    # 1.C. Endpoint Rate Limiting (IpRateLimiting.GeneralRules & IpRateLimitPolicies)
     mgmt_rules = [
         {
             "Endpoint": "*:/heappe/Management/*",
@@ -658,6 +672,7 @@ def generate_appsettings_v6_5_0(
     for idx, r in enumerate(general_rules):
         if isinstance(r, dict) and r.get('Endpoint') == '*':
             catch_all_idx = idx
+            r['Limit'] = 1000000
             break
     if catch_all_idx is not None:
         general_rules[catch_all_idx:catch_all_idx] = rules_to_prepend
@@ -665,9 +680,24 @@ def generate_appsettings_v6_5_0(
         general_rules = rules_to_prepend + general_rules
     appsettings['IpRateLimiting']['GeneralRules'] = general_rules
 
-    # 1.C. Scripts & HPC Callbacks (HPCConnectionFrameworkSettings.ScriptsSettings)
+    if 'IpRateLimitPolicies' in appsettings and 'IpRules' in appsettings['IpRateLimitPolicies']:
+        for ip_rule in appsettings['IpRateLimitPolicies']['IpRules']:
+            for rule in ip_rule.get('Rules', []):
+                if rule.get('Endpoint') == '*':
+                    rule['Limit'] = 1000000
+
+    # 1.D. HPCConnectionFrameworkSettings
     if 'HPCConnectionFrameworkSettings' not in appsettings:
         appsettings['HPCConnectionFrameworkSettings'] = {}
+    
+    if 'ClustersConnectionPoolSettings' not in appsettings['HPCConnectionFrameworkSettings']:
+        appsettings['HPCConnectionFrameworkSettings']['ClustersConnectionPoolSettings'] = {}
+    appsettings['HPCConnectionFrameworkSettings']['ClustersConnectionPoolSettings']['ConnectionPoolMaxUnusedInterval'] = 1800
+
+    if 'SshClientSettings' not in appsettings['HPCConnectionFrameworkSettings']:
+        appsettings['HPCConnectionFrameworkSettings']['SshClientSettings'] = {}
+    appsettings['HPCConnectionFrameworkSettings']['SshClientSettings']['ConnectionTimeout'] = 30000
+
     if 'ScriptsSettings' not in appsettings['HPCConnectionFrameworkSettings']:
         appsettings['HPCConnectionFrameworkSettings']['ScriptsSettings'] = {}
     scripts = appsettings['HPCConnectionFrameworkSettings']['ScriptsSettings']
@@ -679,26 +709,58 @@ def generate_appsettings_v6_5_0(
     scripts['SshCommandPrefix'] = ""
     scripts['SyncScriptsViaSftp'] = False
 
-    # 1.D. High-Load DB Optimization (BusinessLogicSettings)
+    # 1.E. High-Load DB Optimization (BusinessLogicSettings)
     if 'BusinessLogicSettings' not in appsettings:
         appsettings['BusinessLogicSettings'] = {}
     appsettings['BusinessLogicSettings']['SessionLastAccessTimeUpdateIntervalInSeconds'] = 60
-
-    # 1.E. Health Monitoring Service (BackGroundThreadSettings)
-    if 'BackGroundThreadSettings' not in appsettings:
-        appsettings['BackGroundThreadSettings'] = {}
-    appsettings['BackGroundThreadSettings']['ExternalServiceHealthMonitoringSettings'] = {
-        "IsEnabled": True,
-        "IntervalSeconds": 60,
-        "RetentionDays": 30
-    }
 
     # 1.F. Migration & Backup Encryption (MigrationSettings)
     appsettings['MigrationSettings'] = {
         "EncryptionKey": ""
     }
 
+    # 1.G. ExternalAuthenticationSettings & sub-configurations
+    if 'ExternalAuthenticationSettings' in appsettings:
+        ext_auth = appsettings['ExternalAuthenticationSettings']
+        if 'LexisAuthenticationConfiguration' in ext_auth:
+            lexis_auth = ext_auth['LexisAuthenticationConfiguration']
+            lexis_auth['ApiVersion'] = "v2"
+            lexis_auth['ExtendedUserInfoV2Endpoint'] = "/api/v2/users/me/extended"
+            lexis_auth['CommandTemplatePermissionsV2Endpoint'] = "/api/v2/heappe/command-template-permissions/"
+            lexis_auth['HEAppEUserPrefix'] = "LEXIS_"
+            lexis_auth['ConnectionTimeoutInSeconds'] = 10
+
+    if 'JwtTokenIntrospectionConfiguration' in appsettings:
+        jwt_cfg = appsettings['JwtTokenIntrospectionConfiguration']
+        if 'LexisTokenFlowConfiguration' in jwt_cfg:
+            jwt_cfg['LexisTokenFlowConfiguration']['ConnectionTimeoutInSeconds'] = 15
+
+    if 'SshCaSettings' in appsettings:
+        appsettings['SshCaSettings']['BaseUri'] = "https://ssh.ca.api.heappe.eu"
+
+    if 'VaultConnectorSettings' in appsettings:
+        appsettings['VaultConnectorSettings']['ConnectionTimeoutInSeconds'] = 15
+
     return appsettings
+
+def generate_appsettings_data_staging_v6_4_17(
+        instance_name: str,
+        sa_password: str,
+        data_staging_token: str,
+        port: int = 5001,
+        version: str = None):
+    return generate_appsettings_data_staging_v6_4_0(instance_name, sa_password, data_staging_token, port, version)
+
+def generate_appsettings_v6_5_0(
+        instance_name: str,
+        sa_password: str,
+        port: int = 5000,
+        automigrate: bool = True,
+        version: str = None,
+        deployed_ip: str = None):
+    return generate_appsettings_v6_4_17(
+        instance_name, sa_password, port, automigrate, version or "v6.5.0", deployed_ip
+    )
 
 def generate_appsettings_data_staging_v6_5_0(
         instance_name: str,
@@ -706,4 +768,4 @@ def generate_appsettings_data_staging_v6_5_0(
         data_staging_token: str,
         port: int = 5001,
         version: str = None):
-    return generate_appsettings_data_staging_v6_4_0(instance_name, sa_password, data_staging_token, port, version)
+    return generate_appsettings_data_staging_v6_4_17(instance_name, sa_password, data_staging_token, port, version)

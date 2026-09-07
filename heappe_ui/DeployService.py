@@ -22,9 +22,12 @@ from heappe_ui.appsettings.generator import (
     generate_appsettings_data_staging_v6_2_1,
     generate_appsettings_v6_4_0,
     generate_appsettings_data_staging_v6_4_0,
+    generate_appsettings_v6_4_17,
+    generate_appsettings_data_staging_v6_4_17,
     generate_appsettings_v6_5_0,
     generate_appsettings_data_staging_v6_5_0,
 )
+from heappe_ui.view.utils import clean_ver
 
 from heappe_ui.models import InstanceCredentials
 
@@ -349,19 +352,19 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             raise RuntimeError(f"seed.njson file generation failed: {e}")
 
     def _get_generators_for_version(self, version: str):
-        v = (version or "").upper().lstrip("V")
-        if v.startswith("6.0."):
+        v_clean = clean_ver(version)
+        if v_clean < [6, 1, 0]:
             return generate_appsettings_v6_0_0, generate_appsettings_data_staging_v6_0_0
-        elif v.startswith("6.1."):
+        elif v_clean < [6, 2, 0]:
             return generate_appsettings_v6_1_0, generate_appsettings_data_staging_v6_1_0
-        elif v.startswith("6.2.0"):
+        elif v_clean == [6, 2, 0]:
             return generate_appsettings_v6_2_0, generate_appsettings_data_staging_v6_2_0
-        elif v.startswith("6.2.1"):
+        elif v_clean < [6, 4, 0]:
             return generate_appsettings_v6_2_1, generate_appsettings_data_staging_v6_2_1
-        elif v.startswith("6.4.0") or v.startswith("6.4."):
+        elif v_clean < [6, 4, 17]:
             return generate_appsettings_v6_4_0, generate_appsettings_data_staging_v6_4_0
-        elif v.startswith("6.5.0") or v.startswith("6.5."):
-            return generate_appsettings_v6_5_0, generate_appsettings_data_staging_v6_5_0
+        elif v_clean < [6, 5, 0]:
+            return generate_appsettings_v6_4_17, generate_appsettings_data_staging_v6_4_17
         else:
             return generate_appsettings_v6_5_0, generate_appsettings_data_staging_v6_5_0
 

@@ -2700,6 +2700,38 @@ class AppSettingsV650UpgradeTests(TestCase):
             "v6.5.0"
         )
 
+    def test_generate_appsettings_v6_4_17_structure(self):
+        from heappe_ui.appsettings.generator import (
+            generate_appsettings_v6_4_17,
+            generate_appsettings_data_staging_v6_4_17,
+        )
+        from heappe_ui.DeployService import HEAppEDeployService, HEAppEConfig
+
+        appsettings = generate_appsettings_v6_4_17(
+            instance_name="v6417_inst",
+            sa_password="Password123!",
+            port=5000,
+            automigrate=True,
+            version="v6.4.17",
+            deployed_ip="127.0.0.1"
+        )
+
+        self.assertEqual(appsettings["ApplicationAPISettings"]["DeploymentSettings"]["Version"], "v6.4.17")
+        self.assertEqual(appsettings["ApplicationAPISettings"]["SwaggerDocSettings"]["DictionaryTitle"], "Dictionary API")
+        self.assertEqual(appsettings["BackGroundThreadSettings"]["ClusterProjectCredentialsCheckConfiguration"], {"IsEnabled": False, "IntervalMinutes": 60})
+        self.assertEqual(appsettings["BackGroundThreadSettings"]["ExternalServiceHealthMonitoringSettings"], {"IsEnabled": True, "IntervalSeconds": 60, "RetentionDays": 30})
+        self.assertEqual(appsettings["HPCConnectionFrameworkSettings"]["ClustersConnectionPoolSettings"]["ConnectionPoolMaxUnusedInterval"], 1800)
+        self.assertEqual(appsettings["HPCConnectionFrameworkSettings"]["SshClientSettings"]["ConnectionTimeout"], 30000)
+        self.assertEqual(appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]["ApiVersion"], "v2")
+        self.assertEqual(appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]["ExtendedUserInfoV2Endpoint"], "/api/v2/users/me/extended")
+        self.assertEqual(appsettings["SshCaSettings"]["BaseUri"], "https://ssh.ca.api.heappe.eu")
+
+        # Test DeployService version matching for 6.4.17
+        service = HEAppEDeployService(HEAppEConfig(base_path="/tmp", repo_branch="v6.4.17"))
+        gen, ds_gen = service._get_generators_for_version("6.4.17")
+        self.assertEqual(gen, generate_appsettings_v6_4_17)
+        self.assertEqual(ds_gen, generate_appsettings_data_staging_v6_4_17)
+
     def test_update_init_v6_5_0_merge_preserves_secrets_and_applies_new_settings(self):
         import tempfile
         import json
