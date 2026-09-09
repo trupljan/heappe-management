@@ -71,6 +71,8 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
             return adaptor_user_assign_system_role(request, adaptor_user_username)
         if action == "adaptor_user_remove_system_role":
             return adaptor_user_remove_system_role(request, adaptor_user_username)
+        if action == "toggle_block_status":
+            return adaptor_user_toggle_block_status(request, adaptor_user_username)
 
     new_apikey = request.session.pop("new_adaptor_user_apikey", None)
     new_apikey_username = request.session.pop("new_adaptor_user_username", None)
@@ -324,6 +326,45 @@ def adaptor_user_remove_system_role(request: HttpRequest, adaptor_user_username:
                     'status': 'success',
                     'role_name': role_name,
                     'username': adaptor_user_username
+                })
+            return JsonResponse({'status': 'error'}, status=400)
+
+        next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("adaptor_user_detail", kwargs={"adaptor_user_username": adaptor_user_username})
+        return redirect(next_url)
+
+    return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)
+
+
+@login_required
+def adaptor_user_toggle_block_status(request: HttpRequest, adaptor_user_username: str) -> HttpResponse:
+    if request.method == "POST":
+        controller = hp.ManagementApi(request.api_instance)
+        is_blocked_param = request.POST.get("is_blocked")
+        if is_blocked_param is not None:
+            is_blocked = str(is_blocked_param).strip().lower() in ("true", "1", "yes")
+        else:
+            action = request.POST.get("action")
+            is_blocked = (action != "unblock")
+
+        payload = _create_payload(request.session_code, {
+            "Username": adaptor_user_username,
+            "IsBlocked": is_blocked
+        })
+
+        action_word = "blocked" if is_blocked else "unblocked"
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_set_adaptor_user_block_status_post(**payload),
+            f"Service account '{adaptor_user_username}' successfully {action_word}!",
+            f"Failed to change block status for '{adaptor_user_username}'"
+        )
+
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            if result is not None:
+                return JsonResponse({
+                    'status': 'success',
+                    'username': adaptor_user_username,
+                    'is_blocked': is_blocked
                 })
             return JsonResponse({'status': 'error'}, status=400)
 

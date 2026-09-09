@@ -611,6 +611,79 @@ class AdaptorUserApiFormattingTests(TestCase):
         self.assertIn(b"Administrator", response.content)
         self.assertIn(b"Dynamic", response.content)
 
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_adaptor_user_toggle_block_status_block(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+        mock_mgmt_instance.heappe_management_set_adaptor_user_block_status_post.return_value = True
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from heappe_ui.view.adaptor_user import adaptor_user_toggle_block_status
+        request = self.factory.post("/adaptor_users/toggle-block/testsvc/", {
+            "is_blocked": "true"
+        })
+        request.user = self.user
+        request.session = {}
+        setattr(request, '_messages', FallbackStorage(request))
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        response = adaptor_user_toggle_block_status(request, adaptor_user_username="testsvc")
+        self.assertEqual(response.status_code, 302)
+        mock_mgmt_instance.heappe_management_set_adaptor_user_block_status_post.assert_called_once()
+        call_args = mock_mgmt_instance.heappe_management_set_adaptor_user_block_status_post.call_args[1]
+        payload = call_args.get("body") or call_args
+        self.assertEqual(payload["Username"], "testsvc")
+        self.assertTrue(payload["IsBlocked"])
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_adaptor_user_toggle_block_status_unblock(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+        mock_mgmt_instance.heappe_management_set_adaptor_user_block_status_post.return_value = True
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from heappe_ui.view.adaptor_user import adaptor_user_toggle_block_status
+        request = self.factory.post("/adaptor_users/toggle-block/testsvc/", {
+            "is_blocked": "false"
+        })
+        request.user = self.user
+        request.session = {}
+        setattr(request, '_messages', FallbackStorage(request))
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        response = adaptor_user_toggle_block_status(request, adaptor_user_username="testsvc")
+        self.assertEqual(response.status_code, 302)
+        mock_mgmt_instance.heappe_management_set_adaptor_user_block_status_post.assert_called_once()
+        call_args = mock_mgmt_instance.heappe_management_set_adaptor_user_block_status_post.call_args[1]
+        payload = call_args.get("body") or call_args
+        self.assertEqual(payload["Username"], "testsvc")
+        self.assertFalse(payload["IsBlocked"])
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_adaptor_user_detail_renders_blocked_badge(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+        
+        mock_user = mock.MagicMock()
+        mock_user.to_dict.return_value = {"username": "testsvc", "is_blocked": True, "adaptor_user_groups": []}
+        mock_mgmt_instance.heappe_management_adaptor_user_get.return_value = mock_user
+        mock_mgmt_instance.heappe_management_projects_get.return_value = []
+        mock_mgmt_instance.heappe_management_system_role_assignments_get.return_value = []
+
+        request = self.factory.get("/adaptor_users/testsvc/")
+        request.user = self.user
+        request.session = {}
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from heappe_ui.view.adaptor_user import adaptor_user_detail
+        response = adaptor_user_detail(request, adaptor_user_username="testsvc")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Blocked", response.content)
+        self.assertIn(b"Unblock Account", response.content)
+
 
 class SelfHealingSessionTests(TestCase):
     def setUp(self):

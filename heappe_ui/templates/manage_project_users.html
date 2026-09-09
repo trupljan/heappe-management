@@ -138,7 +138,14 @@
                                 {% for user in adaptor_users %}
                                 <tr>
                                     <td class="ps-4 fw-bold text-dark font-monospace">
-                                        <a href="{% url 'adaptor_user_detail' user.username %}" class="text-decoration-none text-dark">{{ user.username }}</a>
+                                        <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                            <a href="{% url 'adaptor_user_detail' user.username %}" class="text-decoration-none text-dark">{{ user.username }}</a>
+                                            {% if user.is_blocked %}
+                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle" style="font-size: 0.65rem;" title="Account is blocked">
+                                                    <i class="bi bi-slash-circle-fill me-0.5"></i>Blocked
+                                                </span>
+                                            {% endif %}
+                                        </div>
                                         {% with sys_roles=system_role_user_map|get_item:user.username %}
                                             {% if sys_roles %}
                                                 <div class="d-flex flex-wrap gap-1 mt-1">
@@ -196,7 +203,14 @@
                                 {% for user in available_users %}
                                 <tr>
                                     <td class="ps-4 fw-bold text-dark font-monospace">
-                                        <a href="{% url 'adaptor_user_detail' user.username %}" class="text-decoration-none text-dark">{{ user.username }}</a>
+                                        <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                            <a href="{% url 'adaptor_user_detail' user.username %}" class="text-decoration-none text-dark">{{ user.username }}</a>
+                                            {% if user.is_blocked %}
+                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle" style="font-size: 0.65rem;" title="Account is blocked">
+                                                    <i class="bi bi-slash-circle-fill me-0.5"></i>Blocked
+                                                </span>
+                                            {% endif %}
+                                        </div>
                                         {% with sys_roles=system_role_user_map|get_item:user.username %}
                                             {% if sys_roles %}
                                                 <div class="d-flex flex-wrap gap-1 mt-1">
@@ -248,7 +262,14 @@
                                 {% for user in all_adaptor_users %}
                                 <tr>
                                     <td class="ps-4 fw-bold text-dark font-monospace">
-                                        <a href="{% url 'adaptor_user_detail' user.username %}" class="text-decoration-none text-dark">{{ user.username }}</a>
+                                        <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                            <a href="{% url 'adaptor_user_detail' user.username %}" class="text-decoration-none text-dark">{{ user.username }}</a>
+                                            {% if user.is_blocked %}
+                                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle" style="font-size: 0.65rem;" title="Account is blocked">
+                                                    <i class="bi bi-slash-circle-fill me-0.5"></i>Blocked
+                                                </span>
+                                            {% endif %}
+                                        </div>
                                         {% with sys_roles=system_role_user_map|get_item:user.username %}
                                             {% if sys_roles %}
                                                 <div class="d-flex flex-wrap gap-1 mt-1">
@@ -378,7 +399,14 @@
                         {% for user in all_adaptor_users %}
                         <tr>
                             <td class="ps-4 fw-bold text-dark font-monospace">
-                                <a href="{% url 'adaptor_user_detail' user.username %}" class="text-decoration-none text-dark">{{ user.username }}</a>
+                                <div class="d-flex align-items-center gap-1.5 flex-wrap">
+                                    <a href="{% url 'adaptor_user_detail' user.username %}" class="text-decoration-none text-dark">{{ user.username }}</a>
+                                    {% if user.is_blocked %}
+                                        <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle" style="font-size: 0.65rem;" title="Account is blocked">
+                                            <i class="bi bi-slash-circle-fill me-0.5"></i>Blocked
+                                        </span>
+                                    {% endif %}
+                                </div>
                                 {% with sys_roles=system_role_user_map|get_item:user.username %}
                                     {% if sys_roles %}
                                         <div class="d-flex flex-wrap gap-1 mt-1">
