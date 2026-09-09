@@ -120,6 +120,105 @@
         </div>
     </div>
 
+    <!-- System Roles (Global Permissions) Card -->
+    <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-shield-lock-fill text-warning fs-5"></i>
+                <div>
+                    <h5 class="h6 mb-0 fw-bold text-dark">System Roles (Global Permissions)</h5>
+                    <small class="text-muted">Roles assigned at system level apply automatically across all current and future projects</small>
+                </div>
+            </div>
+            <span class="badge bg-warning bg-opacity-10 text-dark border border-warning-subtle rounded-pill px-3 py-1.5 font-monospace">
+                {{ system_roles|length }} Active System Role{{ system_roles|length|pluralize }}
+            </span>
+        </div>
+        <div class="card-body p-4">
+            <div class="row g-4">
+                <!-- Current Active System Roles -->
+                <div class="col-lg-7 border-end-lg pe-lg-4">
+                    <label class="form-label small fw-bold text-secondary text-uppercase mb-2">Active System Roles</label>
+                    {% if system_roles %}
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light text-secondary small text-uppercase">
+                                <tr>
+                                    <th>Role</th>
+                                    <th>Source</th>
+                                    <th class="text-end">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in system_roles %}
+                                <tr>
+                                    <td>
+                                        <span class="fw-bold text-dark"><i class="bi bi-shield-check text-primary me-1.5"></i>{{ item.role }}</span>
+                                    </td>
+                                    <td>
+                                        {% if item.source == "Appsettings" %}
+                                            <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle" title="Defined in server appsettings.json"><i class="bi bi-file-earmark-code me-1"></i>appsettings.json</span>
+                                        {% elif item.source == "Dynamic" %}
+                                            <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle" title="Dynamic database assignment"><i class="bi bi-lightning-charge-fill me-1"></i>Dynamic</span>
+                                        {% else %}
+                                            <span class="badge bg-info bg-opacity-10 text-info border border-info-subtle"><i class="bi bi-layers-fill me-1"></i>{{ item.source }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        {% if item.source != "Appsettings" %}
+                                        <form method="post" action="{% url 'adaptor_user_remove_system_role' adaptor_user.username %}" class="d-inline" onsubmit="return confirm('Are you sure you want to remove the system role \'{{ item.role }}\' from {{ adaptor_user.username }}?');">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="role" value="{{ item.role }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2 rounded-2" title="Remove dynamic system role">
+                                                <i class="bi bi-trash me-1"></i>Remove
+                                            </button>
+                                        </form>
+                                        {% else %}
+                                        <span class="text-muted small fst-italic" title="System roles defined in appsettings.json cannot be removed via API">Permanent</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="p-3 bg-light rounded-3 text-center text-muted">
+                        <i class="bi bi-shield-slash fs-4 d-block mb-1 text-secondary"></i>
+                        No system roles assigned. This account only has permissions explicitly granted within specific projects or groups.
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Assign System Role Form -->
+                <div class="col-lg-5 ps-lg-4">
+                    <label class="form-label small fw-bold text-secondary text-uppercase mb-2">Assign Global System Role</label>
+                    <form method="post" action="{% url 'adaptor_user_assign_system_role' adaptor_user.username %}">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <select name="role" class="form-select border-secondary-subtle py-2 rounded-3" required>
+                                <option value="" selected disabled>-- Select System Role --</option>
+                                <option value="1">Administrator (Full system access)</option>
+                                <option value="2">Maintainer (Status & maintenance)</option>
+                                <option value="7">Manager (Command templates & job management)</option>
+                                <option value="3">Submitter (Standard submitter across all projects)</option>
+                                <option value="6">ManagementAdmin (Management API)</option>
+                                <option value="4">GroupReporter (Reports for groups)</option>
+                                <option value="5">Reporter (Job watcher)</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-warning fw-bold w-100 py-2 rounded-3 text-dark shadow-sm">
+                            <i class="bi bi-shield-plus me-1.5"></i>Assign System Role
+                        </button>
+                        <div class="form-text small text-muted mt-2">
+                            <i class="bi bi-info-circle me-1"></i>Assigning a system role grants access to all projects automatically without needing per-project assignment.
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row g-4">
         <!-- Assign to Project Card -->
         <div class="col-md-6">

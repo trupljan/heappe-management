@@ -1,3 +1,4 @@
+{% load custom_filters %}
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 
 <style>
@@ -34,6 +35,11 @@
                     <i class="bi bi-person-plus-fill me-1.5"></i>Available Accounts (<span id="countOut">{{ adaptor_users_not_in_project|length }}</span>)
                 </button>
             </li>
+            <li class="nav-item">
+                <button class="nav-link text-uppercase py-3 px-4" id="system-tab" data-bs-toggle="tab" data-bs-target="#system-roles-pane" type="button">
+                    <i class="bi bi-shield-lock-fill me-1.5 text-warning"></i>System Roles (<span id="countSystem">{{ system_role_assignments|length }}</span>)
+                </button>
+            </li>
         </ul>
         <div class="d-flex align-items-center gap-1.5 my-2">
             <a href="{% url 'adaptor_user_create' %}" class="btn btn-primary btn-sm fw-bold px-3 py-1.5 rounded-3 shadow-sm d-flex align-items-center gap-1">
@@ -63,7 +69,20 @@
                             {% for adaptor_user in adaptor_users %}
                             <tr>
                                 <td class="ps-4 font-monospace text-secondary small">#{{ adaptor_user.id }}</td>
-                                <td class="fw-bold text-dark font-monospace">{{ adaptor_user.username }}</td>
+                                <td class="fw-bold text-dark font-monospace" data-username="{{ adaptor_user.username }}">
+                                    <a href="{% url 'adaptor_user_detail' adaptor_user.username %}" class="text-decoration-none text-dark">{{ adaptor_user.username }}</a>
+                                    {% with sys_roles=system_role_user_map|get_item:adaptor_user.username %}
+                                        {% if sys_roles %}
+                                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                                {% for sr in sys_roles %}
+                                                    <span class="badge bg-warning bg-opacity-10 text-dark border border-warning-subtle" style="font-size: 0.65rem;" title="Global System Role: {{ sr.role }} ({{ sr.source }})">
+                                                        <i class="bi bi-shield-lock-fill text-warning me-0.5"></i>{{ sr.role }}
+                                                    </span>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
+                                </td>
                                 <td>
                                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 w-100">
                                         <div class="d-flex flex-wrap role-container-{{ adaptor_user.username }}">
@@ -131,7 +150,20 @@
                         <tbody>
                             {% for user in adaptor_users_not_in_project %}
                             <tr>
-                                <td class="ps-4 fw-bold text-dark font-monospace">{{ user.username }}</td>
+                                <td class="ps-4 fw-bold text-dark font-monospace" data-username="{{ user.username }}">
+                                    <a href="{% url 'adaptor_user_detail' user.username %}" class="text-decoration-none text-dark">{{ user.username }}</a>
+                                    {% with sys_roles=system_role_user_map|get_item:user.username %}
+                                        {% if sys_roles %}
+                                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                                {% for sr in sys_roles %}
+                                                    <span class="badge bg-warning bg-opacity-10 text-dark border border-warning-subtle" style="font-size: 0.65rem;" title="Global System Role: {{ sr.role }} ({{ sr.source }})">
+                                                        <i class="bi bi-shield-lock-fill text-warning me-0.5"></i>{{ sr.role }}
+                                                    </span>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
+                                    {% endwith %}
+                                </td>
                                 <td class="font-monospace text-secondary small">#{{ user.id }}</td>
                                 <td class="text-end pe-4">
                                     <form method="post" action="{% url 'adaptor_user_assign_to_project' user.username %}" class="d-flex align-items-center justify-content-end gap-2 ajax-assign-form" data-table="out">
@@ -152,6 +184,72 @@
                                             <button type="submit" class="btn btn-primary fw-bold px-3">Add to Project</button>
                                         </div>
                                     </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- System Roles Pane -->
+            <div class="tab-pane fade" id="system-roles-pane" role="tabpanel">
+                <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="small text-muted">
+                        <i class="bi bi-info-circle-fill text-primary me-1"></i>
+                        <strong>System Roles</strong> grant permissions across all current and future projects automatically without requiring per-project binding.
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table id="tableSystem" class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+                        <thead class="table-light text-secondary small text-uppercase">
+                            <tr>
+                                <th class="ps-4" style="width: 30%;">User Identity</th>
+                                <th style="width: 25%;">System Role</th>
+                                <th style="width: 25%;">Source</th>
+                                <th class="text-end pe-4" style="width: 20%;">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in system_role_assignments %}
+                            <tr>
+                                <td class="ps-4 fw-bold text-dark font-monospace">
+                                    <a href="{% url 'adaptor_user_detail' item.username %}" class="text-decoration-none text-dark">
+                                        <i class="bi bi-person-fill text-secondary me-1"></i>{{ item.username }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle font-monospace px-2.5 py-1" style="font-size: 0.8rem;">
+                                        <i class="bi bi-shield-check me-1"></i>{{ item.role }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if item.source == "Appsettings" %}
+                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle font-monospace"><i class="bi bi-file-earmark-code me-1"></i>appsettings.json</span>
+                                    {% elif item.source == "Dynamic" %}
+                                        <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle font-monospace"><i class="bi bi-lightning-charge-fill me-1"></i>Dynamic</span>
+                                    {% else %}
+                                        <span class="badge bg-info bg-opacity-10 text-info border border-info-subtle font-monospace"><i class="bi bi-layers-fill me-1"></i>{{ item.source }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end pe-4">
+                                    {% if item.source != "Appsettings" %}
+                                    <form method="post" action="{% url 'adaptor_user_remove_system_role' item.username %}" class="d-inline" onsubmit="return confirm('Are you sure you want to remove the system role \'{{ item.role }}\' from {{ item.username }}?');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="role" value="{{ item.role }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger py-1 px-2 rounded-2" title="Remove dynamic system role">
+                                            <i class="bi bi-trash me-1"></i>Remove
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    <a href="{% url 'adaptor_user_detail' item.username %}" class="btn btn-sm btn-outline-secondary fw-semibold px-2.5 rounded-3 ms-1">Profile</a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center py-5 text-muted">
+                                    <i class="bi bi-shield-slash fs-3 d-block mb-2 text-secondary"></i>
+                                    No system roles assigned.
                                 </td>
                             </tr>
                             {% endfor %}
@@ -193,6 +291,18 @@
             autoWidth: false 
         });
 
+        const t3 = $('#tableSystem').DataTable({ 
+            pageLength: 10, 
+            dom: "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                 "<'row'<'col-sm-12'tr>>" +
+                 "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+            language: {
+                search: "_INPUT_",
+                searchPlaceholder: "Search system roles..."
+            },
+            autoWidth: false 
+        });
+
         $(document).on('submit', '.ajax-assign-form', function(e) {
             e.preventDefault();
             const $form = $(this);
@@ -203,7 +313,7 @@
 
             $form.find('.role-name-display').val(roleText);
             const $row = $form.closest('tr');
-            const username = tableType === 'in' ? $row.find('td:eq(1)').text().trim() : $row.find('td:eq(0)').text().trim();
+            const username = $row.find('[data-username]').attr('data-username') || (tableType === 'in' ? $row.find('td:eq(1)').text().trim() : $row.find('td:eq(0)').text().trim());
 
             $btn.prop('disabled', true).prepend('<span class="spinner-border spinner-border-sm me-1.5" role="status" aria-hidden="true"></span>');
 
@@ -243,6 +353,6 @@
             });
         });
 
-        $('button[data-bs-toggle="tab"]').on('shown.bs.tab', () => { t1.columns.adjust(); t2.columns.adjust(); });
+        $('button[data-bs-toggle="tab"]').on('shown.bs.tab', () => { t1.columns.adjust(); t2.columns.adjust(); t3.columns.adjust(); });
     });
 </script>

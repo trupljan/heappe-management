@@ -1867,11 +1867,30 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
     available_users = []
     all_adaptor_users = []
 
+    system_role_assignments = []
+    system_role_user_map = {}
+
     try:
         raw_adaptor_users = controller.heappe_management_adaptor_users_get(SessionCode=session_code)
         all_adaptor_users = [u.to_dict() for u in raw_adaptor_users] if raw_adaptor_users else []
     except Exception as e:
         print(f"Error fetching adaptor users: {e}")
+
+    try:
+        raw_sys_roles = controller.heappe_management_system_role_assignments_get(SessionCode=session_code)
+        if raw_sys_roles:
+            for sr in raw_sys_roles:
+                u = getattr(sr, 'username', None) or (sr.get('username') if isinstance(sr, dict) else None)
+                r = getattr(sr, 'role', None) or (sr.get('role') if isinstance(sr, dict) else None)
+                s = getattr(sr, 'source', None) or (sr.get('source') if isinstance(sr, dict) else None) or "Dynamic"
+                entry = {'username': u, 'role': r, 'source': s}
+                system_role_assignments.append(entry)
+                if u:
+                    system_role_user_map.setdefault(u, []).append(entry)
+                    if u.lower() != u:
+                        system_role_user_map.setdefault(u.lower(), []).append(entry)
+    except Exception as e:
+        print(f"[manage_project_adaptor_users] Error fetching system roles: {e}")
 
     for u in all_adaptor_users:
         proj_roles = []
@@ -1960,6 +1979,8 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
         "adaptor_users": adaptor_users_in_project,
         "available_users": available_users,
         "all_adaptor_users": all_adaptor_users,
+        "system_role_assignments": system_role_assignments,
+        "system_role_user_map": system_role_user_map,
         "roles_mapping": ADAPTOR_USER_STR_TO_INT
     })
 

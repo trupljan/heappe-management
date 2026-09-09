@@ -32,6 +32,24 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
 
     all_projects = projects_response if projects_response is not None else []
 
+    system_roles = []
+    all_system_roles = []
+    try:
+        sys_res = controller.heappe_management_system_role_assignments_get(
+            SessionCode=request.session_code
+        )
+        if sys_res:
+            for item in sys_res:
+                u = getattr(item, 'username', None) or (item.get('username') if isinstance(item, dict) else None)
+                r = getattr(item, 'role', None) or (item.get('role') if isinstance(item, dict) else None)
+                s = getattr(item, 'source', None) or (item.get('source') if isinstance(item, dict) else None) or "Dynamic"
+                entry = {'username': u, 'role': r, 'source': s}
+                all_system_roles.append(entry)
+                if u and u.lower() == adaptor_user_username.lower():
+                    system_roles.append(entry)
+    except Exception as e:
+        print(f"[adaptor_user_detail] Error fetching system roles: {e}")
+
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "update_adaptor_user":
@@ -40,6 +58,10 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
             return adaptor_user_assign_to_project(request, adaptor_user_username)
         if action == "adaptor_user_assign_to_user_group":
             return adaptor_user_assign_to_user_group(request, adaptor_user_username)
+        if action == "adaptor_user_assign_system_role":
+            return adaptor_user_assign_system_role(request, adaptor_user_username)
+        if action == "adaptor_user_remove_system_role":
+            return adaptor_user_remove_system_role(request, adaptor_user_username)
 
     new_apikey = request.session.pop("new_adaptor_user_apikey", None)
     new_apikey_username = request.session.pop("new_adaptor_user_username", None)
@@ -49,6 +71,9 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
         "projects": all_projects,
         "new_apikey": new_apikey,
         "new_apikey_username": new_apikey_username,
+        "system_roles": system_roles,
+        "all_system_roles": all_system_roles,
+        "roles_mapping": ADAPTOR_USER_STR_TO_INT,
     })
 
 
@@ -207,5 +232,93 @@ def adaptor_user_assign_to_user_group(request: HttpRequest, adaptor_user_usernam
         if project_id:
             return redirect(f"{reverse('project_detail', kwargs={'project_id': int(project_id)})}?tab=adaptor_users")
         return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)
+
+    return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)
+
+
+@login_required
+def adaptor_user_assign_system_role(request: HttpRequest, adaptor_user_username: str) -> HttpResponse:
+    if request.method == "POST":
+        controller = hp.ManagementApi(request.api_instance)
+        role = request.POST.get("role") or request.POST.get("Role")
+        role_int = None
+        if role:
+            if str(role).isdigit():
+                role_int = int(role)
+            elif role in ADAPTOR_USER_STR_TO_INT:
+                role_int = ADAPTOR_USER_STR_TO_INT[role]
+
+        if not role_int or role_int not in ADAPTOR_USER_INT_TO_STR:
+            messages.error(request, "Invalid role selected.")
+            return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)
+
+        role_name = ADAPTOR_USER_INT_TO_STR[role_int]
+        payload = _create_payload(request.session_code, {
+            "Username": adaptor_user_username,
+            "Role": role_int
+        })
+
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_assign_system_role_to_user_post(**payload),
+            f"System role '{role_name}' successfully assigned to user '{adaptor_user_username}' across all projects!",
+            f"Failed to assign system role '{role_name}' to '{adaptor_user_username}'"
+        )
+
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            if result is not None:
+                return JsonResponse({
+                    'status': 'success',
+                    'role_name': role_name,
+                    'username': adaptor_user_username
+                })
+            return JsonResponse({'status': 'error'}, status=400)
+
+        next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("adaptor_user_detail", kwargs={"adaptor_user_username": adaptor_user_username})
+        return redirect(next_url)
+
+    return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)
+
+
+@login_required
+def adaptor_user_remove_system_role(request: HttpRequest, adaptor_user_username: str) -> HttpResponse:
+    if request.method == "POST":
+        controller = hp.ManagementApi(request.api_instance)
+        role = request.POST.get("role") or request.POST.get("Role")
+        role_int = None
+        if role:
+            if str(role).isdigit():
+                role_int = int(role)
+            elif role in ADAPTOR_USER_STR_TO_INT:
+                role_int = ADAPTOR_USER_STR_TO_INT[role]
+
+        if not role_int or role_int not in ADAPTOR_USER_INT_TO_STR:
+            messages.error(request, "Invalid role selected for removal.")
+            return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)
+
+        role_name = ADAPTOR_USER_INT_TO_STR[role_int]
+        payload = _create_payload(request.session_code, {
+            "Username": adaptor_user_username,
+            "Role": role_int
+        })
+
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_remove_system_role_from_user_post(**payload),
+            f"System role '{role_name}' removed from '{adaptor_user_username}'!",
+            f"Failed to remove system role '{role_name}' from '{adaptor_user_username}'"
+        )
+
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            if result is not None:
+                return JsonResponse({
+                    'status': 'success',
+                    'role_name': role_name,
+                    'username': adaptor_user_username
+                })
+            return JsonResponse({'status': 'error'}, status=400)
+
+        next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("adaptor_user_detail", kwargs={"adaptor_user_username": adaptor_user_username})
+        return redirect(next_url)
 
     return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)

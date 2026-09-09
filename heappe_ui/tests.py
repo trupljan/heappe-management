@@ -535,6 +535,82 @@ class AdaptorUserApiFormattingTests(TestCase):
         
         self.assertIn(b"newserviceuser:secret-key-123", response.content)
 
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_adaptor_user_assign_system_role_success(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+        mock_mgmt_instance.heappe_management_assign_system_role_to_user_post.return_value = True
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from heappe_ui.view.adaptor_user import adaptor_user_assign_system_role
+        request = self.factory.post("/adaptor_users/assign-system-role/testsvc/", {
+            "role": "1"
+        })
+        request.user = self.user
+        request.session = {}
+        setattr(request, '_messages', FallbackStorage(request))
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        response = adaptor_user_assign_system_role(request, adaptor_user_username="testsvc")
+        self.assertEqual(response.status_code, 302)
+        mock_mgmt_instance.heappe_management_assign_system_role_to_user_post.assert_called_once()
+        call_args = mock_mgmt_instance.heappe_management_assign_system_role_to_user_post.call_args[1]
+        payload = call_args.get("body") or call_args
+        self.assertEqual(payload["Username"], "testsvc")
+        self.assertEqual(payload["Role"], 1)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_adaptor_user_remove_system_role_success(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+        mock_mgmt_instance.heappe_management_remove_system_role_from_user_post.return_value = True
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from heappe_ui.view.adaptor_user import adaptor_user_remove_system_role
+        request = self.factory.post("/adaptor_users/remove-system-role/testsvc/", {
+            "role": "Administrator"
+        })
+        request.user = self.user
+        request.session = {}
+        setattr(request, '_messages', FallbackStorage(request))
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        response = adaptor_user_remove_system_role(request, adaptor_user_username="testsvc")
+        self.assertEqual(response.status_code, 302)
+        mock_mgmt_instance.heappe_management_remove_system_role_from_user_post.assert_called_once()
+        call_args = mock_mgmt_instance.heappe_management_remove_system_role_from_user_post.call_args[1]
+        payload = call_args.get("body") or call_args
+        self.assertEqual(payload["Username"], "testsvc")
+        self.assertEqual(payload["Role"], 1)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_adaptor_user_detail_renders_system_roles(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+        
+        mock_user = mock.MagicMock()
+        mock_user.to_dict.return_value = {"username": "newserviceuser", "adaptor_user_groups": []}
+        mock_mgmt_instance.heappe_management_adaptor_user_get.return_value = mock_user
+        mock_mgmt_instance.heappe_management_projects_get.return_value = []
+        mock_mgmt_instance.heappe_management_system_role_assignments_get.return_value = [
+            mock.MagicMock(username="newserviceuser", role="Administrator", source="Dynamic")
+        ]
+
+        request = self.factory.get("/adaptor_users/newserviceuser/")
+        request.user = self.user
+        request.session = {}
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from heappe_ui.view.adaptor_user import adaptor_user_detail
+        response = adaptor_user_detail(request, adaptor_user_username="newserviceuser")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"System Roles (Global Permissions)", response.content)
+        self.assertIn(b"Administrator", response.content)
+        self.assertIn(b"Dynamic", response.content)
+
 
 class SelfHealingSessionTests(TestCase):
     def setUp(self):

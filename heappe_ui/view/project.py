@@ -115,6 +115,8 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
     node_types = []
     adaptor_users = []
     adaptor_users_not_in_project = []
+    system_role_assignments = []
+    system_role_user_map = {}
     ui_features = {}
     project_queue_groups = []
 
@@ -417,6 +419,22 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
 
             existing_ids = {u['id'] for u in adaptor_users}
             adaptor_users_not_in_project = [u for u in all_adaptor_users if u['id'] not in existing_ids]
+
+            try:
+                raw_sys_roles = controller.heappe_management_system_role_assignments_get(SessionCode=session_code)
+                if raw_sys_roles:
+                    for sr in raw_sys_roles:
+                        u = getattr(sr, 'username', None) or (sr.get('username') if isinstance(sr, dict) else None)
+                        r = getattr(sr, 'role', None) or (sr.get('role') if isinstance(sr, dict) else None)
+                        s = getattr(sr, 'source', None) or (sr.get('source') if isinstance(sr, dict) else None) or "Dynamic"
+                        entry = {'username': u, 'role': r, 'source': s}
+                        system_role_assignments.append(entry)
+                        if u:
+                            system_role_user_map.setdefault(u, []).append(entry)
+                            if u.lower() != u:
+                                system_role_user_map.setdefault(u.lower(), []).append(entry)
+            except Exception as ex_sr:
+                print(f"[project_detail] System roles query error: {ex_sr}")
         except Exception:
             pass
 
@@ -543,6 +561,9 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "project_queue_groups": project_queue_groups if tab == "commandtemplates" else [],
         "adaptor_users": adaptor_users,
         "adaptor_users_not_in_project": adaptor_users_not_in_project,
+        "system_role_assignments": system_role_assignments,
+        "system_role_user_map": system_role_user_map,
+        "roles_mapping": ADAPTOR_USER_STR_TO_INT,
         "ui_features": ui_features,
         "templates_cache_age_str": templates_cache_age_str if tab == "commandtemplates" else None,
         "setup_checklist": setup_checklist,
