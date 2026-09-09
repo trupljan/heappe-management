@@ -392,6 +392,54 @@
     {% endfor %}
 </div>
 
+<!-- External Service Telemetry Logs Panel -->
+<div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+    <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-activity text-primary"></i>
+            <h5 class="h6 mb-0 fw-bold text-dark">External Service Logs &amp; Telemetry</h5>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadJobExternalLogs({{ job.id }})">
+            <i class="bi bi-arrow-clockwise me-1"></i>Fetch Telemetry Logs
+        </button>
+    </div>
+    <div class="card-body p-4">
+        <div id="job-external-logs-container" class="text-muted small">
+            <p class="mb-0 text-secondary"><i class="bi bi-info-circle me-1"></i>Click <strong>Fetch Telemetry Logs</strong> to view underlying database, Vault, and SSH calls recorded for job #{{ job.id }}.</p>
+        </div>
+    </div>
+</div>
+
+<script>
+function loadJobExternalLogs(jobId) {
+    const container = document.getElementById('job-external-logs-container');
+    if (!container) return;
+    container.innerHTML = '<div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading telemetry logs...';
+    fetch(`/monitoring/telemetry/job/${jobId}/logs/`, {
+        headers: {'X-Requested-With': 'XMLHttpRequest'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success' && data.logs && data.logs.length > 0) {
+            let html = '<div class="table-responsive"><table class="table table-sm table-hover font-monospace mb-0" style="font-size: 0.8rem;">';
+            html += '<thead class="table-light"><tr><th>Timestamp</th><th>Service</th><th>Operation</th><th>Duration</th><th>Status</th></tr></thead><tbody>';
+            data.logs.forEach(l => {
+                const isSuccess = l.IsSuccess !== false && l.StatusCode < 400;
+                const badge = isSuccess ? '<span class="badge bg-success-subtle text-success">OK</span>' : `<span class="badge bg-danger-subtle text-danger">ERR ${l.StatusCode || ''}</span>`;
+                html += `<tr><td>${l.Timestamp || '-'}</td><td><strong>${l.ServiceName || '-'}</strong></td><td>${l.CommandOrPath || '-'}</td><td>${l.DurationMs || 0} ms</td><td>${badge}</td></tr>`;
+            });
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<div class="alert alert-light border mb-0 text-muted"><i class="bi bi-inbox me-1"></i>No external service log records found for this job.</div>';
+        }
+    })
+    .catch(err => {
+        container.innerHTML = `<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>Failed to fetch logs: ${err}</div>`;
+    });
+}
+</script>
+
 <script>
 (function() {
     const jaegerPageUrl = "{% url 'jaeger_page' %}";

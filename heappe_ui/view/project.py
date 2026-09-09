@@ -1730,3 +1730,63 @@ def delete_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     )
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
+
+
+@login_required
+def admin_jobs_monitoring_view(request: HttpRequest) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    page_size = int(request.GET.get("page_size", 20))
+    last_job_id = request.GET.get("last_job_id")
+    if last_job_id:
+        try:
+            last_job_id = int(last_job_id)
+        except ValueError:
+            last_job_id = None
+
+    jobs = []
+    next_last_job_id = None
+    try:
+        if hasattr(controller, "heappe_management_get_jobs_monitoring_post"):
+            res = controller.heappe_management_get_jobs_monitoring_post(
+                SessionCode=request.session_code,
+                PageSize=page_size,
+                LastJobId=last_job_id
+            )
+            if res:
+                if isinstance(res, list):
+                    jobs = [j.to_dict() if hasattr(j, "to_dict") else j for j in res]
+                elif hasattr(res, "jobs"):
+                    jobs = [j.to_dict() if hasattr(j, "to_dict") else j for j in res.jobs]
+        else:
+            import requests as req_lib
+            base_url = request.api_instance.configuration.host
+            params = {"SessionCode": request.session_code}
+            body = {"PageSize": page_size}
+            if last_job_id is not None:
+                body["LastJobId"] = last_job_id
+            resp = req_lib.post(
+                f"{base_url}/heappe/Management/GetJobsMonitoring",
+                params=params,
+                json=body,
+                verify=False,
+                timeout=15
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    jobs = data
+                elif isinstance(data, dict):
+                    jobs = data.get("jobs", data.get("Jobs", []))
+    except Exception as e:
+        messages.error(request, f"Failed to fetch jobs monitoring data: {e}")
+
+    if jobs:
+        last_item = jobs[-1]
+        next_last_job_id = last_item.get("id") or last_item.get("Id")
+
+    return render(request, "jobs_monitoring.html", {
+        "jobs": jobs,
+        "page_size": page_size,
+        "last_job_id": last_job_id,
+        "next_last_job_id": next_last_job_id,
+    })

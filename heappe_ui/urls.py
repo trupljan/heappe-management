@@ -70,6 +70,7 @@ urlpatterns = [
     path('command-templates/<int:command_template_id>/', views.command_template_detail, name='command_template_detail'),
     path('command-templates/<int:command_template_id>/modify/', views.command_template_modify, name='command_template_modify'),
     path('command-templates/<int:command_template_id>/delete/', views.command_template_delete, name='command_template_delete'),
+    path('command-templates/<int:command_template_id>/copy/', views.command_template_copy, name='command_template_copy'),
 
 
     path('instances/', views.instance_credentials_list, name='instance_credentials_list'),
@@ -126,6 +127,7 @@ urlpatterns = [
     path('jaeger-proxy/<path:path>', views.jaeger_proxy, name='jaeger_proxy'),
 
     # Telemetry & Monitoring Dashboard (v6.5.0+)
+    path('monitoring/jobs/', views.admin_jobs_monitoring_view, name='admin_jobs_monitoring_view'),
     path('monitoring/telemetry/', views.external_services_telemetry_view, name='external_services_telemetry_view'),
     path('monitoring/telemetry/live-status/', views.external_services_live_status_api, name='external_services_live_status_api'),
     path('monitoring/telemetry/statistics/', views.external_services_statistics_api, name='external_services_statistics_api'),

@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Copy Command Template - {{ source_template.name }}{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'project_list' %}" class="text-decoration-none text-secondary">Projects</a></li>
+    {% if source_project and source_project.id %}
+        <li class="breadcrumb-item"><a href="{% url 'project_detail' source_project.id %}" class="text-decoration-none text-secondary">{{ source_project.name }}</a></li>
+    {% endif %}
+    <li class="breadcrumb-item"><a href="{% url 'command_template_detail' source_template.id %}" class="text-decoration-none text-secondary">{{ source_template.name }}</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Copy Template</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+  <div class="row">
+    <div class="col-xl-9 col-lg-10 mx-auto">
+
+      <!-- Back Action Header -->
+      <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2.5">
+          <div class="bg-primary bg-opacity-10 text-primary p-2.5 rounded-3 d-flex align-items-center justify-content-center">
+            <i class="bi bi-copy fs-4"></i>
+          </div>
+          <div>
+            <h4 class="mb-0 fw-bold text-dark">
+              Copy Command Template
+            </h4>
+            <span class="text-muted small">Duplicate template configuration, cluster bindings, and dynamic parameters to any target project</span>
+          </div>
+        </div>
+        {% if source_project and source_project.id %}
+        <a href="{% url 'project_detail' source_project.id %}?tab=commandtemplates" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
+          <i class="bi bi-arrow-left me-1.5"></i>Back to Project
+        </a>
+        {% else %}
+        <a href="{% url 'command_template_detail' source_template.id %}" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
+          <i class="bi bi-arrow-left me-1.5"></i>Back to Template
+        </a>
+        {% endif %}
+      </div>
+
+      <!-- Source Template Info Banner -->
+      <div class="alert alert-light border border-secondary-subtle rounded-3 shadow-xs p-3.5 mb-4 d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div class="d-flex align-items-center gap-3">
+          <i class="bi bi-info-circle-fill text-primary fs-4"></i>
+          <div>
+            <div class="fw-bold text-dark">Source Template: <span class="text-primary">{{ source_template.name }}</span> (ID: #{{ source_template.id }})</div>
+            <div class="text-muted small">
+              {% if source_project %}
+                Belongs to project <strong>{{ source_project.name }}</strong> (ID: {{ source_project.id }}).
+              {% elif source_template.project_id == 0 %}
+                Shared template across all projects.
+              {% endif %}
+              Select a target project below to duplicate this template.
+            </div>
+          </div>
+        </div>
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill font-monospace small">
+          {% if source_template.template_parameters %}{{ source_template.template_parameters|length }} Parameter(s) included{% else %}0 Parameters{% endif %}
+        </span>
+      </div>
+
+      <!-- Copy Form Card -->
+      <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-file-earmark-plus-fill text-primary"></i>
+            <h5 class="h6 mb-0 fw-bold text-dark">New Template Properties</h5>
+          </div>
+        </div>
+
+        <div class="card-body p-4">
+          <form method="post">
+            {% csrf_token %}
+
+            <div class="row g-3">
+              <!-- Target Project Dropdown -->
+              <div class="col-md-12">
+                <label class="form-label small fw-bold text-secondary text-uppercase">
+                  Target Project <span class="text-danger">*</span>
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text bg-light border-secondary-subtle"><i class="bi bi-folder2-open text-secondary"></i></span>
+                  <select class="form-select border-secondary-subtle py-2 fw-semibold" name="ProjectId" required id="targetProjectSelect">
+                    <option value="" disabled>-- Select Target Project --</option>
+                    {% for p in projects %}
+                      <option value="{{ p.id }}" {% if source_template.project_id == p.id %}selected{% endif %}>
+                        {{ p.name }} (ID: {{ p.id }}){% if source_template.project_id == p.id %} - Current Project{% endif %}
+                      </option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="form-text small text-muted">The new command template will be created inside this selected project.</div>
+              </div>
+
+              <!-- Template Name -->
+              <div class="col-md-12">
+                <label class="form-label small fw-bold text-secondary text-uppercase">
+                  Template Name <span class="text-danger">*</span>
+                </label>
+                <input type="text" class="form-control border-secondary-subtle py-2 fw-semibold" name="Name" value="Copy of {{ source_template.name|default:'' }}" required placeholder="e.g. Copy of Barbora MPI Run">
+              </div>
+
+              <!-- Description -->
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-secondary text-uppercase">
+                  Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span>
+                </label>
+                <input type="text" class="form-control border-secondary-subtle py-2" name="Description" value="{{ source_template.description|default:'' }}" placeholder="e.g. Executable configuration for Python jobs on Barbora">
+              </div>
+
+              <!-- Extended Allocation Command -->
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-secondary text-uppercase">
+                  Extended Allocation Command <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span>
+                </label>
+                <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExtendedAllocationCommand" value="{{ source_template.extended_allocation_command|default:'' }}" placeholder="e.g. --mem=10G">
+              </div>
+
+              <!-- Executable File -->
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-secondary text-uppercase">
+                  Executable File <span class="text-danger">*</span>
+                </label>
+                <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="ExecutableFile" value="{{ source_template.executable_file|default:'' }}" required placeholder="e.g. /usr/bin/python3">
+              </div>
+
+              <!-- Preparation Script -->
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-secondary text-uppercase">
+                  Preparation Script <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span>
+                </label>
+                <input type="text" class="form-control border-secondary-subtle py-2 font-monospace" name="PreparationScript" value="{{ source_template.preparation_script|default:'' }}" placeholder="e.g. module load Python">
+              </div>
+
+              <!-- Cluster Node Type -->
+              <div class="col-md-6">
+                <label class="form-label small fw-bold text-secondary text-uppercase">Cluster Node Type</label>
+                <select class="form-select border-secondary-subtle py-2" name="ClusterNodeTypeId">
+                  <option value="0" {% if source_template.cluster_node_type_id|default:0 == 0 %}selected{% endif %}>-- Select Node Type --</option>
+                  {% regroup node_types by cluster_name as cluster_list %}
+                  {% for cluster in cluster_list %}
+                    <optgroup label="Cluster: {{ cluster.grouper }}">
+                      {% for node_type in cluster.list %}
+                        <option value="{{ node_type.id }}" {% if source_template.cluster_node_type_id|default:0 == node_type.id %}selected{% endif %}>
+                          {{ node_type.name }} (ID: {{ node_type.id }})
+                        </option>
+                      {% endfor %}
+                    </optgroup>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <!-- Switches -->
+              <div class="col-12 mt-3 d-flex flex-wrap gap-4">
+                <div class="form-check form-switch py-1">
+                  <input class="form-check-input" type="checkbox" role="switch" id="isEnabledSwitch" name="IsEnabled" {% if source_template.is_enabled or source_template.is_enabled is None %}checked{% endif %}>
+                  <label class="form-check-label fw-semibold text-secondary small text-uppercase" for="isEnabledSwitch">Is Enabled</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Parameters Preview Section -->
+            <div class="mt-4 pt-3 border-top">
+              <div class="d-flex align-items-center justify-content-between mb-3">
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-list-nested text-primary"></i>
+                  <h6 class="mb-0 fw-bold text-dark">Parameters to be Cloned</h6>
+                </div>
+                <span class="badge bg-secondary-subtle text-secondary small">
+                  {{ source_template.template_parameters|length|default:0 }} parameter(s)
+                </span>
+              </div>
+
+              {% if source_template.template_parameters %}
+                <div class="table-responsive border rounded-3 overflow-hidden">
+                  <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light text-secondary small text-uppercase">
+                      <tr>
+                        <th class="ps-3" style="width: 30%;">Identifier</th>
+                        <th style="width: 45%;">Description</th>
+                        <th style="width: 25%;">Query</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for param in source_template.template_parameters %}
+                        <tr>
+                          <td class="ps-3 fw-bold text-dark font-monospace small">${{ param.identifier }}</td>
+                          <td class="text-secondary small">{{ param.description|default:"-" }}</td>
+                          <td class="font-monospace text-secondary small">{{ param.query|default:"-" }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+                <div class="form-text small text-muted mt-1.5">
+                  <i class="bi bi-info-circle me-1"></i>These parameters will be created automatically under the new command template.
+                </div>
+              {% else %}
+                <div class="p-3 bg-light rounded-3 text-muted small text-center">
+                  <i class="bi bi-info-circle me-1"></i>Source template has no dynamic parameters.
+                </div>
+              {% endif %}
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="mt-4 pt-3 border-top d-flex justify-content-between align-items-center">
+              <button type="submit" class="btn btn-primary fw-bold px-4 py-2 rounded-3 shadow-sm d-flex align-items-center gap-2">
+                <i class="bi bi-copy"></i>
+                <span>Create Copy</span>
+              </button>
+              {% if source_project and source_project.id %}
+              <a href="{% url 'project_detail' source_project.id %}?tab=commandtemplates" class="btn btn-outline-secondary fw-semibold px-4 py-2 rounded-3">Cancel</a>
+              {% else %}
+              <a href="{% url 'command_template_detail' source_template.id %}" class="btn btn-outline-secondary fw-semibold px-4 py-2 rounded-3">Cancel</a>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}

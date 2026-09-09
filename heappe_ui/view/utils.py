@@ -272,3 +272,27 @@ def get_instance_api_links(instance_name):
         "datastaging_api_url": datastaging_api_url,
         "datastaging_swagger_url": datastaging_swagger_url,
     }
+
+
+def get_dynamic_dictionary(request: HttpRequest, endpoint_name: str) -> list:
+    """Fetch dictionary items from HEAppE Dictionary API with fallback support."""
+    if not hasattr(request, "api_instance") or not request.api_instance:
+        return []
+    import requests as req_lib
+    base_url = request.api_instance.configuration.host
+    endpoint_clean = endpoint_name.lstrip('/')
+    if not endpoint_clean.startswith("heappe/Dictionary/"):
+        endpoint_clean = f"heappe/Dictionary/{endpoint_clean}"
+    try:
+        resp = req_lib.get(
+            f"{base_url}/{endpoint_clean}",
+            verify=False,
+            timeout=10
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list):
+                return data
+    except Exception:
+        pass
+    return []
