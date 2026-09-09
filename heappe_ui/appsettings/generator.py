@@ -724,7 +724,7 @@ def generate_appsettings_v6_4_17(
         ext_auth = appsettings['ExternalAuthenticationSettings']
         if 'LexisAuthenticationConfiguration' in ext_auth:
             lexis_auth = ext_auth['LexisAuthenticationConfiguration']
-            lexis_auth['ApiVersion'] = "v2"
+            lexis_auth['ApiVersion'] = "auto"
             lexis_auth['ExtendedUserInfoV2Endpoint'] = "/api/v2/users/me/extended"
             lexis_auth['CommandTemplatePermissionsV2Endpoint'] = "/api/v2/heappe/command-template-permissions/"
             lexis_auth['HEAppEUserPrefix'] = "LEXIS_"

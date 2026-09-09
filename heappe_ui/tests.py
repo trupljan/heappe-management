@@ -2722,7 +2722,7 @@ class AppSettingsV650UpgradeTests(TestCase):
         self.assertEqual(appsettings["BackGroundThreadSettings"]["ExternalServiceHealthMonitoringSettings"], {"IsEnabled": True, "IntervalSeconds": 60, "RetentionDays": 30})
         self.assertEqual(appsettings["HPCConnectionFrameworkSettings"]["ClustersConnectionPoolSettings"]["ConnectionPoolMaxUnusedInterval"], 1800)
         self.assertEqual(appsettings["HPCConnectionFrameworkSettings"]["SshClientSettings"]["ConnectionTimeout"], 30000)
-        self.assertEqual(appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]["ApiVersion"], "v2")
+        self.assertEqual(appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]["ApiVersion"], "auto")
         self.assertEqual(appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]["ExtendedUserInfoV2Endpoint"], "/api/v2/users/me/extended")
         self.assertEqual(appsettings["SshCaSettings"]["BaseUri"], "https://ssh.ca.api.heappe.eu")
 
