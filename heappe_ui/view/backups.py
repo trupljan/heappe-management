@@ -43,7 +43,10 @@ def database_backups(request: HttpRequest) -> HttpResponse:
         if action == "backup_full":
             result = _handle_api_call(
                 request,
-                lambda: controller.heappe_management_backup_database_post(SessionCode=request.session_code),
+                lambda: controller.heappe_management_backup_database_post(
+                    SessionCode=request.session_code,
+                    _request_timeout=300
+                ),
                 "Full database backup initiated successfully!",
                 "Failed to initiate full database backup"
             )
@@ -51,7 +54,10 @@ def database_backups(request: HttpRequest) -> HttpResponse:
         elif action == "backup_logs":
             result = _handle_api_call(
                 request,
-                lambda: controller.heappe_management_backup_database_transaction_logs_post(SessionCode=request.session_code),
+                lambda: controller.heappe_management_backup_database_transaction_logs_post(
+                    SessionCode=request.session_code,
+                    _request_timeout=180
+                ),
                 "Transaction logs backup initiated successfully!",
                 "Failed to initiate transaction logs backup"
             )
@@ -71,7 +77,10 @@ def database_backups(request: HttpRequest) -> HttpResponse:
             )
             result = _handle_api_call(
                 request,
-                lambda: controller.heappe_management_restore_database_post(body=body),
+                lambda: controller.heappe_management_restore_database_post(
+                    body=body,
+                    _request_timeout=600
+                ),
                 f"Database restore from '{backup_file_name}' initiated successfully!",
                 "Failed to restore database"
             )
@@ -233,6 +242,7 @@ def export_migration_package(request: HttpRequest) -> HttpResponse:
             "SessionCode": request.session_code,
             "_preload_content": False,
             "_return_http_data_only": True,
+            "_request_timeout": 300,
         }
         if passphrase:
             kwargs["Passphrase"] = passphrase

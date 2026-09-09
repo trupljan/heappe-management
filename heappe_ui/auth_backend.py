@@ -78,7 +78,11 @@ def patch_api_client(api_instance):
 
         # Inject default _request_timeout if not specified
         if bound_args.arguments.get('_request_timeout') is None:
-            bound_args.arguments['_request_timeout'] = 5
+            resource_path = str(bound_args.arguments.get('resource_path') or '')
+            if any(heavy in resource_path for heavy in ['Backup', 'Restore', 'Migration', 'SetupSlurm', 'InitializeClusterScriptDirectory']):
+                bound_args.arguments['_request_timeout'] = 300
+            else:
+                bound_args.arguments['_request_timeout'] = 15
 
         # Modify query_params
         query_params = bound_args.arguments.get('query_params')
