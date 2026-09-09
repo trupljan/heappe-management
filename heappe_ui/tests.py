@@ -549,6 +549,7 @@ class CommandTemplateCopyTests(TestCase):
         self.assertEqual(post_kwargs['body']['ExecutableFile'], "/usr/bin/python3")
         self.assertEqual(post_kwargs['body']['ClusterNodeTypeId'], 3)
         self.assertEqual(post_kwargs['body']['IsEnabled'], True)
+        self.assertEqual(post_kwargs['body']['TemplateParameters'], [])
 
         # Verify parameter duplication
         mock_mgmt_instance.heappe_management_command_template_parameter_post.assert_called_once()

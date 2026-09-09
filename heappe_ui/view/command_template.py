@@ -314,12 +314,13 @@ def command_template_copy(request: HttpRequest, command_template_id: int) -> Htt
         payload_data = {
             "ProjectId": target_project_id,
             "Name": request.POST.get("Name"),
-            "Description": request.POST.get("Description"),
-            "ExtendedAllocationCommand": request.POST.get("ExtendedAllocationCommand"),
+            "Description": request.POST.get("Description") or "",
+            "ExtendedAllocationCommand": request.POST.get("ExtendedAllocationCommand") or "",
             "ExecutableFile": request.POST.get("ExecutableFile"),
-            "PreparationScript": request.POST.get("PreparationScript"),
+            "PreparationScript": request.POST.get("PreparationScript") or "",
             "ClusterNodeTypeId": int(request.POST.get("ClusterNodeTypeId")) if request.POST.get("ClusterNodeTypeId") and request.POST.get("ClusterNodeTypeId") != "0" else None,
             "IsEnabled": request.POST.get("IsEnabled") == "on",
+            "TemplateParameters": []
         }
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
