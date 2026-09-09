@@ -39,14 +39,23 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
             SessionCode=request.session_code
         )
         if sys_res:
+            seen_all = set()
+            seen_user = set()
             for item in sys_res:
                 u = getattr(item, 'username', None) or (item.get('username') if isinstance(item, dict) else None)
                 r = getattr(item, 'role', None) or (item.get('role') if isinstance(item, dict) else None)
                 s = getattr(item, 'source', None) or (item.get('source') if isinstance(item, dict) else None) or "Dynamic"
-                entry = {'username': u, 'role': r, 'source': s}
-                all_system_roles.append(entry)
-                if u and u.lower() == adaptor_user_username.lower():
-                    system_roles.append(entry)
+                if not u or not r:
+                    continue
+                key_all = (u.lower(), str(r).lower(), str(s).lower())
+                if key_all not in seen_all:
+                    seen_all.add(key_all)
+                    all_system_roles.append({'username': u, 'role': r, 'source': s})
+                if u.lower() == adaptor_user_username.lower():
+                    key_user = (str(r).lower(), str(s).lower())
+                    if key_user not in seen_user:
+                        seen_user.add(key_user)
+                        system_roles.append({'username': u, 'role': r, 'source': s})
     except Exception as e:
         print(f"[adaptor_user_detail] Error fetching system roles: {e}")
 

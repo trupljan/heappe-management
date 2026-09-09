@@ -423,16 +423,22 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             try:
                 raw_sys_roles = controller.heappe_management_system_role_assignments_get(SessionCode=session_code)
                 if raw_sys_roles:
+                    seen_sys = set()
                     for sr in raw_sys_roles:
                         u = getattr(sr, 'username', None) or (sr.get('username') if isinstance(sr, dict) else None)
                         r = getattr(sr, 'role', None) or (sr.get('role') if isinstance(sr, dict) else None)
                         s = getattr(sr, 'source', None) or (sr.get('source') if isinstance(sr, dict) else None) or "Dynamic"
+                        if not u or not r:
+                            continue
+                        key = (u.lower(), str(r).lower(), str(s).lower())
+                        if key in seen_sys:
+                            continue
+                        seen_sys.add(key)
                         entry = {'username': u, 'role': r, 'source': s}
                         system_role_assignments.append(entry)
-                        if u:
-                            system_role_user_map.setdefault(u, []).append(entry)
-                            if u.lower() != u:
-                                system_role_user_map.setdefault(u.lower(), []).append(entry)
+                        system_role_user_map.setdefault(u, []).append(entry)
+                        if u.lower() != u:
+                            system_role_user_map.setdefault(u.lower(), []).append(entry)
             except Exception as ex_sr:
                 print(f"[project_detail] System roles query error: {ex_sr}")
         except Exception:
