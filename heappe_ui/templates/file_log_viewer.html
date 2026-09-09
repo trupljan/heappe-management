@@ -371,12 +371,12 @@
 
     <!-- Top Control Bar -->
     <div class="card filter-card p-3 bg-white mb-3">
-        <form method="GET" class="d-flex flex-wrap align-items-end gap-2.5">
+        <form method="GET" id="logFilterForm" class="d-flex flex-wrap align-items-end gap-2.5">
             <div class="flex-grow-1" style="min-width: 150px; flex-basis: 0;">
                 <label class="filter-label">Log Source</label>
                 <select name="service" class="form-select form-control-custom w-100">
-                    <option value="ALL" {% if service_filter == "ALL" or not service_filter %}selected{% endif %}>ALL LOGS</option>
-                    <option value="API" {% if service_filter == "API" %}selected{% endif %}>HEAppE API</option>
+                    <option value="API" {% if service_filter == "API" or not service_filter %}selected{% endif %}>HEAppE API</option>
+                    <option value="ALL" {% if service_filter == "ALL" %}selected{% endif %}>ALL LOGS</option>
                     <option value="DATASTAGING" {% if service_filter == "DATASTAGING" %}selected{% endif %}>DataStaging API</option>
                     <option value="RATELIMIT-API" {% if service_filter == "RATELIMIT-API" %}selected{% endif %}>RateLimit API</option>
                     <option value="RATELIMIT-DATASTAGING" {% if service_filter == "RATELIMIT-DATASTAGING" %}selected{% endif %}>RateLimit DataStaging</option>
@@ -417,7 +417,7 @@
             </div>
             
             <div class="d-flex gap-2 ms-auto" style="min-width: 160px; flex-basis: 0;">
-                <button type="submit" class="btn btn-primary btn-filter-apply w-100">
+                <button type="submit" id="applyFilterBtn" class="btn btn-primary btn-filter-apply w-100">
                     <i class="bi bi-funnel-fill me-1"></i>Apply
                 </button>
                 <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-filter-reset w-100">
@@ -480,7 +480,13 @@
             <!-- Console Body -->
             <div class="card-body console-body" id="logWindow">
                 <div id="logConsole" class="log-console-content">
-                    <!-- Loaded dynamically via JS -->
+                    <div id="logLoadingSpinner" class="d-flex flex-column justify-content-center align-items-center py-5 text-center my-4">
+                        <div class="spinner-border text-primary mb-3" style="width: 2.5rem; height: 2.5rem;" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Loading HEAppE Logs...</h6>
+                        <p class="text-muted small mb-0 font-monospace" style="font-size: 0.75rem;">Reading and parsing log entries from instance files</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -659,6 +665,7 @@
     }
 
     function renderLogs(entries) {
+        consoleContent.innerHTML = '';
         let html = '';
         for (const entry of entries) {
             html += createLogEntryHtml(entry);
@@ -666,7 +673,7 @@
         if (html) {
             consoleContent.insertAdjacentHTML('beforeend', html);
         } else {
-            consoleContent.innerHTML = '<div class="text-center py-5 text-muted">No matching logs found.</div>';
+            consoleContent.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No matching logs found.</div>';
         }
         scrollToBottom();
         entryCountDisplay.textContent = consoleContent.querySelectorAll('.log-entry').length;
@@ -902,6 +909,28 @@
                 }
             });
         });
+
+        const logFilterForm = document.getElementById('logFilterForm');
+        if (logFilterForm) {
+            logFilterForm.addEventListener('submit', function() {
+                const btn = document.getElementById('applyFilterBtn');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Loading...';
+                }
+                if (consoleContent) {
+                    consoleContent.innerHTML = `
+                        <div class="d-flex flex-column justify-content-center align-items-center py-5 text-center my-4">
+                            <div class="spinner-border text-primary mb-3" style="width: 2.5rem; height: 2.5rem;" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">Applying Filters &amp; Loading Logs...</h6>
+                            <p class="text-muted small mb-0 font-monospace" style="font-size: 0.75rem;">Reading and parsing matching records from HEAppE instance</p>
+                        </div>
+                    `;
+                }
+            });
+        }
 
         const initialDataEl = document.getElementById('initialLogsData');
         if (initialDataEl) {

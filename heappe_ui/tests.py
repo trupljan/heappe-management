@@ -2548,17 +2548,19 @@ class LogViewerJsonTests(TestCase):
         self.assertIn('[req1]', parsed['content'])
 
     @mock.patch('os.path.exists')
+    @mock.patch('os.path.isdir')
     @mock.patch('os.listdir')
     @mock.patch('os.path.getmtime')
-    def test_get_log_file_paths_includes_json(self, mock_getmtime, mock_listdir, mock_exists):
+    def test_get_log_file_paths_includes_json(self, mock_getmtime, mock_listdir, mock_isdir, mock_exists):
         from heappe_ui.views import get_log_file_paths
         mock_exists.return_value = True
-        mock_listdir.return_value = ['2026_07_13.log', '2026_07_13.json', '2026_07_13.json.1', 'other.log']
+        mock_isdir.return_value = False
+        mock_listdir.side_effect = lambda d: ['2026_07_13.log', '2026_07_13.json', '2026_07_13.json.1', 'other.log'] if str(d).endswith('/API') else []
         mock_getmtime.side_effect = lambda path: 10 if 'json.1' in path else 20
         
-        paths = get_log_file_paths('test_instance', '2026-07-13')
+        paths = get_log_file_paths('test_instance', '2026-07-13', service='API')
         self.assertEqual(len(paths), 3)
-        self.assertIn('/opt/heappe-deployment/test_instance/app/logs/API/2026_07_13.json.1', paths[0])
+        self.assertIn('/opt/heappe-deployment/test_instance/app/logs/API/2026_07_13.json.1', paths[0][0] if isinstance(paths[0], tuple) else paths[0])
 
     def test_get_log_entries_backwards_json(self):
         from heappe_ui.views import get_log_entries_backwards
@@ -2593,7 +2595,7 @@ class LogViewerJsonTests(TestCase):
             tmp_path = tmp.name
             
         try:
-            with mock.patch('heappe_ui.views.get_log_file_path', return_value=tmp_path):
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
                 req = factory.get('/fetch-new-logs/?offset=0')
                 req.user = user
                 req.session = {'chosen_instance': 'test'}

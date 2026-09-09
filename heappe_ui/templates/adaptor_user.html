@@ -120,7 +120,7 @@
                 <h5 class="h6 mb-0 fw-bold text-dark">General Settings &amp; Identity</h5>
             </div>
             {% if adaptor_user.idp_sid or adaptor_user.IdpSid %}
-                <span class="badge bg-light text-secondary border font-monospace small"><i class="bi bi-fingerprint me-1"></i>IDP SID: {{ adaptor_user.idp_sid|default:adaptor_user.IdpSid }}</span>
+                <span class="badge bg-light text-secondary border font-monospace small"><i class="bi bi-fingerprint me-1"></i>IDP SID: {% firstof adaptor_user.idp_sid adaptor_user.IdpSid %}</span>
             {% endif %}
         </div>
         <div class="card-body p-4">
@@ -134,7 +134,7 @@
                     </div>
                     <div class="col-md-6 col-12">
                         <label class="form-label small fw-bold text-secondary text-uppercase mb-1">IDP Identity SID (Keycloak / Federated SID)</label>
-                        <input type="text" class="form-control border-secondary-subtle bg-light py-2 rounded-3 font-monospace small" value="{{ adaptor_user.idp_sid|default:adaptor_user.IdpSid|default:'N/A' }}" readonly>
+                        <input type="text" class="form-control border-secondary-subtle bg-light py-2 rounded-3 font-monospace small" value="{% firstof adaptor_user.idp_sid adaptor_user.IdpSid 'N/A' %}" readonly>
                     </div>
                     <div class="col-12 mt-3">
                         <button type="submit" class="btn btn-primary fw-bold py-2 px-4 rounded-3 shadow-sm">

@@ -1006,25 +1006,40 @@ def project_create(request: HttpRequest) -> HttpResponse:
 def project_list(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     
-    # Retrieve raw projects list to extract PIEmail, which is discarded by the Swagger model
+    projects = []
     try:
         raw_resp = controller.heappe_management_projects_get(
             SessionCode=request.session_code, _preload_content=False
         )
         import json
-        raw_projects = json.loads(raw_resp.data.decode('utf-8'))
-        raw_by_id = {p.get('Id'): p for p in raw_projects}
+        raw_data = raw_resp.data
+        if isinstance(raw_data, bytes):
+            raw_data = raw_data.decode('utf-8')
+        raw_projects = json.loads(raw_data)
+        for p in raw_projects:
+            pi_email = p.get('PIEmail') or p.get('pi_email')
+            p_dict = {
+                'id': p.get('Id') if p.get('Id') is not None else p.get('id'),
+                'name': p.get('Name') or p.get('name'),
+                'description': p.get('Description') or p.get('description'),
+                'start_date': p.get('StartDate') or p.get('start_date'),
+                'end_date': p.get('EndDate') or p.get('end_date'),
+                'accounting_string': p.get('AccountingString') or p.get('accounting_string'),
+                'usage_type': p.get('UsageType') if p.get('UsageType') is not None else p.get('usage_type'),
+                'pi_email': pi_email,
+                'PIEmail': pi_email,
+                'use_accounting_string_for_scheduler': p.get('UseAccountingStringForScheduler') if p.get('UseAccountingStringForScheduler') is not None else p.get('use_accounting_string_for_scheduler'),
+                'is_one_to_one_mapping': p.get('IsOneToOneMapping') if p.get('IsOneToOneMapping') is not None else p.get('is_one_to_one_mapping'),
+            }
+            projects.append(p_dict)
     except Exception as e:
         print(f"Error fetching raw projects: {e}")
-        raw_by_id = {}
-
-    projects = []
-    for p in controller.heappe_management_projects_get(SessionCode=request.session_code):
-        p_dict = p.to_dict()
-        raw_proj = raw_by_id.get(p_dict.get('id'), {})
-        p_dict['pi_email'] = raw_proj.get('PIEmail') or raw_proj.get('pi_email')
-        p_dict['PIEmail'] = p_dict['pi_email']
-        projects.append(p_dict)
+        try:
+            for p in (controller.heappe_management_projects_get(SessionCode=request.session_code) or []):
+                p_dict = p.to_dict() if hasattr(p, 'to_dict') else p
+                projects.append(p_dict)
+        except Exception:
+            projects = []
 
     if request.method == "POST":
         action = request.POST.get("action")
