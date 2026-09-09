@@ -130,110 +130,162 @@
     <div class="modal fade" id="jobModal{{ job_item.id }}" tabindex="-1" aria-labelledby="jobModalLabel{{ job_item.id }}" aria-hidden="true">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
-                <div class="modal-header bg-white border-bottom py-3 px-4">
-                    <h5 class="modal-title fw-bold text-dark d-flex align-items-center" id="jobModalLabel{{ job_item.id }}">
-                        <i class="bi bi-info-circle text-primary me-2 fs-5"></i>
-                        Job Details
-                        <span class="text-muted font-monospace small ms-2 bg-light border px-2 py-0.5 rounded">#{{ job_item.id }}</span>
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="modal-header bg-dark text-white py-3 px-4 d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="bg-primary bg-gradient rounded-3 p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                            <i class="bi bi-cpu fs-4 text-warning"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title fw-bold text-white mb-0" id="jobModalLabel{{ job_item.id }}">
+                                {{ job_item.name }}
+                                <span class="badge bg-secondary font-monospace small ms-2" style="font-size: 0.75rem;">#{{ job_item.id }}</span>
+                            </h5>
+                            <small class="text-white-50">
+                                Cluster: <strong class="text-white">{{ job_item.cluster_name|default:"N/A" }}</strong>
+                                {% if job_item.cluster_id %}(ID: {{ job_item.cluster_id }}){% endif %}
+                                &bull; Project: <strong class="text-white">{{ job_item.project_name|default:"N/A" }}</strong>
+                                {% if job_item.project_id %}(ID: {{ job_item.project_id }}){% endif %}
+                            </small>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if job_item.state == 1 %}<span class="badge bg-secondary px-3 py-2 text-white fw-bold">Configuring</span>
+                        {% elif job_item.state == 2 %}<span class="badge bg-info px-3 py-2 text-white fw-bold">Submitted</span>
+                        {% elif job_item.state == 4 %}<span class="badge bg-primary px-3 py-2 text-white fw-bold">Queued</span>
+                        {% elif job_item.state == 8 %}<span class="badge bg-warning px-3 py-2 text-dark fw-bold">Running</span>
+                        {% elif job_item.state == 16 %}<span class="badge bg-success px-3 py-2 text-white fw-bold">Finished</span>
+                        {% elif job_item.state == 32 %}<span class="badge bg-danger px-3 py-2 text-white fw-bold">Failed</span>
+                        {% elif job_item.state == 64 %}<span class="badge bg-dark px-3 py-2 text-white fw-bold">Canceled</span>
+                        {% elif job_item.state == 128 %}<span class="badge bg-warning px-3 py-2 text-dark fw-bold">Waiting</span>
+                        {% elif job_item.state == 256 %}<span class="badge bg-secondary px-3 py-2 text-white fw-bold">Deleted</span>
+                        {% else %}<span class="badge bg-light px-3 py-2 text-dark border fw-bold">{{ job_item.state }}</span>
+                        {% endif %}
+                        <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                 </div>
-                <div class="modal-body p-4">
-                    <!-- Metadata Grid -->
-                    <div class="bg-light p-3.5 rounded-3 border border-light-subtle mb-4">
-                        <div class="row g-3">
-                            <!-- Column 1: Core Job Info -->
-                            <div class="col-md-4 d-flex flex-column gap-2 border-end pe-3">
-                                <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
-                                    <i class="bi bi-card-checklist text-primary me-1"></i>Basic Information
+                <div class="modal-body p-4 bg-light-subtle">
+                    <!-- 4-Card Overview Grid for all Job-Level Parameters -->
+                    <div class="row g-3 mb-4">
+                        <!-- Card 1: Execution & Timing -->
+                        <div class="col-lg-3 col-md-6">
+                            <div class="p-3 bg-white rounded-3 border shadow-sm h-100 d-flex flex-column gap-1.5" style="font-size: 0.82rem;">
+                                <h6 class="fw-bold text-primary border-bottom pb-1.5 mb-1 d-flex align-items-center" style="font-size: 0.84rem;">
+                                    <i class="bi bi-stopwatch text-primary me-1.5"></i>Timing &amp; Lifecycle
                                 </h6>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Job Name:</span>
-                                    <span class="fw-bold text-dark text-end" style="font-size: 0.85rem;">{{ job_item.name }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Created:</span>
+                                    <span class="fw-semibold text-dark font-monospace text-end">{{ job_item.creation_time|format_datetime|default:"N/A" }}</span>
                                 </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">State:</span>
-                                    <div>
-                                        {% if job_item.state == 1 %}<span class="badge bg-secondary-subtle text-secondary border">Configuring</span>
-                                        {% elif job_item.state == 2 %}<span class="badge bg-info-subtle text-info border">Submitted</span>
-                                        {% elif job_item.state == 4 %}<span class="badge bg-primary-subtle text-primary border">Queued</span>
-                                        {% elif job_item.state == 8 %}<span class="badge bg-warning-subtle text-warning-emphasis border">Running</span>
-                                        {% elif job_item.state == 16 %}<span class="badge bg-success-subtle text-success border">Finished</span>
-                                        {% elif job_item.state == 32 %}<span class="badge bg-danger-subtle text-danger border">Failed</span>
-                                        {% elif job_item.state == 64 %}<span class="badge bg-dark-subtle text-dark border">Canceled</span>
-                                        {% elif job_item.state == 128 %}<span class="badge bg-secondary-subtle text-secondary border">Waiting</span>
-                                        {% elif job_item.state == 256 %}<span class="badge bg-secondary-subtle text-secondary border">Deleted</span>
-                                        {% else %}<span class="badge bg-secondary-subtle text-secondary border">{{ job_item.state }}</span>
-                                        {% endif %}
-                                    </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Submitted:</span>
+                                    <span class="fw-semibold text-dark font-monospace text-end">{{ job_item.submit_time|format_datetime|default:"Not submitted" }}</span>
                                 </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Creation Time:</span>
-                                    <span class="text-dark small text-end">{{ job_item.creation_time|format_datetime|default:"N/A" }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Started:</span>
+                                    <span class="fw-semibold text-dark font-monospace text-end">{{ job_item.start_time|format_datetime|default:"Not started" }}</span>
                                 </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Start Time:</span>
-                                    <span class="text-dark small text-end">{{ job_item.start_time|format_datetime|default:"N/A" }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Ended:</span>
+                                    <span class="fw-semibold text-dark font-monospace text-end">{{ job_item.end_time|format_datetime|default:"Not ended" }}</span>
                                 </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">End Time:</span>
-                                    <span class="text-dark small text-end">{{ job_item.end_time|format_datetime|default:"N/A" }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">State Updated:</span>
+                                    <span class="fw-semibold text-dark font-monospace text-end">{{ job_item.state_updated_at|format_datetime|default:"N/A" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">State Source:</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace">{{ job_item|get_job_state_source|default:"N/A" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between pt-1 border-top">
+                                    <span class="text-muted">Allocated Time:</span>
+                                    <span class="fw-bold text-dark">{{ job_item.total_allocated_time|default:"N/A" }}{% if job_item.total_allocated_time %} s{% endif %}</span>
                                 </div>
                             </div>
+                        </div>
 
-                            <!-- Column 2: Submitter & HPC Account -->
-                            <div class="col-md-4 d-flex flex-column gap-2 border-end px-3">
-                                <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
-                                    <i class="bi bi-person-badge text-primary me-1"></i>Submitter &amp; HPC Account
+                        <!-- Card 2: Submitter Identity -->
+                        <div class="col-lg-3 col-md-6">
+                            <div class="p-3 bg-white rounded-3 border shadow-sm h-100 d-flex flex-column gap-1.5" style="font-size: 0.82rem;">
+                                <h6 class="fw-bold text-primary border-bottom pb-1.5 mb-1 d-flex align-items-center" style="font-size: 0.84rem;">
+                                    <i class="bi bi-person-badge text-primary me-1.5"></i>Submitter (User)
                                 </h6>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Submitter:</span>
-                                    <span class="fw-semibold text-dark font-monospace small text-end">{{ job_item.submitter.username|default:job_item.submitter|default:"N/A" }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Username:</span>
+                                    <span class="fw-bold text-dark font-monospace text-end">{{ job_item.submitter.username|default:job_item.submitter|default:"N/A" }}</span>
                                 </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Email:</span>
-                                    <span class="text-dark small text-end text-break" style="max-width: 65%;">{{ job_item.submitter.email|default:"N/A" }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">User ID:</span>
+                                    <span class="badge bg-light text-secondary border font-monospace">#{{ job_item.submitter.id|default:"N/A" }}</span>
                                 </div>
-                                {% if job_item.submitter.idp_sid %}
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">IDP SID:</span>
-                                    <span class="font-monospace text-muted text-end text-break" style="font-size: 0.72rem; max-width: 65%;">{{ job_item.submitter.idp_sid }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Email:</span>
+                                    <span class="text-dark text-end text-truncate" style="max-width: 60%;" title="{{ job_item.submitter.email }}">{{ job_item.submitter.email|default:"N/A" }}</span>
                                 </div>
-                                {% endif %}
-                                <div class="d-flex justify-content-between align-items-center mt-1">
-                                    <span class="text-muted small">HPC Username:</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Group:</span>
+                                    <span class="fw-semibold text-dark text-end">{{ job_item.submitter_group|default:"N/A" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">IDP Subject (IdpSid):</span>
+                                    <span class="font-monospace text-muted text-end text-truncate" style="max-width: 50%; font-size: 0.72rem;" title="{{ job_item.submitter.idp_sid }}">{{ job_item.submitter.idp_sid|default:"N/A" }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Cluster & HPC Account -->
+                        <div class="col-lg-3 col-md-6">
+                            <div class="p-3 bg-white rounded-3 border shadow-sm h-100 d-flex flex-column gap-1.5" style="font-size: 0.82rem;">
+                                <h6 class="fw-bold text-primary border-bottom pb-1.5 mb-1 d-flex align-items-center" style="font-size: 0.84rem;">
+                                    <i class="bi bi-server text-primary me-1.5"></i>Cluster &amp; Credentials
+                                </h6>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Cluster Name:</span>
+                                    <span class="fw-bold text-dark text-end">{{ job_item.cluster_name|default:"N/A" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Cluster ID:</span>
+                                    <span class="badge bg-light text-secondary border font-monospace">{{ job_item.cluster_id|default:"N/A" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Cluster Username:</span>
                                     <span class="badge bg-dark bg-opacity-10 text-dark border font-monospace">{{ job_item.cluster_username|default:"N/A" }}</span>
                                 </div>
-                                {% if job_item.cluster_authentication_type %}
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">HPC Auth Type:</span>
-                                    <span class="text-dark small text-end">{{ job_item.cluster_authentication_type }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Auth Type:</span>
+                                    <span class="text-dark text-end">{{ job_item.cluster_authentication_type|format_cluster_auth_type }}</span>
                                 </div>
-                                {% endif %}
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">HPC Reservation:</span>
+                                    <span class="{% if job_item.reservation %}badge bg-warning-subtle text-warning-emphasis border font-monospace{% else %}text-muted{% endif %}">{{ job_item.reservation|default:"None" }}</span>
+                                </div>
                             </div>
+                        </div>
 
-                            <!-- Column 3: Project & Reservation -->
-                            <div class="col-md-4 d-flex flex-column gap-2 ps-3">
-                                <h6 class="fw-bold text-dark border-bottom pb-1.5 mb-1" style="font-size: 0.85rem;">
-                                    <i class="bi bi-folder2-open text-primary me-1"></i>Project &amp; Reservation
+                        <!-- Card 4: Project & Hierarchy -->
+                        <div class="col-lg-3 col-md-6">
+                            <div class="p-3 bg-white rounded-3 border shadow-sm h-100 d-flex flex-column gap-1.5" style="font-size: 0.82rem;">
+                                <h6 class="fw-bold text-primary border-bottom pb-1.5 mb-1 d-flex align-items-center" style="font-size: 0.84rem;">
+                                    <i class="bi bi-folder2-open text-primary me-1.5"></i>Project &amp; SubProject
                                 </h6>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Project:</span>
-                                    <span class="fw-semibold text-dark small text-end">{{ job_item.project_name|default:job_item.project_id|default:"N/A" }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Project:</span>
+                                    <span class="fw-bold text-dark text-end text-truncate" style="max-width: 65%;">{{ job_item.project_name|default:"N/A" }}</span>
                                 </div>
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">SubProject ID:</span>
-                                    <span class="text-dark small text-end">{{ job_item.sub_project_identifier|default:"N/A" }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">Project ID:</span>
+                                    <span class="badge bg-light text-secondary border font-monospace">{{ job_item.project_id|default:"N/A" }}</span>
                                 </div>
-                                {% if job_item.reservation %}
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Reservation:</span>
-                                    <span class="badge bg-warning bg-opacity-20 text-warning-emphasis border font-monospace">{{ job_item.reservation }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">SubProject ID:</span>
+                                    <span class="font-monospace text-dark">{{ job_item.sub_project_id|default:"-" }}</span>
                                 </div>
-                                {% endif %}
-                                <div class="d-flex justify-content-between align-items-center">
-                                    <span class="text-muted small">Total Tasks:</span>
-                                    <span class="badge bg-light text-secondary border fw-bold">{{ job_item.tasks|length }}</span>
+                                <div class="d-flex justify-content-between">
+                                    <span class="text-muted">SubProject Identifier:</span>
+                                    <span class="text-dark text-end font-monospace">{{ job_item.sub_project_identifier|default:"None" }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between pt-1 border-top">
+                                    <span class="text-muted">Associated Tasks:</span>
+                                    <span class="badge bg-primary text-white rounded-pill px-2.5">{{ job_item.tasks|length }}</span>
                                 </div>
                             </div>
                         </div>
@@ -246,15 +298,21 @@
 
                     <div class="accordion" id="tasksAccordion{{ job_item.id }}">
                         {% for task in job_item.tasks %}
-                        <div class="accordion-item mb-2 border border-light-subtle rounded-3 overflow-hidden shadow-sm">
+                        <div class="accordion-item mb-3 border border-light-subtle rounded-3 overflow-hidden shadow-sm">
                             <h2 class="accordion-header" id="headingTask{{ task.id }}">
                                 <button class="accordion-button {% if not forloop.first %}collapsed{% endif %} bg-white py-2.5 px-3" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTask{{ task.id }}" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" aria-controls="collapseTask{{ task.id }}">
-                                    <div class="d-flex align-items-center justify-content-between w-100 me-3">
+                                    <div class="d-flex align-items-center justify-content-between w-100 me-3 flex-wrap gap-2">
                                         <div class="d-flex align-items-center gap-2">
+                                            <i class="bi bi-cpu text-primary"></i>
                                             <strong class="text-dark me-1">{{ task.name }}</strong>
                                             <span class="text-muted font-monospace small bg-light border px-1.5 py-0.5 rounded" style="font-size: 0.72rem;">ID: {{ task.id }}</span>
+                                            {% if task.command_template_id %}
+                                            <span class="badge bg-light text-secondary border font-monospace" style="font-size: 0.7rem;" title="Command Template ID">Tpl #{{ task.command_template_id }}</span>
+                                            {% endif %}
                                         </div>
-                                        <div>
+                                        <div class="d-flex align-items-center gap-1.5">
+                                            <span class="badge bg-secondary-subtle text-secondary border font-monospace" style="font-size: 0.72rem;" title="Priority">Prio: {{ task.priority|format_task_priority }}</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size: 0.72rem;" title="State Source">{{ task|get_job_state_source }}</span>
                                             {% if task.state == 1 %}<span class="badge bg-secondary-subtle text-secondary border">Configuring</span>
                                             {% elif task.state == 2 %}<span class="badge bg-info-subtle text-info border">Submitted</span>
                                             {% elif task.state == 4 %}<span class="badge bg-primary-subtle text-primary border">Queued</span>
@@ -271,62 +329,231 @@
                                 </button>
                             </h2>
                             <div id="collapseTask{{ task.id }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" aria-labelledby="headingTask{{ task.id }}" data-bs-parent="#tasksAccordion{{ job_item.id }}">
-                                <div class="accordion-body p-3 bg-light bg-opacity-30">
+                                <div class="accordion-body p-3 bg-light bg-opacity-40">
                                     
-                                    <!-- Resource Limits & Files summary -->
+                                    <!-- Row 1: Execution Timing & Scheduling Policies -->
                                     <div class="row g-3 mb-3">
-                                        <!-- Resources -->
+                                        <!-- Card 1: Timing & Allocation -->
                                         <div class="col-md-6">
                                             <div class="card border border-light-subtle shadow-none h-100">
-                                                <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
-                                                    <i class="bi bi-speedometer2 text-primary me-1"></i>TASK RESOURCES
+                                                <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary d-flex align-items-center justify-content-between" style="font-size: 0.75rem;">
+                                                    <span><i class="bi bi-clock-history text-primary me-1"></i>EXECUTION &amp; TIMING</span>
+                                                    <span class="badge bg-light text-muted border">Source: {{ task|get_job_state_source }}</span>
                                                 </div>
                                                 <div class="card-body p-2.5" style="font-size: 0.78rem;">
                                                     <div class="d-flex justify-content-between mb-1">
-                                                        <span class="text-muted">CPU Cores (Min/Max):</span>
-                                                        <span class="fw-semibold text-dark">{{ task.min_cores|default:"1" }} / {{ task.max_cores|default:"1" }}</span>
+                                                        <span class="text-muted">Start Time:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.start_time|format_datetime|default:"Not started" }}</span>
                                                     </div>
                                                     <div class="d-flex justify-content-between mb-1">
-                                                        <span class="text-muted">GPU Cores / Nodes:</span>
-                                                        <span class="fw-semibold text-dark">{{ task.gpu_cores|default:"0" }} / {{ task.gpu_nodes|default:"0" }}</span>
+                                                        <span class="text-muted">End Time:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.end_time|format_datetime|default:"Not finished" }}</span>
                                                     </div>
                                                     <div class="d-flex justify-content-between mb-1">
-                                                        <span class="text-muted">Walltime Limit:</span>
-                                                        <span class="fw-semibold text-dark">{{ task.walltime_limit|default:"-" }} s</span>
+                                                        <span class="text-muted">State Updated At:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.state_updated_at|format_datetime|default:"N/A" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Allocated Time:</span>
+                                                        <span class="fw-bold text-dark font-monospace">{{ task.allocated_time|default:"N/A" }}{% if task.allocated_time %} s{% endif %}</span>
                                                     </div>
                                                     <div class="d-flex justify-content-between">
-                                                        <span class="text-muted">Memory:</span>
-                                                        <span class="fw-semibold text-dark">{{ task.memory|default:"-" }} MB</span>
+                                                        <span class="text-muted">Priority:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.priority|format_task_priority }} ({{ task.priority|default:"0" }})</span>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <!-- Task Files -->
+                                        <!-- Card 2: Allocation & Policies -->
                                         <div class="col-md-6">
                                             <div class="card border border-light-subtle shadow-none h-100">
                                                 <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
-                                                    <i class="bi bi-file-earmark-code text-primary me-1"></i>FILES &amp; DIRECTORY
+                                                    <i class="bi bi-diagram-3 text-primary me-1"></i>ALLOCATION &amp; SCHEDULING
                                                 </div>
-                                                <div class="card-body p-2.5 font-monospace" style="font-size: 0.75rem;">
-                                                    <div class="text-truncate mb-1" title="Standard Input File">
-                                                        <span class="text-muted">StdIn:</span> {{ task.standard_input_file|default:"-" }}
+                                                <div class="card-body p-2.5" style="font-size: 0.78rem;">
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Allocated Core IDs:</span>
+                                                        <span class="fw-semibold text-dark font-monospace text-end text-truncate" style="max-width: 60%;" title="{{ task.allocated_core_ids|join:', ' }}">{{ task.allocated_core_ids|join:", "|default:"None" }}</span>
                                                     </div>
-                                                    <div class="text-truncate mb-1" title="Standard Output File">
-                                                        <span class="text-muted">StdOut:</span> {{ task.standard_output_file|default:"-" }}
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Hyper-Threading:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.cpu_hyper_threading|yesno:"Enabled,Disabled,N/A" }}</span>
                                                     </div>
-                                                    <div class="text-truncate mb-1" title="Standard Error File">
-                                                        <span class="text-muted">StdErr:</span> {{ task.standard_error_file|default:"-" }}
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Exclusive Execution:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.is_exclusive|yesno:"Yes,No,N/A" }}</span>
                                                     </div>
-                                                    <div class="text-truncate" title="Cluster Subdirectory">
-                                                        <span class="text-muted">Subdir:</span> {{ task.cluster_task_subdirectory|default:"-" }}
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Is Rerunnable:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.is_rerunnable|yesno:"Yes,No,N/A" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Job Arrays:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.job_arrays|default:"None" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="text-muted">Placement Policy:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.placement_policy|default:"Default" }}</span>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- Submitted Template Parameters (TemplateParameterValues) -->
+                                    <!-- Row 2: Hardware Sizing Limits -->
+                                    <div class="row g-3 mb-3">
+                                        <!-- Card 3: Compute Cores & Walltime -->
+                                        <div class="col-md-6">
+                                            <div class="card border border-light-subtle shadow-none h-100">
+                                                <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-cpu-fill text-primary me-1"></i>COMPUTE HARDWARE &amp; WALLTIME
+                                                </div>
+                                                <div class="card-body p-2.5" style="font-size: 0.78rem;">
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">CPU Cores (Min / Max):</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.min_cores|default:"1" }} / {{ task.max_cores|default:"1" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">GPU Cores / GPU Nodes:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.gpu_cores|default:"0" }} cores / {{ task.gpu_nodes|default:"0" }} nodes</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="text-muted">Walltime Limit:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.walltime_limit|default:"-" }}{% if task.walltime_limit %} s{% endif %}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Card 4: Memory Specifications -->
+                                        <div class="col-md-6">
+                                            <div class="card border border-light-subtle shadow-none h-100">
+                                                <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-memory text-primary me-1"></i>MEMORY SPECIFICATIONS
+                                                </div>
+                                                <div class="card-body p-2.5" style="font-size: 0.78rem;">
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Total Memory:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.memory|default:"-" }}{% if task.memory %} MB{% endif %}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Memory per CPU:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.memory_per_cpu|default:"-" }}{% if task.memory_per_cpu %} MB{% endif %}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="text-muted">Memory per GPU:</span>
+                                                        <span class="fw-semibold text-dark font-monospace">{{ task.memory_per_gpu|default:"-" }}{% if task.memory_per_gpu %} MB{% endif %}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Row 3: Node Type & Project Hierarchy Binding -->
+                                    <div class="row g-3 mb-3">
+                                        <!-- Node Type -->
+                                        <div class="col-md-6">
+                                            <div class="card border border-light-subtle shadow-none h-100">
+                                                <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-hdd-rack text-primary me-1"></i>CLUSTER NODE TYPE
+                                                </div>
+                                                <div class="card-body p-2.5" style="font-size: 0.78rem;">
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Name:</span>
+                                                        <span class="fw-bold text-dark">{{ task.node_type.name|default:"N/A" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Node Type ID:</span>
+                                                        <span class="badge bg-light text-secondary border font-monospace">{{ task.node_type.id|default:"-" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="text-muted">Description:</span>
+                                                        <span class="text-dark text-end text-truncate" style="max-width: 65%;" title="{{ task.node_type.description }}">{{ task.node_type.description|default:"-" }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Project & Template Binding -->
+                                        <div class="col-md-6">
+                                            <div class="card border border-light-subtle shadow-none h-100">
+                                                <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-folder-symlink text-primary me-1"></i>NODE TYPE PROJECT &amp; TEMPLATE
+                                                </div>
+                                                <div class="card-body p-2.5" style="font-size: 0.78rem;">
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Project:</span>
+                                                        <span class="fw-bold text-dark text-truncate" style="max-width: 65%;" title="{{ task.node_type.project.name }}">{{ task.node_type.project.name|default:"N/A" }} {% if task.node_type.project.id %}<span class="text-muted font-monospace">(#{{ task.node_type.project.id }})</span>{% endif %}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Accounting String:</span>
+                                                        <span class="badge bg-dark bg-opacity-10 text-dark border font-monospace">{{ task.node_type.project.accounting_string|default:"None" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Project Desc:</span>
+                                                        <span class="text-dark text-end text-truncate" style="max-width: 65%;" title="{{ task.node_type.project.description }}">{{ task.node_type.project.description|default:"-" }}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="text-muted">Command Template:</span>
+                                                        <span class="text-dark text-end text-truncate" style="max-width: 65%;" title="{{ task.node_type.project.command_template.description|default:task.node_type.project.command_template.name }}">
+                                                            {{ task.node_type.project.command_template.name|default:"-" }}
+                                                            {% if task.node_type.project.command_template.id %}<span class="text-muted font-monospace">(#{{ task.node_type.project.command_template.id }})</span>{% endif %}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Row 4: Files & Directory -->
+                                    <div class="card border border-light-subtle shadow-none mb-3">
+                                        <div class="card-header bg-white py-1.5 px-3 border-bottom font-monospace fw-bold text-secondary d-flex align-items-center justify-content-between" style="font-size: 0.75rem;">
+                                            <span><i class="bi bi-file-earmark-code text-primary me-1"></i>FILES, DIRECTORY &amp; COMMAND TEMPLATE</span>
+                                            <span class="badge bg-light text-secondary border font-monospace">CommandTemplateId: {{ task.command_template_id|default:"-" }}</span>
+                                        </div>
+                                        <div class="card-body p-2.5 font-monospace" style="font-size: 0.76rem;">
+                                            <div class="row g-2">
+                                                <div class="col-md-6 text-truncate" title="Standard Input File">
+                                                    <span class="text-muted">StdIn File:</span> <span class="text-dark">{{ task.standard_input_file|default:"-" }}</span>
+                                                </div>
+                                                <div class="col-md-6 text-truncate" title="Standard Output File">
+                                                    <span class="text-muted">StdOut File:</span> <span class="text-dark">{{ task.standard_output_file|default:"-" }}</span>
+                                                </div>
+                                                <div class="col-md-6 text-truncate" title="Standard Error File">
+                                                    <span class="text-muted">StdErr File:</span> <span class="text-dark">{{ task.standard_error_file|default:"-" }}</span>
+                                                </div>
+                                                <div class="col-md-6 text-truncate" title="Cluster Subdirectory">
+                                                    <span class="text-muted">Cluster Subdirectory:</span> <span class="text-dark">{{ task.cluster_task_subdirectory|default:"-" }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Row 5: Diagnostics (if error_message or reason exists) -->
+                                    {% if task.error_message or task.reason %}
+                                    <div class="card border-danger-subtle bg-danger-subtle bg-opacity-25 shadow-none mb-3">
+                                        <div class="card-header bg-white py-1.5 px-3 border-bottom border-danger-subtle font-monospace fw-bold text-danger d-flex align-items-center justify-content-between" style="font-size: 0.75rem;">
+                                            <span><i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>DIAGNOSTICS &amp; SCHEDULER REASON</span>
+                                        </div>
+                                        <div class="card-body p-2.5" style="font-size: 0.78rem;">
+                                            {% if task.error_message %}
+                                            <div class="mb-2">
+                                                <span class="text-danger fw-bold d-block mb-1">ErrorMessage:</span>
+                                                <div class="p-2 bg-white text-danger border border-danger-subtle rounded font-monospace small text-break">{{ task.error_message }}</div>
+                                            </div>
+                                            {% endif %}
+                                            {% if task.reason %}
+                                            <div>
+                                                <span class="text-secondary fw-bold">Reason:</span>
+                                                <span class="text-dark fw-semibold ms-1 font-monospace">{{ task.reason }}</span>
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+
+                                    <!-- Row 6: Submitted Template Parameters (TemplateParameterValues) -->
                                     <div class="card border border-light-subtle shadow-none mb-3">
                                         <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
                                             <span class="fw-bold text-dark small"><i class="bi bi-sliders text-primary me-1.5"></i>Submitted Template Parameters (TemplateParameterValues)</span>
@@ -360,7 +587,7 @@
                                         </div>
                                     </div>
 
-                                    <!-- Environment variables (EnvironmentVariables) -->
+                                    <!-- Row 7: Environment Variables (EnvironmentVariables) -->
                                     <div class="card border border-light-subtle shadow-none">
                                         <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center justify-content-between">
                                             <span class="fw-bold text-dark small"><i class="bi bi-terminal-split text-primary me-1.5"></i>Environment Variables (EnvironmentVariables)</span>
@@ -400,7 +627,10 @@
                         {% endfor %}
                     </div>
                 </div>
-                <div class="modal-footer bg-light border-top">
+                <div class="modal-footer bg-light border-top d-flex justify-content-between">
+                    <a href="{% url 'job_status_view' job_item.id %}" target="_blank" class="btn btn-sm btn-outline-primary fw-semibold">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Open Dedicated Status Page
+                    </a>
                     <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>

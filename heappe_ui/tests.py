@@ -830,6 +830,22 @@ class JobStatusViewTests(TestCase):
         self.assertEqual(get_job_state_source(ObjJob()), "ServiceAccount")
         self.assertEqual(get_job_state_updated_at(ObjJob()), "2026-08-31T09:20:00")
 
+    def test_cluster_auth_type_and_task_priority_filters(self):
+        from heappe_ui.templatetags.custom_filters import format_cluster_auth_type, format_task_priority
+
+        self.assertEqual(format_cluster_auth_type(None), "N/A")
+        self.assertEqual(format_cluster_auth_type(1), "Password")
+        self.assertEqual(format_cluster_auth_type(4), "SSH Private Key")
+        self.assertEqual(format_cluster_auth_type("4"), "SSH Private Key")
+        self.assertEqual(format_cluster_auth_type(999), "999")
+
+        self.assertEqual(format_task_priority(None), "N/A")
+        self.assertEqual(format_task_priority(0), "Lowest")
+        self.assertEqual(format_task_priority(4), "Average")
+        self.assertEqual(format_task_priority(8), "Critical")
+        self.assertEqual(format_task_priority("6"), "High")
+        self.assertEqual(format_task_priority(999), "999")
+
 
 class SubmitJobTests(TestCase):
     def setUp(self):

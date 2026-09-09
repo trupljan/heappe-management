@@ -97,6 +97,14 @@ def get_job_state_source(job):
         "1": "ServiceAccount",
         "2": "Callback",
         "3": "DirectQuery",
+        "Unknown": "Unknown",
+        "Callback": "Scheduler (Callback)",
+        "UserVerified": "User Verified",
+        "BackgroundPoll": "Background Poll",
+        "Scheduler": "Scheduler",
+        "Framework": "Framework",
+        "Proxy": "Proxy",
+        "User": "User",
     }
     return mapping.get(val, str(val))
 
@@ -112,6 +120,56 @@ def get_job_state_updated_at(job):
             return job['StateUpdatedAt']
         return None
     return getattr(job, 'state_updated_at', getattr(job, 'StateUpdatedAt', None))
+
+
+@register.filter
+def format_cluster_auth_type(val):
+    if val is None:
+        return "N/A"
+    mapping = {
+        0: "None / Unknown",
+        1: "Password",
+        2: "Password Interactive",
+        3: "Password & Private Key",
+        4: "SSH Private Key",
+        5: "Password via Proxy",
+        6: "Password Interactive via Proxy",
+        7: "Password & Private Key via Proxy",
+        8: "Private Key via Proxy",
+        9: "SSH Agent Key",
+        10: "Vault & SSH Agent Key",
+        11: "SSH Certificate",
+        12: "SSH Certificate via Proxy",
+        13: "Kerberos Keytab",
+        14: "FirecREST IDP via Expirio",
+    }
+    try:
+        int_val = int(val)
+        return mapping.get(int_val, str(val))
+    except (ValueError, TypeError):
+        return str(val)
+
+
+@register.filter
+def format_task_priority(val):
+    if val is None:
+        return "N/A"
+    mapping = {
+        0: "Lowest",
+        1: "Very Low",
+        2: "Low",
+        3: "Below Average",
+        4: "Average",
+        5: "Above Average",
+        6: "High",
+        7: "Very High",
+        8: "Critical",
+    }
+    try:
+        int_val = int(val)
+        return mapping.get(int_val, str(val))
+    except (ValueError, TypeError):
+        return str(val)
 
 
 

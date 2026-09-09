@@ -322,29 +322,109 @@
 
             <div class="card-body p-4">
                 <div class="row g-3 small mb-3">
-                    <div class="col-sm-6">
+                    <div class="col-sm-6 col-md-4">
                         <span class="text-secondary small fw-semibold">Task Name:</span>
                         <div class="fw-bold text-dark mt-0.5">{{ task.name }}</div>
                     </div>
-                    <div class="col-sm-6">
+                    <div class="col-sm-6 col-md-4">
                         <span class="text-secondary small fw-semibold">Priority:</span>
-                        <div class="fw-bold text-dark mt-0.5">{{ task.priority }}</div>
+                        <div class="fw-bold text-dark mt-0.5">{{ task.priority|format_task_priority }} <span class="text-muted font-monospace small">({{ task.priority|default:"0" }})</span></div>
                     </div>
-                    <div class="col-sm-6">
-                        <span class="text-secondary small fw-semibold">Allocated Nodes/Cores:</span>
-                        <div class="fw-bold text-dark mt-0.5">{{ task.allocated_time|default:"N/A" }}</div>
+                    <div class="col-sm-6 col-md-4">
+                        <span class="text-secondary small fw-semibold">State Source:</span>
+                        <div class="mt-0.5"><span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace">{{ task|get_job_state_source }}</span></div>
                     </div>
-                    <div class="col-sm-6">
+                    <div class="col-sm-6 col-md-4">
+                        <span class="text-secondary small fw-semibold">Allocated Time:</span>
+                        <div class="fw-bold text-dark mt-0.5 font-monospace">{{ task.allocated_time|default:"N/A" }}{% if task.allocated_time %} s{% endif %}</div>
+                    </div>
+                    <div class="col-sm-6 col-md-4">
                         <span class="text-secondary small fw-semibold">Core Bindings IDs:</span>
-                        <div class="font-monospace text-dark mt-0.5">{{ task.allocated_core_ids|join:", "|default:"None" }}</div>
+                        <div class="font-monospace text-dark mt-0.5 text-truncate" title="{{ task.allocated_core_ids|join:', ' }}">{{ task.allocated_core_ids|join:", "|default:"None" }}</div>
                     </div>
-                    <div class="col-sm-6">
+                    <div class="col-sm-6 col-md-4">
+                        <span class="text-secondary small fw-semibold">Hyper-Threading:</span>
+                        <div class="fw-semibold text-dark mt-0.5 font-monospace">{{ task.cpu_hyper_threading|yesno:"Enabled,Disabled,N/A" }}</div>
+                    </div>
+                    <div class="col-sm-6 col-md-4">
                         <span class="text-secondary small fw-semibold">Start Timestamp:</span>
                         <div class="font-monospace text-dark mt-0.5">{{ task.start_time|format_datetime|default:"Not started" }}</div>
                     </div>
-                    <div class="col-sm-6">
+                    <div class="col-sm-6 col-md-4">
                         <span class="text-secondary small fw-semibold">End Timestamp:</span>
                         <div class="font-monospace text-dark mt-0.5">{{ task.end_time|format_datetime|default:"Not finished" }}</div>
+                    </div>
+                    <div class="col-sm-6 col-md-4">
+                        <span class="text-secondary small fw-semibold">State Last Updated:</span>
+                        <div class="font-monospace text-dark mt-0.5">{{ task.state_updated_at|format_datetime|default:"N/A" }}</div>
+                    </div>
+                </div>
+
+                <!-- Hardware & Resource Limits -->
+                <div class="border-top pt-3 mt-3">
+                    <h6 class="fw-bold text-dark small mb-2"><i class="bi bi-cpu-fill me-1.5 text-primary"></i>Hardware &amp; Execution Limits</h6>
+                    <div class="row g-2 small">
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2.5 bg-light rounded-3 border">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">CPU Cores (Min / Max)</span>
+                                <span class="fw-bold text-dark font-monospace">{{ task.min_cores|default:"1" }} / {{ task.max_cores|default:"1" }}</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2.5 bg-light rounded-3 border">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">GPU Cores / Nodes</span>
+                                <span class="fw-bold text-dark font-monospace">{{ task.gpu_cores|default:"0" }} / {{ task.gpu_nodes|default:"0" }}</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2.5 bg-light rounded-3 border">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">Walltime Limit</span>
+                                <span class="fw-bold text-dark font-monospace">{{ task.walltime_limit|default:"-" }}{% if task.walltime_limit %} s{% endif %}</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2.5 bg-light rounded-3 border">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">Total Memory</span>
+                                <span class="fw-bold text-dark font-monospace">{{ task.memory|default:"-" }}{% if task.memory %} MB{% endif %}</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2.5 bg-light rounded-3 border">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">Memory per CPU / GPU</span>
+                                <span class="fw-bold text-dark font-monospace">{{ task.memory_per_cpu|default:"-" }} / {{ task.memory_per_gpu|default:"-" }} MB</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2.5 bg-light rounded-3 border">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">Placement Policy</span>
+                                <span class="fw-bold text-dark font-monospace">{{ task.placement_policy|default:"Default" }}</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2.5 bg-light rounded-3 border">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">Exclusive / Rerunnable</span>
+                                <span class="fw-bold text-dark font-monospace">{{ task.is_exclusive|yesno:"Exclusive,Shared,N/A" }} / {{ task.is_rerunnable|yesno:"Rerunnable,No,N/A" }}</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-md-3">
+                            <div class="p-2.5 bg-light rounded-3 border">
+                                <span class="text-muted d-block" style="font-size: 0.72rem;">Job Arrays</span>
+                                <span class="fw-bold text-dark font-monospace">{{ task.job_arrays|default:"None" }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Task Files & Directories -->
+                <div class="border-top pt-3 mt-3">
+                    <h6 class="fw-bold text-dark small mb-2"><i class="bi bi-file-earmark-code me-1.5 text-secondary"></i>Task Files &amp; Subdirectory</h6>
+                    <div class="p-3 bg-light rounded-3 border font-monospace small">
+                        <div class="row g-2">
+                            <div class="col-md-6 text-truncate" title="{{ task.standard_input_file }}"><span class="text-muted">StdIn:</span> {{ task.standard_input_file|default:"-" }}</div>
+                            <div class="col-md-6 text-truncate" title="{{ task.standard_output_file }}"><span class="text-muted">StdOut:</span> {{ task.standard_output_file|default:"-" }}</div>
+                            <div class="col-md-6 text-truncate" title="{{ task.standard_error_file }}"><span class="text-muted">StdErr:</span> {{ task.standard_error_file|default:"-" }}</div>
+                            <div class="col-md-6 text-truncate" title="{{ task.cluster_task_subdirectory }}"><span class="text-muted">Subdirectory:</span> {{ task.cluster_task_subdirectory|default:"-" }}</div>
+                        </div>
                     </div>
                 </div>
 
@@ -359,11 +439,14 @@
 
                 <!-- Assigned Project metadata -->
                 <div class="border-top pt-3 mt-3">
-                    <h6 class="fw-bold text-dark small mb-2"><i class="bi bi-folder-fill me-1.5 text-secondary"></i>Associated Project Binding</h6>
+                    <h6 class="fw-bold text-dark small mb-2"><i class="bi bi-folder-fill me-1.5 text-secondary"></i>Associated Project &amp; Template Binding</h6>
                     <div class="p-3 bg-light rounded-3 border">
                         <div class="fw-bold text-dark" style="font-size: 0.88rem;">{{ task.node_type.project.name }} <span class="text-muted font-monospace" style="font-size: 0.75rem;">(ID: {{ task.node_type.project.id }})</span></div>
                         <div class="text-secondary small mt-1">{{ task.node_type.project.description }}</div>
                         <div class="small mt-2 font-monospace text-secondary" style="font-size: 0.78rem;">Accounting String: <span class="text-dark fw-bold">{{ task.node_type.project.accounting_string }}</span></div>
+                        {% if task.node_type.project.command_template %}
+                        <div class="small mt-1 text-secondary" style="font-size: 0.78rem;">Command Template: <span class="text-dark fw-semibold">{{ task.node_type.project.command_template.name }} (#{{ task.node_type.project.command_template.id }})</span></div>
+                        {% endif %}
                     </div>
                 </div>
 
@@ -377,6 +460,56 @@
                     {% if task.reason %}
                     <div class="small text-secondary">Reason: <strong class="text-dark">{{ task.reason }}</strong></div>
                     {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Submitted Template Parameters (TemplateParameterValues) -->
+                {% if task.template_parameter_values %}
+                <div class="border-top pt-3 mt-3">
+                    <h6 class="fw-bold text-dark small mb-2"><i class="bi bi-sliders me-1.5 text-primary"></i>Submitted Template Parameters</h6>
+                    <div class="table-responsive border rounded-3 overflow-hidden">
+                        <table class="table table-sm table-striped mb-0 small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3" style="width: 40%;">Parameter</th>
+                                    <th class="pe-3" style="width: 60%;">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for param in task.template_parameter_values %}
+                                <tr>
+                                    <td class="ps-3 font-monospace fw-semibold text-primary">{{ param.command_parameter_identifier }}</td>
+                                    <td class="pe-3 font-monospace text-dark text-break">{{ param.parameter_value }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Environment Variables -->
+                {% if task.environment_variables %}
+                <div class="border-top pt-3 mt-3">
+                    <h6 class="fw-bold text-dark small mb-2"><i class="bi bi-terminal-split me-1.5 text-secondary"></i>Environment Variables</h6>
+                    <div class="table-responsive border rounded-3 overflow-hidden">
+                        <table class="table table-sm table-striped mb-0 small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3" style="width: 40%;">Variable Name</th>
+                                    <th class="pe-3" style="width: 60%;">Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for env_var in task.environment_variables %}
+                                <tr>
+                                    <td class="ps-3 font-monospace fw-semibold text-dark">{{ env_var.name }}</td>
+                                    <td class="pe-3 font-monospace text-muted text-break">{{ env_var.value }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
                 {% endif %}
             </div>
