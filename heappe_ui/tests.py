@@ -846,6 +846,55 @@ class JobStatusViewTests(TestCase):
         self.assertEqual(format_task_priority("6"), "High")
         self.assertEqual(format_task_priority(999), "999")
 
+    def test_dashboard_jobs_history_template_null_safe(self):
+        from django.template.loader import render_to_string
+
+        class SimpleObj:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+
+        task_null_node = SimpleObj(id=1, name='Task 1', state=2, node_type=None, command_template_id=10)
+        task_null_project = SimpleObj(id=2, name='Task 2', state=2, node_type=SimpleObj(id=5, name='CPU', description='CPU Node', project=None))
+        task_null_template = SimpleObj(id=3, name='Task 3', state=2, node_type=SimpleObj(id=6, name='GPU', description=None, project=SimpleObj(id=8, name='Prj', accounting_string='acc', description=None, command_template=None)))
+        task_full = SimpleObj(id=4, name='Task 4', state=2, node_type=SimpleObj(id=7, name='MEM', description='Mem', project=SimpleObj(id=9, name='Prj2', accounting_string='acc2', description='desc', command_template=SimpleObj(id=12, name='CT', description='Command Temp'))))
+
+        job1 = SimpleObj(
+            id=101,
+            name='Test Job 1',
+            state=2,
+            submitter=SimpleObj(username='john', email='john@example.com', id=42),
+            tasks=[task_null_node, task_null_project, task_null_template, task_full],
+            cluster_username='johnhpc',
+            project_name='Demo',
+            sub_project_identifier='sub1',
+            total_nodes=1,
+            total_cores=4,
+            total_allocated_cores=4
+        )
+        job2 = SimpleObj(
+            id=102,
+            name='Test Job 2',
+            state=16,
+            submitter='str_user',
+            tasks=[],
+            cluster_username=None,
+            project_name=None,
+            sub_project_identifier=None
+        )
+
+        rendered = render_to_string('partials/dashboard_jobs_history.html', {
+            'job_details': [job1, job2],
+            'total_count': 2,
+            'total_pages': 1,
+            'page': 1,
+            'page_range': [1],
+            'is_admin_api': True,
+            'request': SimpleObj(GET={})
+        })
+        self.assertIn("Test Job 1", rendered)
+        self.assertIn("Test Job 2", rendered)
+        self.assertIn("CLUSTER NODE TYPE", rendered)
+
 
 class SubmitJobTests(TestCase):
     def setUp(self):

@@ -57,7 +57,7 @@
                             <span class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 20px; height: 20px; font-size: 0.65rem;">
                                 <i class="bi bi-person"></i>
                             </span>
-                            {{ job_item.submitter.username|default:job_item.submitter|default:"N/A" }}
+                            {% if job_item.submitter.username %}{{ job_item.submitter.username }}{% elif job_item.submitter %}{{ job_item.submitter }}{% else %}N/A{% endif %}
                         </div>
                         {% if job_item.submitter.email %}
                         <div class="text-muted mt-0.5" style="font-size: 0.72rem;">
@@ -65,7 +65,7 @@
                         </div>
                         {% endif %}
                         <div class="text-muted mt-0.5" style="font-size: 0.70rem;">
-                            <i class="bi bi-clock me-1 text-secondary"></i>{{ job_item.creation_time|format_datetime|default:job_item.submit_time|format_datetime|default:"N/A" }}
+                            <i class="bi bi-clock me-1 text-secondary"></i>{% if job_item.creation_time %}{{ job_item.creation_time|format_datetime }}{% elif job_item.submit_time %}{{ job_item.submit_time|format_datetime }}{% else %}N/A{% endif %}
                         </div>
                     </td>
 
@@ -83,7 +83,7 @@
                     <!-- Project -->
                     <td>
                         {% if job_item.project_name or job_item.sub_project_identifier %}
-                        <div class="fw-semibold text-dark small">{{ job_item.project_name|default:job_item.project_id|default:"-" }}</div>
+                        <div class="fw-semibold text-dark small">{% if job_item.project_name %}{{ job_item.project_name }}{% elif job_item.project_id %}{{ job_item.project_id }}{% else %}-{% endif %}</div>
                         {% if job_item.sub_project_identifier %}
                         <div class="text-muted" style="font-size: 0.72rem;">
                             <i class="bi bi-folder2-open me-1"></i>{{ job_item.sub_project_identifier }}
@@ -211,7 +211,7 @@
                                 </h6>
                                 <div class="d-flex justify-content-between">
                                     <span class="text-muted">Username:</span>
-                                    <span class="fw-bold text-dark font-monospace text-end">{{ job_item.submitter.username|default:job_item.submitter|default:"N/A" }}</span>
+                                    <span class="fw-bold text-dark font-monospace text-end">{% if job_item.submitter.username %}{{ job_item.submitter.username }}{% elif job_item.submitter %}{{ job_item.submitter }}{% else %}N/A{% endif %}</span>
                                 </div>
                                 <div class="d-flex justify-content-between">
                                     <span class="text-muted">User ID:</span>
@@ -461,15 +461,15 @@
                                                 <div class="card-body p-2.5" style="font-size: 0.78rem;">
                                                     <div class="d-flex justify-content-between mb-1">
                                                         <span class="text-muted">Name:</span>
-                                                        <span class="fw-bold text-dark">{{ task.node_type.name|default:"N/A" }}</span>
+                                                        <span class="fw-bold text-dark">{% if task.node_type %}{{ task.node_type.name|default:"N/A" }}{% else %}N/A{% endif %}</span>
                                                     </div>
                                                     <div class="d-flex justify-content-between mb-1">
                                                         <span class="text-muted">Node Type ID:</span>
-                                                        <span class="badge bg-light text-secondary border font-monospace">{{ task.node_type.id|default:"-" }}</span>
+                                                        <span class="badge bg-light text-secondary border font-monospace">{% if task.node_type %}{{ task.node_type.id|default:"-" }}{% else %}-{% endif %}</span>
                                                     </div>
                                                     <div class="d-flex justify-content-between">
                                                         <span class="text-muted">Description:</span>
-                                                        <span class="text-dark text-end text-truncate" style="max-width: 65%;" title="{{ task.node_type.description }}">{{ task.node_type.description|default:"-" }}</span>
+                                                        <span class="text-dark text-end text-truncate" style="max-width: 65%;" title="{% if task.node_type %}{{ task.node_type.description }}{% endif %}">{% if task.node_type %}{{ task.node_type.description|default:"-" }}{% else %}-{% endif %}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -484,21 +484,31 @@
                                                 <div class="card-body p-2.5" style="font-size: 0.78rem;">
                                                     <div class="d-flex justify-content-between mb-1">
                                                         <span class="text-muted">Project:</span>
-                                                        <span class="fw-bold text-dark text-truncate" style="max-width: 65%;" title="{{ task.node_type.project.name }}">{{ task.node_type.project.name|default:"N/A" }} {% if task.node_type.project.id %}<span class="text-muted font-monospace">(#{{ task.node_type.project.id }})</span>{% endif %}</span>
+                                                        <span class="fw-bold text-dark text-truncate" style="max-width: 65%;" title="{% if task.node_type and task.node_type.project %}{{ task.node_type.project.name }}{% endif %}">
+                                                            {% if task.node_type and task.node_type.project %}
+                                                                {{ task.node_type.project.name|default:"N/A" }} {% if task.node_type.project.id %}<span class="text-muted font-monospace">(#{{ task.node_type.project.id }})</span>{% endif %}
+                                                            {% else %}
+                                                                N/A
+                                                            {% endif %}
+                                                        </span>
                                                     </div>
                                                     <div class="d-flex justify-content-between mb-1">
                                                         <span class="text-muted">Accounting String:</span>
-                                                        <span class="badge bg-dark bg-opacity-10 text-dark border font-monospace">{{ task.node_type.project.accounting_string|default:"None" }}</span>
+                                                        <span class="badge bg-dark bg-opacity-10 text-dark border font-monospace">{% if task.node_type and task.node_type.project %}{{ task.node_type.project.accounting_string|default:"None" }}{% else %}None{% endif %}</span>
                                                     </div>
                                                     <div class="d-flex justify-content-between mb-1">
                                                         <span class="text-muted">Project Desc:</span>
-                                                        <span class="text-dark text-end text-truncate" style="max-width: 65%;" title="{{ task.node_type.project.description }}">{{ task.node_type.project.description|default:"-" }}</span>
+                                                        <span class="text-dark text-end text-truncate" style="max-width: 65%;" title="{% if task.node_type and task.node_type.project %}{{ task.node_type.project.description }}{% endif %}">{% if task.node_type and task.node_type.project %}{{ task.node_type.project.description|default:"-" }}{% else %}-{% endif %}</span>
                                                     </div>
                                                     <div class="d-flex justify-content-between">
                                                         <span class="text-muted">Command Template:</span>
-                                                        <span class="text-dark text-end text-truncate" style="max-width: 65%;" title="{{ task.node_type.project.command_template.description|default:task.node_type.project.command_template.name }}">
-                                                            {{ task.node_type.project.command_template.name|default:"-" }}
-                                                            {% if task.node_type.project.command_template.id %}<span class="text-muted font-monospace">(#{{ task.node_type.project.command_template.id }})</span>{% endif %}
+                                                        <span class="text-dark text-end text-truncate" style="max-width: 65%;" title="{% if task.node_type and task.node_type.project and task.node_type.project.command_template %}{% if task.node_type.project.command_template.description %}{{ task.node_type.project.command_template.description }}{% elif task.node_type.project.command_template.name %}{{ task.node_type.project.command_template.name }}{% endif %}{% endif %}">
+                                                            {% if task.node_type and task.node_type.project and task.node_type.project.command_template %}
+                                                                {{ task.node_type.project.command_template.name|default:"-" }}
+                                                                {% if task.node_type.project.command_template.id %}<span class="text-muted font-monospace">(#{{ task.node_type.project.command_template.id }})</span>{% endif %}
+                                                            {% else %}
+                                                                -
+                                                            {% endif %}
                                                         </span>
                                                     </div>
                                                 </div>

@@ -529,16 +529,17 @@ def dashboard_jobs_history_partial(request: HttpRequest) -> HttpResponse:
             import math
             total_pages = max(1, math.ceil(total_count / limit)) if total_count > 0 else 1
 
-            context["job_details"] = items
-            context["total_count"] = total_count
-            context["total_pages"] = total_pages
-            context["has_previous"] = page > 1
-            context["has_next"] = page < total_pages
-            context["previous_page_number"] = page - 1
-            context["next_page_number"] = page + 1
-            context["page_range"] = list(range(1, total_pages + 1))
-            context["is_admin_api"] = True
-            return render(request, "partials/dashboard_jobs_history.html", context)
+            admin_context = dict(context)
+            admin_context["job_details"] = items
+            admin_context["total_count"] = total_count
+            admin_context["total_pages"] = total_pages
+            admin_context["has_previous"] = page > 1
+            admin_context["has_next"] = page < total_pages
+            admin_context["previous_page_number"] = page - 1
+            admin_context["next_page_number"] = page + 1
+            admin_context["page_range"] = list(range(1, total_pages + 1))
+            admin_context["is_admin_api"] = True
+            return render(request, "partials/dashboard_jobs_history.html", admin_context)
         except Exception as e:
             print(f"[dashboard_jobs_history] ListDetailedJobsForAdmin failed: {e}. Falling back to legacy JobReportingApi.")
 
