@@ -160,10 +160,19 @@
                                 <i class="bi bi-cpu me-1"></i>{{ log.ServiceName|default:log.service_name|default:"Service" }}
                             </span>
                         </td>
-                        <td class="py-2.5" style="max-width: 250px;">
-                            <code class="small text-dark text-truncate d-block" title="{{ log.CommandOrPath|default:log.command_or_path|default:log.Operation|default:log.operation|default:'-' }}">
-                                {{ log.CommandOrPath|default:log.command_or_path|default:log.Operation|default:log.operation|default:"-" }}
-                            </code>
+                        <td class="py-2.5" style="max-width: 350px;">
+                            {% with op_val=log.CommandOrPath|default:log.command_or_path|default:log.Operation|default:log.operation|default:'-' %}
+                            <div class="d-flex align-items-center justify-content-between gap-1.5">
+                                <code class="small text-dark text-truncate d-block code-text-to-copy" style="max-width: 300px;" title="{{ op_val }}" data-full-text="{{ op_val|escape }}">
+                                    {{ op_val }}
+                                </code>
+                                {% if op_val and op_val != '-' %}
+                                <button type="button" class="btn btn-xs btn-outline-secondary flex-shrink-0 p-0.5 px-1 rounded-1" title="Copy full operation" onclick="copyOperationText(this)">
+                                    <i class="bi bi-clipboard" style="font-size: 0.7rem;"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endwith %}
                         </td>
                         <td class="py-2.5 text-center">
                             {% with dur=log.DurationMs|default:log.duration_ms|default:0 %}
@@ -196,7 +205,7 @@
                             {% with req_id=log.RequestId|default:log.request_id|default:log.TraceId|default:log.trace_id %}
                             {% if req_id %}
                             <div class="d-flex align-items-center gap-1">
-                                <code class="small text-truncate font-monospace text-secondary" style="max-width: 130px;" title="{{ req_id }}">{{ req_id }}</code>
+                                <code class="small text-truncate font-monospace text-dark trace-processed" style="max-width: 130px;" title="{{ req_id }}">{{ req_id }}</code>
                                 <button type="button" class="btn btn-xs btn-outline-secondary p-0.5 px-1 rounded-1" title="Copy RequestId" onclick="navigator.clipboard.writeText('{{ req_id }}'); this.innerHTML='<i class=\'bi bi-check text-success\'></i>'; setTimeout(() => this.innerHTML='<i class=\'bi bi-clipboard\'></i>', 1500);">
                                     <i class="bi bi-clipboard" style="font-size: 0.7rem;"></i>
                                 </button>
@@ -555,7 +564,18 @@
                             <tr>
                                 <td>{{ l.Timestamp|default:'-' }}</td>
                                 <td><strong>{{ l.ServiceName|default:'-' }}</strong></td>
-                                <td class="text-break" style="max-width: 350px;">{{ l.Operation|default:l.CommandOrPath|default:'-' }}</td>
+                                <td class="text-break" style="max-width: 500px;">
+                                    {% with op_val=l.Operation|default:l.CommandOrPath|default:'-' %}
+                                    <div class="d-flex align-items-center justify-content-between gap-2">
+                                        <span class="code-text-to-copy text-break" style="word-break: break-all; user-select: all;" data-full-text="{{ op_val|escape }}">{{ op_val }}</span>
+                                        {% if op_val and op_val != '-' %}
+                                        <button type="button" class="btn btn-xs btn-outline-secondary flex-shrink-0 p-1 rounded-1" title="Copy full operation" onclick="copyOperationText(this)">
+                                            <i class="bi bi-clipboard" style="font-size: 0.75rem;"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                    {% endwith %}
+                                </td>
                                 <td>{{ l.ResponseTimeMs|default:l.DurationMs|default:0 }} ms</td>
                                 <td>
                                     {% if l.IsSuccess and l.StatusCode == '200' or l.StatusCode == '0' or l.StatusCode == 0 or l.StatusCode == 200 %}
@@ -609,10 +629,12 @@ function loadJobExternalLogs(jobId) {
             html += '<thead class="table-light"><tr><th>Timestamp</th><th>Service</th><th>Operation</th><th>Duration</th><th>Status</th></tr></thead><tbody>';
             logs.forEach(l => {
                 const isSuccess = l.IsSuccess !== false && (l.StatusCode === '200' || l.StatusCode === 0 || l.StatusCode === '0' || l.StatusCode === null || l.StatusCode < 400);
-                const badge = isSuccess ? '<span class="badge bg-success-subtle text-success">OK</span>' : `<span class="badge bg-danger-subtle text-danger">${l.StatusCode || 'ERR'}</span>`;
-                const op = l.Operation || l.CommandOrPath || '-';
+                const badge = isSuccess ? '<span class="badge bg-success-subtle text-success">OK</span>' : `<span class="badge bg-danger-subtle text-danger">${escapeHtml(String(l.StatusCode || 'ERR'))}</span>`;
+                const rawOp = l.Operation || l.CommandOrPath || '-';
+                const escapedOp = escapeHtml(String(rawOp));
                 const duration = l.ResponseTimeMs !== undefined ? l.ResponseTimeMs : (l.DurationMs !== undefined ? l.DurationMs : 0);
-                html += `<tr><td>${l.Timestamp || '-'}</td><td><strong>${l.ServiceName || '-'}</strong></td><td class="text-break" style="max-width: 350px;">${op}</td><td>${duration} ms</td><td>${badge}</td></tr>`;
+                const copyBtn = (rawOp && rawOp !== '-') ? `<button type="button" class="btn btn-xs btn-outline-secondary flex-shrink-0 p-1 rounded-1" title="Copy full operation" onclick="copyOperationText(this)"><i class="bi bi-clipboard" style="font-size: 0.75rem;"></i></button>` : '';
+                html += `<tr><td>${escapeHtml(String(l.Timestamp || '-'))}</td><td><strong>${escapeHtml(String(l.ServiceName || '-'))}</strong></td><td class="text-break" style="max-width: 500px;"><div class="d-flex align-items-center justify-content-between gap-2"><span class="code-text-to-copy text-break" style="word-break: break-all; user-select: all;" data-full-text="${escapedOp}">${escapedOp}</span>${copyBtn}</div></td><td>${duration} ms</td><td>${badge}</td></tr>`;
             });
             html += '</tbody></table></div>';
             container.innerHTML = html;
@@ -624,6 +646,53 @@ function loadJobExternalLogs(jobId) {
         container.innerHTML = `<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>Failed to fetch logs: ${err.message || err}</div>`;
     });
 }
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+function copyOperationText(btn) {
+    if (!btn) return;
+    const container = btn.closest('.d-flex') || btn.parentElement;
+    const textEl = container ? container.querySelector('.code-text-to-copy') : null;
+    const textToCopy = textEl ? (textEl.getAttribute('data-full-text') || textEl.textContent || '') : '';
+    if (!textToCopy || textToCopy === '-') return;
+
+    function showSuccess() {
+        const icon = btn.querySelector('i');
+        const origClass = icon ? icon.className : '';
+        if (icon) icon.className = 'bi bi-check2 text-success fw-bold';
+        btn.classList.add('btn-outline-success');
+        btn.classList.remove('btn-outline-secondary');
+        setTimeout(() => {
+            if (icon) icon.className = origClass || 'bi bi-clipboard';
+            btn.classList.remove('btn-outline-success');
+            btn.classList.add('btn-outline-secondary');
+        }, 1800);
+    }
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(textToCopy).then(showSuccess).catch(() => fallbackCopyOperation(textToCopy, showSuccess));
+    } else {
+        fallbackCopyOperation(textToCopy, showSuccess);
+    }
+}
+
+function fallbackCopyOperation(text, cb) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+        document.execCommand('copy');
+        if (cb) cb();
+    } catch(e) {}
+    document.body.removeChild(ta);
+}
 </script>
 
 <script>
@@ -634,9 +703,9 @@ function loadJobExternalLogs(jobId) {
 
     const traceIdRegex = /\b([a-fA-F0-9]{32})\b/g;
 
-    // Scan error messages and reasons
-    document.querySelectorAll('.bg-danger-subtle, .text-secondary').forEach(function(el) {
-        if (el.classList.contains('trace-processed')) return;
+    // Scan error messages and reasons (excluding tables to avoid breaking table layout)
+    document.querySelectorAll('.bg-danger-subtle, .alert-danger').forEach(function(el) {
+        if (el.closest('table') || el.classList.contains('trace-processed')) return;
         
         const text = el.textContent;
         traceIdRegex.lastIndex = 0;
@@ -651,16 +720,6 @@ function loadJobExternalLogs(jobId) {
             
             traceIdRegex.lastIndex = 0;
             el.innerHTML = el.innerHTML.replace(traceIdRegex, highlightBadge);
-            
-            // Append a small button for trace details
-            const btnHtml = `
-                <div class="mt-2">
-                    <a href="${jaegerLink}" target="_blank" class="btn btn-xs btn-outline-info fw-bold rounded-2 px-2.5 py-1" style="font-size: 0.75rem;">
-                        <i class="bi bi-activity me-1"></i> View Request Trace (Jaeger)
-                    </a>
-                </div>
-            `;
-            el.insertAdjacentHTML('afterend', btnHtml);
         }
     });
 })();
