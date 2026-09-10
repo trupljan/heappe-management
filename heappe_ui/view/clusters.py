@@ -1455,9 +1455,32 @@ def _run_slurm_setup_thread(instance_name, uid, port, container_name):
     slurm_username = f"u{uid}"
     
     try:
-        # Step 1: Create temp directory and files
+        # Step 1: Create temp directory and check disk space
         log("Creating workspace directory for building Docker image...")
         os.makedirs(temp_dir, exist_ok=True)
+        
+        try:
+            total_b, used_b, free_b = shutil.disk_usage(temp_dir)
+            free_mb = free_b / (1024 * 1024)
+            free_gb = free_b / (1024 * 1024 * 1024)
+            log(f"Available disk space on host: {free_gb:.2f} GB ({free_mb:.0f} MB)")
+            if free_gb < 1.0:
+                log("=" * 70)
+                log("ERROR: OUT OF DISK SPACE!")
+                log(f"The host filesystem has only {free_mb:.0f} MB of free space remaining.")
+                log("Building the Slurm simulator requires at least 2.5 GB of free space.")
+                log("Please free up disk space on the server before trying again:")
+                log("  - docker system prune -a -f --volumes")
+                log("  - docker builder prune -a -f")
+                log("  - journalctl --vacuum-size=200M")
+                log("=" * 70)
+                raise RuntimeError(f"Host is out of disk space: only {free_mb:.0f} MB free. Please free up space on the server before retrying.")
+            elif free_gb < 2.5:
+                log(f"WARNING: Low disk space detected ({free_gb:.2f} GB available). Docker build may run out of space.")
+        except RuntimeError:
+            raise
+        except Exception:
+            pass
         
         # 1.1 slurm.conf
         slurm_conf_content = f"""ClusterName=simulator
@@ -1664,6 +1687,18 @@ ENTRYPOINT ["/entrypoint.sh"]
             text=True
         )
         if proc_build.returncode != 0:
+            is_disk_full = "no space left on device" in (proc_build.stderr + proc_build.stdout).lower()
+            if is_disk_full:
+                log("=" * 70)
+                log("ERROR: OUT OF DISK SPACE!")
+                log("The Docker image build failed because the host ran out of disk space ('No space left on device').")
+                log("Please free up disk space on the server before trying again:")
+                log("  - docker system prune -a -f --volumes")
+                log("  - docker builder prune -a -f")
+                log("  - journalctl --vacuum-size=200M")
+                log("=" * 70)
+                raise RuntimeError("Docker build failed: Host ran out of disk space ('No space left on device'). Please free up disk space on the server (e.g. 'docker system prune -a') and try again.")
+            
             log("Build output:")
             log(proc_build.stdout)
             log("Build errors:")
@@ -1690,6 +1725,13 @@ ENTRYPOINT ["/entrypoint.sh"]
             text=True
         )
         if proc_run.returncode != 0:
+            is_disk_full = "no space left on device" in proc_run.stderr.lower()
+            if is_disk_full:
+                log("=" * 70)
+                log("ERROR: OUT OF DISK SPACE!")
+                log("Starting Docker container failed: Host is out of disk space ('No space left on device').")
+                log("=" * 70)
+                raise RuntimeError("Docker run failed: Host is out of disk space ('No space left on device'). Please free up disk space on the server and try again.")
             raise RuntimeError(f"Docker run failed: {proc_run.stderr}")
         log(f"Docker container '{container_name}' started successfully.")
 
@@ -2017,10 +2059,15 @@ ENTRYPOINT ["/entrypoint.sh"]
             _slurm_setup_state['success'] = True
             
     except Exception as ex:
-        log(f"EXCEPTION: Setup failed: {str(ex)}")
+        err_str = str(ex)
+        if "no space left on device" in err_str.lower():
+            clean_err = "Host is out of disk space ('No space left on device'). Please free up space on the server (e.g. 'docker system prune -a') and try again."
+        else:
+            clean_err = err_str
+        log(f"EXCEPTION: Setup failed: {clean_err}")
         with _slurm_setup_lock:
             _slurm_setup_state['is_running'] = False
-            _slurm_setup_state['error'] = str(ex)
+            _slurm_setup_state['error'] = clean_err
             
     finally:
         # Clean up temp build folder
