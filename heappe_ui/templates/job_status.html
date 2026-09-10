@@ -48,7 +48,7 @@
                 <i class="bi bi-arrow-clockwise me-1.5"></i>Reload Status
             </button>
             <a href="{% url 'job_status_view' job.id %}?force_direct=1" class="btn btn-sm btn-warning text-dark fw-bold px-3 py-2 rounded-3 shadow-xs" title="Force direct cluster query bypassing cached state">
-                <i class="bi bi-lightning-charge-fill me-1.5"></i>Vynutit kontrolu na clusteru (Force Direct Query)
+                <i class="bi bi-lightning-charge-fill me-1.5"></i>Force Direct Query
             </a>
             {% if project %}
             <a href="{% url 'project_detail' project.id %}" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
