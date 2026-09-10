@@ -1687,12 +1687,14 @@ def create_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     if auth_type in (1, 2, 3, 5, 6, 7):
         cred_password = request.POST.get("cred_password") or None
 
-    adaptor_user_id = request.POST.get("adaptor_user")
-    if adaptor_user_id == "" or adaptor_user_id == "None":
+    adaptor_user = request.POST.get("adaptor_user")
+    if not adaptor_user or adaptor_user == "None" or str(adaptor_user).strip() == "":
         adaptor_user_id = None
-
-    print(f"[DEBUG create_credential] adaptor_user from form: '{request.POST.get('adaptor_user')}'")
-    print(f"[DEBUG create_credential] adaptor_user_id after processing: {adaptor_user_id} (type: {type(adaptor_user_id)})")
+    else:
+        try:
+            adaptor_user_id = int(adaptor_user)
+        except (ValueError, TypeError):
+            adaptor_user_id = None
 
     payload_data = {
         "ProjectId": project_id,
@@ -1726,9 +1728,14 @@ def modify_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     if new_username == '':
         new_username = old_username 
 
-    adaptor_user_id = request.POST.get("mod_cred_adaptor_user_id")
-    if adaptor_user_id == "" or adaptor_user_id == "None":
+    adaptor_user = request.POST.get("mod_cred_adaptor_user_id")
+    if not adaptor_user or adaptor_user == "None" or str(adaptor_user).strip() == "":
         adaptor_user_id = None
+    else:
+        try:
+            adaptor_user_id = int(adaptor_user)
+        except (ValueError, TypeError):
+            adaptor_user_id = None
 
     payload_data = {
         "ProjectId": project_id,
@@ -1754,9 +1761,14 @@ def delete_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     controller = hp.CredentialsApi(request.api_instance)
     #project_id = int(request.POST.get("ProjectId"))
 
-    adaptor_user_id = request.POST.get("AdaptorUserId")
-    if adaptor_user_id == "" or adaptor_user_id == "None":
+    adaptor_user = request.POST.get("AdaptorUserId")
+    if not adaptor_user or adaptor_user == "None" or str(adaptor_user).strip() == "":
         adaptor_user_id = None
+    else:
+        try:
+            adaptor_user_id = int(adaptor_user)
+        except (ValueError, TypeError):
+            adaptor_user_id = None
 
     payload_data = {
         "ProjectId": project_id,
