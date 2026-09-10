@@ -171,6 +171,11 @@
                     {% endif %}
                     {% if is_v6_5_0_plus %}
                     <li class="nav-item">
+                        <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'monitoring/jobs' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'admin_jobs_monitoring_view' %}">
+                            <i class="bi bi-speedometer2 fs-5"></i><span>Admin Job Monitoring</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link d-flex align-items-center gap-2.5 py-2 px-3 rounded {% if 'telemetry' in request.path %}bg-primary bg-opacity-10 text-primary fw-bold{% else %}text-secondary hover-bg-light{% endif %}" href="{% url 'external_services_telemetry_view' %}">
                             <i class="bi bi-activity fs-5"></i><span>External Telemetry</span>
                         </a>

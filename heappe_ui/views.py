@@ -498,14 +498,22 @@ def dashboard_jobs_history_partial(request: HttpRequest) -> HttpResponse:
 
     # Check HEAppE Core version (ListDetailedJobsForAdmin requires >= 6.5.0)
     use_admin_api = False
+    current_version = request.session.get("middleware_deployed_version", "")
+    if not current_version:
+        try:
+            health_api = hp.HealthApi(request.api_instance)
+            health_info = health_api.heappe_health_get()
+            current_version = health_info.version.lstrip("vV") if health_info and getattr(health_info, 'version', None) else "0.0.0"
+            if current_version and current_version != "0.0.0":
+                request.session["middleware_deployed_version"] = current_version
+        except Exception as e:
+            print(f"[dashboard_jobs_history] Version check error: {e}")
+            current_version = "0.0.0"
+
     try:
-        health_api = hp.HealthApi(request.api_instance)
-        health_info = health_api.heappe_health_get()
-        current_version = health_info.version.lstrip("vV") if health_info and getattr(health_info, 'version', None) else "0.0.0"
         if clean_ver(current_version) >= clean_ver("6.5.0"):
             use_admin_api = True
-    except Exception as e:
-        print(f"[dashboard_jobs_history] Version check error: {e}")
+    except Exception:
         use_admin_api = False
 
     if use_admin_api:
@@ -733,7 +741,7 @@ def logs_view(request):
         search = request.GET.get('search', '').lower()
 
         # SQL dotaz s podmínkami
-        query = "SELECT * FROM Log WHERE 1=1"
+        query = "SELECT TOP 1000 * FROM Log WHERE 1=1"
         params = []
 
         if date_from:
@@ -1538,6 +1546,7 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
             
         is_json = log_path.endswith('.json') or '.json.' in os.path.basename(log_path)
         
+        file_entries_count = 0
         if is_json:
             for line in get_lines_backwards(log_path):
                 line_stripped = line.strip()
@@ -1546,8 +1555,9 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                 parsed = parse_json_log_line(line_stripped, service=default_svc)
                 if parsed and matches_filters(parsed, level_filter, search_query, time_from, time_to):
                     all_entries.append(parsed)
+                    file_entries_count += 1
                     entries_count += 1
-                    if entries_count >= max_entries * 2:
+                    if entries_count >= max_entries * 2 or file_entries_count >= max_entries:
                         break
         else:
             current_entry_lines = []
@@ -1556,21 +1566,22 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                 ts_match = timestamp_re.search(line[:30])
                 
                 if ts_match:
-                    current_entry_lines.insert(0, line)
-                    entry_text = "".join(current_entry_lines)
+                    current_entry_lines.append(line)
+                    entry_text = "".join(reversed(current_entry_lines))
                     current_entry_lines = []
                     
                     parsed = parse_log_line(entry_text, service=default_svc)
                     if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                         all_entries.append(parsed)
+                        file_entries_count += 1
                         entries_count += 1
-                        if entries_count >= max_entries * 2:
+                        if entries_count >= max_entries * 2 or file_entries_count >= max_entries:
                             break
                 else:
-                    current_entry_lines.insert(0, line)
+                    current_entry_lines.append(line)
                     
             if current_entry_lines:
-                entry_text = "".join(current_entry_lines)
+                entry_text = "".join(reversed(current_entry_lines))
                 parsed = parse_log_line(entry_text, service=default_svc)
                 if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                     all_entries.append(parsed)
@@ -1581,24 +1592,28 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
         yield entry
 
 
-def get_log_file_paths(instance, date_str, service="ALL"):
+def get_log_file_paths(instance, date_str, service="API"):
     base_logs_dir = f"/opt/heappe-deployment/{instance}/app/logs"
     date_formatted = date_str.replace("-", "_")
 
     if not os.path.exists(base_logs_dir):
         return []
 
-    service_upper = (service or "ALL").upper()
+    service_upper = (service or "API").upper()
     matching_files = []
 
     date_pattern = re.compile(rf"^(?:[a-zA-Z0-9_\-]*?_)?{re.escape(date_formatted)}\.(?:log|json)(?:\.\d+)?$", re.IGNORECASE)
 
     def scan_dir(dir_path, svc_tag):
         if os.path.exists(dir_path):
-            for f in os.listdir(dir_path):
+            try:
+                entries = os.listdir(dir_path)
+            except OSError:
+                return
+            for f in entries:
                 filepath = os.path.join(dir_path, f)
-                if os.path.isfile(filepath):
-                    if date_pattern.match(f) or f.endswith(".log") or f.endswith(".json"):
+                if not os.path.isdir(filepath):
+                    if date_pattern.match(f):
                         if (filepath, svc_tag) not in matching_files:
                             matching_files.append((filepath, svc_tag))
 
@@ -1620,32 +1635,35 @@ def get_log_file_paths(instance, date_str, service="ALL"):
         target_services = [service_upper]
         service_map[service_upper] = ([service], [])
 
+    scanned_dirs = set()
     for s in target_services:
         folders, root_files = service_map.get(s, ([s], []))
         for folder in folders:
-            scan_dir(os.path.join(base_logs_dir, folder), s)
+            folder_path = os.path.join(base_logs_dir, folder)
+            scanned_dirs.add(os.path.abspath(folder_path))
+            scan_dir(folder_path, s)
         for root_file in root_files:
             filepath = os.path.join(base_logs_dir, root_file)
-            if os.path.exists(filepath) and os.path.isfile(filepath):
+            if os.path.exists(filepath) and not os.path.isdir(filepath):
                 if (filepath, s) not in matching_files:
                     matching_files.append((filepath, s))
 
     if service_upper == "ALL":
-        for entry in os.listdir(base_logs_dir):
+        try:
+            base_entries = os.listdir(base_logs_dir)
+        except OSError:
+            base_entries = []
+        for entry in base_entries:
             full_path = os.path.join(base_logs_dir, entry)
-            if os.path.isdir(full_path):
+            if os.path.isdir(full_path) and os.path.abspath(full_path) not in scanned_dirs:
                 tag_name = entry.upper()
                 scan_dir(full_path, tag_name)
-            elif os.path.isfile(full_path) and (entry.endswith(".log") or entry.endswith(".json")):
-                file_tag = entry.rsplit(".", 1)[0].upper()
-                if (full_path, file_tag) not in matching_files:
-                    matching_files.append((full_path, file_tag))
 
     matching_files.sort(key=lambda x: os.path.getmtime(x[0]))
     return matching_files
 
 
-def get_log_file_path(instance, date_str, service="ALL"):
+def get_log_file_path(instance, date_str, service="API"):
     paths = get_log_file_paths(instance, date_str, service=service)
     if paths:
         return paths[-1][0] if isinstance(paths[-1], tuple) else paths[-1]
@@ -1661,7 +1679,7 @@ def log_viewer_view(request):
     time_to = request.GET.get('time_to', '')
     search_query = request.GET.get('search', '').lower()
     level_filter = request.GET.get('level', '').upper()
-    service_filter = request.GET.get('service', 'ALL').upper()
+    service_filter = request.GET.get('service', 'API').upper()
 
     log_paths = get_log_file_paths(instance, selected_date, service=service_filter)
     
@@ -1702,7 +1720,7 @@ def log_viewer_view(request):
 def fetch_new_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
     today = datetime.now().strftime('%Y-%m-%d')
-    service_filter = request.GET.get('service', 'ALL').upper()
+    service_filter = request.GET.get('service', 'API').upper()
     level_filter = request.GET.get('level', '').upper()
     search_query = request.GET.get('search', '').lower()
 
@@ -1736,7 +1754,6 @@ def fetch_new_logs(request):
         with open(log_path, 'rb') as f:
             f.seek(read_offset)
             chunk = f.read()
-            max_offset = max(max_offset, f.tell())
 
         if chunk:
             decoded = chunk.decode('utf-8', errors='ignore')
@@ -1745,14 +1762,22 @@ def fetch_new_logs(request):
             is_json = log_path.endswith('.json') or '.json.' in os.path.basename(log_path)
 
             if is_json:
+                processed_bytes = 0
                 for line in lines:
                     line_stripped = line.strip()
                     if not line_stripped:
+                        processed_bytes += len(line.encode('utf-8'))
                         continue
                     parsed = parse_json_log_line(line_stripped, service=svc_tag)
-                    if parsed and matches_filters(parsed, level_filter, search_query, None, None):
-                        new_entries.append(parsed)
+                    if parsed:
+                        processed_bytes += len(line.encode('utf-8'))
+                        if matches_filters(parsed, level_filter, search_query, None, None):
+                            new_entries.append(parsed)
+                    else:
+                        break
+                max_offset = max(max_offset, read_offset + processed_bytes)
             else:
+                max_offset = max(max_offset, read_offset + len(chunk))
                 current_entry_lines = []
                 timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
 
@@ -1766,6 +1791,12 @@ def fetch_new_logs(request):
                         current_entry_lines = [line]
                     else:
                         current_entry_lines.append(line)
+
+                if current_entry_lines:
+                    entry_text = "".join(current_entry_lines)
+                    parsed = parse_log_line(entry_text, service=svc_tag)
+                    if matches_filters(parsed, level_filter, search_query, None, None):
+                        new_entries.append(parsed)
 
                 if current_entry_lines:
                     entry_text = "".join(current_entry_lines)

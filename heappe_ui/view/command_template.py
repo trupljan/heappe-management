@@ -293,6 +293,121 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
 
 
 @login_required
+def command_template_copy(request: HttpRequest, command_template_id: int) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    session_code = request.session_code
+
+    if request.method == "POST":
+        target_project_id = request.POST.get("ProjectId")
+        if not target_project_id:
+            from django.contrib import messages as _messages
+            _messages.error(request, "Please select a target project.")
+            return redirect("command_template_copy", command_template_id=command_template_id)
+
+        try:
+            target_project_id = int(target_project_id)
+        except (ValueError, TypeError):
+            from django.contrib import messages as _messages
+            _messages.error(request, "Invalid target project ID.")
+            return redirect("command_template_copy", command_template_id=command_template_id)
+
+        payload_data = {
+            "ProjectId": target_project_id,
+            "Name": request.POST.get("Name"),
+            "Description": request.POST.get("Description") or "",
+            "ExtendedAllocationCommand": request.POST.get("ExtendedAllocationCommand") or "",
+            "ExecutableFile": request.POST.get("ExecutableFile"),
+            "PreparationScript": request.POST.get("PreparationScript") or "",
+            "ClusterNodeTypeId": int(request.POST.get("ClusterNodeTypeId")) if request.POST.get("ClusterNodeTypeId") and request.POST.get("ClusterNodeTypeId") != "0" else None,
+            "IsEnabled": request.POST.get("IsEnabled") == "on",
+            "TemplateParameters": []
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_command_template_post(**payload),
+            "Command Template copied successfully!",
+            "Failed to copy Command Template"
+        )
+        if result:
+            new_id = result.get('Id') if isinstance(result, dict) else (getattr(result, 'id', None) or getattr(result, 'Id', None))
+
+            # Fetch source template parameters to duplicate
+            try:
+                src_template = controller.heappe_management_command_template_get(
+                    Id=command_template_id, SessionCode=session_code
+                )
+                src_template_dict = src_template.to_dict() if hasattr(src_template, 'to_dict') else src_template
+                parameters = src_template_dict.get('template_parameters') or []
+                if new_id:
+                    for param in parameters:
+                        p_dict = param if isinstance(param, dict) else (param.to_dict() if hasattr(param, 'to_dict') else param)
+                        param_payload_data = {
+                            "CommandTemplateId": new_id,
+                            "Identifier": p_dict.get("identifier") or p_dict.get("Identifier"),
+                            "Query": p_dict.get("query") or p_dict.get("Query"),
+                            "Description": p_dict.get("description") or p_dict.get("Description")
+                        }
+                        param_payload = _create_payload(request.session_code, param_payload_data)
+                        controller.heappe_management_command_template_parameter_post(**param_payload)
+            except Exception as e:
+                print(f"Error copying template parameters for template {command_template_id}: {e}")
+
+            # Invalidate cache for target project
+            cache_key = f"command_templates_cache_{target_project_id}"
+            cache_time_key = f"command_templates_cache_{target_project_id}_time"
+            request.session.pop(cache_key, None)
+            request.session.pop(cache_time_key, None)
+
+            if new_id:
+                return redirect("command_template_detail", command_template_id=new_id)
+            from django.urls import reverse
+            return redirect(f"{reverse('project_detail', kwargs={'project_id': target_project_id})}?tab=commandtemplates")
+
+    # GET: Load source template, projects, clusters, and node types
+    try:
+        src_template = controller.heappe_management_command_template_get(
+            Id=command_template_id, SessionCode=session_code
+        ).to_dict()
+    except Exception as e:
+        print(f"Error fetching source command template {command_template_id}: {e}")
+        raise e
+
+    try:
+        projects_raw = controller.heappe_management_projects_get(SessionCode=session_code)
+        projects = [p.to_dict() for p in projects_raw] if projects_raw else []
+    except Exception as e:
+        print(f"Error fetching projects: {e}")
+        projects = []
+
+    try:
+        clusters_raw = controller.heappe_management_clusters_get(SessionCode=session_code)
+        clusters = [c.to_dict() for c in clusters_raw] if clusters_raw else []
+    except Exception as e:
+        print(f"Error fetching clusters: {e}")
+        clusters = []
+
+    cluster_node_types = []
+    for cluster in clusters:
+        cluster_name = cluster.get('name', 'Unknown')
+        for ntype in cluster.get('node_types', []):
+            ntype_dict = ntype.copy() if isinstance(ntype, dict) else ntype.to_dict()
+            ntype_dict['cluster_name'] = cluster_name
+            cluster_node_types.append(ntype_dict)
+
+    source_project = None
+    if src_template.get('project_id'):
+        source_project = next((p for p in projects if p.get('id') == src_template['project_id']), None)
+
+    return render(request, 'command_template_copy.html', {
+        'source_template': src_template,
+        'projects': projects,
+        'source_project': source_project,
+        'node_types': cluster_node_types,
+    })
+
+
+@login_required
 def command_template_delete(request: HttpRequest, command_template_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
 

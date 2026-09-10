@@ -827,7 +827,7 @@ def get_remote_tags(repo_url: str) -> list[str]:
         # Fetch tags
         result_tags = subprocess.run(
             ["git", "ls-remote", "--tags", repo_url],
-            capture_output=True, text=True, check=True
+            capture_output=True, text=True, check=True, timeout=5
         )
         tags = []
         for line in result_tags.stdout.splitlines():
@@ -846,7 +846,7 @@ def get_remote_tags(repo_url: str) -> list[str]:
         # Fetch branches (heads)
         result_heads = subprocess.run(
             ["git", "ls-remote", "--heads", repo_url],
-            capture_output=True, text=True, check=True
+            capture_output=True, text=True, check=True, timeout=5
         )
         branches = []
         for line in result_heads.stdout.splitlines():

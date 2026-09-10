@@ -431,6 +431,164 @@ class ProjectCommandTemplatesBulkDeleteTests(TestCase):
         self.assertEqual(second_call['body']['CommandTemplateId'], 43)
 
 
+class CommandTemplateCopyTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser", password="password")
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_command_template_copy_get(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+
+        mock_template = mock.MagicMock()
+        mock_template.to_dict.return_value = {
+            "id": 10,
+            "name": "Original MPI Template",
+            "description": "Original description",
+            "extended_allocation_command": "--mem=8G",
+            "executable_file": "/usr/bin/mpirun",
+            "preparation_script": "module load mpi",
+            "cluster_node_type_id": 3,
+            "is_enabled": True,
+            "project_id": 1,
+            "template_parameters": [
+                {"id": 101, "identifier": "CORES", "description": "Num cores", "query": "1..64"}
+            ]
+        }
+        mock_mgmt_instance.heappe_management_command_template_get.return_value = mock_template
+
+        mock_p1 = mock.MagicMock()
+        mock_p1.to_dict.return_value = {"id": 1, "name": "Source Project"}
+        mock_p2 = mock.MagicMock()
+        mock_p2.to_dict.return_value = {"id": 2, "name": "Target Project"}
+        mock_mgmt_instance.heappe_management_projects_get.return_value = [mock_p1, mock_p2]
+
+        mock_cluster = mock.MagicMock()
+        mock_cluster.to_dict.return_value = {
+            "id": 1,
+            "name": "Cluster A",
+            "node_types": [{"id": 3, "name": "Default Queue"}]
+        }
+        mock_mgmt_instance.heappe_management_clusters_get.return_value = [mock_cluster]
+
+        request = self.factory.get("/command-templates/10/copy/")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.command_template import command_template_copy
+        response = command_template_copy(request, command_template_id=10)
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Copy of Original MPI Template", content)
+        self.assertIn("Target Project", content)
+        self.assertIn("CORES", content)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_command_template_copy_post_success(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+
+        mock_mgmt_instance.heappe_management_command_template_post.return_value = {"Id": 99}
+        mock_mgmt_instance.heappe_management_command_template_parameter_post.return_value = {"Id": 201}
+
+        mock_src_template = mock.MagicMock()
+        mock_src_template.to_dict.return_value = {
+            "id": 10,
+            "name": "Original Template",
+            "template_parameters": [
+                {"id": 101, "identifier": "PARAM1", "description": "Param 1 desc", "query": "1..10"}
+            ]
+        }
+        mock_mgmt_instance.heappe_management_command_template_get.return_value = mock_src_template
+
+        request = self.factory.post("/command-templates/10/copy/", {
+            "ProjectId": "2",
+            "Name": "Cloned Template",
+            "Description": "Cloned desc",
+            "ExtendedAllocationCommand": "--mem=16G",
+            "ExecutableFile": "/usr/bin/python3",
+            "PreparationScript": "module load python3",
+            "ClusterNodeTypeId": "3",
+            "IsEnabled": "on"
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123",
+            "command_templates_cache_2": [],
+            "command_templates_cache_2_time": 0
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.command_template import command_template_copy
+        response = command_template_copy(request, command_template_id=10)
+
+        # Verify redirect to new command template detail
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/command-templates/99/"))
+
+        # Verify command template creation call
+        mock_mgmt_instance.heappe_management_command_template_post.assert_called_once()
+        post_kwargs = mock_mgmt_instance.heappe_management_command_template_post.call_args[1]
+        self.assertEqual(post_kwargs['body']['ProjectId'], 2)
+        self.assertEqual(post_kwargs['body']['Name'], "Cloned Template")
+        self.assertEqual(post_kwargs['body']['ExecutableFile'], "/usr/bin/python3")
+        self.assertEqual(post_kwargs['body']['ClusterNodeTypeId'], 3)
+        self.assertEqual(post_kwargs['body']['IsEnabled'], True)
+        self.assertEqual(post_kwargs['body']['TemplateParameters'], [])
+
+        # Verify parameter duplication
+        mock_mgmt_instance.heappe_management_command_template_parameter_post.assert_called_once()
+        param_kwargs = mock_mgmt_instance.heappe_management_command_template_parameter_post.call_args[1]
+        self.assertEqual(param_kwargs['body']['CommandTemplateId'], 99)
+        self.assertEqual(param_kwargs['body']['Identifier'], "PARAM1")
+
+        # Verify cache invalidation for target project
+        self.assertNotIn("command_templates_cache_2", request.session)
+        self.assertNotIn("command_templates_cache_2_time", request.session)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_command_template_copy_post_missing_project(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+
+        request = self.factory.post("/command-templates/10/copy/", {
+            "ProjectId": "",
+            "Name": "Cloned Template",
+            "ExecutableFile": "/usr/bin/python3",
+        })
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.command_template import command_template_copy
+        response = command_template_copy(request, command_template_id=10)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.url.endswith("/command-templates/10/copy/"))
+
+
 class ProjectCommandTemplateIndividualDeleteTests(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
@@ -2647,17 +2805,19 @@ class LogViewerJsonTests(TestCase):
         self.assertIn('[req1]', parsed['content'])
 
     @mock.patch('os.path.exists')
+    @mock.patch('os.path.isdir')
     @mock.patch('os.listdir')
     @mock.patch('os.path.getmtime')
-    def test_get_log_file_paths_includes_json(self, mock_getmtime, mock_listdir, mock_exists):
+    def test_get_log_file_paths_includes_json(self, mock_getmtime, mock_listdir, mock_isdir, mock_exists):
         from heappe_ui.views import get_log_file_paths
         mock_exists.return_value = True
-        mock_listdir.return_value = ['2026_07_13.log', '2026_07_13.json', '2026_07_13.json.1', 'other.log']
+        mock_isdir.return_value = False
+        mock_listdir.side_effect = lambda d: ['2026_07_13.log', '2026_07_13.json', '2026_07_13.json.1', 'other.log'] if str(d).endswith('/API') else []
         mock_getmtime.side_effect = lambda path: 10 if 'json.1' in path else 20
         
-        paths = get_log_file_paths('test_instance', '2026-07-13')
+        paths = get_log_file_paths('test_instance', '2026-07-13', service='API')
         self.assertEqual(len(paths), 3)
-        self.assertIn('/opt/heappe-deployment/test_instance/app/logs/API/2026_07_13.json.1', paths[0])
+        self.assertIn('/opt/heappe-deployment/test_instance/app/logs/API/2026_07_13.json.1', paths[0][0] if isinstance(paths[0], tuple) else paths[0])
 
     def test_get_log_entries_backwards_json(self):
         from heappe_ui.views import get_log_entries_backwards
@@ -2692,7 +2852,7 @@ class LogViewerJsonTests(TestCase):
             tmp_path = tmp.name
             
         try:
-            with mock.patch('heappe_ui.views.get_log_file_path', return_value=tmp_path):
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
                 req = factory.get('/fetch-new-logs/?offset=0')
                 req.user = user
                 req.session = {'chosen_instance': 'test'}

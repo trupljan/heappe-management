@@ -27,11 +27,18 @@
             <span class="text-muted small">Configure command execution parameters and cluster bindings</span>
           </div>
         </div>
-        {% if project and project.id %}
-        <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
-          <i class="bi bi-arrow-left me-1.5"></i>Back to Project
-        </a>
-        {% endif %}
+        <div class="d-flex align-items-center gap-2">
+          {% if command_template and command_template.id %}
+          <a href="{% url 'command_template_copy' command_template.id %}" class="btn btn-sm btn-outline-primary fw-semibold px-3 py-2 rounded-3 shadow-xs">
+            <i class="bi bi-copy me-1.5"></i>Copy to Project
+          </a>
+          {% endif %}
+          {% if project and project.id %}
+          <a href="{% url 'project_detail' project.id %}?tab=commandtemplates" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
+            <i class="bi bi-arrow-left me-1.5"></i>Back to Project
+          </a>
+          {% endif %}
+        </div>
       </div>
 
       {% if command_template.id and not command_template.project_id %}

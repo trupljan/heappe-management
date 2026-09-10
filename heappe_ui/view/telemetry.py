@@ -393,28 +393,36 @@ def external_services_telemetry_view(request: HttpRequest) -> HttpResponse:
         pass
 
     available_service_names = set()
-    for s in live_statuses:
-        name = s.get('ServiceName') or s.get('service_name') or s.get('name')
-        if name:
-            available_service_names.add(name)
-    for st in stats_list:
-        name = st.get('ServiceName') or st.get('service_name')
-        if name:
-            available_service_names.add(name)
+    for s in (live_statuses or []):
+        if isinstance(s, dict):
+            name = s.get('ServiceName') or s.get('service_name') or s.get('name')
+            if name:
+                available_service_names.add(name)
+    if isinstance(stats_list, list):
+        for st in stats_list:
+            if isinstance(st, dict):
+                name = st.get('ServiceName') or st.get('service_name')
+                if name:
+                    available_service_names.add(name)
 
-    # Normalize stats_list and calculate accurate availability percentage
-    for st in stats_list:
-        tc = int(st.get('TotalChecks') or st.get('total_checks') or 0)
-        fc = int(st.get('FailedChecks') or st.get('failed_checks') or 0)
-        if tc > 0:
-            st['availability_percentage'] = round(max(0.0, min(100.0, ((tc - fc) / tc) * 100.0)), 1)
-        else:
-            raw_avail = st.get('AvailabilityPercentage') or st.get('availability_percentage')
-            st['availability_percentage'] = float(raw_avail) if raw_avail is not None else 100.0
+        # Normalize stats_list and calculate accurate availability percentage
+        for st in stats_list:
+            if isinstance(st, dict):
+                tc = int(st.get('TotalChecks') or st.get('total_checks') or 0)
+                fc = int(st.get('FailedChecks') or st.get('failed_checks') or 0)
+                if tc > 0:
+                    st['availability_percentage'] = round(max(0.0, min(100.0, ((tc - fc) / tc) * 100.0)), 1)
+                else:
+                    raw_avail = st.get('AvailabilityPercentage') or st.get('availability_percentage')
+                    st['availability_percentage'] = float(raw_avail) if raw_avail is not None else 100.0
 
-    # Compute KPI Aggregates
-    total_checks = sum(int(st.get('TotalChecks') or st.get('total_checks') or 0) for st in stats_list)
-    total_failures = sum(int(st.get('FailedChecks') or st.get('failed_checks') or 0) for st in stats_list)
+        # Compute KPI Aggregates
+        total_checks = sum(int(st.get('TotalChecks') or st.get('total_checks') or 0) for st in stats_list if isinstance(st, dict))
+        total_failures = sum(int(st.get('FailedChecks') or st.get('failed_checks') or 0) for st in stats_list if isinstance(st, dict))
+    else:
+        stats_list = []
+        total_checks = 0
+        total_failures = 0
     avg_avail = 100.0
     if total_checks > 0:
         avg_avail = max(0.0, min(100.0, ((total_checks - total_failures) / total_checks) * 100.0))

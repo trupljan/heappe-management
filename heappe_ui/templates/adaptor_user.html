@@ -81,7 +81,7 @@
             <div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <h4 class="mb-0 fw-bold text-dark">Service Account: <span class="text-primary font-monospace">{{ adaptor_user.username }}</span></h4>
-                    {% if adaptor_user.is_blocked %}
+                    {% if adaptor_user.is_blocked or adaptor_user.IsBlocked %}
                         <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1 rounded-pill fw-bold" style="font-size: 0.8rem;">
                             <i class="bi bi-slash-circle-fill me-1"></i>Blocked
                         </span>
@@ -96,10 +96,10 @@
         </div>
         <div class="d-flex align-items-center gap-2">
             <!-- Block / Unblock Account Button -->
-            <form method="post" action="{% url 'adaptor_user_toggle_block_status' adaptor_user.username %}" class="d-inline m-0" onsubmit="return confirm('Are you sure you want to {% if adaptor_user.is_blocked %}unblock{% else %}block{% endif %} service account \'{{ adaptor_user.username }}\'?');">
+            <form method="post" action="{% url 'adaptor_user_toggle_block_status' adaptor_user.username %}" class="d-inline m-0" onsubmit="return confirm('Are you sure you want to {% if adaptor_user.is_blocked or adaptor_user.IsBlocked %}unblock{% else %}block{% endif %} service account \'{{ adaptor_user.username }}\'?');">
                 {% csrf_token %}
-                <input type="hidden" name="is_blocked" value="{% if adaptor_user.is_blocked %}false{% else %}true{% endif %}">
-                {% if adaptor_user.is_blocked %}
+                <input type="hidden" name="is_blocked" value="{% if adaptor_user.is_blocked or adaptor_user.IsBlocked %}false{% else %}true{% endif %}">
+                {% if adaptor_user.is_blocked or adaptor_user.IsBlocked %}
                     <button type="submit" class="btn btn-sm btn-outline-success fw-bold px-3 py-2 rounded-3 shadow-sm d-flex align-items-center gap-1.5" title="Restore account access and allow job submissions">
                         <i class="bi bi-unlock-fill"></i>Unblock Account
                     </button>
@@ -115,7 +115,7 @@
         </div>
     </div>
 
-    {% if adaptor_user.is_blocked %}
+    {% if adaptor_user.is_blocked or adaptor_user.IsBlocked %}
     <div class="alert alert-danger border-0 rounded-3 mb-4 d-flex align-items-center justify-content-between flex-wrap gap-2 shadow-sm p-3">
         <div class="d-flex align-items-center gap-2">
             <i class="bi bi-slash-circle-fill fs-4 flex-shrink-0 text-danger"></i>
@@ -135,22 +135,31 @@
 
     <!-- General Settings Form -->
     <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
-        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
-            <i class="bi bi-gear-fill text-primary"></i>
-            <h5 class="h6 mb-0 fw-bold text-dark">General Settings</h5>
+        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-gear-fill text-primary"></i>
+                <h5 class="h6 mb-0 fw-bold text-dark">General Settings &amp; Identity</h5>
+            </div>
+            {% if adaptor_user.idp_sid or adaptor_user.IdpSid %}
+                <span class="badge bg-light text-secondary border font-monospace small"><i class="bi bi-fingerprint me-1"></i>IDP SID: {% firstof adaptor_user.idp_sid adaptor_user.IdpSid %}</span>
+            {% endif %}
         </div>
         <div class="card-body p-4">
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="update_adaptor_user">
                 <div class="row align-items-end g-3">
-                    <div class="col-md-8 col-12">
+                    <div class="col-md-6 col-12">
                         <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Username / Identifier</label>
                         <input type="text" class="form-control border-secondary-subtle py-2 rounded-3 font-monospace fw-semibold" name="Username" value="{{ adaptor_user.username }}" required>
                     </div>
-                    <div class="col-md-4 col-12">
-                        <button type="submit" class="btn btn-primary fw-bold py-2 w-100 rounded-3 shadow-sm">
-                            <i class="bi bi-key-fill me-1.5"></i>Update & Regenerate Key
+                    <div class="col-md-6 col-12">
+                        <label class="form-label small fw-bold text-secondary text-uppercase mb-1">IDP Identity SID (Keycloak / Federated SID)</label>
+                        <input type="text" class="form-control border-secondary-subtle bg-light py-2 rounded-3 font-monospace small" value="{% firstof adaptor_user.idp_sid adaptor_user.IdpSid 'N/A' %}" readonly>
+                    </div>
+                    <div class="col-12 mt-3">
+                        <button type="submit" class="btn btn-primary fw-bold py-2 px-4 rounded-3 shadow-sm">
+                            <i class="bi bi-key-fill me-1.5"></i>Update &amp; Regenerate Key
                         </button>
                     </div>
                 </div>

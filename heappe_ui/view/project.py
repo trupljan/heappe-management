@@ -1034,25 +1034,40 @@ def project_create(request: HttpRequest) -> HttpResponse:
 def project_list(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     
-    # Retrieve raw projects list to extract PIEmail, which is discarded by the Swagger model
+    projects = []
     try:
         raw_resp = controller.heappe_management_projects_get(
             SessionCode=request.session_code, _preload_content=False
         )
         import json
-        raw_projects = json.loads(raw_resp.data.decode('utf-8'))
-        raw_by_id = {p.get('Id'): p for p in raw_projects}
+        raw_data = raw_resp.data
+        if isinstance(raw_data, bytes):
+            raw_data = raw_data.decode('utf-8')
+        raw_projects = json.loads(raw_data)
+        for p in raw_projects:
+            pi_email = p.get('PIEmail') or p.get('pi_email')
+            p_dict = {
+                'id': p.get('Id') if p.get('Id') is not None else p.get('id'),
+                'name': p.get('Name') or p.get('name'),
+                'description': p.get('Description') or p.get('description'),
+                'start_date': p.get('StartDate') or p.get('start_date'),
+                'end_date': p.get('EndDate') or p.get('end_date'),
+                'accounting_string': p.get('AccountingString') or p.get('accounting_string'),
+                'usage_type': p.get('UsageType') if p.get('UsageType') is not None else p.get('usage_type'),
+                'pi_email': pi_email,
+                'PIEmail': pi_email,
+                'use_accounting_string_for_scheduler': p.get('UseAccountingStringForScheduler') if p.get('UseAccountingStringForScheduler') is not None else p.get('use_accounting_string_for_scheduler'),
+                'is_one_to_one_mapping': p.get('IsOneToOneMapping') if p.get('IsOneToOneMapping') is not None else p.get('is_one_to_one_mapping'),
+            }
+            projects.append(p_dict)
     except Exception as e:
         print(f"Error fetching raw projects: {e}")
-        raw_by_id = {}
-
-    projects = []
-    for p in controller.heappe_management_projects_get(SessionCode=request.session_code):
-        p_dict = p.to_dict()
-        raw_proj = raw_by_id.get(p_dict.get('id'), {})
-        p_dict['pi_email'] = raw_proj.get('PIEmail') or raw_proj.get('pi_email')
-        p_dict['PIEmail'] = p_dict['pi_email']
-        projects.append(p_dict)
+        try:
+            for p in (controller.heappe_management_projects_get(SessionCode=request.session_code) or []):
+                p_dict = p.to_dict() if hasattr(p, 'to_dict') else p
+                projects.append(p_dict)
+        except Exception:
+            projects = []
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -1758,3 +1773,63 @@ def delete_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     )
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
+
+
+@login_required
+def admin_jobs_monitoring_view(request: HttpRequest) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    page_size = int(request.GET.get("page_size", 20))
+    last_job_id = request.GET.get("last_job_id")
+    if last_job_id:
+        try:
+            last_job_id = int(last_job_id)
+        except ValueError:
+            last_job_id = None
+
+    jobs = []
+    next_last_job_id = None
+    try:
+        if hasattr(controller, "heappe_management_get_jobs_monitoring_post"):
+            res = controller.heappe_management_get_jobs_monitoring_post(
+                SessionCode=request.session_code,
+                PageSize=page_size,
+                LastJobId=last_job_id
+            )
+            if res:
+                if isinstance(res, list):
+                    jobs = [j.to_dict() if hasattr(j, "to_dict") else j for j in res]
+                elif hasattr(res, "jobs"):
+                    jobs = [j.to_dict() if hasattr(j, "to_dict") else j for j in res.jobs]
+        else:
+            import requests as req_lib
+            base_url = request.api_instance.configuration.host
+            params = {"SessionCode": request.session_code}
+            body = {"PageSize": page_size}
+            if last_job_id is not None:
+                body["LastJobId"] = last_job_id
+            resp = req_lib.post(
+                f"{base_url}/heappe/Management/GetJobsMonitoring",
+                params=params,
+                json=body,
+                verify=False,
+                timeout=15
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if isinstance(data, list):
+                    jobs = data
+                elif isinstance(data, dict):
+                    jobs = data.get("jobs", data.get("Jobs", []))
+    except Exception as e:
+        messages.error(request, f"Failed to fetch jobs monitoring data: {e}")
+
+    if jobs:
+        last_item = jobs[-1]
+        next_last_job_id = last_item.get("id") or last_item.get("Id")
+
+    return render(request, "jobs_monitoring.html", {
+        "jobs": jobs,
+        "page_size": page_size,
+        "last_job_id": last_job_id,
+        "next_last_job_id": next_last_job_id,
+    })

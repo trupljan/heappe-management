@@ -63,6 +63,37 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
         action = request.POST.get("action")
         if action == "update_adaptor_user":
             return adaptor_user_update(request, adaptor_user_username)
+        if action == "toggle_user_block":
+            is_blocked = request.POST.get("is_blocked") in ("true", "True", "1")
+            try:
+                if hasattr(controller, 'heappe_management_set_adaptor_user_block_status_post'):
+                    _handle_api_call(
+                        request,
+                        lambda: controller.heappe_management_set_adaptor_user_block_status_post(
+                            SessionCode=request.session_code,
+                            Username=adaptor_user_username,
+                            IsBlocked=is_blocked
+                        ),
+                        f"User block status updated successfully!",
+                        "Failed to update block status"
+                    )
+                else:
+                    import requests as req_lib
+                    base_url = request.api_instance.configuration.host
+                    resp = req_lib.post(
+                        f"{base_url}/heappe/Management/SetAdaptorUserBlockStatus",
+                        params={"SessionCode": request.session_code},
+                        json={"Username": adaptor_user_username, "IsBlocked": is_blocked},
+                        verify=False,
+                        timeout=15
+                    )
+                    if resp.status_code == 200:
+                        messages.success(request, f"User block status updated successfully!")
+                    else:
+                        messages.error(request, f"Failed to set user block status ({resp.status_code})")
+            except Exception as e:
+                messages.error(request, f"Error updating block status: {e}")
+            return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)
         if action == "adaptor_user_assign_to_project":
             return adaptor_user_assign_to_project(request, adaptor_user_username)
         if action == "adaptor_user_assign_to_user_group":
