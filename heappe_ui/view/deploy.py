@@ -148,14 +148,14 @@ def generate_secure_password(length=16):
     digits = string.digits
     all_chars = lower + upper + digits
 
-    # zajistí alespoň jednu malou, jednu velkou a jednu číslici
+    # ensure at least one lowercase, one uppercase, and one digit
     password = [
         random.choice(lower),
         random.choice(upper),
         random.choice(digits)
     ]
 
-    # doplní zbytek hesla náhodnými znaky
+    # fill remaining password length with random characters
     password += [random.choice(all_chars) for _ in range(length - 3)]
     random.shuffle(password)
     return ''.join(password)

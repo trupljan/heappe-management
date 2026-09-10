@@ -1789,28 +1789,44 @@ def admin_jobs_monitoring_view(request: HttpRequest) -> HttpResponse:
     jobs = []
     next_last_job_id = None
     try:
+        body_data = {
+            "SessionCode": request.session_code,
+            "PageSize": page_size,
+        }
+        if last_job_id is not None:
+            body_data["LastJobId"] = last_job_id
+
         if hasattr(controller, "heappe_management_get_jobs_monitoring_post"):
-            res = controller.heappe_management_get_jobs_monitoring_post(
-                SessionCode=request.session_code,
-                PageSize=page_size,
-                LastJobId=last_job_id
-            )
+            model = None
+            if hasattr(hp, "GetJobsMonitoringModel"):
+                try:
+                    model = hp.GetJobsMonitoringModel(
+                        session_code=request.session_code,
+                        page_size=page_size,
+                        last_job_id=last_job_id
+                    )
+                except Exception:
+                    model = None
+            res = controller.heappe_management_get_jobs_monitoring_post(body=model if model is not None else body_data)
             if res:
-                if isinstance(res, list):
-                    jobs = [j.to_dict() if hasattr(j, "to_dict") else j for j in res]
-                elif hasattr(res, "jobs"):
+                if hasattr(res, "jobs") and res.jobs is not None:
                     jobs = [j.to_dict() if hasattr(j, "to_dict") else j for j in res.jobs]
+                    if hasattr(res, "next_cursor_id") and res.next_cursor_id:
+                        next_last_job_id = res.next_cursor_id
+                elif isinstance(res, dict):
+                    raw_jobs = res.get("Jobs") or res.get("jobs") or []
+                    jobs = [j.to_dict() if hasattr(j, "to_dict") else j for j in raw_jobs]
+                    next_last_job_id = res.get("NextCursorId") or res.get("next_cursor_id")
+                elif isinstance(res, list):
+                    jobs = [j.to_dict() if hasattr(j, "to_dict") else j for j in res]
         else:
             import requests as req_lib
             base_url = request.api_instance.configuration.host
             params = {"SessionCode": request.session_code}
-            body = {"PageSize": page_size}
-            if last_job_id is not None:
-                body["LastJobId"] = last_job_id
             resp = req_lib.post(
                 f"{base_url}/heappe/Management/GetJobsMonitoring",
                 params=params,
-                json=body,
+                json=body_data,
                 verify=False,
                 timeout=15
             )
@@ -1820,12 +1836,27 @@ def admin_jobs_monitoring_view(request: HttpRequest) -> HttpResponse:
                     jobs = data
                 elif isinstance(data, dict):
                     jobs = data.get("jobs", data.get("Jobs", []))
+                    next_last_job_id = data.get("next_cursor_id", data.get("NextCursorId"))
     except Exception as e:
         messages.error(request, f"Failed to fetch jobs monitoring data: {e}")
 
-    if jobs:
+    standardized_jobs = []
+    for j in jobs:
+        d = j.to_dict() if hasattr(j, "to_dict") else (dict(j) if isinstance(j, dict) else {})
+        standardized_jobs.append({
+            "id": d.get("id") or d.get("Id") or getattr(j, "id", getattr(j, "Id", None)),
+            "name": d.get("name") or d.get("Name") or getattr(j, "name", getattr(j, "Name", "Unassigned")),
+            "state": d.get("state") or d.get("State") or getattr(j, "state", getattr(j, "State", None)),
+            "submitted_by": d.get("submitted_by") or d.get("SubmittedBy") or d.get("submitter_name") or d.get("SubmitterName") or getattr(j, "submitted_by", getattr(j, "SubmittedBy", "-")),
+            "cluster": d.get("cluster") or d.get("Cluster") or d.get("cluster_name") or d.get("ClusterName") or getattr(j, "cluster", getattr(j, "Cluster", "Cluster")),
+            "creation_time": d.get("creation_time") or d.get("CreationTime") or getattr(j, "creation_time", getattr(j, "CreationTime", None)),
+            "start_time": d.get("start_time") or d.get("StartTime") or getattr(j, "start_time", getattr(j, "StartTime", None)),
+        })
+    jobs = standardized_jobs
+
+    if jobs and not next_last_job_id:
         last_item = jobs[-1]
-        next_last_job_id = last_item.get("id") or last_item.get("Id")
+        next_last_job_id = last_item.get("id")
 
     return render(request, "jobs_monitoring.html", {
         "jobs": jobs,

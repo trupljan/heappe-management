@@ -730,7 +730,7 @@ def logs_view(request):
         context['levels'] = [{'Id': k, 'Name': v} for k, v in LoggingLevelType.items()]
         cursor.close()
 
-        # Filtry z GET parametrů
+        # Filters from GET parameters
         date_from = request.GET.get('date_from')
         if date_from is not None:
             date_from = date_from.replace('T', ' ')
@@ -740,7 +740,7 @@ def logs_view(request):
         level_filter = request.GET.get('level')
         search = request.GET.get('search', '').lower()
 
-        # SQL dotaz s podmínkami
+        # SQL query with conditions
         query = "SELECT TOP 1000 * FROM Log WHERE 1=1"
         params = []
 
@@ -1027,9 +1027,9 @@ from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import user_passes_test
 from django.http import JsonResponse
 
-# Skript je umístěn PŘÍMO v kořenovém adresáři projektu, vedle manage.py
+# Script is located DIRECTLY in the project root directory, next to manage.py
 DEPLOY_SCRIPT_NAME = "deploy.sh"
-# Sestavení plné cesty
+# Build full path
 DEPLOY_SCRIPT_PATH = os.path.join(settings.BASE_DIR, DEPLOY_SCRIPT_NAME)
 
 
@@ -1047,16 +1047,16 @@ from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from django.conf import settings
-from django.core.files.storage import default_storage # Volitelně, pro lepší práci s cestami
+from django.core.files.storage import default_storage # Optional, for file paths
 
 # --- DEFINE THESE CONSTANTS BASED ON YOUR PROJECT SETUP ---
 # Example: Define the path to your deployment script relative to BASE_DIR
 DEPLOY_SCRIPT_NAME = 'deploy.sh'
 # Assuming the script is in the project's root directory
-# Ujistěte se, že toto je správná cesta, např. /cesta/k/projektu/deploy.sh
+# Ensure this is the correct path, e.g. /path/to/project/deploy.sh
 DEPLOY_SCRIPT_PATH = os.path.join(settings.BASE_DIR, DEPLOY_SCRIPT_NAME)
 
-# PŘED POUŽITÍM ZKONTROLUJTE, ŽE settings.BASE_DIR JE SPRÁVNĚ NASTAVENO!
+# BEFORE USE, VERIFY THAT settings.BASE_DIR IS CONFIGURED CORRECTLY!
 # ---------------------------------------------------------
 
 
@@ -1283,7 +1283,7 @@ def check_for_updates(request):
     return response
 
 
-# ... tvoje existující error handling ...
+# ... error handling ...
 
 
 
@@ -1292,12 +1292,12 @@ def check_for_updates(request):
 
 
 @require_http_methods(["POST"])
-@login_required # Důležité: Tuto kritickou operaci smí spustit jen přihlášený uživatel.
+@login_required # Important: Only authenticated users may trigger this critical operation.
 def trigger_deployment_direct(request):
     """Final API endpoint to execute the deployment script."""
     # 1. Input Validation and Parsing
     try:
-        # Použijeme .decode('utf-8') pro jistotu
+        # Decode as utf-8
         data = json.loads(request.body.decode('utf-8'))
         git_url = data.get('git_url')
         git_tag = data.get('git_tag')
@@ -1315,7 +1315,7 @@ def trigger_deployment_direct(request):
         return JsonResponse({"status": "error", "message": f"Deployment script not found at {DEPLOY_SCRIPT_PATH}"},
                             status=500)
     try:
-        # Ensure script is executable (rwx pro vlastníka, r-- pro skupinu/ostatní)
+        # Ensure script is executable (rwx for owner, r-- for group/others)
         os.chmod(DEPLOY_SCRIPT_PATH, 0o744)
     except Exception as e:
         return JsonResponse({"status": "error", "message": f"Error setting permissions on script: {e}"}, status=500)
@@ -1330,12 +1330,11 @@ def trigger_deployment_direct(request):
         env_vars['GIT_USER'] = git_user
         env_vars['GIT_PASS'] = git_pass  # SENSITIVE!
 
-        # Doporučené: Použít shlex pro správné formátování příkazu
-        # Ale jelikož je spouštěn jen skript, stačí i tento zápis
+        # Use shlex/list format for secure command execution
         process = subprocess.Popen(
             ['/bin/bash', DEPLOY_SCRIPT_PATH],
             cwd=settings.BASE_DIR,
-            start_new_session=True,  # Důležité: Proces se odpojí a běží nezávisle (daemonizace)
+            start_new_session=True,  # Important: detach process to run independently (daemonize)
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=env_vars

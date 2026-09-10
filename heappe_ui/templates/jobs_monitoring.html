@@ -74,39 +74,39 @@
                 <tbody>
                     {% for job in jobs %}
                     <tr>
-                        <td class="ps-4 font-monospace fw-bold text-primary">#{{ job.id|default:job.Id }}</td>
-                        <td class="fw-bold text-dark">{{ job.name|default:job.Name|default:"Unassigned" }}</td>
+                        <td class="ps-4 font-monospace fw-bold text-primary">#{{ job.id }}</td>
+                        <td class="fw-bold text-dark">{{ job.name }}</td>
                         <td>
-                            {% with st=job.state|default:job.State %}
-                            {% if st == 1 %}
+                            {% with st=job.state|stringformat:"s"|lower %}
+                            {% if st == '1' or st == 'configuring' %}
                                 <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 rounded-pill fw-bold">CONFIGURING</span>
-                            {% elif st == 2 %}
+                            {% elif st == '2' or st == 'submitted' %}
                                 <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1 rounded-pill fw-bold">SUBMITTED</span>
-                            {% elif st == 4 %}
+                            {% elif st == '4' or st == 'queued' %}
                                 <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 rounded-pill fw-bold">QUEUED</span>
-                            {% elif st == 8 %}
+                            {% elif st == '8' or st == 'running' %}
                                 <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 rounded-pill fw-bold">RUNNING</span>
-                            {% elif st == 16 %}
+                            {% elif st == '16' or st == 'finished' %}
                                 <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill fw-bold">FINISHED</span>
-                            {% elif st == 32 %}
+                            {% elif st == '32' or st == 'failed' %}
                                 <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-2 py-1 rounded-pill fw-bold">FAILED</span>
-                            {% elif st == 64 %}
+                            {% elif st == '64' or st == 'canceled' %}
                                 <span class="badge bg-dark text-white px-2 py-1 rounded-pill fw-bold">CANCELED</span>
                             {% else %}
-                                <span class="badge bg-light text-secondary border px-2 py-1 rounded-pill fw-bold">STATE #{{ st }}</span>
+                                <span class="badge bg-light text-secondary border px-2 py-1 rounded-pill fw-bold">{{ job.state|upper }}</span>
                             {% endif %}
                             {% endwith %}
                         </td>
-                        <td><span class="font-monospace text-secondary">{{ job.submitter_name|default:job.SubmitterName|default:"-" }}</span></td>
-                        <td><span class="badge bg-light text-dark border">{{ job.cluster_name|default:job.ClusterName|default:"Cluster" }}</span></td>
+                        <td><span class="font-monospace text-secondary">{{ job.submitted_by }}</span></td>
+                        <td><span class="badge bg-light text-dark border">{{ job.cluster }}</span></td>
                         <td class="font-monospace small text-muted">
-                            {{ job.creation_time|default:job.CreationTime|format_datetime|default:"-" }}
+                            {{ job.creation_time|format_datetime|default:"-" }}
                         </td>
                         <td class="font-monospace small text-muted">
-                            {{ job.start_time|default:job.StartTime|format_datetime|default:"-" }}
+                            {{ job.start_time|format_datetime|default:"-" }}
                         </td>
                         <td class="text-end pe-4">
-                            <a href="{% url 'job_status_view' job.id|default:job.Id %}" class="btn btn-sm btn-outline-primary py-1 px-2 fw-semibold" title="View Job Details">
+                            <a href="{% url 'job_status_view' job.id %}" class="btn btn-sm btn-outline-primary py-1 px-2 fw-semibold" title="View Job Details">
                                 <i class="bi bi-eye-fill me-1"></i>Details
                             </a>
                         </td>

@@ -560,10 +560,10 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             return {"status": "error", "message": str(e)}
 
     def merge_keep_old(self, old: dict, new: dict) -> dict:
-        result = new.copy()  # začneme s novým JSONem
+        result = new.copy()  # start with new JSON
         for key, value in old.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = self.merge_keep_old(value, result[key])  # rekurzivní merge dictů
+                result[key] = self.merge_keep_old(value, result[key])  # recursive dict merge
             elif key in result and isinstance(result[key], list) and isinstance(value, list):
                 if key == "GeneralRules":
                     merged_list = [dict(item) if isinstance(item, dict) else item for item in value]
@@ -582,7 +582,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 else:
                     result[key] = value
             else:
-                result[key] = value  # použijeme hodnotu ze starého JSONu
+                result[key] = value  # use value from old JSON
         return result
 
     def update_init(

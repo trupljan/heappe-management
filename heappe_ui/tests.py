@@ -885,6 +885,50 @@ class AdaptorUserApiFormattingTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Test Project", response.content)
 
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_admin_jobs_monitoring_view_success(self, mock_management_api):
+        mock_mgmt = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt
+
+        mock_job = mock.MagicMock()
+        mock_job.to_dict.return_value = {
+            "id": 101,
+            "name": "MonitoringJob",
+            "state": "Running",
+            "submitted_by": "testuser",
+            "cluster": "Karolina",
+            "creation_time": "2026-09-10T10:00:00",
+            "start_time": "2026-09-10T10:05:00",
+        }
+        mock_page = mock.MagicMock()
+        mock_page.jobs = [mock_job]
+        mock_page.next_cursor_id = 101
+        mock_page.count = 1
+        mock_mgmt.heappe_management_get_jobs_monitoring_post.return_value = mock_page
+
+        request = self.factory.get("/monitoring/jobs/?page_size=20")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.project import admin_jobs_monitoring_view
+        response = admin_jobs_monitoring_view(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"MonitoringJob", response.content)
+        self.assertIn(b"Karolina", response.content)
+        self.assertIn(b"RUNNING", response.content)
+        mock_mgmt.heappe_management_get_jobs_monitoring_post.assert_called_once()
+        call_kwargs = mock_mgmt.heappe_management_get_jobs_monitoring_post.call_args[1]
+        self.assertIn("body", call_kwargs)
+
+
 
 class SelfHealingSessionTests(TestCase):
     def setUp(self):
