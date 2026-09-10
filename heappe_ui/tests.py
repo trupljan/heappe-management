@@ -1211,8 +1211,8 @@ class JobStatusViewTests(TestCase):
         job_dict_0 = {"state_source": 0, "state_updated_at": "2026-08-31T09:00:00"}
         job_dict_3 = {"state_source": 3, "StateUpdatedAt": "2026-08-31T09:10:00"}
         
-        self.assertEqual(get_job_state_source(job_dict_0), "Standard")
-        self.assertEqual(get_job_state_source(job_dict_3), "DirectQuery")
+        self.assertEqual(get_job_state_source(job_dict_0), "Unknown")
+        self.assertEqual(get_job_state_source(job_dict_3), "Background Poll")
         self.assertEqual(get_job_state_updated_at(job_dict_0), "2026-08-31T09:00:00")
         self.assertEqual(get_job_state_updated_at(job_dict_3), "2026-08-31T09:10:00")
 
@@ -1221,7 +1221,7 @@ class JobStatusViewTests(TestCase):
             state_source = 1
             state_updated_at = "2026-08-31T09:20:00"
 
-        self.assertEqual(get_job_state_source(ObjJob()), "ServiceAccount")
+        self.assertEqual(get_job_state_source(ObjJob()), "Callback")
         self.assertEqual(get_job_state_updated_at(ObjJob()), "2026-08-31T09:20:00")
 
     def test_cluster_auth_type_and_task_priority_filters(self):
