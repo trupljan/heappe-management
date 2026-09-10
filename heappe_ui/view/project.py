@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required, _parse_datetime_local, clean_ver
 from .command_template import COMMAND_TEMPLATE_PRESETS
+from .adaptor_user import ADAPTOR_USER_STR_TO_INT, ADAPTOR_USER_INT_TO_STR
 
 
 KEY_TYPE_CHOICES = {

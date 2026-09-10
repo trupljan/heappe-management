@@ -684,6 +684,49 @@ class AdaptorUserApiFormattingTests(TestCase):
         self.assertIn(b"Blocked", response.content)
         self.assertIn(b"Unblock Account", response.content)
 
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    @mock.patch("py4heappe.heappe_v6.core.HealthApi")
+    def test_project_detail_get_renders_with_roles_mapping(self, mock_health_api, mock_management_api):
+        mock_mgmt = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt
+        mock_health = mock.MagicMock()
+        mock_health_api.return_value = mock_health
+
+        mock_health.heappe_health_get.return_value = mock.MagicMock(version="6.5.0")
+        mock_project = mock.MagicMock()
+        mock_project.to_dict.return_value = {
+            "id": 1,
+            "name": "Test Project",
+            "description": "Test Project Desc",
+            "start_date": "2026-01-01T00:00:00",
+            "end_date": "2027-01-01T00:00:00",
+        }
+        mock_mgmt.heappe_management_project_get.return_value = mock_project
+        mock_mgmt.heappe_management_clusters_get.return_value = []
+        mock_mgmt.heappe_management_clusters_in_project_get.return_value = []
+        mock_mgmt.heappe_management_command_templates_get.return_value = []
+        mock_mgmt.heappe_management_adaptor_users_in_project_get.return_value = []
+        mock_mgmt.heappe_management_adaptor_users_get.return_value = []
+        mock_mgmt.heappe_management_system_role_assignments_get.return_value = []
+        mock_mgmt.heappe_management_cluster_accounts_in_project_get.return_value = []
+
+        request = self.factory.get("/projects/1/")
+        request.user = self.user
+        request.session = {
+            "chosen_instance": "test_instance",
+            "heappe_session_code": "token123"
+        }
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(request, '_messages', FallbackStorage(request))
+
+        from heappe_ui.view.project import project_detail
+        response = project_detail(request, project_id=1)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Test Project", response.content)
+
 
 class SelfHealingSessionTests(TestCase):
     def setUp(self):
