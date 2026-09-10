@@ -47,7 +47,7 @@
             <button id="reload-status-btn" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
                 <i class="bi bi-arrow-clockwise me-1.5"></i>Reload Status
             </button>
-            <a href="{% url 'job_status_view' job.id %}?force_direct=1" class="btn btn-sm btn-warning text-dark fw-bold px-3 py-2 rounded-3 shadow-xs" title="Force direct cluster query bypassing cached state">
+            <a href="{% url 'job_status_view' job_id %}?force_direct=1" class="btn btn-sm btn-warning text-dark fw-bold px-3 py-2 rounded-3 shadow-xs" title="Force direct cluster query bypassing cached state">
                 <i class="bi bi-lightning-charge-fill me-1.5"></i>Force Direct Query
             </a>
             {% if project %}
@@ -186,7 +186,7 @@
                 }
             }
 
-            const url = "{% url 'job_status_partial' job.id %}";
+            const url = "{% url 'job_status_partial' job_id %}";
             return fetch(url)
                 .then(response => {
                     if (!response.ok) {

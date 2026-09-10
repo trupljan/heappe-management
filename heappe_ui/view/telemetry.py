@@ -723,6 +723,6 @@ def job_external_service_logs_api(request: HttpRequest, job_id: int) -> JsonResp
                 "SubmittedJobInfoId": int(job_id)
             }
         )
-        return JsonResponse({"status": "success", "data": logs})
+        return JsonResponse({"status": "success", "data": logs, "logs": logs})
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)

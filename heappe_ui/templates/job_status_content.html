@@ -532,34 +532,87 @@
             <i class="bi bi-activity text-primary"></i>
             <h5 class="h6 mb-0 fw-bold text-dark">External Service Logs &amp; Telemetry</h5>
         </div>
-        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadJobExternalLogs({{ job.id }})">
+        <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadJobExternalLogs('{{ job_id|default:job.id }}')">
             <i class="bi bi-arrow-clockwise me-1"></i>Fetch Telemetry Logs
         </button>
     </div>
     <div class="card-body p-4">
         <div id="job-external-logs-container" class="text-muted small">
-            <p class="mb-0 text-secondary"><i class="bi bi-info-circle me-1"></i>Click <strong>Fetch Telemetry Logs</strong> to view underlying database, Vault, and SSH calls recorded for job #{{ job.id }}.</p>
+            {% if job_external_logs %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover font-monospace mb-0" style="font-size: 0.8rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Service</th>
+                                <th>Operation</th>
+                                <th>Duration</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for l in job_external_logs %}
+                            <tr>
+                                <td>{{ l.Timestamp|default:'-' }}</td>
+                                <td><strong>{{ l.ServiceName|default:'-' }}</strong></td>
+                                <td class="text-break" style="max-width: 350px;">{{ l.Operation|default:l.CommandOrPath|default:'-' }}</td>
+                                <td>{{ l.ResponseTimeMs|default:l.DurationMs|default:0 }} ms</td>
+                                <td>
+                                    {% if l.IsSuccess and l.StatusCode == '200' or l.StatusCode == '0' or l.StatusCode == 0 or l.StatusCode == 200 %}
+                                        <span class="badge bg-success-subtle text-success">OK</span>
+                                    {% else %}
+                                        <span class="badge bg-danger-subtle text-danger">{{ l.StatusCode|default:'ERR' }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="mb-0 text-secondary"><i class="bi bi-info-circle me-1"></i>Click <strong>Fetch Telemetry Logs</strong> to view underlying database, Vault, and SSH calls recorded for job #{{ job_id|default:job.id }}.</p>
+            {% endif %}
         </div>
     </div>
 </div>
 
 <script>
 function loadJobExternalLogs(jobId) {
+    const id = jobId || '{{ job_id|default:job.id }}';
     const container = document.getElementById('job-external-logs-container');
     if (!container) return;
+    if (!id || id === 'undefined' || id === '') {
+        container.innerHTML = '<div class="alert alert-warning mb-0"><i class="bi bi-exclamation-circle me-1"></i>Cannot fetch telemetry logs: Job ID is missing.</div>';
+        return;
+    }
     container.innerHTML = '<div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading telemetry logs...';
-    fetch(`/monitoring/telemetry/job/${jobId}/logs/`, {
+    fetch(`/monitoring/telemetry/job/${encodeURIComponent(id)}/logs/`, {
         headers: {'X-Requested-With': 'XMLHttpRequest'}
     })
-    .then(r => r.json())
+    .then(r => {
+        if (!r.ok) {
+            return r.text().then(text => {
+                let errorMsg = `Server error ${r.status}`;
+                try {
+                    const parsed = JSON.parse(text);
+                    if (parsed.message) errorMsg = parsed.message;
+                } catch(e) {}
+                throw new Error(errorMsg);
+            });
+        }
+        return r.json();
+    })
     .then(data => {
-        if (data.status === 'success' && data.logs && data.logs.length > 0) {
+        const logs = data.data || data.logs || [];
+        if (data.status === 'success' && logs.length > 0) {
             let html = '<div class="table-responsive"><table class="table table-sm table-hover font-monospace mb-0" style="font-size: 0.8rem;">';
             html += '<thead class="table-light"><tr><th>Timestamp</th><th>Service</th><th>Operation</th><th>Duration</th><th>Status</th></tr></thead><tbody>';
-            data.logs.forEach(l => {
-                const isSuccess = l.IsSuccess !== false && l.StatusCode < 400;
-                const badge = isSuccess ? '<span class="badge bg-success-subtle text-success">OK</span>' : `<span class="badge bg-danger-subtle text-danger">ERR ${l.StatusCode || ''}</span>`;
-                html += `<tr><td>${l.Timestamp || '-'}</td><td><strong>${l.ServiceName || '-'}</strong></td><td>${l.CommandOrPath || '-'}</td><td>${l.DurationMs || 0} ms</td><td>${badge}</td></tr>`;
+            logs.forEach(l => {
+                const isSuccess = l.IsSuccess !== false && (l.StatusCode === '200' || l.StatusCode === 0 || l.StatusCode === '0' || l.StatusCode === null || l.StatusCode < 400);
+                const badge = isSuccess ? '<span class="badge bg-success-subtle text-success">OK</span>' : `<span class="badge bg-danger-subtle text-danger">${l.StatusCode || 'ERR'}</span>`;
+                const op = l.Operation || l.CommandOrPath || '-';
+                const duration = l.ResponseTimeMs !== undefined ? l.ResponseTimeMs : (l.DurationMs !== undefined ? l.DurationMs : 0);
+                html += `<tr><td>${l.Timestamp || '-'}</td><td><strong>${l.ServiceName || '-'}</strong></td><td class="text-break" style="max-width: 350px;">${op}</td><td>${duration} ms</td><td>${badge}</td></tr>`;
             });
             html += '</tbody></table></div>';
             container.innerHTML = html;
@@ -568,7 +621,7 @@ function loadJobExternalLogs(jobId) {
         }
     })
     .catch(err => {
-        container.innerHTML = `<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>Failed to fetch logs: ${err}</div>`;
+        container.innerHTML = `<div class="alert alert-danger mb-0"><i class="bi bi-exclamation-triangle me-1"></i>Failed to fetch logs: ${err.message || err}</div>`;
     });
 }
 </script>

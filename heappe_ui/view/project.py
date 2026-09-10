@@ -817,6 +817,7 @@ def job_status_view(request: HttpRequest, job_id:int) -> HttpResponse:
                     project = proj
 
     context = {
+        "job_id": job_id,
         "job": result,
         "project": project,
         "changed_files": [],
@@ -982,6 +983,7 @@ def job_status_partial_view(request: HttpRequest, job_id: int) -> HttpResponse:
         pass
 
     context = {
+        "job_id": job_id,
         "job": result,
         "project": project,
         "changed_files": changed_files,
