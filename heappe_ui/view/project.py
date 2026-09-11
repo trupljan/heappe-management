@@ -431,17 +431,40 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
                         s = getattr(sr, 'source', None) or (sr.get('source') if isinstance(sr, dict) else None) or "Dynamic"
                         if not u or not r:
                             continue
-                        key = (u.lower(), str(r).lower(), str(s).lower())
+                        role_display = ADAPTOR_USER_INT_TO_STR.get(r, ADAPTOR_USER_INT_TO_STR.get(int(r) if str(r).isdigit() else None, r))
+                        u_str = str(u).strip()
+                        key = (u_str.lower(), str(role_display).lower(), str(s).lower())
                         if key in seen_sys:
                             continue
                         seen_sys.add(key)
-                        entry = {'username': u, 'role': r, 'source': s}
+                        entry = {'username': u_str, 'role': role_display, 'source': s}
                         system_role_assignments.append(entry)
-                        system_role_user_map.setdefault(u, []).append(entry)
-                        if u.lower() != u:
-                            system_role_user_map.setdefault(u.lower(), []).append(entry)
+                        for k in {u_str, u_str.lower(), u_str.upper(), str(u)}:
+                            system_role_user_map.setdefault(k, []).append(entry)
             except Exception as ex_sr:
                 print(f"[project_detail] System roles query error: {ex_sr}")
+
+            def _attach_user_roles(user_list):
+                for u in user_list:
+                    u_name = str(u.get("username") or "")
+                    u_email = str(u.get("email") or "")
+                    u_idp = str(u.get("idp_sid") or u.get("IdpSid") or "")
+                    matched_sys = []
+                    seen_sys_keys = set()
+                    for cand in (u_name, u_name.strip(), u_name.strip().lower(),
+                                 u_email, u_email.strip(), u_email.strip().lower(),
+                                 u_idp, u_idp.strip(), u_idp.strip().lower()):
+                        if cand and cand in system_role_user_map:
+                            for sr in system_role_user_map[cand]:
+                                sk = (str(sr.get('role')).lower(), str(sr.get('source')).lower())
+                                if sk not in seen_sys_keys:
+                                    seen_sys_keys.add(sk)
+                                    matched_sys.append(sr)
+                    u["system_roles"] = matched_sys
+
+            _attach_user_roles(adaptor_users)
+            _attach_user_roles(adaptor_users_not_in_project)
+            _attach_user_roles(all_adaptor_users)
         except Exception:
             pass
 

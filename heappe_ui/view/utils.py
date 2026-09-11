@@ -296,3 +296,19 @@ def get_dynamic_dictionary(request: HttpRequest, endpoint_name: str) -> list:
     except Exception:
         pass
     return []
+
+
+def invalidate_adaptor_users_cache(request=None):
+    """Invalidate session and global cache for adaptor users and roles."""
+    if request and hasattr(request, "session"):
+        request.session.pop("all_adaptor_users_cache", None)
+        request.session.pop("all_adaptor_users_cache_time", None)
+    try:
+        import os
+        import time
+        from django.conf import settings
+        timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
+        with open(timestamp_file, "w") as f:
+            f.write(str(time.time()))
+    except Exception:
+        pass

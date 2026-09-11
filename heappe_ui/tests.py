@@ -842,6 +842,66 @@ class AdaptorUserApiFormattingTests(TestCase):
         self.assertIn(b"Blocked", response.content)
         self.assertIn(b"Unblock Account", response.content)
 
+    def test_get_user_system_roles_filter(self):
+        from heappe_ui.templatetags.custom_filters import get_user_system_roles
+
+        system_role_user_map = {
+            "test_user": [{"role": "Administrator", "source": "Dynamic"}],
+            "admin_user": [{"role": "ManagementAdmin", "source": "Appsettings"}]
+        }
+
+        # 1. Direct attachment in dict
+        user_with_direct = {"username": "other", "system_roles": [{"role": "Manager", "source": "Dynamic"}]}
+        res = get_user_system_roles(user_with_direct, system_role_user_map)
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0]["role"], "Manager")
+
+        # 2. Case insensitive lookup
+        user_upper = {"username": "TEST_USER"}
+        res = get_user_system_roles(user_upper, system_role_user_map)
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0]["role"], "Administrator")
+
+        # 3. Stripped whitespace lookup
+        user_whitespace = {"username": "  admin_user  "}
+        res = get_user_system_roles(user_whitespace, system_role_user_map)
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0]["role"], "ManagementAdmin")
+
+        # 4. Plain username string
+        res = get_user_system_roles("test_user", system_role_user_map)
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0]["role"], "Administrator")
+
+        # 5. Non-existent user
+        res = get_user_system_roles("unknown_user", system_role_user_map)
+        self.assertEqual(res, [])
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_adaptor_user_assign_system_role_invalidates_cache(self, mock_management_api):
+        mock_mgmt_instance = mock.MagicMock()
+        mock_management_api.return_value = mock_mgmt_instance
+        mock_mgmt_instance.heappe_management_assign_system_role_to_user_post.return_value = True
+
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from heappe_ui.view.adaptor_user import adaptor_user_assign_system_role
+        request = self.factory.post("/adaptor_users/assign-system-role/testsvc/", {
+            "role": "1"
+        })
+        request.user = self.user
+        request.session = {
+            "all_adaptor_users_cache": [{"username": "testsvc"}],
+            "all_adaptor_users_cache_time": 12345
+        }
+        setattr(request, '_messages', FallbackStorage(request))
+        request.api_instance = mock.MagicMock()
+        request.session_code = "token123"
+
+        response = adaptor_user_assign_system_role(request, adaptor_user_username="testsvc")
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("all_adaptor_users_cache", request.session)
+        self.assertNotIn("all_adaptor_users_cache_time", request.session)
+
     @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
     @mock.patch("py4heappe.heappe_v6.core.HealthApi")
     def test_project_detail_get_renders_with_roles_mapping(self, mock_health_api, mock_management_api):

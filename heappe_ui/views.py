@@ -1916,28 +1916,49 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
                 s = getattr(sr, 'source', None) or (sr.get('source') if isinstance(sr, dict) else None) or "Dynamic"
                 if not u or not r:
                     continue
-                key = (u.lower(), str(r).lower(), str(s).lower())
+                role_display = ADAPTOR_USER_INT_TO_STR.get(r, ADAPTOR_USER_INT_TO_STR.get(int(r) if str(r).isdigit() else None, r))
+                u_str = str(u).strip()
+                key = (u_str.lower(), str(role_display).lower(), str(s).lower())
                 if key in seen_sys:
                     continue
                 seen_sys.add(key)
-                entry = {'username': u, 'role': r, 'source': s}
+                entry = {'username': u_str, 'role': role_display, 'source': s}
                 system_role_assignments.append(entry)
-                system_role_user_map.setdefault(u, []).append(entry)
-                if u.lower() != u:
-                    system_role_user_map.setdefault(u.lower(), []).append(entry)
+                for k in {u_str, u_str.lower(), u_str.upper(), str(u)}:
+                    system_role_user_map.setdefault(k, []).append(entry)
     except Exception as e:
         print(f"[manage_project_adaptor_users] Error fetching system roles: {e}")
 
-    for u in all_adaptor_users:
-        proj_roles = []
-        for group in u.get("adaptor_user_groups", []) or []:
-            g_proj = group.get("project")
-            pname = g_proj.get("name") if g_proj else None
-            for r in group.get("roles", []):
-                role_str = f"{pname} ({r})" if pname else str(r)
-                if role_str not in proj_roles:
-                    proj_roles.append(role_str)
-        u["proj_roles"] = proj_roles
+    def _attach_user_roles(user_list):
+        for u in user_list:
+            u_name = str(u.get("username") or "")
+            u_email = str(u.get("email") or "")
+            u_idp = str(u.get("idp_sid") or u.get("IdpSid") or "")
+            matched_sys = []
+            seen_sys_keys = set()
+            for cand in (u_name, u_name.strip(), u_name.strip().lower(),
+                         u_email, u_email.strip(), u_email.strip().lower(),
+                         u_idp, u_idp.strip(), u_idp.strip().lower()):
+                if cand and cand in system_role_user_map:
+                    for sr in system_role_user_map[cand]:
+                        sk = (str(sr.get('role')).lower(), str(sr.get('source')).lower())
+                        if sk not in seen_sys_keys:
+                            seen_sys_keys.add(sk)
+                            matched_sys.append(sr)
+            u["system_roles"] = matched_sys
+
+            proj_roles = []
+            for group in (u.get("adaptor_user_groups") or []):
+                g_proj = group.get("project")
+                pname = g_proj.get("name") if g_proj else None
+                for r in (group.get("roles") or []):
+                    r_display = ADAPTOR_USER_INT_TO_STR.get(r, ADAPTOR_USER_INT_TO_STR.get(int(r) if str(r).isdigit() else None, r))
+                    role_str = f"{pname} ({r_display})" if pname else str(r_display)
+                    if role_str not in proj_roles:
+                        proj_roles.append(role_str)
+            u["proj_roles"] = proj_roles
+
+    _attach_user_roles(all_adaptor_users)
 
     if project_id:
         project_data = next((p for p in all_projects if p['id'] == project_id), None)
@@ -1956,18 +1977,20 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
                                             )]
                 for u in adaptor_users_in_project:
                     roles = []
-                    for group in u.get("adaptor_user_groups", []):
+                    for group in (u.get("adaptor_user_groups") or []):
                         g_proj = group.get("project")
                         if g_proj and g_proj.get("id") == project_id:
-                            for r in group.get("roles", []):
-                                if r not in roles:
-                                    roles.append(r)
+                            for r in (group.get("roles") or []):
+                                r_display = ADAPTOR_USER_INT_TO_STR.get(r, ADAPTOR_USER_INT_TO_STR.get(int(r) if str(r).isdigit() else None, r))
+                                if r_display not in roles:
+                                    roles.append(r_display)
                     u["roles"] = roles
+                _attach_user_roles(adaptor_users_in_project)
             except Exception as e:
                 print(f"Error fetching adaptor users in project: {e}")
 
-            existing_usernames = {u['username'] for u in adaptor_users_in_project}
-            available_users = [u for u in all_adaptor_users if u['username'] not in existing_usernames]
+            existing_usernames = {str(u['username']).strip().lower() for u in adaptor_users_in_project if u.get('username')}
+            available_users = [u for u in all_adaptor_users if str(u.get('username', '')).strip().lower() not in existing_usernames]
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -1980,6 +2003,7 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
             _handle_api_call(request,
                              lambda: controller.heappe_management_adaptor_user_post(**payload),
                              f"User {new_user} created.", "Creation failed.")
+            invalidate_adaptor_users_cache(request)
 
             target_url = reverse("manage_project_adaptor_users",
                                  kwargs={"project_id": project_id}) if project_id else reverse(
@@ -1995,6 +2019,7 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
                 _handle_api_call(request,
                                  lambda: controller.heappe_management_assign_adaptor_user_to_project_post(**payload),
                                  f"User {username} assigned.", "Assignment failed.")
+                invalidate_adaptor_users_cache(request)
 
             elif action == "unassign":
                 username = request.POST.get("username")
@@ -2006,8 +2031,10 @@ def manage_project_adaptor_users(request: HttpRequest, project_id: int = None) -
                                  lambda: controller.heappe_management_remove_adaptor_user_from_project_delete(
                                      **payload),
                                  f"User {username} removed.", "Removal failed.")
+                invalidate_adaptor_users_cache(request)
 
             return redirect("manage_project_adaptor_users", project_id=project_id)
+
 
     return render(request, "manage_project_users.html", {
         "project": project_data,

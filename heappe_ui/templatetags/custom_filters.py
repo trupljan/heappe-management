@@ -6,7 +6,63 @@ register = template.Library()
 
 @register.filter
 def get_item(dictionary, key):
-    return dictionary.get(key)
+    if not isinstance(dictionary, dict) or key is None:
+        return None
+    val = dictionary.get(key)
+    if val is not None:
+        return val
+    if isinstance(key, str):
+        k_strip = key.strip()
+        val = dictionary.get(k_strip)
+        if val is not None:
+            return val
+        k_lower = k_strip.lower()
+        val = dictionary.get(k_lower)
+        if val is not None:
+            return val
+        k_upper = k_strip.upper()
+        val = dictionary.get(k_upper)
+        if val is not None:
+            return val
+        for d_key, d_val in dictionary.items():
+            if isinstance(d_key, str) and d_key.strip().lower() == k_lower:
+                return d_val
+    return None
+
+@register.filter
+def get_user_system_roles(user_or_username, system_role_user_map):
+    """
+    Returns system roles for a user, checking:
+    1. Direct 'system_roles' attribute/key on user dict or object
+    2. Lookup in system_role_user_map by username, email, or idp_sid
+       with case-insensitivity and whitespace trimming.
+    """
+    if isinstance(user_or_username, dict):
+        if user_or_username.get("system_roles"):
+            return user_or_username["system_roles"]
+        username = user_or_username.get("username")
+        email = user_or_username.get("email")
+        idp_sid = user_or_username.get("idp_sid") or user_or_username.get("IdpSid")
+    elif hasattr(user_or_username, 'username'):
+        if getattr(user_or_username, 'system_roles', None):
+            return user_or_username.system_roles
+        username = getattr(user_or_username, 'username', None)
+        email = getattr(user_or_username, 'email', None)
+        idp_sid = getattr(user_or_username, 'idp_sid', None) or getattr(user_or_username, 'IdpSid', None)
+    else:
+        username = str(user_or_username) if user_or_username is not None else None
+        email = None
+        idp_sid = None
+
+    if not isinstance(system_role_user_map, dict):
+        return []
+
+    for cand in (username, email, idp_sid):
+        if cand:
+            res = get_item(system_role_user_map, cand)
+            if res:
+                return res
+    return []
 
 @register.simple_tag(takes_context=True)
 def heappe_version_ok(context, min_version):

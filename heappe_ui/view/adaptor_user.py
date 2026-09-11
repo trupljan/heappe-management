@@ -1,5 +1,5 @@
 from .imports import *
-from .utils import _create_payload, _handle_api_call, login_required
+from .utils import _create_payload, _handle_api_call, login_required, invalidate_adaptor_users_cache
 
 from django.urls import reverse
 from django.contrib import messages
@@ -41,21 +41,24 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
         if sys_res:
             seen_all = set()
             seen_user = set()
+            clean_username = adaptor_user_username.strip().lower()
             for item in sys_res:
                 u = getattr(item, 'username', None) or (item.get('username') if isinstance(item, dict) else None)
                 r = getattr(item, 'role', None) or (item.get('role') if isinstance(item, dict) else None)
                 s = getattr(item, 'source', None) or (item.get('source') if isinstance(item, dict) else None) or "Dynamic"
                 if not u or not r:
                     continue
-                key_all = (u.lower(), str(r).lower(), str(s).lower())
+                role_display = ADAPTOR_USER_INT_TO_STR.get(r, ADAPTOR_USER_INT_TO_STR.get(int(r) if str(r).isdigit() else None, r))
+                u_str = str(u).strip()
+                key_all = (u_str.lower(), str(role_display).lower(), str(s).lower())
                 if key_all not in seen_all:
                     seen_all.add(key_all)
-                    all_system_roles.append({'username': u, 'role': r, 'source': s})
-                if u.lower() == adaptor_user_username.lower():
-                    key_user = (str(r).lower(), str(s).lower())
+                    all_system_roles.append({'username': u_str, 'role': role_display, 'source': s})
+                if u_str.lower() == clean_username:
+                    key_user = (str(role_display).lower(), str(s).lower())
                     if key_user not in seen_user:
                         seen_user.add(key_user)
-                        system_roles.append({'username': u, 'role': r, 'source': s})
+                        system_roles.append({'username': u_str, 'role': role_display, 'source': s})
     except Exception as e:
         print(f"[adaptor_user_detail] Error fetching system roles: {e}")
 
@@ -88,11 +91,13 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
                         timeout=15
                     )
                     if resp.status_code == 200:
+                        invalidate_adaptor_users_cache(request)
                         messages.success(request, f"User block status updated successfully!")
                     else:
                         messages.error(request, f"Failed to set user block status ({resp.status_code})")
             except Exception as e:
                 messages.error(request, f"Error updating block status: {e}")
+            invalidate_adaptor_users_cache(request)
             return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)
         if action == "adaptor_user_assign_to_project":
             return adaptor_user_assign_to_project(request, adaptor_user_username)
@@ -120,6 +125,7 @@ def adaptor_user_detail(request: HttpRequest, adaptor_user_username: str) -> Htt
 
 
 
+
 @login_required
 def adaptor_user_create(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
@@ -136,6 +142,7 @@ def adaptor_user_create(request: HttpRequest) -> HttpResponse:
             "Service account created successfully!",
             "Failed to create Service account"
         )
+        invalidate_adaptor_users_cache(request)
         if result and result.get("ApiKey"):
             request.session["new_adaptor_user_apikey"] = result.get("ApiKey")
             request.session["new_adaptor_user_username"] = result.get("Username")
@@ -163,6 +170,7 @@ def adaptor_user_update(request: HttpRequest, adaptor_user_username: str) -> Htt
             "Service account updated successfully!",
             "Failed to update Service account"
         )
+        invalidate_adaptor_users_cache(request)
         if result and result.get("ApiKey"):
             request.session["new_adaptor_user_apikey"] = result.get("ApiKey")
             request.session["new_adaptor_user_username"] = result.get("Username")
@@ -197,6 +205,7 @@ def adaptor_user_assign_to_project(request: HttpRequest, adaptor_user_username: 
             "Service account assigned successfully!",
             "Failed to assign Service account"
         )
+        invalidate_adaptor_users_cache(request)
 
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             if result is not None:
@@ -231,8 +240,10 @@ def adaptor_user_unassign_from_project(request: HttpRequest, adaptor_user_userna
             "Service account role removed from project successfully!",
             "Failed to remove Service account role from project"
         )
+        invalidate_adaptor_users_cache(request)
         
         return redirect(f"{reverse('project_detail', kwargs={'project_id': project_id})}?tab=adaptor_users")
+
 
 
 from django.http import JsonResponse
@@ -261,6 +272,7 @@ def adaptor_user_assign_to_user_group(request: HttpRequest, adaptor_user_usernam
             "Service account assigned to user group successfully!",
             "Failed to assign Service account to user group"
         )
+        invalidate_adaptor_users_cache(request)
 
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             if result is not None:
@@ -306,6 +318,7 @@ def adaptor_user_assign_system_role(request: HttpRequest, adaptor_user_username:
             f"System role '{role_name}' successfully assigned to user '{adaptor_user_username}' across all projects!",
             f"Failed to assign system role '{role_name}' to '{adaptor_user_username}'"
         )
+        invalidate_adaptor_users_cache(request)
 
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             if result is not None:
@@ -350,6 +363,7 @@ def adaptor_user_remove_system_role(request: HttpRequest, adaptor_user_username:
             f"System role '{role_name}' removed from '{adaptor_user_username}'!",
             f"Failed to remove system role '{role_name}' from '{adaptor_user_username}'"
         )
+        invalidate_adaptor_users_cache(request)
 
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             if result is not None:
@@ -389,6 +403,7 @@ def adaptor_user_toggle_block_status(request: HttpRequest, adaptor_user_username
             f"Service account '{adaptor_user_username}' successfully {action_word}!",
             f"Failed to change block status for '{adaptor_user_username}'"
         )
+        invalidate_adaptor_users_cache(request)
 
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             if result is not None:
@@ -401,5 +416,6 @@ def adaptor_user_toggle_block_status(request: HttpRequest, adaptor_user_username
 
         next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("adaptor_user_detail", kwargs={"adaptor_user_username": adaptor_user_username})
         return redirect(next_url)
+
 
     return redirect("adaptor_user_detail", adaptor_user_username=adaptor_user_username)

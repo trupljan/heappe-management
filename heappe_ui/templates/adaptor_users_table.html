@@ -78,7 +78,7 @@
                                             </span>
                                         {% endif %}
                                     </div>
-                                    {% with sys_roles=system_role_user_map|get_item:adaptor_user.username %}
+                                    {% with sys_roles=adaptor_user|get_user_system_roles:system_role_user_map %}
                                         {% if sys_roles %}
                                             <div class="d-flex flex-wrap gap-1 mt-1">
                                                 {% for sr in sys_roles %}
@@ -166,7 +166,7 @@
                                             </span>
                                         {% endif %}
                                     </div>
-                                    {% with sys_roles=system_role_user_map|get_item:user.username %}
+                                    {% with sys_roles=user|get_user_system_roles:system_role_user_map %}
                                         {% if sys_roles %}
                                             <div class="d-flex flex-wrap gap-1 mt-1">
                                                 {% for sr in sys_roles %}
