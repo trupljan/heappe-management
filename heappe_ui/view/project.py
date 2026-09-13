@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 import time
 from django.http import JsonResponse
 from .imports import *
-from .utils import _create_payload, _handle_api_call, login_view, login_required, _parse_datetime_local, clean_ver
+from .utils import _create_payload, _handle_api_call, login_view, login_required, _parse_datetime_local, clean_ver, extract_heappe_error
 from .command_template import COMMAND_TEMPLATE_PRESETS
 from .adaptor_user import ADAPTOR_USER_STR_TO_INT, ADAPTOR_USER_INT_TO_STR
 
@@ -1288,17 +1288,21 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
     username = request.POST.get("username")
 
     def _parse_clusters(data):
-        """Turn a list of cluster dicts/objects into (name, is_accessible) pairs."""
+        """Turn cluster dicts/objects into (name, is_accessible, error_message) tuples."""
         results = []
-        for item in data:
+        if isinstance(data, dict):
+            data = [data]
+        for item in data if isinstance(data, list) else []:
             if isinstance(item, dict):
                 # API returns PascalCase keys in raw JSON
                 name = item.get('ClusterName') or item.get('cluster_name') or 'Unknown'
                 accessible = item.get('IsClusterAccessible') if 'IsClusterAccessible' in item else item.get('is_cluster_accessible', False)
+                err = item.get('ErrorMessage') or item.get('error_message') or item.get('Message') or item.get('message') or ''
             else:
                 name = getattr(item, 'cluster_name', 'Unknown')
                 accessible = getattr(item, 'is_cluster_accessible', False)
-            results.append((name, bool(accessible)))
+                err = getattr(item, 'error_message', '') or getattr(item, 'ErrorMessage', '') or ''
+            results.append((name, bool(accessible), str(err).strip() if err else ''))
         return results
 
     try:
@@ -1314,41 +1318,59 @@ def test_cluster_authentication_credential_HPC_access(request: HttpRequest):
                 _preload_content=False,
             )
             body = _json.loads(raw.data.decode('utf-8'))
-            clusters = _parse_clusters(body if isinstance(body, list) else [])
+            clusters = _parse_clusters(body)
         except Exception as api_exc:
             # HEAppE may return 4xx with a JSON body that still contains the result.
             # Try to extract the body from the exception before giving up.
             clusters = None
-            exc_str = str(api_exc)
-            # Look for the JSON body embedded in the exception message
-            body_marker = "HTTP response body: b'"
-            if body_marker in exc_str:
+            raw_body = getattr(api_exc, 'body', None)
+            if isinstance(raw_body, bytes):
                 try:
-                    start = exc_str.index(body_marker) + len(body_marker)
-                    end = exc_str.rindex("'")
-                    raw_body = exc_str[start:end]
+                    raw_body = raw_body.decode('utf-8')
+                except Exception:
+                    raw_body = raw_body.decode('utf-8', errors='replace')
+            if not raw_body:
+                exc_str = str(api_exc)
+                for marker in ["HTTP response body: b'", 'HTTP response body: b"', "HTTP response body: "]:
+                    if marker in exc_str:
+                        extracted = exc_str.split(marker, 1)[1]
+                        if marker.endswith("'") and "'" in extracted:
+                            raw_body = extracted.rsplit("'", 1)[0]
+                        elif marker.endswith('"') and '"' in extracted:
+                            raw_body = extracted.rsplit('"', 1)[0]
+                        else:
+                            raw_body = extracted.strip()
+                        break
+
+            if raw_body:
+                try:
                     parsed = _json.loads(raw_body)
-                    if isinstance(parsed, list):
+                    if isinstance(parsed, list) and len(parsed) > 0 and any(k in parsed[0] for k in ('ClusterName', 'cluster_name', 'IsClusterAccessible', 'is_cluster_accessible')):
                         clusters = _parse_clusters(parsed)
+                    elif isinstance(parsed, dict) and any(k in parsed for k in ('ClusterName', 'cluster_name', 'IsClusterAccessible', 'is_cluster_accessible')):
+                        clusters = _parse_clusters([parsed])
                 except Exception:
                     pass
+
             if clusters is None:
-                # Truly failed — no parseable body found
-                messages.error(request, f"Access test for '{username}' failed. Could not reach the HEAppE service.")
+                # Truly failed — extract and display actual error message from HEAppE
+                error_detail = extract_heappe_error(api_exc)
+                messages.error(request, f"Access test for '{username}' failed: {error_detail}")
                 reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
                 return redirect(reload_url)
 
         if clusters:
-            for name, accessible in clusters:
+            for name, accessible, err in clusters:
                 if accessible:
                     messages.success(request, f"✓ {name}: Access verified for '{username}'.")
                 else:
-                    messages.warning(request, f"✗ {name}: Access denied for '{username}'.")
+                    detail = f": {err}" if err else ""
+                    messages.warning(request, f"✗ {name}: Access denied for '{username}'{detail}.")
         else:
             messages.warning(request, f"Access test returned no cluster data for '{username}'.")
 
     except Exception as e:
-        messages.error(request, f"Internal error during access test: {str(e)}")
+        messages.error(request, f"Internal error during access test: {extract_heappe_error(e)}")
 
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)
@@ -1367,16 +1389,20 @@ def initialize_hpc_account(request: HttpRequest):
     payload = _create_payload(request.session_code, payload_data)
 
     def _parse_init_result(data):
-        """Return list of (cluster_name, is_initialized) from a parsed JSON list."""
+        """Return list of (cluster_name, is_initialized, error_message) from a parsed JSON list/dict."""
         results = []
+        if isinstance(data, dict):
+            data = [data]
         for item in data if isinstance(data, list) else []:
             if isinstance(item, dict):
                 name = item.get('ClusterName') or item.get('cluster_name') or 'Unknown'
                 initialized = item.get('IsClusterInitialized') if 'IsClusterInitialized' in item else item.get('is_cluster_initialized', False)
+                err = item.get('ErrorMessage') or item.get('error_message') or item.get('Message') or item.get('message') or ''
             else:
                 name = getattr(item, 'cluster_name', 'Unknown')
                 initialized = getattr(item, 'is_cluster_initialized', False)
-            results.append((name, bool(initialized)))
+                err = getattr(item, 'error_message', '') or getattr(item, 'ErrorMessage', '') or ''
+            results.append((name, bool(initialized), str(err).strip() if err else ''))
         return results
 
     try:
@@ -1388,32 +1414,53 @@ def initialize_hpc_account(request: HttpRequest):
             clusters = _parse_init_result(body)
         except Exception as api_exc:
             clusters = None
-            exc_str = str(api_exc)
-            body_marker = "HTTP response body: b'"
-            if body_marker in exc_str:
+            raw_body = getattr(api_exc, 'body', None)
+            if isinstance(raw_body, bytes):
                 try:
-                    start = exc_str.index(body_marker) + len(body_marker)
-                    end = exc_str.rindex("'")
-                    parsed = _json.loads(exc_str[start:end])
-                    clusters = _parse_init_result(parsed)
+                    raw_body = raw_body.decode('utf-8')
+                except Exception:
+                    raw_body = raw_body.decode('utf-8', errors='replace')
+            if not raw_body:
+                exc_str = str(api_exc)
+                for marker in ["HTTP response body: b'", 'HTTP response body: b"', "HTTP response body: "]:
+                    if marker in exc_str:
+                        extracted = exc_str.split(marker, 1)[1]
+                        if marker.endswith("'") and "'" in extracted:
+                            raw_body = extracted.rsplit("'", 1)[0]
+                        elif marker.endswith('"') and '"' in extracted:
+                            raw_body = extracted.rsplit('"', 1)[0]
+                        else:
+                            raw_body = extracted.strip()
+                        break
+
+            if raw_body:
+                try:
+                    parsed = _json.loads(raw_body)
+                    if isinstance(parsed, list) and len(parsed) > 0 and any(k in parsed[0] for k in ('ClusterName', 'cluster_name', 'IsClusterInitialized', 'is_cluster_initialized')):
+                        clusters = _parse_init_result(parsed)
+                    elif isinstance(parsed, dict) and any(k in parsed for k in ('ClusterName', 'cluster_name', 'IsClusterInitialized', 'is_cluster_initialized')):
+                        clusters = _parse_init_result([parsed])
                 except Exception:
                     pass
+
             if clusters is None:
-                messages.error(request, f"Initialization of '{username}' failed. Could not reach the HEAppE service.")
+                error_detail = extract_heappe_error(api_exc)
+                messages.error(request, f"Initialization of '{username}' failed: {error_detail}")
                 reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
                 return redirect(reload_url)
 
         if clusters:
-            for name, initialized in clusters:
+            for name, initialized, err in clusters:
                 if initialized:
                     messages.success(request, f"✓ {name}: '{username}' initialized successfully.")
                 else:
-                    messages.warning(request, f"✗ {name}: Initialization of '{username}' did not complete.")
+                    detail = f": {err}" if err else ""
+                    messages.warning(request, f"✗ {name}: Initialization of '{username}' did not complete{detail}.")
         else:
             messages.success(request, f"Initialization request sent for '{username}'.")
 
     except Exception as e:
-        messages.error(request, f"Internal error during initialization: {str(e)}")
+        messages.error(request, f"Internal error during initialization: {extract_heappe_error(e)}")
 
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
     return redirect(reload_url)

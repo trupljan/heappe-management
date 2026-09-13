@@ -98,6 +98,111 @@ def _parse_datetime_local(date_str: Optional[str]) -> Optional[datetime]:
         dt = make_aware(dt)
     return dt
 
+def _extract_error_from_json(data):
+    if isinstance(data, str):
+        return data.strip() if data.strip() else None
+    if isinstance(data, list):
+        items = [_extract_error_from_json(x) for x in data if x]
+        return ", ".join(filter(None, items)) if items else None
+    if isinstance(data, dict):
+        # 1. Validation errors dict: {"errors": {"Field": ["Error 1", "Error 2"]}}
+        errors = data.get('errors') or data.get('Errors')
+        errors_str = None
+        if isinstance(errors, dict):
+            parts = []
+            for field, errs in errors.items():
+                if isinstance(errs, list):
+                    err_text = ", ".join(str(e) for e in errs)
+                else:
+                    err_text = str(errs)
+                parts.append(f"{field}: {err_text}" if field else err_text)
+            if parts:
+                errors_str = "; ".join(parts)
+        elif isinstance(errors, list):
+            errors_str = ", ".join(str(e) for e in errors)
+
+        # 2. Direct error message keys commonly returned by HEAppE / ASP.NET
+        for key in ['ErrorMessage', 'errorMessage', 'Message', 'message', 'detail', 'Detail', 'error', 'Error', 'description']:
+            val = data.get(key)
+            if val and isinstance(val, str) and val.strip():
+                if errors_str:
+                    return f"{val.strip()} ({errors_str})"
+                return val.strip()
+
+        title = data.get('title') or data.get('Title')
+        if title and isinstance(title, str) and title.strip():
+            if errors_str:
+                return f"{title.strip()} ({errors_str})"
+            return title.strip()
+
+        if errors_str:
+            return errors_str
+
+    return None
+
+
+def extract_heappe_error(exc) -> str:
+    """Extract a user-friendly error message from an exception, especially ApiException or HEAppE response."""
+    if exc is None:
+        return "Unknown error"
+
+    raw_body = getattr(exc, 'body', None)
+    if isinstance(raw_body, bytes):
+        try:
+            raw_body = raw_body.decode('utf-8')
+        except Exception:
+            raw_body = raw_body.decode('utf-8', errors='replace')
+
+    # If body wasn't an attribute, check if exception string contains response body
+    if not raw_body:
+        exc_str = str(exc)
+        for marker in ["HTTP response body: b'", 'HTTP response body: b"', "HTTP response body: "]:
+            if marker in exc_str:
+                extracted = exc_str.split(marker, 1)[1]
+                if marker.endswith("'") and "'" in extracted:
+                    raw_body = extracted.rsplit("'", 1)[0]
+                elif marker.endswith('"') and '"' in extracted:
+                    raw_body = extracted.rsplit('"', 1)[0]
+                else:
+                    raw_body = extracted.strip()
+                break
+
+    if raw_body:
+        # Try JSON parsing
+        try:
+            import json
+            data = json.loads(raw_body)
+            msg = _extract_error_from_json(data)
+            if msg:
+                return msg
+        except Exception:
+            # Not JSON - check if plain text error
+            text = raw_body.strip()
+            if text and not text.startswith('<'):
+                if len(text) > 300:
+                    text = text[:300] + "..."
+                return text
+
+    status = getattr(exc, 'status', None)
+    reason = getattr(exc, 'reason', None)
+    exc_str = str(exc)
+
+    # Check for network/connection errors
+    exc_lower = exc_str.lower()
+    if any(term in exc_lower for term in ["connection refused", "timeout", "timed out", "max retries", "unreachable", "name resolution", "failed to establish a new connection"]):
+        detail = reason or (exc_str.splitlines()[0] if exc_str else "")
+        return f"Could not reach the HEAppE service ({detail})"
+
+    if status and reason:
+        return f"HEAppE error ({status} {reason})"
+    elif reason:
+        return str(reason)
+    elif status:
+        return f"HEAppE error ({status})"
+
+    first_line = exc_str.splitlines()[0] if exc_str else "Unknown error"
+    return first_line
+
 
 def _handle_api_call(request, api_call, success_message, error_message, silent=False):
     try:

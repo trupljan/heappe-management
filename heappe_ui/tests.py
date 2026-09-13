@@ -3591,6 +3591,121 @@ class QuantumAndQSchedulerV650Tests(TestCase):
         self.assertEqual(data_close["status"], "success")
 
 
+class HpcAccountAccessTestErrorHandlingTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="admin", email="admin@test.com", password="password", is_superuser=True)
+
+    def test_extract_heappe_error_from_dict_error_message(self):
+        from heappe_ui.view.utils import extract_heappe_error
+        class FakeApiException(Exception):
+            def __init__(self):
+                self.status = 400
+                self.reason = "Bad Request"
+                self.body = b'{"ErrorMessage": "Account atr-26-4-01 not configured on cluster Karolina"}'
+        
+        err = extract_heappe_error(FakeApiException())
+        self.assertEqual(err, "Account atr-26-4-01 not configured on cluster Karolina")
+
+    def test_extract_heappe_error_from_validation_errors(self):
+        from heappe_ui.view.utils import extract_heappe_error
+        class FakeApiException(Exception):
+            def __init__(self):
+                self.status = 400
+                self.reason = "Bad Request"
+                self.body = b'{"title": "Validation failed", "errors": {"Username": ["Account not found"]}}'
+        
+        err = extract_heappe_error(FakeApiException())
+        self.assertEqual(err, "Validation failed (Username: Account not found)")
+
+    def test_extract_heappe_error_plain_text(self):
+        from heappe_ui.view.utils import extract_heappe_error
+        class FakeApiException(Exception):
+            def __init__(self):
+                self.status = 500
+                self.reason = "Internal Server Error"
+                self.body = b'SSH connection timed out on cluster node'
+        
+        err = extract_heappe_error(FakeApiException())
+        self.assertEqual(err, "SSH connection timed out on cluster node")
+
+    def test_extract_heappe_error_connection_failure(self):
+        from heappe_ui.view.utils import extract_heappe_error
+        exc = Exception("Failed to establish a new connection: [Errno 61] Connection refused")
+        err = extract_heappe_error(exc)
+        self.assertIn("Could not reach the HEAppE service", err)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_access_test_failed_displays_heappe_error(self, mock_mgmt_api_class):
+        from heappe_ui.view.project import test_cluster_authentication_credential_HPC_access
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api_class.return_value = mock_controller
+
+        class FakeApiException(Exception):
+            def __init__(self):
+                self.status = 400
+                self.reason = "Bad Request"
+                self.body = b'{"ErrorMessage": "Account atr-26-4-01 not found on cluster"}'
+
+        mock_controller.heappe_management_test_cluster_access_for_account_get.side_effect = FakeApiException()
+
+        req = self.factory.post("/projects/test_access/", {
+            "ProjectId": "10",
+            "username": "atr-26-4-01"
+        })
+        req.user = self.user
+        req.session_code = "dummy_session"
+        req.api_instance = mock.MagicMock()
+        req.session = {}
+        req._messages = mock.MagicMock()
+
+        response = test_cluster_authentication_credential_HPC_access(req)
+        self.assertEqual(response.status_code, 302)
+
+        # Ensure messages.error was called with the specific message from HEAppE
+        req._messages.add.assert_called()
+        error_calls = [call for call in req._messages.add.call_args_list if call[0][0] == messages.ERROR]
+        self.assertTrue(len(error_calls) > 0)
+        msg_text = error_calls[0][0][1]
+        self.assertIn("Account atr-26-4-01 not found on cluster", msg_text)
+        self.assertNotIn("Could not reach the HEAppE service", msg_text)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_access_test_denied_with_cluster_error(self, mock_mgmt_api_class):
+        from heappe_ui.view.project import test_cluster_authentication_credential_HPC_access
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api_class.return_value = mock_controller
+
+        fake_resp = mock.MagicMock()
+        fake_resp.data = json.dumps([{
+            "ClusterName": "Karolina",
+            "IsClusterAccessible": False,
+            "ErrorMessage": "SSH key rejected by host"
+        }]).encode('utf-8')
+        mock_controller.heappe_management_test_cluster_access_for_account_get.return_value = fake_resp
+
+        req = self.factory.post("/projects/test_access/", {
+            "ProjectId": "10",
+            "username": "atr-26-4-01"
+        })
+        req.user = self.user
+        req.session_code = "dummy_session"
+        req.api_instance = mock.MagicMock()
+        req.session = {}
+        req._messages = mock.MagicMock()
+
+        response = test_cluster_authentication_credential_HPC_access(req)
+        self.assertEqual(response.status_code, 302)
+
+        req._messages.add.assert_called()
+        warning_calls = [call for call in req._messages.add.call_args_list if call[0][0] == messages.WARNING]
+        self.assertTrue(len(warning_calls) > 0)
+        msg_text = warning_calls[0][0][1]
+        self.assertIn("Access denied for 'atr-26-4-01'", msg_text)
+        self.assertIn("SSH key rejected by host", msg_text)
+
+
+
 
 
 
