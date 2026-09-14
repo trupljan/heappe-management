@@ -1116,6 +1116,34 @@ class SelfHealingSessionTests(TestCase):
 
         self.assertIsNone(_get_session_code_fallback(api_client))
 
+    def test_session_middleware_allows_admin_update_paths_without_chosen_instance(self):
+        from heappe_ui.middleware import HeappeSessionMiddleware
+        middleware = HeappeSessionMiddleware(get_response=lambda req: HttpResponse("OK"))
+
+        paths = [
+            "/api/check-updates/",
+            "/api/deploy-direct/",
+            "/fetch-branches/",
+        ]
+        for path in paths:
+            request = self.factory.get(path)
+            request.user = self.user
+            request.session = {}  # No chosen_instance
+            response = middleware(request)
+            self.assertEqual(
+                response.status_code, 200,
+                f"Path {path} should be accessible without chosen_instance"
+            )
+            self.assertEqual(response.content, b"OK")
+
+        # Non-whitelisted path should still redirect to instance list
+        req_redirect = self.factory.get("/dashboard/")
+        req_redirect.user = self.user
+        req_redirect.session = {}
+        resp_redirect = middleware(req_redirect)
+        self.assertEqual(resp_redirect.status_code, 302)
+        self.assertEqual(resp_redirect.url, "/instances/")
+
 
 class JobStatusViewTests(TestCase):
     def setUp(self):

@@ -58,7 +58,15 @@ class HeappeSessionMiddleware:
             return resp
 
         path = request.path
-        if any(p in path for p in ["/instances/", "/logout/", "/login/", "/reconnect/"]):
+        if any(p in path for p in [
+            "/instances/",
+            "/logout/",
+            "/login/",
+            "/reconnect/",
+            "/api/check-updates/",
+            "/api/deploy-direct/",
+            "/fetch-branches/",
+        ]):
             return process_response(self.get_response(request))
 
         if not hasattr(request, 'user') or not request.user.is_authenticated:
