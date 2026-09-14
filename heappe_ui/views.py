@@ -992,7 +992,7 @@ def instance_health_check_api(request, pk):
                 
         version = "unknown"
         if health_info and hasattr(health_info, 'version') and health_info.version:
-            version = health_info.version
+            version = str(health_info.version).lstrip("vV")
             
         instance_identifier = "unknown"
         if health_info and hasattr(health_info, 'instance_identifier') and health_info.instance_identifier:

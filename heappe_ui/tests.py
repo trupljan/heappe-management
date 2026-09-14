@@ -1144,6 +1144,35 @@ class SelfHealingSessionTests(TestCase):
         self.assertEqual(resp_redirect.status_code, 302)
         self.assertEqual(resp_redirect.url, "/instances/")
 
+    @mock.patch("py4heappe.heappe_v6.core.HealthApi.heappe_health_get")
+    def test_instance_health_check_api_version_stripped(self, mock_health_get):
+        from heappe_ui.models import InstanceCredentials
+        from heappe_ui.views import instance_health_check_api
+        import json
+
+        instance = InstanceCredentials.objects.create(
+            instance_name="test_deucalion",
+            heappe_host="localhost",
+            heappe_port=8080,
+            heappe_login="user",
+            heappe_password="password",
+        )
+        mock_resp = mock.MagicMock()
+        mock_resp.version = "V6.5.1"
+        mock_resp.component = None
+        mock_resp.instance_identifier = "deucalion"
+        mock_health_get.return_value = mock_resp
+
+        request = self.factory.get(f"/instances/{instance.pk}/health/")
+        request.user = self.user
+        request.session = {}
+
+        response = instance_health_check_api(request, instance.pk)
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content.decode("utf-8"))
+        self.assertEqual(data["version"], "6.5.1")
+        self.assertEqual(data["status"], "online")
+
 
 class JobStatusViewTests(TestCase):
     def setUp(self):
