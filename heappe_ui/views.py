@@ -278,6 +278,27 @@ def dashboard_view(request):
     if (time_to - time_from) > timedelta(days=90):
         time_from = time_to - timedelta(days=90)
 
+    # Check if HEAppE version >= 6.5.0 (Admin API support)
+    current_version = request.session.get("middleware_deployed_version", "")
+    if not current_version:
+        try:
+            health_api = hp.HealthApi(request.api_instance)
+            health_info = health_api.heappe_health_get()
+            current_version = health_info.version.lstrip("vV") if health_info and getattr(health_info, 'version', None) else "0.0.0"
+            if current_version and current_version != "0.0.0":
+                request.session["middleware_deployed_version"] = current_version
+        except Exception as e:
+            current_version = "0.0.0"
+
+    is_admin_api = False
+    try:
+        if clean_ver(current_version) >= clean_ver("6.5.0"):
+            is_admin_api = True
+    except Exception:
+        is_admin_api = False
+
+    context["is_admin_api"] = is_admin_api
+
     # Store for template
     context["time_to"] = time_to.strftime('%Y-%m-%dT%H:%M')
     context["time_from"] = time_from.strftime('%Y-%m-%dT%H:%M')

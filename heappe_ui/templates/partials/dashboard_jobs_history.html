@@ -6,11 +6,11 @@
         <table class="table table-hover align-middle mb-0" id="submittedJobsTable">
             <thead class="table-light">
                 <tr style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em;">
-                    <th class="ps-4 text-secondary py-3" style="width: 22%;">Job Name &amp; ID</th>
+                    <th class="ps-4 text-secondary py-3" style="width: 20%;">Job Name &amp; ID</th>
                     <th class="text-secondary py-3" style="width: 12%;">State</th>
-                    <th class="text-secondary py-3" style="width: 20%;">Submitter</th>
-                    <th class="text-secondary py-3" style="width: 14%;">HPC Account</th>
-                    <th class="text-secondary py-3" style="width: 14%;">Project</th>
+                    <th class="text-secondary py-3" style="width: 24%;">Submitter</th>
+                    <th class="text-secondary py-3" style="width: 13%;">HPC Account</th>
+                    <th class="text-secondary py-3" style="width: 13%;">Project</th>
                     <th class="text-secondary py-3" style="width: 8%;">Tasks</th>
                     <th class="text-end pe-4 text-secondary py-3" style="width: 10%;">Actions</th>
                 </tr>
@@ -20,7 +20,7 @@
                 <tr>
                     <!-- Job Name & ID Combined -->
                     <td class="ps-4">
-                        <div class="fw-bold text-dark" style="font-size: 0.88rem;">{{ job_item.name }}</div>
+                        <div class="fw-bold text-dark text-truncate" style="font-size: 0.88rem; max-width: 160px;" title="{{ job_item.name }}">{{ job_item.name }}</div>
                         <div class="text-secondary mt-1 font-monospace small d-inline-flex align-items-center gap-1 bg-light border border-light-subtle rounded px-2 py-0.5" style="font-size: 0.72rem;">
                             <i class="bi bi-hash text-muted"></i>{{ job_item.id }}
                         </div>
@@ -53,26 +53,30 @@
                     
                     <!-- Submitter Info -->
                     <td>
-                        <div class="text-dark fw-semibold small d-flex align-items-center gap-1.5 text-break" style="word-break: break-all;">
-                            <span class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0" style="width: 20px; height: 20px; font-size: 0.65rem;">
+                        <div class="d-flex align-items-start gap-2" style="min-width: 0;">
+                            <span class="bg-primary bg-opacity-10 text-primary rounded-circle d-inline-flex align-items-center justify-content-center flex-shrink-0 mt-0.5" style="width: 22px; height: 22px; font-size: 0.7rem;">
                                 <i class="bi bi-person"></i>
                             </span>
-                            {% if job_item.submitter.username %}{{ job_item.submitter.username }}{% elif job_item.submitter %}{{ job_item.submitter }}{% else %}N/A{% endif %}
-                        </div>
-                        {% if job_item.submitter.email %}
-                        <div class="text-muted mt-0.5 text-break" style="font-size: 0.72rem; word-break: break-all;">
-                            <i class="bi bi-envelope me-1 text-secondary"></i>{{ job_item.submitter.email }}
-                        </div>
-                        {% endif %}
-                        <div class="text-muted mt-0.5" style="font-size: 0.70rem;">
-                            <i class="bi bi-clock me-1 text-secondary"></i>{% if job_item.creation_time %}{{ job_item.creation_time|format_datetime }}{% elif job_item.submit_time %}{{ job_item.submit_time|format_datetime }}{% else %}N/A{% endif %}
+                            <div class="d-flex flex-column" style="min-width: 0; max-width: 185px;">
+                                <div class="text-dark fw-semibold small text-truncate" title="{% if job_item.submitter.username %}{{ job_item.submitter.username }}{% elif job_item.submitter %}{{ job_item.submitter }}{% else %}N/A{% endif %}">
+                                    {% if job_item.submitter.username %}{{ job_item.submitter.username }}{% elif job_item.submitter %}{{ job_item.submitter }}{% else %}N/A{% endif %}
+                                </div>
+                                {% if job_item.submitter.email %}
+                                <div class="text-muted text-truncate" style="font-size: 0.72rem;" title="{{ job_item.submitter.email }}">
+                                    <i class="bi bi-envelope me-1 text-secondary"></i>{{ job_item.submitter.email }}
+                                </div>
+                                {% endif %}
+                                <div class="text-muted text-nowrap" style="font-size: 0.70rem;">
+                                    <i class="bi bi-clock me-1 text-secondary"></i>{% if job_item.creation_time %}{{ job_item.creation_time|format_datetime }}{% elif job_item.submit_time %}{{ job_item.submit_time|format_datetime }}{% else %}N/A{% endif %}
+                                </div>
+                            </div>
                         </div>
                     </td>
 
                     <!-- HPC Cluster Account -->
                     <td>
                         {% if job_item.cluster_username %}
-                        <span class="badge bg-dark bg-opacity-10 text-dark border border-dark-subtle px-2 py-1 font-monospace text-break" style="font-size: 0.75rem; word-break: break-all;">
+                        <span class="badge bg-dark bg-opacity-10 text-dark border border-dark-subtle px-2 py-1 font-monospace text-truncate d-inline-block" style="font-size: 0.75rem; max-width: 120px; vertical-align: middle;" title="{{ job_item.cluster_username }}">
                             <i class="bi bi-terminal me-1 text-primary"></i>{{ job_item.cluster_username }}
                         </span>
                         {% else %}
@@ -83,9 +87,11 @@
                     <!-- Project -->
                     <td>
                         {% if job_item.project_name or job_item.sub_project_identifier %}
-                        <div class="fw-semibold text-dark small text-break" style="word-break: break-word;">{% if job_item.project_name %}{{ job_item.project_name }}{% elif job_item.project_id %}{{ job_item.project_id }}{% else %}-{% endif %}</div>
+                        <div class="fw-semibold text-dark small text-truncate" style="max-width: 130px;" title="{% if job_item.project_name %}{{ job_item.project_name }}{% elif job_item.project_id %}{{ job_item.project_id }}{% else %}-{% endif %}">
+                            {% if job_item.project_name %}{{ job_item.project_name }}{% elif job_item.project_id %}{{ job_item.project_id }}{% else %}-{% endif %}
+                        </div>
                         {% if job_item.sub_project_identifier %}
-                        <div class="text-muted text-break" style="font-size: 0.72rem; word-break: break-all;">
+                        <div class="text-muted text-truncate" style="font-size: 0.72rem; max-width: 130px;" title="{{ job_item.sub_project_identifier }}">
                             <i class="bi bi-folder2-open me-1"></i>{{ job_item.sub_project_identifier }}
                         </div>
                         {% endif %}
@@ -96,14 +102,14 @@
                     
                     <!-- Tasks Count Badge -->
                     <td>
-                        <span class="badge bg-light text-secondary border border-light-subtle rounded-3 px-2.5 py-1.5 fw-semibold" style="font-size: 0.78rem;">
+                        <span class="badge bg-light text-secondary border border-light-subtle rounded-3 px-2.5 py-1.5 fw-semibold text-nowrap" style="font-size: 0.78rem;">
                             <i class="bi bi-cpu text-muted me-1"></i>{{ job_item.tasks|length }} tasks
                         </span>
                     </td>
                     
                     <!-- Actions -->
                     <td class="text-end pe-4">
-                        <div class="d-flex gap-1.5 justify-content-end">
+                        <div class="d-flex gap-1.5 justify-content-end text-nowrap">
                             <button type="button" class="btn btn-sm btn-light border border-light-subtle text-secondary px-2.5 py-1.5 rounded-3 d-inline-flex align-items-center justify-content-center" data-bs-toggle="modal" data-bs-target="#jobModal{{ job_item.id }}" title="View details">
                                 <i class="bi bi-eye"></i>
                             </button>
