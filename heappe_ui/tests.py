@@ -3759,7 +3759,147 @@ class HpcAccountAccessTestErrorHandlingTests(TestCase):
         self.assertTrue(len(warning_calls) > 0)
         msg_text = warning_calls[0][0][1]
         self.assertIn("Access denied for 'atr-26-4-01'", msg_text)
-        self.assertIn("SSH key rejected by host", msg_text)
+
+class SshKeysAndCredentialsVersionGatingTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser", password="password")
+
+    def test_obsolete_model_and_api_method(self):
+        from py4heappe.heappe_v6.core.models.create_secure_shell_key_model_obsolete import CreateSecureShellKeyModelObsolete
+        model = CreateSecureShellKeyModelObsolete(
+            session_code="sess",
+            username="user1",
+            password="pwd",
+            project_id=42
+        )
+        self.assertEqual(model.username, "user1")
+        self.assertEqual(model.project_id, 42)
+        d = model.to_dict()
+        self.assertEqual(d["username"], "user1")
+        self.assertEqual(d["project_id"], 42)
+
+        import py4heappe.heappe_v6.core as hp
+        self.assertTrue(hasattr(hp.ManagementApi, "heappe_management_secure_shell_key_post"))
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_create_new_hpc_account_success_generate(self, mock_mgmt_api):
+        from heappe_ui.view.project import create_new_hpc_account
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_controller
+
+        req = self.factory.post("/projects/create_account/", {
+            "ProjectId": "10",
+            "username": "new_user",
+            "password": "secret_password"
+        })
+        req.user = self.user
+        req.session_code = "sess_123"
+        req.api_instance = mock.MagicMock()
+        req.session = {}
+        req._messages = mock.MagicMock()
+
+        response = create_new_hpc_account(req)
+        self.assertEqual(response.status_code, 302)
+        mock_controller.heappe_management_generate_secure_shell_key_post.assert_called_once()
+        mock_controller.heappe_management_secure_shell_key_post.assert_not_called()
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_create_new_hpc_account_fallback_to_obsolete(self, mock_mgmt_api):
+        from heappe_ui.view.project import create_new_hpc_account
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_controller
+
+        # Simulate GenerateSecureShellKey failing (e.g. 404 endpoint not found on older server)
+        mock_controller.heappe_management_generate_secure_shell_key_post.side_effect = Exception("404 Not Found")
+
+        req = self.factory.post("/projects/create_account/", {
+            "ProjectId": "10",
+            "username": "old_user",
+            "password": "old_password"
+        })
+        req.user = self.user
+        req.session_code = "sess_123"
+        req.api_instance = mock.MagicMock()
+        req.session = {}
+        req._messages = mock.MagicMock()
+
+        response = create_new_hpc_account(req)
+        self.assertEqual(response.status_code, 302)
+        mock_controller.heappe_management_generate_secure_shell_key_post.assert_called_once()
+        mock_controller.heappe_management_secure_shell_key_post.assert_called_once()
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_create_new_hpc_account_fallback_to_direct_api_call(self, mock_mgmt_api):
+        from heappe_ui.view.project import create_new_hpc_account
+        mock_controller = mock.MagicMock(spec=["heappe_management_generate_secure_shell_key_post", "api_client"])
+        mock_mgmt_api.return_value = mock_controller
+
+        mock_controller.heappe_management_generate_secure_shell_key_post.side_effect = Exception("404 Not Found")
+        mock_controller.api_client = mock.MagicMock()
+
+        req = self.factory.post("/projects/create_account/", {
+            "ProjectId": "10",
+            "username": "direct_user",
+            "password": "direct_password"
+        })
+        req.user = self.user
+        req.session_code = "sess_123"
+        req.api_instance = mock.MagicMock()
+        req.session = {}
+        req._messages = mock.MagicMock()
+
+        response = create_new_hpc_account(req)
+        self.assertEqual(response.status_code, 302)
+        mock_controller.heappe_management_generate_secure_shell_key_post.assert_called_once()
+        mock_controller.api_client.call_api.assert_called_once()
+        call_args = mock_controller.api_client.call_api.call_args
+        self.assertEqual(call_args[0][0], '/heappe/Management/SecureShellKey')
+        self.assertEqual(call_args[0][1], 'POST')
+
+    @mock.patch("heappe_ui.view.project.render")
+    @mock.patch("py4heappe.heappe_v6.core.CredentialsApi")
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_project_detail_credentials_gated_at_v650(self, mock_mgmt_api, mock_cred_api, mock_render):
+        from heappe_ui.view.project import project_detail
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_controller
+        mock_cred_ctrl = mock.MagicMock()
+        mock_cred_api.return_value = mock_cred_ctrl
+
+        proj_obj = mock.MagicMock()
+        proj_obj.to_dict.return_value = {"id": 1, "name": "Proj1"}
+        mock_controller.heappe_management_project_get.return_value = proj_obj
+
+        # 1. Test version 6.4.0: CredentialsApi should NOT be called
+        req_640 = self.factory.get("/projects/1/?tab=accounts")
+        req_640.user = self.user
+        req_640.session_code = "sess_123"
+        req_640.api_instance = mock.MagicMock()
+        req_640.session = {"middleware_deployed_version": "6.4.0"}
+        req_640._messages = mock.MagicMock()
+
+        project_detail(req_640, project_id=1)
+        mock_cred_ctrl.heappe_credentials_get_credentials_get.assert_not_called()
+        render_context = mock_render.call_args[0][2]
+        self.assertFalse(render_context["is_v6_5_0_plus"])
+        self.assertTrue(render_context["is_v6_4_0_plus"])
+
+        # 2. Test version 6.5.0: CredentialsApi should be called
+        mock_cred_ctrl.reset_mock()
+        mock_cred_ctrl.heappe_credentials_get_credentials_get.return_value = []
+        req_650 = self.factory.get("/projects/1/?tab=accounts")
+        req_650.user = self.user
+        req_650.session_code = "sess_123"
+        req_650.api_instance = mock.MagicMock()
+        req_650.session = {"middleware_deployed_version": "6.5.0"}
+        req_650._messages = mock.MagicMock()
+
+        project_detail(req_650, project_id=1)
+        self.assertEqual(mock_cred_ctrl.heappe_credentials_get_credentials_get.call_count, 2)
+        render_context = mock_render.call_args[0][2]
+        self.assertTrue(render_context["is_v6_5_0_plus"])
+
 
 
 

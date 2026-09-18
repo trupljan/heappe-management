@@ -51,6 +51,7 @@ PREFERRED_AUTH_TYPE_CHOICES = dict(PREFERRED_AUTH_TYPES_NO_PROXY + PREFERRED_AUT
 def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> HttpResponse:
     deployed_version = request.session.get("middleware_deployed_version", "")
     is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    is_v6_5_0_plus = clean_ver(deployed_version) >= [6, 5, 0]
     filter_type = request.GET.get("project_filter", "own")
     controller = hp.ManagementApi(request.api_instance)
     session_code = request.session_code
@@ -318,7 +319,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         except:
             project_accounts = []
 
-        if is_v6_4_0_plus:
+        if is_v6_5_0_plus:
             cred_ctrl = hp.CredentialsApi(request.api_instance)
             project_credentials = [pc.to_dict() for pc in cred_ctrl.heappe_credentials_get_credentials_get(
                 ProjectId=project_id, SessionCode=session_code
@@ -529,7 +530,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         setup_checklist["command_template_exists"] = len(own_templates) > 0
 
         # 6. SSH Account/Credentials active check
-        if is_v6_4_0_plus:
+        if is_v6_5_0_plus:
             try:
                 cred_ctrl = hp.CredentialsApi(request.api_instance)
                 credentials = cred_ctrl.heappe_credentials_get_credentials_get(
@@ -599,6 +600,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "setup_checklist": setup_checklist,
         "setup_checklist_completed": setup_checklist_completed,
         "is_v6_4_0_plus": is_v6_4_0_plus,
+        "is_v6_5_0_plus": is_v6_5_0_plus,
         "preferred_auth_types_no_proxy": PREFERRED_AUTH_TYPES_NO_PROXY,
         "preferred_auth_types_with_proxy": PREFERRED_AUTH_TYPES_WITH_PROXY,
         "preferred_auth_type_choices": PREFERRED_AUTH_TYPE_CHOICES,
@@ -1469,19 +1471,53 @@ def initialize_hpc_account(request: HttpRequest):
 def create_new_hpc_account(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
+    username = request.POST.get("username")
+    password = request.POST.get("password")
 
-    payload_data = {
-        "Credentials" : [
-            {
-                "Username": request.POST.get("username"),
-                "Password": request.POST.get("password")
-            }],
-        "ProjectId": project_id,
-    }
-    payload = _create_payload(request.session_code, payload_data)
+    def _call_create():
+        payload_data = {
+            "Credentials": [
+                {
+                    "Username": username,
+                    "Password": password
+                }
+            ],
+            "ProjectId": project_id,
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        try:
+            return controller.heappe_management_generate_secure_shell_key_post(**payload)
+        except Exception as e:
+            # Fallback to obsolete SecureShellKey endpoint (/heappe/Management/SecureShellKey)
+            obsolete_payload_data = {
+                "ProjectId": project_id,
+                "Username": username,
+                "Password": password
+            }
+            obsolete_payload = _create_payload(request.session_code, obsolete_payload_data)
+            try:
+                if hasattr(controller, "heappe_management_secure_shell_key_post"):
+                    return controller.heappe_management_secure_shell_key_post(**obsolete_payload)
+                else:
+                    header_params = {
+                        'Accept': controller.api_client.select_header_accept(['application/json']),
+                        'Content-Type': controller.api_client.select_header_content_type(['application/json', 'text/json', 'application/*+json'])
+                    }
+                    return controller.api_client.call_api(
+                        '/heappe/Management/SecureShellKey', 'POST',
+                        {}, [], header_params,
+                        body=obsolete_payload.get('body'),
+                        post_params=[], files={},
+                        response_type='list[PublicKeyExt]',
+                        auth_settings=['Bearer', 'ServiceApiKey'],
+                        _return_http_data_only=True
+                    )
+            except Exception:
+                raise e
+
     result = _handle_api_call(
         request,
-        lambda: controller.heappe_management_generate_secure_shell_key_post(**payload),
+        _call_create,
         "HPC account created successfully!",
         "Failed to create HPC account"
     )
