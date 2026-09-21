@@ -1001,11 +1001,15 @@
                 <option value="" disabled selected>Select authentication type...</option>
                     {% if is_v7_0_0_plus %}
                         {% for val, name in preferred_auth_types %}
+                            {% if val != 0 %}
                             <option value="{{ val }}">{{ name }}</option>
+                            {% endif %}
                         {% endfor %}
                     {% else %}
                         {% for val, name in preferred_auth_types_no_proxy %}
+                            {% if val != 0 %}
                             <option value="{{ val }}">{{ name }}</option>
+                            {% endif %}
                         {% endfor %}
                     {% endif %}
             </select>
