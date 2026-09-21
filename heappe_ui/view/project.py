@@ -39,18 +39,32 @@ PREFERRED_AUTH_TYPES_WITH_PROXY = [
     (14, "FirecRest IdP via Proxy"),
 ]
 
+AUTH_TYPES  = [
+    (0, "Unknown"),
+    (1, "Password Interactive"),
+    (2, "Password"),
+    (4, "Private Key"),
+    (6, "Password And Private Key"),
+    (8, "Private Key In SSH Agent"),
+    (16, "Private Key In Vault And In SSH Agent"),
+    (32, "SSH Certificate"),
+    (64, "Kerberos"),
+    (128, "FirecRest IdP"),
+]
+
 PREFERRED_AUTH_TYPE_NO_PROXY_DICT = dict(PREFERRED_AUTH_TYPES_NO_PROXY)
 PREFERRED_AUTH_TYPE_WITH_PROXY_DICT = dict(PREFERRED_AUTH_TYPES_WITH_PROXY)
 # Merged dict for backwards compatibility – note: shared keys (e.g. 13) resolve to the with-proxy label.
 # Use PREFERRED_AUTH_TYPE_NO_PROXY_DICT / PREFERRED_AUTH_TYPE_WITH_PROXY_DICT for context-aware lookups.
 PREFERRED_AUTH_TYPE_CHOICES = dict(PREFERRED_AUTH_TYPES_NO_PROXY + PREFERRED_AUTH_TYPES_WITH_PROXY)
-
+AUTH_TYPE_DICT = dict(AUTH_TYPES)
 
 
 @login_required
 def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> HttpResponse:
     deployed_version = request.session.get("middleware_deployed_version", "")
     is_v6_4_0_plus = clean_ver(deployed_version) >= [6, 4, 0]
+    is_v7_0_0_plus = clean_ver(deployed_version) >= [7, 0, 0]
     filter_type = request.GET.get("project_filter", "own")
     controller = hp.ManagementApi(request.api_instance)
     session_code = request.session_code
@@ -102,7 +116,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         if action == "delete_hpc_account": return delete_hpc_account(request)
         if action == "bulk_delete_command_templates": return bulk_delete_command_templates(request, project_id)
         if action == "create_preset_template": return _create_preset_template(request, project_id, controller, session_code)
-        if action == "create_credential": return create_credential(request, project_id)
+        if action == "create_credential": return create_credential(request, project_id, is_v7_0_0_plus)
         if action == "modify_credential": return modify_credential(request, project_id)
         if action == "delete_credential": return delete_credential(request, project_id)
 
@@ -181,12 +195,17 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             if pref_auth is not None:
                 try:
                     auth_int = int(pref_auth)
-                    # Use proxy-aware lookup so that e.g. value 13 shows "Kerberos" (no proxy)
-                    # or "Kerberos via Proxy" (with proxy) rather than always the with-proxy label.
-                    if a['cluster_has_proxy']:
-                        primary, fallback = PREFERRED_AUTH_TYPE_WITH_PROXY_DICT, PREFERRED_AUTH_TYPE_NO_PROXY_DICT
+
+                    if is_v7_0_0_plus:
+                        primary, fallback = AUTH_TYPE_DICT, AUTH_TYPE_DICT
                     else:
-                        primary, fallback = PREFERRED_AUTH_TYPE_NO_PROXY_DICT, PREFERRED_AUTH_TYPE_WITH_PROXY_DICT
+                        # Use proxy-aware lookup so that e.g. value 13 shows "Kerberos" (no proxy)
+                        # or "Kerberos via Proxy" (with proxy) rather than always the with-proxy label.
+                        if a['cluster_has_proxy']:
+                            primary, fallback = PREFERRED_AUTH_TYPE_WITH_PROXY_DICT, PREFERRED_AUTH_TYPE_NO_PROXY_DICT
+                        else:
+                            primary, fallback = PREFERRED_AUTH_TYPE_NO_PROXY_DICT, PREFERRED_AUTH_TYPE_WITH_PROXY_DICT
+                    
                     a['preferred_auth_type_name'] = primary.get(auth_int) or fallback.get(auth_int, "Unknown")
                 except (ValueError, TypeError):
                     a['preferred_auth_type_name'] = str(pref_auth)
@@ -328,8 +347,11 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
             )]
             # add adaptor_username to dictionary
             for project_credential in project_credentials:
-                project_credential["auth_type_str"] = PREFERRED_AUTH_TYPE_CHOICES.get(project_credential["auth_type"], "Unknown")
-                 
+                if is_v7_0_0_plus:
+                    project_credential["auth_type_str"] = AUTH_TYPE_DICT.get(project_credential["auth_type"], "Unknown")
+                else:
+                    project_credential["auth_type_str"] = PREFERRED_AUTH_TYPE_CHOICES.get(project_credential["auth_type"], "Unknown")
+                
                 # DEBUG: Log credential structure
                 print(f"[DEBUG] Credential: {project_credential.get('username')}")
                 print(f"[DEBUG] adaptor_user_id: {project_credential.get('adaptor_user_id')} (type: {type(project_credential.get('adaptor_user_id'))})")
@@ -599,9 +621,11 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "setup_checklist": setup_checklist,
         "setup_checklist_completed": setup_checklist_completed,
         "is_v6_4_0_plus": is_v6_4_0_plus,
+        "is_v7_0_0_plus": is_v7_0_0_plus,
         "preferred_auth_types_no_proxy": PREFERRED_AUTH_TYPES_NO_PROXY,
         "preferred_auth_types_with_proxy": PREFERRED_AUTH_TYPES_WITH_PROXY,
         "preferred_auth_type_choices": PREFERRED_AUTH_TYPE_CHOICES,
+        "preferred_auth_types": AUTH_TYPES
     })
 
 
@@ -1732,7 +1756,7 @@ def job_live_details_partial(request: HttpRequest, job_id: int) -> HttpResponse:
 
 
 @login_required
-def create_credential(request: HttpRequest, project_id: int) -> HttpResponse:
+def create_credential(request: HttpRequest, project_id: int, is_v7_0_0_plus: bool) -> HttpResponse:
     controller = hp.CredentialsApi(request.api_instance)
 
     cred_passphrase = None
@@ -1743,20 +1767,20 @@ def create_credential(request: HttpRequest, project_id: int) -> HttpResponse:
     auth_type = int(request.POST.get("auth_type"))
     
     # Private key based with key generation: 3 (pwd & key), 4 (key), 7 (pwd & key proxy), 8 (key proxy)
-    if auth_type in (3, 4, 7, 8):
+    if is_v7_0_0_plus and auth_type in (4, 6) or not is_v7_0_0_plus and auth_type in (3, 4, 7, 8):
         cred_passphrase = request.POST.get("cred_passphrase") or None
         generate_new_key = request.POST.get("key_gen") == "generate"
         if not generate_new_key:
             provided_private_key = request.POST.get("provided_private_key", "").strip() or None
             
     # SSH Certificate based (key generation is forbidden, provided private key is required): 11, 12
-    elif auth_type in (11, 12):
+    elif is_v7_0_0_plus and auth_type == 32 or not is_v7_0_0_plus and auth_type in (11, 12):
         cred_passphrase = request.POST.get("cred_passphrase") or None
         generate_new_key = None
         provided_private_key = request.POST.get("provided_private_key", "").strip() or None
             
     # Password based: 1 (pwd), 2 (pwd interactive), 3 (pwd & key), 5 (pwd proxy), 6 (pwd interactive proxy), 7 (pwd & key proxy)
-    if auth_type in (1, 2, 3, 5, 6, 7):
+    if is_v7_0_0_plus and auth_type in (1, 2, 6) or not is_v7_0_0_plus and auth_type in (1, 2, 3, 5, 6, 7):
         cred_password = request.POST.get("cred_password") or None
 
     adaptor_user = request.POST.get("adaptor_user")

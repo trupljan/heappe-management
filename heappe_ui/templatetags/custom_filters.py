@@ -228,7 +228,12 @@ def format_task_priority(val):
         return str(val)
 
 
-
+@register.filter
+def in_csv(value, csv):
+    """
+    Return True if *value*, as a string, is found in the comma‑separated string csv.
+    """
+    return str(value) in csv.split(',')
 
 
 

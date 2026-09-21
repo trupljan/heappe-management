@@ -204,22 +204,34 @@
                                 <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ProjectStoragePath" placeholder="e.g. /mnt/projects/project_123">
                             </div>
                             {% if is_v6_4_0_plus %}
-                            <div class="col-12">
-                                <label class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
-                                <select class="form-select form-select-sm border-light-subtle bg-white" name="PreferredAuthType" id="PreferredAuthTypeSelect" required>
-                                    <option value="" disabled>Select preferred auth type...</option>
-                                    <optgroup label="Without Proxy" id="optgroup-no-proxy">
-                                        {% for val, name in preferred_auth_types_no_proxy %}
-                                            <option value="{{ val }}" {% if val == 4 %}selected{% endif %}>{{ name }}</option>
-                                        {% endfor %}
-                                    </optgroup>
-                                    <optgroup label="With Proxy (at HEAppE Cluster)" id="optgroup-with-proxy">
-                                        {% for val, name in preferred_auth_types_with_proxy %}
-                                            <option value="{{ val }}">{{ name }}</option>
-                                        {% endfor %}
-                                    </optgroup>
-                                </select>
-                            </div>
+                                {% if is_v7_0_0_plus %}
+                                <div class="col-12">
+                                    <label class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
+                                    <select class="form-select form-select-sm border-light-subtle bg-white" name="PreferredAuthType" id="PreferredAuthTypeSelect" required>
+                                        <option value="" disabled>Select preferred auth type...</option>
+                                            {% for val, name in preferred_auth_types %}
+                                                <option value="{{ val }}" {% if val == 4 %}selected{% endif %}>{{ name }}</option>
+                                            {% endfor %}
+                                    </select>
+                                </div>
+                                {% else %}
+                                <div class="col-12">
+                                    <label class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
+                                    <select class="form-select form-select-sm border-light-subtle bg-white" name="PreferredAuthType" id="PreferredAuthTypeSelect" required>
+                                        <option value="" disabled>Select preferred auth type...</option>
+                                        <optgroup label="Without Proxy" id="optgroup-no-proxy">
+                                            {% for val, name in preferred_auth_types_no_proxy %}
+                                                <option value="{{ val }}" {% if val == 4 %}selected{% endif %}>{{ name }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        <optgroup label="With Proxy (at HEAppE Cluster)" id="optgroup-with-proxy">
+                                            {% for val, name in preferred_auth_types_with_proxy %}
+                                                <option value="{{ val }}">{{ name }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                    </select>
+                                </div>
+                                {% endif %}
                             {% endif %}
                             <div class="col-12 pt-2">
                                 <button type="submit" class="btn btn-sm btn-primary w-100 fw-bold shadow-sm">Assign Cluster</button>
@@ -918,19 +930,28 @@
           {% if is_v6_4_0_plus %}
           <div class="mb-2">
             <label class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
-            <select class="form-select form-select-sm border-light-subtle bg-white" id="editPreferredAuthType" name="PreferredAuthType" required>
-                <option value="" disabled>Select preferred auth type...</option>
-                <optgroup label="Without Proxy" id="edit-optgroup-no-proxy">
-                    {% for val, name in preferred_auth_types_no_proxy %}
-                        <option value="{{ val }}">{{ name }}</option>
-                    {% endfor %}
-                </optgroup>
-                <optgroup label="With Proxy (at HEAppE Cluster)" id="edit-optgroup-with-proxy">
-                    {% for val, name in preferred_auth_types_with_proxy %}
-                        <option value="{{ val }}">{{ name }}</option>
-                    {% endfor %}
-                </optgroup>
-            </select>
+            {% if is_v7_0_0_plus %}
+                <select class="form-select form-select-sm border-light-subtle bg-white" id="editPreferredAuthType" name="PreferredAuthType" required>
+                    <option value="" disabled>Select preferred auth type...</option>
+                        {% for val, name in preferred_auth_types %}
+                            <option value="{{ val }}">{{ name }}</option>
+                        {% endfor %}
+                </select>
+            {% else %}
+                <select class="form-select form-select-sm border-light-subtle bg-white" id="editPreferredAuthType" name="PreferredAuthType" required>
+                    <option value="" disabled>Select preferred auth type...</option>
+                    <optgroup label="Without Proxy" id="edit-optgroup-no-proxy">
+                        {% for val, name in preferred_auth_types_no_proxy %}
+                            <option value="{{ val }}">{{ name }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    <optgroup label="With Proxy (at HEAppE Cluster)" id="edit-optgroup-with-proxy">
+                        {% for val, name in preferred_auth_types_with_proxy %}
+                            <option value="{{ val }}">{{ name }}</option>
+                        {% endfor %}
+                    </optgroup>
+                </select>
+            {% endif %}
           </div>
           {% endif %}
         </div>
@@ -978,16 +999,15 @@
             <label class="form-label small text-muted fw-semibold">Authentication Type</label>
             <select name="auth_type" id="addAuthTypeSelect" class="form-select form-select-sm border-light-subtle bg-white" required onchange="toggleAddAuthFields()">
                 <option value="" disabled selected>Select authentication type...</option>
-                <optgroup label="Without Proxy">
-                    {% for val, name in preferred_auth_types_no_proxy %}
-                        <option value="{{ val }}">{{ name }}</option>
-                    {% endfor %}
-                </optgroup>
-                <optgroup label="With Proxy (at HEAppE Cluster)">
-                    {% for val, name in preferred_auth_types_with_proxy %}
-                        <option value="{{ val }}">{{ name }}</option>
-                    {% endfor %}
-                </optgroup>
+                    {% if is_v7_0_0_plus %}
+                        {% for val, name in preferred_auth_types %}
+                            <option value="{{ val }}">{{ name }}</option>
+                        {% endfor %}
+                    {% else %}
+                        {% for val, name in preferred_auth_types_no_proxy %}
+                            <option value="{{ val }}">{{ name }}</option>
+                        {% endfor %}
+                    {% endif %}
             </select>
           </div>
 
@@ -1598,10 +1618,11 @@ function toggleAddAuthFields() {
     const passwordPanel = document.getElementById('addPasswordPanel');
     const passwordInput = document.getElementById('addPasswordInput');
 
-    const hasSshKey = [3, 4, 7, 8, 11, 12].includes(val);
-    const canGenerateKey = [3, 4, 7, 8].includes(val);
-    const hasPassword = [1, 2, 3, 5, 6, 7].includes(val);
-    const isPasswordRequired = [1, 3, 5, 7].includes(val);
+    var _is_v7_0_0_plus = ("{{is_v7_0_0_plus}}" === "True");
+    const hasSshKey = _is_v7_0_0_plus ? [4, 6, 32].includes(val) : [3, 4, 7, 8, 11, 12].includes(val);
+    const canGenerateKey = _is_v7_0_0_plus ? [4, 6].includes(val) : [3, 4, 7, 8].includes(val);
+    const hasPassword = _is_v7_0_0_plus ? [1, 2, 6].includes(val) : [1, 2, 3, 5, 6, 7].includes(val);
+    const isPasswordRequired = _is_v7_0_0_plus ? [2, 6].includes(val) : [1, 3, 5, 7].includes(val);
 
     if (hasSshKey) {
         sshPanel.style.display = 'block';

@@ -166,16 +166,22 @@
             <label for="PreferredAuthType" class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
             <select class="form-select form-select-sm border-light-subtle bg-white" id="PreferredAuthType" name="PreferredAuthType" required>
               <option value="" disabled>Select preferred auth type...</option>
-              <optgroup label="Without Proxy">
-                {% for val, name in preferred_auth_types_no_proxy %}
+              {% if is_v7_0_0_plus %}
+                {% for val, name in preferred_auth_types %}
                   <option value="{{ val }}" {% if val == 4 %}selected{% endif %}>{{ name }}</option>
                 {% endfor %}
-              </optgroup>
-              <optgroup label="With Proxy">
-                {% for val, name in preferred_auth_types_with_proxy %}
-                  <option value="{{ val }}">{{ name }}</option>
-                {% endfor %}
-              </optgroup>
+              {% else %}
+                <optgroup label="Without Proxy">
+                    {% for val, name in preferred_auth_types_no_proxy %}
+                    <option value="{{ val }}" {% if val == 4 %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="With Proxy">
+                    {% for val, name in preferred_auth_types_with_proxy %}
+                    <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+              {% endif %}
             </select>
           </div>
           {% endif %}
