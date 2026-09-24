@@ -353,6 +353,9 @@ PWD={self.config.base_path}{instance_name}/heappe-core
 
     def _get_generators_for_version(self, version: str):
         v_clean = clean_ver(version)
+        if not version or v_clean == [0, 0, 0] or not any(v_clean):
+            # Branch names without version numbers (e.g. master, main, development) default to latest generator
+            return generate_appsettings_v6_5_0, generate_appsettings_data_staging_v6_5_0
         if v_clean < [6, 1, 0]:
             return generate_appsettings_v6_0_0, generate_appsettings_data_staging_v6_0_0
         elif v_clean < [6, 2, 0]:
@@ -367,8 +370,6 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             return generate_appsettings_v6_4_17, generate_appsettings_data_staging_v6_4_17
         else:
             return generate_appsettings_v6_5_0, generate_appsettings_data_staging_v6_5_0
-
-        raise ValueError(f"Unsupported version: {version}")
 
     def generate_appsettings_and_merge_with_old(self, old_appsettings: dict, version: str) -> dict:
         """Generate appsettings.json and merge with old settings."""

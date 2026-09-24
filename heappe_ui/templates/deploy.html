@@ -31,11 +31,14 @@
                 {% endif %}
             {% endif %}
         </div>
-        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+        <div class="col-md-4 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end gap-2 flex-wrap">
             {% if not instance_name %}
             {% elif is_deployed %}
-                <button type="button" class="btn btn-outline-primary shadow-sm w-100 w-md-auto open-maintenance-tab-btn" data-action="update">
-                    <i class="bi bi-arrow-repeat me-2"></i>Update Instance
+                <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
+                    <i class="bi bi-git me-1.5"></i>Switch Branch &amp; Build
+                </button>
+                <button type="button" class="btn btn-outline-secondary shadow-sm open-maintenance-tab-btn" data-action="update">
+                    <i class="bi bi-arrow-repeat me-1.5"></i>Update Instance
                 </button>
             {% endif %}
         </div>
@@ -96,7 +99,16 @@
             <!-- Global actions -->
             <div class="card mb-4 border-0 shadow-sm bg-light">
                 <div class="card-body">
-                    <h5 class="card-title mb-3 fw-bold">Global Container Actions</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <h5 class="card-title mb-0 fw-bold">Global Container Actions</h5>
+                        {% if current_git_ref and current_git_ref.description %}
+                        <div class="small text-muted d-flex align-items-center gap-1.5">
+                            <i class="bi bi-git text-primary"></i>
+                            <span>Active HEAppE Branch:</span>
+                            <span class="badge bg-white text-dark border font-monospace">{{ current_git_ref.description }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
                     <div class="d-flex flex-wrap gap-2">
                         <form id="start-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
                             {% csrf_token %}
@@ -116,6 +128,9 @@
                             <input type="hidden" name="action" value="stop_all">
                             <button type="submit" class="btn btn-danger w-100 px-4"><i class="bi bi-stop-fill"></i> Stop All</button>
                         </form>
+                        <button type="button" class="btn btn-outline-primary px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
+                            <i class="bi bi-git me-1.5"></i> Switch Branch &amp; Build (Build &amp; Up)
+                        </button>
                     </div>
                 </div>
             </div>
@@ -614,13 +629,20 @@
         <!-- Maintenance & Setup Tab Pane -->
         <div class="tab-pane fade" id="maintenance-pane" role="tabpanel" aria-labelledby="maintenance-tab">
             <div class="row g-4 mb-5">
-                <!-- Update Middleware Panel -->
+                <!-- Switch Branch & Build Panel -->
                 <div class="col-xl-4 col-md-6">
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 d-flex flex-column">
-                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-arrow-repeat me-2 text-warning"></i>Update Middleware</h5>
-                            <p class="text-muted small mb-4">Update the HEAppE middleware source code of the active instance, rebuild the Docker services, and restart the containers.</p>
+                            <h5 class="fw-bold text-dark mb-2"><i class="bi bi-git me-2 text-primary"></i>Switch Branch &amp; Build</h5>
+                            <p class="text-muted small mb-3">Switch the HEAppE middleware git branch or release tag, optionally regenerate configurations, rebuild the Docker services, and start containers (<code>build &amp; up</code>).</p>
                             
+                            {% if current_git_ref and current_git_ref.description %}
+                            <div class="alert alert-light border d-flex align-items-center justify-content-between p-2.5 mb-3 rounded-2">
+                                <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Current checkout:</span>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis font-monospace border">{{ current_git_ref.description }}</span>
+                            </div>
+                            {% endif %}
+
                             <form id="update-form" class="instance-action-form mt-auto">
                                 {% csrf_token %}
                                 <div class="mb-3">
@@ -631,26 +653,63 @@
                                     <label class="form-label fw-semibold text-secondary small">Repository URL</label>
                                     <div class="input-group">
                                         <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
-                                        <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags"><i class="bi bi-arrow-clockwise"></i></button>
+                                        <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags &amp; Branches"><i class="bi bi-arrow-clockwise"></i></button>
                                     </div>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label fw-semibold text-secondary small">Update to Version (Tag)</label>
+                                    <label class="form-label fw-semibold text-secondary small">Target Branch / Release Tag</label>
                                     <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
-                                        {% for branch in branches %}
-                                            <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
-                                        {% endfor %}
+                                        {% if branch_list %}
+                                        <optgroup label="Branches">
+                                            {% for b in branch_list %}
+                                                <option value="{{ b }}" {% if b == current_git_ref.branch or b == repo_branch %}selected{% endif %}>{{ b }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        {% if tag_list %}
+                                        <optgroup label="Release Tags">
+                                            {% for t in tag_list %}
+                                                <option value="{{ t }}" {% if t == current_git_ref.branch or t == repo_branch %}selected{% endif %}>{{ t }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        {% if not branch_list and not tag_list %}
+                                            {% for r in branches %}
+                                                <option value="{{ r }}" {% if r == current_git_ref.branch or r == repo_branch %}selected{% endif %}>{{ r }}</option>
+                                            {% endfor %}
+                                        {% endif %}
                                     </select>
                                     <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
                                 </div>
-                                <input type="hidden" name="action" value="update">
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input custom-branch-toggle" type="checkbox" id="customBranchToggleMaint">
+                                        <label class="form-check-label small text-secondary" for="customBranchToggleMaint">Or enter custom branch/commit</label>
+                                    </div>
+                                    <input type="text" name="CustomBranch" class="form-control form-control-sm font-monospace mt-1.5 custom-branch-input" placeholder="e.g. feature/my-branch or commit hash" style="display:none;">
+                                </div>
+                                <div class="p-3 bg-light rounded-2 border mb-3">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="clean_build" id="maintCleanBuild">
+                                        <label class="form-check-label small text-dark" for="maintCleanBuild">
+                                            <strong>Clean Docker build</strong> (<code>--no-cache</code>)
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="update_configs" id="maintUpdateConfigs" checked>
+                                        <label class="form-check-label small text-dark" for="maintUpdateConfigs">
+                                            <strong>Update configuration templates</strong> (<code>.env</code> &amp; <code>appsettings.json</code>)
+                                        </label>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="action" value="switch_branch">
                                 <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-warning-emphasis p-3 rounded-3 mb-4 small d-flex align-items-start gap-2.5">
                                     <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
                                     <div>
-                                        <strong>Maintenance Required:</strong> Updating the middleware will pull tags, compile configuration dependencies, rebuild docker containers, and restart services causing a <strong>short downtime</strong>. Please notify active users first.
+                                        <strong>Maintenance Action:</strong> Switching branch will checkout the chosen branch, rebuild Docker images, and restart services causing a <strong>short downtime</strong>.
                                     </div>
                                 </div>
-                                <button type="submit" class="btn btn-warning w-100 py-2 fw-bold text-dark shadow-sm mt-auto"><i class="bi bi-arrow-repeat me-1.5"></i>Run Update Now</button>
+                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold text-white shadow-sm mt-auto"><i class="bi bi-play-circle-fill me-1.5"></i>Switch Branch, Build &amp; Up</button>
                             </form>
                         </div>
                     </div>
@@ -769,6 +828,104 @@
     {% endif %}
 
     <!-- Global Progress Modals -->
+    <!-- Switch Branch Modal -->
+    <div class="modal fade" id="switchBranchModal" tabindex="-1" aria-labelledby="switchBranchModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-3">
+                <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="switchBranchModalLabel">
+                        <i class="bi bi-git text-primary"></i>
+                        <span>Switch HEAppE Branch &amp; Build (Build &amp; Up)</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="switch-branch-modal-form" class="instance-action-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    <input type="hidden" name="action" value="switch_branch">
+                    <div class="modal-body p-4">
+                        {% if current_git_ref and current_git_ref.description %}
+                        <div class="alert alert-light border d-flex align-items-center justify-content-between p-2.5 mb-3 rounded-2">
+                            <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Current checkout:</span>
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis font-monospace border">{{ current_git_ref.description }}</span>
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Repository URL</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                <button class="btn btn-outline-secondary fetch-branches-btn" type="button" title="Fetch Tags &amp; Branches"><i class="bi bi-arrow-clockwise"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Target Branch / Release Tag</label>
+                            <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
+                                {% if branch_list %}
+                                <optgroup label="Branches">
+                                    {% for b in branch_list %}
+                                        <option value="{{ b }}" {% if b == current_git_ref.branch or b == repo_branch %}selected{% endif %}>{{ b }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endif %}
+                                {% if tag_list %}
+                                <optgroup label="Release Tags">
+                                    {% for t in tag_list %}
+                                        <option value="{{ t }}" {% if t == current_git_ref.branch or t == repo_branch %}selected{% endif %}>{{ t }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endif %}
+                                {% if not branch_list and not tag_list %}
+                                    {% for r in branches %}
+                                        <option value="{{ r }}" {% if r == current_git_ref.branch or r == repo_branch %}selected{% endif %}>{{ r }}</option>
+                                    {% endfor %}
+                                {% endif %}
+                            </select>
+                            <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input custom-branch-toggle" type="checkbox" id="customBranchToggleModal">
+                                <label class="form-check-label small text-secondary" for="customBranchToggleModal">Or enter custom branch/commit</label>
+                            </div>
+                            <input type="text" name="CustomBranch" class="form-control form-control-sm font-monospace mt-1.5 custom-branch-input" placeholder="e.g. feature/my-branch or commit hash" style="display:none;">
+                        </div>
+
+                        <div class="p-3 bg-light rounded-2 border mb-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="clean_build" id="modalCleanBuild">
+                                <label class="form-check-label small text-dark" for="modalCleanBuild">
+                                    <strong>Clean Docker build</strong> (<code>--no-cache</code>)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="update_configs" id="modalUpdateConfigs" checked>
+                                <label class="form-check-label small text-dark" for="modalUpdateConfigs">
+                                    <strong>Update configuration templates</strong> (<code>.env</code> &amp; <code>appsettings.json</code>)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-warning-emphasis p-2.5 rounded-2 mb-0 small d-flex align-items-start gap-2">
+                            <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+                            <div>
+                                This will checkout the selected branch, rebuild Docker images, and run <code>docker compose up -d</code>.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-2.5 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-2 px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-2 px-4 shadow-sm">
+                            <i class="bi bi-play-circle-fill me-1.5"></i>Switch Branch, Build &amp; Up
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Update Progress Modal -->
     <div class="modal fade" id="updateProgressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="updateProgressModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -848,6 +1005,7 @@ function startUpdatePolling(actionType = 'update') {
     if (!updateModalEl) return;
     
     const isUpdate = (actionType === true || actionType === 'update');
+    const isSwitch = (actionType === 'switch_branch');
     const isRegen = (actionType === 'regenerate_configs');
     
     // Adjust modal titles and log labels based on actionType
@@ -855,6 +1013,10 @@ function startUpdatePolling(actionType = 'update') {
         $('#updateProgressModalLabel').html('<i class="bi bi-gear-wide-connected spin-icon me-2 text-danger"></i>HEAppE Configuration Regeneration');
         $('#update-status-title').text('Regenerating Configurations...');
         $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Regeneration Logs):');
+    } else if (isSwitch) {
+        $('#updateProgressModalLabel').html('<i class="bi bi-git spin-icon me-2 text-primary"></i>HEAppE Switch Branch, Build & Up');
+        $('#update-status-title').text('Switching Branch, Building & Starting Containers...');
+        $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Build & Up Logs):');
     } else if (isUpdate) {
         $('#updateProgressModalLabel').html('<i class="bi bi-arrow-repeat spin-icon me-2 text-primary"></i>HEAppE Middleware Update');
         $('#update-status-title').text('Updating Instance...');
@@ -1096,16 +1258,34 @@ $(document).ready(function() {
         const action = form.find('input[name="action"]').val();
         e.preventDefault();
 
-        if (action === 'update' || action === 'regenerate_configs') {
+        // If switch branch modal was open, close it
+        const switchModalEl = document.getElementById('switchBranchModal');
+        if (switchModalEl) {
+            const sm = bootstrap.Modal.getInstance(switchModalEl);
+            if (sm) sm.hide();
+        }
+
+        if (action === 'update' || action === 'switch_branch' || action === 'regenerate_configs') {
             // Reset spinner & status text
             const $spinner = $('.modal-body .spinner-border');
             $spinner.removeClass('bi bi-check-circle-fill bi-exclamation-octagon-fill text-success text-danger fs-1 mb-3').addClass('spinner-border text-primary mb-3');
             $spinner.css('animation', '');
             
-            const titleText = action === 'update' ? 'Starting Update...' : 'Starting Configuration Regeneration...';
-            const logText = action === 'update' ? 'Requesting update from server...' : 'Requesting configuration regeneration...';
-            const errorTitle = action === 'update' ? 'Update Request Failed' : 'Regeneration Request Failed';
-            const errorLog = action === 'update' ? 'FAILED to request update:\n' : 'FAILED to request configuration regeneration:\n';
+            let titleText = 'Starting Update...';
+            let logText = 'Requesting update from server...';
+            let errorTitle = 'Update Request Failed';
+            let errorLog = 'FAILED to request update:\n';
+            if (action === 'switch_branch') {
+                titleText = 'Starting Branch Switch, Build & Up...';
+                logText = 'Requesting branch switch, build and up from server...';
+                errorTitle = 'Branch Switch Request Failed';
+                errorLog = 'FAILED to request branch switch:\n';
+            } else if (action === 'regenerate_configs') {
+                titleText = 'Starting Configuration Regeneration...';
+                logText = 'Requesting configuration regeneration...';
+                errorTitle = 'Regeneration Request Failed';
+                errorLog = 'FAILED to request configuration regeneration:\n';
+            }
 
             $('#update-status-title').text(titleText).removeClass('text-success text-danger').addClass('text-dark');
             $('#update-logs').text(logText);
@@ -1340,11 +1520,37 @@ $(document).ready(function() {
             data: { 'url': repoUrl },
             success: function(r) {
                 $branchSelect.empty();
-                r.branches.forEach(b => $branchSelect.append(new Option(b, b)));
+                if (r.branch_list && r.branch_list.length > 0) {
+                    const $groupBranches = $('<optgroup label="Branches"></optgroup>');
+                    r.branch_list.forEach(b => $groupBranches.append(new Option(b, b)));
+                    $branchSelect.append($groupBranches);
+                }
+                if (r.tag_list && r.tag_list.length > 0) {
+                    const $groupTags = $('<optgroup label="Release Tags"></optgroup>');
+                    r.tag_list.forEach(t => $groupTags.append(new Option(t, t)));
+                    $branchSelect.append($groupTags);
+                }
+                if ((!r.branch_list || !r.branch_list.length) && (!r.tag_list || !r.tag_list.length) && r.branches) {
+                    r.branches.forEach(b => $branchSelect.append(new Option(b, b)));
+                }
             },
-            error: () => alert('Error fetching tags'),
+            error: () => alert('Error fetching branches/tags'),
             complete: () => { $btn.prop('disabled', false); $spinner.hide(); }
         });
+    });
+
+    // --- CUSTOM BRANCH TOGGLE ---
+    $(document).on('change', '.custom-branch-toggle', function() {
+        const $form = $(this).closest('form');
+        const $customInput = $form.find('.custom-branch-input');
+        const $select = $form.find('.branch-select');
+        if ($(this).is(':checked')) {
+            $customInput.show().focus();
+            $select.prop('disabled', true);
+        } else {
+            $customInput.hide().val('');
+            $select.prop('disabled', false);
+        }
     });
 
     // --- MAINTENANCE TAB ORCHESTRATION ---
@@ -2024,7 +2230,7 @@ $(document).ready(function() {
         });
     });
 
-    // --- AUTOMATICALLY SWITCH TO MAINTENANCE TAB IF REQUESTED ---
+    // --- AUTOMATICALLY SWITCH TO MAINTENANCE TAB OR MODAL IF REQUESTED ---
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('action') === 'update') {
         const tabEl = document.getElementById('maintenance-tab');
@@ -2038,6 +2244,11 @@ $(document).ready(function() {
                     if (repoInput.length) repoInput.focus();
                 }
             }, 300);
+        }
+    } else if (urlParams.get('action') === 'switch_branch') {
+        const switchModalEl = document.getElementById('switchBranchModal');
+        if (switchModalEl) {
+            new bootstrap.Modal(switchModalEl).show();
         }
     }
 });

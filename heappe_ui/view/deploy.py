@@ -525,8 +525,8 @@ def _set_updating_status(instance_name: str, status: bool):
         print(f"Error setting updating status for {instance_name}: {e}")
 
 
-def handle_update_action(config, instance_name):
-    """Handle the update process and return the result."""
+def handle_switch_branch_action(config, instance_name, no_cache=False, update_configs=True):
+    """Switch HEAppE git branch/tag, update configs (optional), build and up containers."""
     from datetime import datetime
     service = HEAppEDeployService(config)
     compose_dir = os.path.join(config.base_path, instance_name, "heappe-core")
@@ -552,37 +552,134 @@ def handle_update_action(config, instance_name):
         except Exception:
             pass
 
-        log_message("Starting HEAppE update process...")
-        log_message(f"Repository branch/tag: {config.repo_branch}")
+        target_ref = (config.repo_branch or "master").strip()
+        log_message("Starting HEAppE Switch Branch, Build & Up process...")
+        log_message(f"Target instance: {instance_name}")
+        log_message(f"Repository URL: {config.repo_url}")
+        log_message(f"Target branch / ref: {target_ref}")
+        log_message(f"Clean build (--no-cache): {'Yes' if no_cache else 'No'}")
+        log_message(f"Update configuration templates: {'Yes' if update_configs else 'No'}")
         _set_updating_status(instance_name, True)
-        log_message("Database status set to updating.")
+        log_message("Instance status set to updating.")
 
-        # git pull
-        git_command = ["git", "pull", "origin", config.repo_branch]
-        log_message(f"Running command: {' '.join(git_command)}")
-        git_result = subprocess.run(
-            git_command,
-            cwd=compose_dir,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-        log_message(f"Git pull finished with return code {git_result.returncode}")
-        if git_result.stdout:
-            log_message(f"Git stdout:\n{git_result.stdout}")
-        if git_result.stderr:
-            log_message(f"Git stderr:\n{git_result.stderr}")
+        # 1. Ensure directory and git repository exist
+        if not os.path.exists(os.path.join(compose_dir, ".git")):
+            log_message(f"Repository not found at {compose_dir}. Cloning repository...")
+            os.makedirs(compose_dir, exist_ok=True)
+            clone_cmd = ["git", "clone", "--branch", target_ref, config.repo_url, compose_dir]
+            clone_res = subprocess.run(clone_cmd, capture_output=True, text=True, check=False)
+            if clone_res.returncode != 0:
+                raise RuntimeError(f"Git clone failed: {clone_res.stderr}")
+            log_message("Repository cloned successfully.")
+        else:
+            # 2. Fetch all remote tags and branches
+            log_message("Fetching remote branches and tags from origin...")
+            fetch_cmd = ["git", "fetch", "origin", "--tags", "--prune"]
+            fetch_res = subprocess.run(fetch_cmd, cwd=compose_dir, capture_output=True, text=True, check=False)
+            if fetch_res.returncode != 0:
+                log_message(f"Git fetch notice: {fetch_res.stderr.strip()}")
 
-        if git_result.returncode != 0:
-            log_message("ERROR: Failed to pull latest code. Aborting update.")
-            _set_updating_status(instance_name, False)
-            return git_result, f"Failed to pull latest code: {git_result.stderr}", 'danger'
+            # 3. Preserve .env file
+            env_path = os.path.join(compose_dir, ".env")
+            env_backup = None
+            if os.path.exists(env_path):
+                try:
+                    with open(env_path, "r", encoding="utf-8") as f:
+                        env_backup = f.read()
+                except Exception as e:
+                    log_message(f"Notice reading .env: {e}")
 
-        log_message("Updating configuration files (.env and appsettings)...")
-        service.update_init(instance_name=instance_name, version=config.repo_branch)
-        log_message("Configuration update completed.")
+            # 4. Discard dirty tracked changes so checkout does not fail
+            log_message("Cleaning modified tracked files in repository...")
+            subprocess.run(["git", "checkout", "--", "."], cwd=compose_dir, capture_output=True, text=True, check=False)
 
-        # rebuild and restart containers
+            # 5. Check out target ref
+            log_message(f"Switching to target branch/ref: '{target_ref}'...")
+            checkout_success = False
+
+            # Check if origin/<target_ref> exists (remote branch)
+            chk_remote = subprocess.run(
+                ["git", "rev-parse", "--verify", f"origin/{target_ref}"],
+                cwd=compose_dir, capture_output=True, text=True, check=False
+            )
+            if chk_remote.returncode == 0:
+                # Checkout or create local tracking branch
+                res = subprocess.run(
+                    ["git", "checkout", "-B", target_ref, f"origin/{target_ref}"],
+                    cwd=compose_dir, capture_output=True, text=True, check=False
+                )
+                if res.returncode == 0:
+                    checkout_success = True
+                    log_message(f"Checked out branch '{target_ref}' tracking 'origin/{target_ref}'.")
+                    # Pull latest
+                    pull_res = subprocess.run(
+                        ["git", "pull", "origin", target_ref],
+                        cwd=compose_dir, capture_output=True, text=True, check=False
+                    )
+                    if pull_res.stdout:
+                        log_message(f"Git pull output:\n{pull_res.stdout.strip()}")
+                else:
+                    log_message(f"Warning checking out tracking branch: {res.stderr.strip()}")
+
+            if not checkout_success:
+                # Try direct branch/tag checkout
+                res = subprocess.run(
+                    ["git", "checkout", target_ref],
+                    cwd=compose_dir, capture_output=True, text=True, check=False
+                )
+                if res.returncode == 0:
+                    checkout_success = True
+                    log_message(f"Checked out '{target_ref}'.")
+                else:
+                    # Try detached checkout (e.g. tag or commit)
+                    res = subprocess.run(
+                        ["git", "checkout", "--detach", target_ref],
+                        cwd=compose_dir, capture_output=True, text=True, check=False
+                    )
+                    if res.returncode == 0:
+                        checkout_success = True
+                        log_message(f"Checked out '{target_ref}' (detached HEAD).")
+                    else:
+                        raise RuntimeError(f"Git checkout failed for '{target_ref}': {res.stderr}")
+
+            # Restore .env if it was removed
+            if env_backup is not None and not os.path.exists(env_path):
+                try:
+                    with open(env_path, "w", encoding="utf-8") as f:
+                        f.write(env_backup)
+                    log_message("Restored existing .env configuration file.")
+                except Exception as e:
+                    log_message(f"Notice restoring .env: {e}")
+
+            # Log current commit hash
+            commit_res = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=compose_dir, capture_output=True, text=True, check=False
+            )
+            cur_commit = commit_res.stdout.strip()
+            log_message(f"Active checkout is now at commit: {cur_commit}")
+
+        # 6. Update configuration templates if requested
+        if update_configs:
+            log_message(f"Updating configuration files (.env and appsettings) for version/branch: {target_ref}...")
+            service.update_init(instance_name=instance_name, version=target_ref)
+            log_message("Configuration files successfully updated.")
+        else:
+            log_message("Preserving existing configuration files (update_configs=False).")
+
+        # 7. Check if telemetry is enabled in .env
+        env_path = os.path.join(compose_dir, ".env")
+        otel_disabled = True
+        if os.path.exists(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip().startswith("OTEL_DISABLED="):
+                            otel_disabled = (line.strip().split("=", 1)[1].strip().lower() == "true")
+            except Exception:
+                pass
+
+        # 8. Docker compose build
         build_command = [
             "docker", "compose",
             "--profile", "db",
@@ -591,25 +688,27 @@ def handle_update_action(config, instance_name):
             "--profile", "vault",
             "--profile", "vaultagent",
             "--profile", "sshagent",
-            "--profile", "staging",
-            "-p", instance_name,
-            "build"
+            "--profile", "staging"
         ]
-        log_message("Rebuilding Docker containers. This might take a few minutes...")
+        if not otel_disabled:
+            build_command.extend(["--profile", "telemetry"])
+        build_command.extend(["-p", instance_name, "build"])
+        if no_cache:
+            build_command.append("--no-cache")
+
+        log_message(f"Building Docker containers ({'clean build --no-cache' if no_cache else 'cached build'})...")
         build_result = execute_docker_compose(build_command, compose_dir)
         log_message(f"Docker Compose build finished with return code {build_result.returncode}")
         if build_result.stdout:
-            log_message(f"Docker Compose build stdout:\n{build_result.stdout}")
+            log_message(f"Build stdout:\n{build_result.stdout}")
         if build_result.stderr:
-            log_message(f"Docker Compose build stderr:\n{build_result.stderr}")
+            log_message(f"Build stderr:\n{build_result.stderr}")
 
         if build_result.returncode != 0:
-            log_message("ERROR: Docker Compose build failed. Aborting update.")
-            _set_updating_status(instance_name, False)
-            return build_result, f"Failed to rebuild containers: {build_result.stderr}", 'danger'
+            raise RuntimeError(f"Docker Compose build failed: {build_result.stderr}")
 
-        log_message("Restarting containers with the new build...")
-        restart_command = [
+        # 9. Docker compose up
+        up_command = [
             "docker", "compose",
             "--profile", "db",
             "--profile", "heappe",
@@ -617,29 +716,35 @@ def handle_update_action(config, instance_name):
             "--profile", "vault",
             "--profile", "vaultagent",
             "--profile", "sshagent",
-            "--profile", "staging",
-            "-p", instance_name,
-            "up", "-d"
+            "--profile", "staging"
         ]
-        restart_result = execute_docker_compose(restart_command, compose_dir)
-        log_message(f"Docker Compose up finished with return code {restart_result.returncode}")
-        if restart_result.stdout:
-            log_message(f"Docker Compose up stdout:\n{restart_result.stdout}")
-        if restart_result.stderr:
-            log_message(f"Docker Compose up stderr:\n{restart_result.stderr}")
+        if not otel_disabled:
+            up_command.extend(["--profile", "telemetry"])
+        up_command.extend(["-p", instance_name, "up", "-d"])
 
-        if restart_result.returncode != 0:
-            log_message("ERROR: Failed to restart containers. Update failed.")
-            _set_updating_status(instance_name, False)
-            return restart_result, f"Failed to restart containers: {restart_result.stderr}", 'danger'
+        log_message("Starting Docker containers (docker compose up -d)...")
+        up_result = execute_docker_compose(up_command, compose_dir)
+        log_message(f"Docker Compose up finished with return code {up_result.returncode}")
+        if up_result.stdout:
+            log_message(f"Up stdout:\n{up_result.stdout}")
+        if up_result.stderr:
+            log_message(f"Up stderr:\n{up_result.stderr}")
 
-        log_message("SUCCESS: Update completed successfully.")
+        if up_result.returncode != 0:
+            raise RuntimeError(f"Docker Compose up failed: {up_result.stderr}")
+
+        log_message(f"SUCCESS: Branch '{target_ref}' switched, containers built and started successfully.")
         _set_updating_status(instance_name, False)
-        return restart_result, "Update completed successfully.", 'success'
+        return up_result, f"Branch '{target_ref}' checked out, build & up completed successfully.", 'success'
     except Exception as e:
-        log_message(f"EXCEPTION: Update error: {str(e)}")
+        log_message(f"EXCEPTION: Switch branch & build error: {str(e)}")
         _set_updating_status(instance_name, False)
-        return None, f"Update error: {str(e)}", 'danger'
+        return None, f"Switch branch & build error: {str(e)}", 'danger'
+
+
+def handle_update_action(config, instance_name):
+    """Handle standard update process."""
+    return handle_switch_branch_action(config, instance_name, no_cache=False, update_configs=True)
 
 
 def container_logs_view(request, container_id):
@@ -822,7 +927,8 @@ def run_with_retries(instance_name, ports, password, logger=print):
 import subprocess
 
 
-def get_remote_tags(repo_url: str) -> list[str]:
+def get_remote_refs(repo_url: str) -> dict:
+    """Fetch remote branches and tags separately."""
     try:
         # Fetch tags
         result_tags = subprocess.run(
@@ -858,7 +964,7 @@ def get_remote_tags(repo_url: str) -> list[str]:
 
         # Combine: version tags first, then branches, then any other tags
         all_refs = version_tags + branches + [t for t in tags if t not in version_tags]
-        
+
         # De-duplicate while preserving order
         seen = set()
         unique_refs = []
@@ -866,11 +972,65 @@ def get_remote_tags(repo_url: str) -> list[str]:
             if r not in seen:
                 seen.add(r)
                 unique_refs.append(r)
-        return unique_refs
+
+        return {
+            "branches": branches,
+            "tags": version_tags,
+            "all": unique_refs
+        }
 
     except Exception:
-        return []
+        return {"branches": [], "tags": [], "all": []}
 
+
+def get_remote_tags(repo_url: str) -> list[str]:
+    """Fetch remote tags and branches as a flat list for compatibility."""
+    return get_remote_refs(repo_url).get("all", [])
+
+
+def get_current_git_ref(compose_dir: str) -> dict:
+    """Return the currently checked-out branch, commit hash, and description of the HEAppE repository."""
+    if not compose_dir or not os.path.exists(os.path.join(compose_dir, ".git")):
+        return {
+            "branch": "",
+            "commit": "",
+            "description": "Not deployed / not a git repository",
+            "is_repo": False
+        }
+    try:
+        branch_res = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=compose_dir, capture_output=True, text=True, timeout=5
+        )
+        branch = branch_res.stdout.strip()
+
+        commit_res = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=compose_dir, capture_output=True, text=True, timeout=5
+        )
+        commit = commit_res.stdout.strip()
+
+        desc_res = subprocess.run(
+            ["git", "describe", "--tags", "--always"],
+            cwd=compose_dir, capture_output=True, text=True, timeout=5
+        )
+        desc = desc_res.stdout.strip()
+
+        ref_name = branch or desc or "unknown"
+        desc_text = f"{ref_name} ({commit})" if commit else ref_name
+        return {
+            "branch": ref_name,
+            "commit": commit,
+            "description": desc_text,
+            "is_repo": True
+        }
+    except Exception as e:
+        return {
+            "branch": "",
+            "commit": "",
+            "description": f"Git error: {e}",
+            "is_repo": False
+        }
 
 
 import threading
@@ -891,6 +1051,14 @@ def update_background(config, instance_name):
     )
     thread.start()
 
+def switch_branch_background(config, instance_name, no_cache=False, update_configs=True):
+    thread = threading.Thread(
+        target=handle_switch_branch_action,
+        args=(config, instance_name, no_cache, update_configs),
+        daemon=True
+    )
+    thread.start()
+
 def regenerate_configs_background(config, instance_name):
     thread = threading.Thread(
         target=handle_regenerate_configs_action,
@@ -901,14 +1069,16 @@ def regenerate_configs_background(config, instance_name):
 
 from django.utils import timezone
 @login_required
-@login_required
 def deploy_view(request, instance_name: str = '') -> HttpResponse:
     base_path = "/opt/heappe-deployment/"
     repo_url = "https://github.com/It4innovations/HEAppE"
-    repo_branch = "V6.0.0"
     version = "v6.0.0"
     ip = "localhost"
-    branches = get_remote_tags(repo_url)
+    remote_refs = get_remote_refs(repo_url)
+    branches = remote_refs["all"]
+    branch_list = remote_refs["branches"]
+    tag_list = remote_refs["tags"]
+    repo_branch = branch_list[0] if branch_list else (branches[0] if branches else "master")
 
     ports = {}
     action_message = None
@@ -1058,12 +1228,17 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 from django.http import HttpResponseRedirect
                 return HttpResponseRedirect(redirect_url)
 
-            elif action == "update":
+            elif action in ["update", "switch_branch"]:
+                clean_build = request.POST.get('clean_build') in ['true', '1', 'on', True]
+                update_configs = request.POST.get('update_configs', 'true') in ['true', '1', 'on', True]
+                custom_branch = request.POST.get('CustomBranch', '').strip()
+                target_branch = custom_branch if custom_branch else input_branch
+
                 config = HEAppEConfig(
                     base_path=base_path,
                     repo_url=input_repo,
-                    repo_branch=input_branch,
-                    default_version=input_branch,
+                    repo_branch=target_branch,
+                    default_version=target_branch,
                     default_ip=ip,
                     default_ports=ports,
                     target_dir="heappe-core"
@@ -1075,8 +1250,8 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 request.session.pop("middleware_deployed_version", None)
                 request.session.pop("middleware_latest_version", None)
 
-                update_background(config, instance_name)
-                action_message = "Update started in the background."
+                switch_branch_background(config, instance_name, no_cache=clean_build, update_configs=update_configs)
+                action_message = f"Switching to branch '{target_branch}', building and starting containers in background."
                 action_status = 'info'
 
             elif action == "regenerate_configs":
@@ -1197,14 +1372,20 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
     with RESTART_STATES_LOCK:
         restart_info = RESTART_STATES.get(instance_name, {'status': 'none', 'error': None})
 
+    compose_dir = os.path.join(base_path, instance_name, "heappe-core") if instance_name else ""
+    current_git_ref = get_current_git_ref(compose_dir) if compose_dir else {"branch": "", "commit": "", "description": "", "is_repo": False}
+
     context = {
         "containers": containers,
         "instance_name": instance_name,
         "action_message": action_message,
         "action_status": action_status,
         "repo_url": repo_url,
-        "repo_branch": branches[0] if branches else "main",
+        "repo_branch": current_git_ref.get("branch") or (branch_list[0] if branch_list else (branches[0] if branches else "master")),
         "branches": branches,
+        "branch_list": branch_list,
+        "tag_list": tag_list,
+        "current_git_ref": current_git_ref,
         "instance_service": instance_service,
         "is_deployed": instance_service.is_deployed if instance_service else False,
         "is_updating": instance_service.is_updating if instance_service else False,
@@ -1225,8 +1406,12 @@ def fetch_repo_branches(request):
         return JsonResponse({'error': 'No URL provided'}, status=400)
 
     try:
-        branches = get_remote_tags(repo_url)
-        return JsonResponse({'branches': branches})
+        refs = get_remote_refs(repo_url)
+        return JsonResponse({
+            'branches': refs.get("all", []),
+            'branch_list': refs.get("branches", []),
+            'tag_list': refs.get("tags", [])
+        })
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
