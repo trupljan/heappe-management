@@ -66,7 +66,7 @@ def build_and_run_docker(container_name, port, slurm_user, acct_name):
 SlurmctldHost=localhost
 SlurmUser=slurm
 SlurmdUser=root
-FastSchedule=1
+SlurmdParameters=config_overrides
 ProctrackType=proctrack/pgid
 TaskPlugin=task/none
 SlurmctldPidFile=/var/run/slurm/slurmctld.pid
@@ -177,19 +177,35 @@ sacctmgr -i add user {slurm_user} Account={acct_name} DefaultAccount={acct_name}
 echo "Starting Slurmctld & Slurmd..."
 sudo -u slurm slurmctld
 sleep 2
+if ! pgrep -x slurmctld > /dev/null; then
+    echo "ERROR: slurmctld failed to start! /var/log/slurm/slurmctld.log:"
+    cat /var/log/slurm/slurmctld.log || true
+fi
+
 slurmd -N localhost
 sleep 1
+if ! pgrep -x slurmd > /dev/null; then
+    echo "ERROR: slurmd failed to start! /var/log/slurm/slurmd.log:"
+    cat /var/log/slurm/slurmd.log || true
+fi
 
-scontrol update nodename=localhost state=idle || true
+echo "Updating Slurm node state..."
+timeout 15 scontrol update nodename=localhost state=idle || true
 
 if [ ! -d "/home/{slurm_user}/.local_hpc_scripts" ]; then
     echo "Deploying local HPC helper scripts..."
-    git clone --single-branch -b master --quiet https://github.com/It4innovations/HEAppE-scripts.git /tmp/heappe-scripts
     mkdir -p /home/{slurm_user}/.local_hpc_scripts
-    cp -rf /tmp/heappe-scripts/LocalHPC/.local_hpc_scripts/* /home/{slurm_user}/.local_hpc_scripts/
+    if [ -d "/opt/heappe-scripts/LocalHPC/.local_hpc_scripts" ]; then
+        cp -rf /opt/heappe-scripts/LocalHPC/.local_hpc_scripts/* /home/{slurm_user}/.local_hpc_scripts/
+    else
+        git clone --depth 1 --single-branch -b master --quiet https://github.com/It4innovations/HEAppE-scripts.git /tmp/heappe-scripts || true
+        if [ -d "/tmp/heappe-scripts/LocalHPC/.local_hpc_scripts" ]; then
+            cp -rf /tmp/heappe-scripts/LocalHPC/.local_hpc_scripts/* /home/{slurm_user}/.local_hpc_scripts/
+            rm -rf /tmp/heappe-scripts
+        fi
+    fi
     chown -R {slurm_user}:{slurm_user} /home/{slurm_user}/.local_hpc_scripts
     chmod -R 755 /home/{slurm_user}/.local_hpc_scripts
-    rm -rf /tmp/heappe-scripts
 fi
 
 echo "Starting HEAppE key scripts watchdog..."
@@ -237,6 +253,7 @@ RUN apt-get update && apt-get install -y \\
     curl \\
     git \\
     && rm -rf /var/lib/apt/lists/*
+RUN git clone --single-branch -b master --quiet https://github.com/It4innovations/HEAppE-scripts.git /opt/heappe-scripts || true
 RUN useradd -m -s /bin/bash {slurm_user} && \\
     echo "{slurm_user}:pass" | chpasswd && \\
     echo "{slurm_user} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
@@ -262,6 +279,7 @@ ENTRYPOINT ["/entrypoint.sh"]
         run_cmd = [
             "docker", "run", "-d",
             "--name", container_name,
+            "--hostname", "localhost",
             "--restart", "unless-stopped",
             "-p", f"{port}:22",
             "slurm-simulator-img:latest"
@@ -292,6 +310,12 @@ ENTRYPOINT ["/entrypoint.sh"]
 
     if not ssh_ready:
         print("ERROR: SSH service did not start in time inside container.")
+        try:
+            log_proc = subprocess.run(["docker", "logs", "--tail", "100", container_name], capture_output=True, text=True)
+            print("Container logs:")
+            print(log_proc.stdout + "\n" + log_proc.stderr)
+        except Exception:
+            pass
         sys.exit(1)
         
     print("SSH service is UP and responding!")
