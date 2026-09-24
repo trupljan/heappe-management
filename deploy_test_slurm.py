@@ -182,8 +182,8 @@ cat /var/log/slurm/slurmctld.log || true
 echo "---------------------"
 
 echo "Starting Slurmd..."
-slurmd -N slurm-simulator || true
-sleep 1
+slurmd -N slurm-simulator &
+sleep 2
 echo "--- slurmd.log ---"
 cat /var/log/slurm/slurmd.log || true
 echo "------------------"
