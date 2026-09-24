@@ -37,38 +37,46 @@ def is_port_in_use(port):
 
 
 def find_docker_network(network_hint=None):
-    """Detect Docker network for HEAppE."""
-    # 1. Try Docker Python SDK
-    try:
-        import docker
-        client = docker.from_env()
-        if network_hint:
-            try:
-                client.networks.get(network_hint)
-                return network_hint
-            except Exception:
-                pass
-        for c in client.containers.list():
-            if 'heappe' in c.name.lower() or (c.image.tags and any('heappe' in t.lower() for t in c.image.tags)):
-                nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
-                for net_name in nets.keys():
-                    if net_name not in ('bridge', 'host', 'none'):
-                        return net_name
-        for net_candidate in ["heappe-core_default", "heappe_default", "test_default"]:
-            try:
-                client.networks.get(net_candidate)
-                return net_candidate
-            except Exception:
-                pass
-    except Exception:
-        pass
+    """Detect Docker network for HEAppE. Skips slurm-simulator containers, prefers _default networks."""
+    candidates = ["heappe-core_default", "heappe_default", "test_default"]
 
-    # 2. Try docker CLI
-    try:
-        if network_hint:
+    # 1. Check explicit hint
+    if network_hint:
+        try:
             chk = subprocess.run(["docker", "network", "inspect", network_hint], capture_output=True, text=True)
             if chk.returncode == 0:
                 return network_hint
+        except Exception:
+            pass
+
+    # 2. Try candidate network names first
+    for net_candidate in candidates:
+        try:
+            chk = subprocess.run(["docker", "network", "inspect", net_candidate], capture_output=True, text=True)
+            if chk.returncode == 0:
+                return net_candidate
+        except Exception:
+            pass
+
+    # 3. Try Docker Python SDK - scan containers
+    try:
+        import docker
+        client = docker.from_env()
+        for c in client.containers.list():
+            if 'slurm-simulator' in c.name.lower():
+                continue
+            if 'heappe' in c.name.lower() or (c.image.tags and any('heappe' in t.lower() for t in c.image.tags)):
+                nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
+                default_nets = [n for n in nets if n.endswith('_default') and n not in ('bridge', 'host', 'none')]
+                good_nets = [n for n in nets if n not in ('bridge', 'host', 'none')]
+                net = (default_nets or good_nets or [None])[0]
+                if net:
+                    return net
+    except Exception:
+        pass
+
+    # 4. Try docker CLI - scan containers
+    try:
         proc = subprocess.run(
             ["docker", "ps", "--format", "{{.Names}}\t{{.Networks}}"],
             capture_output=True,
@@ -77,14 +85,16 @@ def find_docker_network(network_hint=None):
         if proc.returncode == 0 and proc.stdout.strip():
             for line in proc.stdout.strip().splitlines():
                 parts = line.split("\t")
-                if len(parts) >= 2 and "heappe" in parts[0].lower():
-                    nets = [n.strip() for n in parts[1].split(",") if n.strip() and n.strip() not in ('bridge', 'host', 'none')]
-                    if nets:
-                        return nets[0]
-        for net_candidate in ["heappe-core_default", "heappe_default", "test_default"]:
-            chk = subprocess.run(["docker", "network", "inspect", net_candidate], capture_output=True, text=True)
-            if chk.returncode == 0:
-                return net_candidate
+                if len(parts) >= 2:
+                    c_name, c_nets = parts[0], parts[1]
+                    if 'slurm-simulator' in c_name.lower():
+                        continue
+                    if "heappe" in c_name.lower():
+                        net_list = [n.strip() for n in c_nets.split(",") if n.strip() and n.strip() not in ('bridge', 'host', 'none')]
+                        default_nets = [n for n in net_list if n.endswith('_default')]
+                        net = (default_nets or net_list or [None])[0]
+                        if net:
+                            return net
     except Exception:
         pass
 
@@ -237,14 +247,17 @@ cat /var/log/slurm/slurmctld.log || true
 echo "---------------------"
 
 echo "Starting Slurmd..."
-/usr/sbin/slurmd -N slurm-simulator -L /var/log/slurm/slurmd.log -f /etc/slurm/slurm.conf &
-sleep 2
+slurmd -N slurm-simulator 2>&1 &
+sleep 3
 echo "--- slurmd.log ---"
-cat /var/log/slurm/slurmd.log || true
+cat /var/log/slurm/slurmd.log 2>/dev/null || echo "(no slurmd log file)"
 echo "------------------"
+echo "slurmd process check:"
+pgrep -a slurmd || echo "WARNING: slurmd is not running!"
 
 echo "Updating Slurm node state..."
-timeout 15 scontrol update nodename=slurm-simulator state=resume || true
+sinfo || true
+timeout 10 scontrol update nodename=slurm-simulator state=resume reason="auto" 2>&1 || true
 sleep 1
 sinfo || true
 
