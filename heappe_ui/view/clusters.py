@@ -1671,7 +1671,6 @@ chmod 666 /var/tmp/gpu0 /var/tmp/gpu1
 
 mkdir -p /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
 chown -R slurm:slurm /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
-chmod -R 777 /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
 
 chown slurm:slurm /etc/slurm/slurmdbd.conf
 chmod 600 /etc/slurm/slurmdbd.conf
@@ -1697,7 +1696,7 @@ cat /var/log/slurm/slurmctld.log || true
 echo "---------------------"
 
 echo "Starting Slurmd..."
-/usr/sbin/slurmd -N slurm-simulator -L /var/log/slurm/slurmd.log -f /etc/slurm/slurm.conf || true
+/usr/sbin/slurmd -N slurm-simulator -L /var/log/slurm/slurmd.log -f /etc/slurm/slurm.conf &
 sleep 2
 echo "--- slurmd.log ---"
 cat /var/log/slurm/slurmd.log || true
