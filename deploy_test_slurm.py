@@ -63,7 +63,7 @@ def build_and_run_docker(container_name, port, slurm_user, acct_name):
     try:
         # 4.1 slurm.conf
         slurm_conf = """ClusterName=simulator
-SlurmctldHost=localhost
+SlurmctldHost=slurm-simulator
 SlurmUser=slurm
 SlurmdUser=root
 SlurmdParameters=config_overrides
@@ -79,21 +79,21 @@ SlurmdDebug=info
 SlurmdLogFile=/var/log/slurm/slurmd.log
 JobAcctGatherType=jobacct_gather/linux
 AccountingStorageType=accounting_storage/slurmdbd
-AccountingStorageHost=localhost
+AccountingStorageHost=slurm-simulator
 AccountingStoragePort=6819
 AccountingStorageEnforce=associations,limits
 SelectType=select/cons_tres
 SelectTypeParameters=CR_Core_Memory
 GresTypes=gpu
-NodeName=localhost NodeAddr=127.0.0.1 State=UNKNOWN CoresPerSocket=2 ThreadsPerCore=1 RealMemory=2000 Gres=gpu:2
-PartitionName=test Nodes=localhost Default=YES MaxTime=INFINITE State=UP
+NodeName=slurm-simulator NodeAddr=127.0.0.1 State=UNKNOWN CoresPerSocket=2 ThreadsPerCore=1 RealMemory=2000 Gres=gpu:2
+PartitionName=test Nodes=slurm-simulator Default=YES MaxTime=INFINITE State=UP
 """
         with open(os.path.join(temp_dir, "slurm.conf"), "w") as f:
             f.write(slurm_conf)
 
         # 4.2 slurmdbd.conf
         slurmdbd_conf = """AuthType=auth/munge
-DbdHost=localhost
+DbdHost=slurm-simulator
 DbdPort=6819
 SlurmUser=slurm
 StorageType=accounting_storage/mysql
@@ -174,23 +174,23 @@ sacctmgr -i add cluster simulator || true
 sacctmgr -i add account {acct_name} Description="Test Project Account" Organization="HEAppE" || true
 sacctmgr -i add user {slurm_user} Account={acct_name} DefaultAccount={acct_name} || true
 
-echo "Starting Slurmctld & Slurmd..."
-sudo -u slurm slurmctld
+echo "Starting Slurmctld..."
+sudo -u slurm slurmctld || true
 sleep 2
-if ! pgrep -x slurmctld > /dev/null; then
-    echo "ERROR: slurmctld failed to start! /var/log/slurm/slurmctld.log:"
-    cat /var/log/slurm/slurmctld.log || true
-fi
+echo "--- slurmctld.log ---"
+cat /var/log/slurm/slurmctld.log || true
+echo "---------------------"
 
-slurmd -N localhost
+echo "Starting Slurmd..."
+slurmd -N slurm-simulator || true
 sleep 1
-if ! pgrep -x slurmd > /dev/null; then
-    echo "ERROR: slurmd failed to start! /var/log/slurm/slurmd.log:"
-    cat /var/log/slurm/slurmd.log || true
-fi
+echo "--- slurmd.log ---"
+cat /var/log/slurm/slurmd.log || true
+echo "------------------"
 
 echo "Updating Slurm node state..."
-timeout 15 scontrol update nodename=localhost state=idle || true
+timeout 15 scontrol update nodename=slurm-simulator state=idle || true
+sinfo || true
 
 if [ ! -d "/home/{slurm_user}/.local_hpc_scripts" ]; then
     echo "Deploying local HPC helper scripts..."
@@ -279,7 +279,7 @@ ENTRYPOINT ["/entrypoint.sh"]
         run_cmd = [
             "docker", "run", "-d",
             "--name", container_name,
-            "--hostname", "localhost",
+            "--hostname", "slurm-simulator",
             "--restart", "unless-stopped",
             "-p", f"{port}:22",
             "slurm-simulator-img:latest"
