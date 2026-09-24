@@ -36,7 +36,62 @@ def is_port_in_use(port):
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 
-def build_and_run_docker(container_name, port, slurm_user, acct_name):
+def find_docker_network(network_hint=None):
+    """Detect Docker network for HEAppE."""
+    # 1. Try Docker Python SDK
+    try:
+        import docker
+        client = docker.from_env()
+        if network_hint:
+            try:
+                client.networks.get(network_hint)
+                return network_hint
+            except Exception:
+                pass
+        for c in client.containers.list():
+            if 'heappe' in c.name.lower() or (c.image.tags and any('heappe' in t.lower() for t in c.image.tags)):
+                nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
+                for net_name in nets.keys():
+                    if net_name not in ('bridge', 'host', 'none'):
+                        return net_name
+        for net_candidate in ["heappe-core_default", "heappe_default", "test_default"]:
+            try:
+                client.networks.get(net_candidate)
+                return net_candidate
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 2. Try docker CLI
+    try:
+        if network_hint:
+            chk = subprocess.run(["docker", "network", "inspect", network_hint], capture_output=True, text=True)
+            if chk.returncode == 0:
+                return network_hint
+        proc = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}\t{{.Networks}}"],
+            capture_output=True,
+            text=True
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            for line in proc.stdout.strip().splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 2 and "heappe" in parts[0].lower():
+                    nets = [n.strip() for n in parts[1].split(",") if n.strip() and n.strip() not in ('bridge', 'host', 'none')]
+                    if nets:
+                        return nets[0]
+        for net_candidate in ["heappe-core_default", "heappe_default", "test_default"]:
+            chk = subprocess.run(["docker", "network", "inspect", net_candidate], capture_output=True, text=True)
+            if chk.returncode == 0:
+                return net_candidate
+    except Exception:
+        pass
+
+    return None
+
+
+def build_and_run_docker(container_name, port, slurm_user, acct_name, docker_network=None):
     print("\n=== STEP 1: Deploying Dockerized Slurm Simulator ===")
     
     # 1. Check if docker is running
@@ -157,6 +212,7 @@ chmod 666 /var/tmp/gpu0 /var/tmp/gpu1
 
 mkdir -p /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
 chown -R slurm:slurm /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
+chmod -R 777 /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
 
 chown slurm:slurm /etc/slurm/slurmdbd.conf
 chmod 600 /etc/slurm/slurmdbd.conf
@@ -182,14 +238,15 @@ cat /var/log/slurm/slurmctld.log || true
 echo "---------------------"
 
 echo "Starting Slurmd..."
-slurmd -N slurm-simulator &
+/usr/sbin/slurmd -N slurm-simulator -L /var/log/slurm/slurmd.log -f /etc/slurm/slurm.conf || true
 sleep 2
 echo "--- slurmd.log ---"
 cat /var/log/slurm/slurmd.log || true
 echo "------------------"
 
 echo "Updating Slurm node state..."
-timeout 15 scontrol update nodename=slurm-simulator state=idle || true
+timeout 15 scontrol update nodename=slurm-simulator state=resume || true
+sleep 1
 sinfo || true
 
 if [ ! -d "/home/{slurm_user}/.local_hpc_scripts" ]; then
@@ -282,9 +339,16 @@ ENTRYPOINT ["/entrypoint.sh"]
             "--hostname", "slurm-simulator",
             "--restart", "unless-stopped",
             "-p", f"{port}:22",
-            "slurm-simulator-img:latest"
         ]
+        if docker_network:
+            run_cmd.extend(["--network", docker_network, "--network-alias", "slurm-simulator"])
+        run_cmd.append("slurm-simulator-img:latest")
         subprocess.run(run_cmd, check=True)
+        if docker_network:
+            try:
+                subprocess.run(["docker", "network", "connect", docker_network, container_name], capture_output=True)
+            except Exception:
+                pass
         print(f"Container '{container_name}' started in background.")
 
     finally:
@@ -322,9 +386,14 @@ ENTRYPOINT ["/entrypoint.sh"]
     print(f"Connection details: ssh {slurm_user}@localhost -p {port} (password: pass)")
 
 
-def configure_heappe(heappe_url, heappe_user, heappe_pass, port, uid, slurm_user, acct_name):
+def configure_heappe(heappe_url, heappe_user, heappe_pass, port, uid, slurm_user, acct_name, target_host=None, target_port=None):
     print("\n=== STEP 2: Configuring Slurm Cluster in HEAppE ===")
     
+    if not target_host:
+        target_host = "127.0.0.1"
+    if not target_port:
+        target_port = port
+
     # Clean URL format
     if not heappe_url.startswith("http"):
         heappe_url = "http://" + heappe_url
@@ -372,15 +441,15 @@ def configure_heappe(heappe_url, heappe_user, heappe_pass, port, uid, slurm_user
             sys.exit(1)
 
     # 1. Create Cluster
-    print("Creating Cluster in HEAppE...")
+    print(f"Creating Cluster in HEAppE with target {target_host}:{target_port}...")
     cluster_payload = {
         "Name": f"Slurm Cluster {uid}",
         "Description": f"Automated test Slurm cluster simulator (Port {port})",
-        "MasterNodeName": "host.docker.internal",
+        "MasterNodeName": target_host,
         "SchedulerType": 4, # Slurm
         "ConnectionProtocol": 2, # SSH
         "TimeZone": "CET",
-        "Port": port,
+        "Port": target_port,
         "UpdateJobStateByServiceAccount": False,
         "DomainName": "",
         "ProxyConnectionId": None,
@@ -395,9 +464,9 @@ def configure_heappe(heappe_url, heappe_user, heappe_pass, port, uid, slurm_user
     print("Creating File Transfer Method (SFTP/SCP) in HEAppE...")
     ftm_payload = {
         "ClusterId": cluster_id,
-        "ServerHostname": "host.docker.internal",
+        "ServerHostname": target_host,
         "Protocol": 2, # SFTP/SCP
-        "Port": port,
+        "Port": target_port,
         "SessionCode": session_code
     }
     ftm_resp = controller.heappe_management_file_transfer_method_post(body=ftm_payload)
@@ -575,6 +644,7 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=2222, help="Host SSH port to map to the container (default: 2222)")
     parser.add_argument("--container-name", default="slurm-simulator-local", help="Docker container name (default: slurm-simulator-local)")
     
+    parser.add_argument("--docker-network", default=None, help="Docker network to connect the simulator container to (defaults to auto-detecting HEAppE network)")
     parser.add_argument("--skip-docker", action="store_true", help="Skip Docker build and execution step")
     parser.add_argument("--skip-heappe", action="store_true", help="Skip HEAppE cluster registration & configuration step")
 
@@ -584,8 +654,18 @@ if __name__ == "__main__":
     acct_name = f"a{uid}"
     slurm_user = f"u{uid}"
 
+    docker_network = args.docker_network or find_docker_network()
+    if docker_network:
+        print(f"Using Docker network: '{docker_network}'")
+        target_host = args.container_name
+        target_port = 22
+    else:
+        print("No Docker network detected. Using host loopback addressing.")
+        target_host = "127.0.0.1"
+        target_port = args.port
+
     if not args.skip_docker:
-        build_and_run_docker(args.container_name, args.port, slurm_user, acct_name)
+        build_and_run_docker(args.container_name, args.port, slurm_user, acct_name, docker_network=docker_network)
     else:
         # Fallback names in case docker was skipped
         acct_name = "atest"
@@ -593,7 +673,7 @@ if __name__ == "__main__":
         print("Skipping Docker deployment step as requested.")
 
     if not args.skip_heappe:
-        configure_heappe(args.heappe_url, args.heappe_user, args.heappe_pass, args.port, uid, slurm_user, acct_name)
+        configure_heappe(args.heappe_url, args.heappe_user, args.heappe_pass, args.port, uid, slurm_user, acct_name, target_host=target_host, target_port=target_port)
     else:
         print("Skipping HEAppE configuration step as requested.")
 

@@ -1417,6 +1417,99 @@ def setup_slurm_status_view(request: HttpRequest) -> HttpResponse:
     })
 
 
+def find_docker_network_for_instance(instance_name, log_fn=print):
+    """
+    Finds the Docker network that the HEAppE instance containers are attached to.
+    Returns the network name (e.g. 'test_default') or None if not running in Docker or not found.
+    """
+    import subprocess
+    # 1. Try Docker Python SDK
+    try:
+        import docker
+        client = docker.from_env()
+        # Find containers belonging to this compose project
+        if instance_name:
+            containers = client.containers.list(filters={"label": f"com.docker.compose.project={instance_name}"})
+            if not containers:
+                containers = [c for c in client.containers.list() if c.labels.get('com.docker.compose.project') == instance_name]
+            for c in containers:
+                nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
+                for net_name in nets.keys():
+                    if net_name not in ('bridge', 'host', 'none'):
+                        log_fn(f"Detected Docker network '{net_name}' from container '{c.name}'.")
+                        return net_name
+
+        # Check candidate networks by name
+        candidates = []
+        if instance_name:
+            candidates.extend([f"{instance_name}_default", f"{instance_name}-core_default", f"{instance_name}_heappe-core_default"])
+        candidates.extend(["heappe-core_default", "heappe_default"])
+        for net_candidate in candidates:
+            try:
+                client.networks.get(net_candidate)
+                log_fn(f"Found Docker network '{net_candidate}'.")
+                return net_candidate
+            except Exception:
+                pass
+
+        # Check all running containers for 'heappe'
+        for c in client.containers.list():
+            if 'heappe' in c.name.lower() or (c.image.tags and any('heappe' in t.lower() for t in c.image.tags)):
+                nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
+                for net_name in nets.keys():
+                    if net_name not in ('bridge', 'host', 'none'):
+                        log_fn(f"Detected Docker network '{net_name}' from HEAppE container '{c.name}'.")
+                        return net_name
+    except Exception as e:
+        log_fn(f"Docker SDK network detection note: {e}")
+
+    # 2. Try docker CLI
+    try:
+        if instance_name:
+            proc = subprocess.run(
+                ["docker", "ps", "--filter", f"label=com.docker.compose.project={instance_name}", "--format", "{{.Networks}}"],
+                capture_output=True,
+                text=True
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                for line in proc.stdout.strip().splitlines():
+                    nets = [n.strip() for n in line.split(",") if n.strip() and n.strip() not in ('bridge', 'host', 'none')]
+                    if nets:
+                        log_fn(f"Detected Docker network '{nets[0]}' via docker CLI.")
+                        return nets[0]
+
+        candidates = []
+        if instance_name:
+            candidates.extend([f"{instance_name}_default", f"{instance_name}-core_default", f"{instance_name}_heappe-core_default"])
+        candidates.extend(["heappe-core_default", "heappe_default"])
+        for net_candidate in candidates:
+            chk = subprocess.run(["docker", "network", "inspect", net_candidate], capture_output=True, text=True)
+            if chk.returncode == 0:
+                log_fn(f"Found Docker network '{net_candidate}' via docker network inspect.")
+                return net_candidate
+
+        # Search running containers with heappe in name
+        proc = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}\t{{.Networks}}"],
+            capture_output=True,
+            text=True
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            for line in proc.stdout.strip().splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 2:
+                    c_name, c_nets = parts[0], parts[1]
+                    if (instance_name and instance_name.lower() in c_name.lower()) or "heappe" in c_name.lower():
+                        nets = [n.strip() for n in c_nets.split(",") if n.strip() and n.strip() not in ('bridge', 'host', 'none')]
+                        if nets:
+                            log_fn(f"Detected Docker network '{nets[0]}' from matching container '{c_name}'.")
+                            return nets[0]
+    except Exception as e:
+        log_fn(f"Docker CLI network detection note: {e}")
+
+    return None
+
+
 def _run_slurm_setup_thread(instance_name, uid, port, container_name):
     import os
     import time
@@ -1578,6 +1671,7 @@ chmod 666 /var/tmp/gpu0 /var/tmp/gpu1
 
 mkdir -p /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
 chown -R slurm:slurm /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
+chmod -R 777 /var/spool/slurmctld /var/spool/slurmd /var/log/slurm /var/run/slurm
 
 chown slurm:slurm /etc/slurm/slurmdbd.conf
 chmod 600 /etc/slurm/slurmdbd.conf
@@ -1603,14 +1697,15 @@ cat /var/log/slurm/slurmctld.log || true
 echo "---------------------"
 
 echo "Starting Slurmd..."
-slurmd -N slurm-simulator &
+/usr/sbin/slurmd -N slurm-simulator -L /var/log/slurm/slurmd.log -f /etc/slurm/slurm.conf || true
 sleep 2
 echo "--- slurmd.log ---"
 cat /var/log/slurm/slurmd.log || true
 echo "------------------"
 
 echo "Updating Slurm node state..."
-timeout 15 scontrol update nodename=slurm-simulator state=idle || true
+timeout 15 scontrol update nodename=slurm-simulator state=resume || true
+sleep 1
 sinfo || true
 
 if [ ! -d "/home/heappeslurm/.local_hpc_scripts" ]; then
@@ -1724,6 +1819,13 @@ ENTRYPOINT ["/entrypoint.sh"]
         log("Docker image built successfully.")
 
         # Step 3: Run Docker Container
+        log(f"Detecting Docker network for instance '{instance_name}'...")
+        target_network = find_docker_network_for_instance(instance_name, log_fn=log)
+        if target_network:
+            log(f"Attaching container to Docker network: '{target_network}'")
+        else:
+            log("No custom Docker network detected; container will use default bridge network.")
+
         log(f"Spinning up Docker container '{container_name}' mapping host port {port} -> container port 22...")
         project_label = instance_name or "test"
         run_cmd = [
@@ -1734,8 +1836,11 @@ ENTRYPOINT ["/entrypoint.sh"]
             "--label", f"com.docker.compose.project={project_label}",
             "--label", "com.docker.compose.service=slurm-simulator",
             "-p", f"{port}:22",
-            "slurm-simulator-img:latest"
         ]
+        if target_network:
+            run_cmd.extend(["--network", target_network, "--network-alias", "slurm-simulator"])
+        run_cmd.append("slurm-simulator-img:latest")
+
         proc_run = subprocess.run(
             run_cmd,
             cwd=temp_dir,
@@ -1752,6 +1857,12 @@ ENTRYPOINT ["/entrypoint.sh"]
                 raise RuntimeError("Docker run failed: Host is out of disk space ('No space left on device'). Please free up disk space on the server and try again.")
             raise RuntimeError(f"Docker run failed: {proc_run.stderr}")
         log(f"Docker container '{container_name}' started successfully.")
+
+        if target_network:
+            try:
+                subprocess.run(["docker", "network", "connect", target_network, container_name], capture_output=True, text=True)
+            except Exception:
+                pass
 
         # Step 4: Wait for services inside container to initialize
         import socket
@@ -1855,16 +1966,26 @@ ENTRYPOINT ["/entrypoint.sh"]
 
         controller = hp.ManagementApi(api_client)
         
+        # Determine host and port for HEAppE to reach the cluster
+        if target_network:
+            target_host = container_name
+            target_port = 22
+            log(f"Using Docker network addressing for HEAppE: {target_host}:{target_port} (network '{target_network}')")
+        else:
+            target_host = "127.0.0.1"
+            target_port = port
+            log(f"Using host loopback addressing for HEAppE: {target_host}:{target_port}")
+
         # 5.1 Create Cluster
         log("Creating Cluster in HEAppE...")
         cluster_payload = {
             "Name": f"Slurm Cluster {uid}",
             "Description": "Automatically generated test Slurm cluster",
-            "MasterNodeName": "host.docker.internal",
+            "MasterNodeName": target_host,
             "SchedulerType": 4, # Slurm
             "ConnectionProtocol": 2, # SSH
             "TimeZone": "CET",
-            "Port": port,
+            "Port": target_port,
             "UpdateJobStateByServiceAccount": False,
             "DomainName": "",
             "ProxyConnectionId": None,
@@ -1879,9 +2000,9 @@ ENTRYPOINT ["/entrypoint.sh"]
         log("Creating File Transfer Method (SFTP/SCP) in HEAppE...")
         ftm_payload = {
             "ClusterId": cluster_id,
-            "ServerHostname": "host.docker.internal",
+            "ServerHostname": target_host,
             "Protocol": 2, # SFTP/SCP
-            "Port": port,
+            "Port": target_port,
             "SessionCode": session_code
         }
         ftm_resp = controller.heappe_management_file_transfer_method_post(body=ftm_payload)
