@@ -36,69 +36,74 @@ def is_port_in_use(port):
         return s.connect_ex(('127.0.0.1', port)) == 0
 
 
-def find_docker_network(network_hint=None):
-    """Detect Docker network for HEAppE. Skips slurm-simulator containers, prefers _default networks."""
-    candidates = ["heappe-core_default", "heappe_default", "test_default"]
+def find_docker_networks(network_hint=None):
+    """Detect Docker networks for HEAppE. Inspects running containers and returns all unique networks."""
+    networks = []
 
-    # 1. Check explicit hint
+    def _is_valid_net(net_name):
+        return bool(net_name and net_name not in ('bridge', 'host', 'none'))
+
     if network_hint:
         try:
             chk = subprocess.run(["docker", "network", "inspect", network_hint], capture_output=True, text=True)
             if chk.returncode == 0:
-                return network_hint
+                networks.append(network_hint)
         except Exception:
             pass
 
-    # 2. Try candidate network names first
-    for net_candidate in candidates:
-        try:
-            chk = subprocess.run(["docker", "network", "inspect", net_candidate], capture_output=True, text=True)
-            if chk.returncode == 0:
-                return net_candidate
-        except Exception:
-            pass
-
-    # 3. Try Docker Python SDK - scan containers
+    # Try Docker Python SDK
     try:
         import docker
         client = docker.from_env()
+        matched = []
         for c in client.containers.list():
             if 'slurm-simulator' in c.name.lower():
                 continue
-            if 'heappe' in c.name.lower() or (c.image.tags and any('heappe' in t.lower() for t in c.image.tags)):
-                nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
-                default_nets = [n for n in nets if n.endswith('_default') and n not in ('bridge', 'host', 'none')]
-                good_nets = [n for n in nets if n not in ('bridge', 'host', 'none')]
-                net = (default_nets or good_nets or [None])[0]
-                if net:
-                    return net
+            is_core = bool('heappe' in c.name.lower() or (c.image.tags and any('heappe' in t.lower() for t in c.image.tags)))
+            if is_core:
+                matched.append(c)
+        for c in matched:
+            nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
+            for net_name in nets.keys():
+                if _is_valid_net(net_name) and net_name not in networks:
+                    networks.append(net_name)
     except Exception:
         pass
 
-    # 4. Try docker CLI - scan containers
-    try:
-        proc = subprocess.run(
-            ["docker", "ps", "--format", "{{.Names}}\t{{.Networks}}"],
-            capture_output=True,
-            text=True
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            for line in proc.stdout.strip().splitlines():
-                parts = line.split("\t")
-                if len(parts) >= 2:
-                    c_name, c_nets = parts[0], parts[1]
-                    if 'slurm-simulator' in c_name.lower():
-                        continue
-                    if "heappe" in c_name.lower():
-                        net_list = [n.strip() for n in c_nets.split(",") if n.strip() and n.strip() not in ('bridge', 'host', 'none')]
-                        default_nets = [n for n in net_list if n.endswith('_default')]
-                        net = (default_nets or net_list or [None])[0]
-                        if net:
-                            return net
-    except Exception:
-        pass
+    # Try docker CLI
+    if not networks:
+        try:
+            proc = subprocess.run(
+                ["docker", "ps", "--format", "{{.Names}}\t{{.Networks}}"],
+                capture_output=True,
+                text=True
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                for line in proc.stdout.strip().splitlines():
+                    parts = line.split("\t")
+                    if len(parts) >= 2:
+                        c_name, c_nets = parts[0], parts[1]
+                        if 'slurm-simulator' in c_name.lower():
+                            continue
+                        if "heappe" in c_name.lower():
+                            for n in c_nets.split(","):
+                                net_name = n.strip()
+                                if _is_valid_net(net_name) and net_name not in networks:
+                                    networks.append(net_name)
+        except Exception:
+            pass
 
-    return None
+    # Fallback to candidates
+    if not networks:
+        for net_candidate in ["heappe-core_default", "heappe_default", "test_default"]:
+            try:
+                chk = subprocess.run(["docker", "network", "inspect", net_candidate], capture_output=True, text=True)
+                if chk.returncode == 0 and net_candidate not in networks:
+                    networks.append(net_candidate)
+            except Exception:
+                pass
+
+    return networks
 
 
 def build_and_run_docker(container_name, port, slurm_user, acct_name, docker_network=None):
@@ -666,9 +671,9 @@ if __name__ == "__main__":
     acct_name = f"a{uid}"
     slurm_user = f"u{uid}"
 
-    docker_network = args.docker_network or find_docker_network()
-    if docker_network:
-        print(f"Using Docker network: '{docker_network}'")
+    docker_networks = [args.docker_network] if args.docker_network else find_docker_networks()
+    if docker_networks:
+        print(f"Using Docker networks: {', '.join(docker_networks)}")
         target_host = args.container_name
         target_port = 22
     else:
@@ -677,7 +682,13 @@ if __name__ == "__main__":
         target_port = args.port
 
     if not args.skip_docker:
-        build_and_run_docker(args.container_name, args.port, slurm_user, acct_name, docker_network=docker_network)
+        build_and_run_docker(args.container_name, args.port, slurm_user, acct_name, docker_network=(docker_networks[0] if docker_networks else None))
+        if docker_networks and len(docker_networks) > 1:
+            for extra_net in docker_networks[1:]:
+                try:
+                    subprocess.run(["docker", "network", "connect", "--alias", "slurm-simulator", extra_net, args.container_name], capture_output=True)
+                except Exception:
+                    pass
     else:
         # Fallback names in case docker was skipped
         acct_name = "atest"

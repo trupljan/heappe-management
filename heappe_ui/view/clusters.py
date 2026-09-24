@@ -1417,127 +1417,111 @@ def setup_slurm_status_view(request: HttpRequest) -> HttpResponse:
     })
 
 
-def find_docker_network_for_instance(instance_name, log_fn=print):
+def find_docker_networks_for_instance(instance_name, log_fn=print):
     """
-    Finds the Docker network that the HEAppE instance containers are attached to.
-    Returns the network name (e.g. 'test_default') or None if not running in Docker or not found.
-    
-    Strategy:
-    1. Try well-known candidate network names first (most reliable).
-    2. Then scan containers, skipping slurm-simulator containers and preferring
-       networks with '_default' suffix (standard compose networks).
+    Finds all Docker networks that the HEAppE instance containers are attached to.
+    Returns a list of network names (e.g. ['testing_vaultNet', 'testing_default'])
+    with the HEAppE API/core network prioritized first, or an empty list if not running in Docker.
     """
     import subprocess
-
-    # Services to skip when looking for the HEAppE network
     skip_services = {'slurm-simulator'}
+    networks = []
 
-    def _is_good_network(net_name):
-        """Return True for networks likely to be the main compose network."""
-        return net_name not in ('bridge', 'host', 'none')
+    def _is_valid_net(net_name):
+        return bool(net_name and net_name not in ('bridge', 'host', 'none'))
 
-    def _prefer_default_network(nets):
-        """From a dict of network names, prefer ones ending in '_default'."""
-        default_nets = [n for n in nets if n.endswith('_default')]
-        if default_nets:
-            return default_nets[0]
-        good_nets = [n for n in nets if _is_good_network(n)]
-        return good_nets[0] if good_nets else None
-
-    # --- Phase 1: Try well-known candidate network names ---
-    candidates = []
-    if instance_name:
-        candidates.extend([
-            f"{instance_name}_default",
-            f"{instance_name}-core_default",
-            f"{instance_name}_heappe-core_default",
-        ])
-    candidates.extend(["heappe-core_default", "heappe_default"])
-
-    # 1a. Try Docker Python SDK for candidates
-    try:
-        import docker
-        client = docker.from_env()
-        for net_candidate in candidates:
-            try:
-                client.networks.get(net_candidate)
-                log_fn(f"Found Docker network '{net_candidate}'.")
-                return net_candidate
-            except Exception:
-                pass
-    except Exception:
-        pass
-
-    # 1b. Try docker CLI for candidates
-    for net_candidate in candidates:
-        try:
-            chk = subprocess.run(["docker", "network", "inspect", net_candidate], capture_output=True, text=True)
-            if chk.returncode == 0:
-                log_fn(f"Found Docker network '{net_candidate}' via docker CLI.")
-                return net_candidate
-        except Exception:
-            pass
-
-    # --- Phase 2: Scan containers (skip slurm-simulator) ---
-    # 2a. Try Docker Python SDK
+    # 1. Try Docker Python SDK
     try:
         import docker
         client = docker.from_env()
 
-        # Find HEAppE project containers (skip slurm-simulator)
-        if instance_name:
-            containers = client.containers.list(filters={"label": f"com.docker.compose.project={instance_name}"})
-            for c in containers:
-                svc = c.labels.get('com.docker.compose.service', '')
-                if svc in skip_services or 'slurm-simulator' in c.name.lower():
-                    continue
-                nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
-                net = _prefer_default_network(nets)
-                if net:
-                    log_fn(f"Detected Docker network '{net}' from container '{c.name}' (service '{svc}').")
-                    return net
-
-        # Search all containers for 'heappe' in name or image
+        matched_containers = []
         for c in client.containers.list():
-            if 'slurm-simulator' in c.name.lower():
+            c_name = c.name.lower()
+            if 'slurm-simulator' in c_name:
                 continue
-            if 'heappe' in c.name.lower() or (c.image.tags and any('heappe' in t.lower() for t in c.image.tags)):
-                nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
-                net = _prefer_default_network(nets)
-                if net:
-                    log_fn(f"Detected Docker network '{net}' from HEAppE container '{c.name}'.")
-                    return net
+            c_project = c.labels.get('com.docker.compose.project', '')
+            c_service = c.labels.get('com.docker.compose.service', '')
+            if c_service in skip_services:
+                continue
+
+            is_project_match = bool(instance_name and c_project.lower() == instance_name.lower())
+            is_name_match = bool(instance_name and (c_name.startswith(f"{instance_name.lower()}_") or c_name.startswith(f"{instance_name.lower()}-")))
+            is_heappe_keyword = ('heappe' in c_name or (c.image.tags and any('heappe' in t.lower() for t in c.image.tags)))
+
+            if is_project_match or is_name_match or (not instance_name and is_heappe_keyword):
+                is_core = bool('heappe' in c_name or 'api' in c_name or 'core' in c_name or 'heappe' in c_service.lower())
+                matched_containers.append((is_core, c))
+
+        # Sort so core/API containers come first
+        matched_containers.sort(key=lambda x: x[0], reverse=True)
+
+        for is_core, c in matched_containers:
+            c_nets = c.attrs.get('NetworkSettings', {}).get('Networks', {})
+            for net_name in c_nets.keys():
+                if _is_valid_net(net_name) and net_name not in networks:
+                    networks.append(net_name)
+                    log_fn(f"Found Docker network '{net_name}' from container '{c.name}'.")
+
     except Exception as e:
         log_fn(f"Docker SDK network detection note: {e}")
 
-    # 2b. Try docker CLI
-    try:
-        proc = subprocess.run(
-            ["docker", "ps", "--format", "{{.Names}}\t{{.Networks}}\t{{.Label \"com.docker.compose.service\"}}"],
-            capture_output=True,
-            text=True
-        )
-        if proc.returncode == 0 and proc.stdout.strip():
-            for line in proc.stdout.strip().splitlines():
-                parts = line.split("\t")
-                if len(parts) >= 2:
-                    c_name, c_nets = parts[0], parts[1]
-                    c_svc = parts[2] if len(parts) >= 3 else ""
-                    # Skip slurm-simulator containers
-                    if 'slurm-simulator' in c_name.lower() or c_svc in skip_services:
-                        continue
-                    # Match by instance name or 'heappe' keyword
-                    if (instance_name and instance_name.lower() in c_name.lower()) or "heappe" in c_name.lower():
-                        net_list = [n.strip() for n in c_nets.split(",") if _is_good_network(n.strip())]
-                        default_nets = [n for n in net_list if n.endswith('_default')]
-                        net = (default_nets or net_list or [None])[0]
-                        if net:
-                            log_fn(f"Detected Docker network '{net}' from container '{c_name}' via docker CLI.")
-                            return net
-    except Exception as e:
-        log_fn(f"Docker CLI network detection note: {e}")
+    # 2. Try docker CLI if SDK didn't find any or as fallback
+    if not networks:
+        try:
+            proc = subprocess.run(
+                ["docker", "ps", "--format", "{{.Names}}\t{{.Networks}}\t{{.Label \"com.docker.compose.project\"}}\t{{.Label \"com.docker.compose.service\"}}"],
+                capture_output=True,
+                text=True
+            )
+            if proc.returncode == 0 and proc.stdout.strip():
+                lines = proc.stdout.strip().splitlines()
+                matched_lines = []
+                for line in lines:
+                    parts = line.split("\t")
+                    if len(parts) >= 2:
+                        c_name = parts[0]
+                        c_nets = parts[1]
+                        c_proj = parts[2] if len(parts) >= 3 else ""
+                        c_svc = parts[3] if len(parts) >= 4 else ""
 
-    return None
+                        if 'slurm-simulator' in c_name.lower() or c_svc in skip_services:
+                            continue
+
+                        is_proj = bool(instance_name and c_proj.lower() == instance_name.lower())
+                        is_prefix = bool(instance_name and (c_name.lower().startswith(f"{instance_name.lower()}_") or c_name.lower().startswith(f"{instance_name.lower()}-")))
+                        is_heappe = bool('heappe' in c_name.lower())
+
+                        if is_proj or is_prefix or (not instance_name and is_heappe):
+                            is_core = bool('heappe' in c_name.lower() or 'api' in c_name.lower() or 'core' in c_name.lower())
+                            matched_lines.append((is_core, c_name, c_nets))
+
+                matched_lines.sort(key=lambda x: x[0], reverse=True)
+                for is_core, c_name, c_nets in matched_lines:
+                    for n in c_nets.split(","):
+                        net_name = n.strip()
+                        if _is_valid_net(net_name) and net_name not in networks:
+                            networks.append(net_name)
+                            log_fn(f"Found Docker network '{net_name}' from container '{c_name}' via CLI.")
+        except Exception as e:
+            log_fn(f"Docker CLI network detection note: {e}")
+
+    # 3. Fallback: try common candidate network names if no running containers were found
+    if not networks:
+        candidates = []
+        if instance_name:
+            candidates.extend([f"{instance_name}_default", f"{instance_name}-core_default"])
+        candidates.extend(["heappe-core_default", "heappe_default"])
+        for net_candidate in candidates:
+            try:
+                chk = subprocess.run(["docker", "network", "inspect", net_candidate], capture_output=True, text=True)
+                if chk.returncode == 0 and net_candidate not in networks:
+                    networks.append(net_candidate)
+                    log_fn(f"Found candidate Docker network '{net_candidate}'.")
+            except Exception:
+                pass
+
+    return networks
 
 
 def _run_slurm_setup_thread(instance_name, uid, port, container_name):
@@ -1852,9 +1836,10 @@ ENTRYPOINT ["/entrypoint.sh"]
 
         # Step 3: Run Docker Container
         log(f"Detecting Docker network for instance '{instance_name}'...")
-        target_network = find_docker_network_for_instance(instance_name, log_fn=log)
-        if target_network:
-            log(f"Attaching container to Docker network: '{target_network}'")
+        target_networks = find_docker_networks_for_instance(instance_name, log_fn=log)
+        primary_network = target_networks[0] if target_networks else None
+        if primary_network:
+            log(f"Attaching container to primary Docker network: '{primary_network}' (all networks: {', '.join(target_networks)})")
         else:
             log("No custom Docker network detected; container will use default bridge network.")
 
@@ -1869,8 +1854,8 @@ ENTRYPOINT ["/entrypoint.sh"]
             "--label", "com.docker.compose.service=slurm-simulator",
             "-p", f"{port}:22",
         ]
-        if target_network:
-            run_cmd.extend(["--network", target_network, "--network-alias", "slurm-simulator"])
+        if primary_network:
+            run_cmd.extend(["--network", primary_network, "--network-alias", "slurm-simulator"])
         run_cmd.append("slurm-simulator-img:latest")
 
         proc_run = subprocess.run(
@@ -1890,11 +1875,14 @@ ENTRYPOINT ["/entrypoint.sh"]
             raise RuntimeError(f"Docker run failed: {proc_run.stderr}")
         log(f"Docker container '{container_name}' started successfully.")
 
-        if target_network:
-            try:
-                subprocess.run(["docker", "network", "connect", target_network, container_name], capture_output=True, text=True)
-            except Exception:
-                pass
+        if target_networks:
+            for extra_net in target_networks:
+                if extra_net != primary_network:
+                    try:
+                        subprocess.run(["docker", "network", "connect", "--alias", "slurm-simulator", extra_net, container_name], capture_output=True, text=True)
+                        log(f"Connected container to additional Docker network: '{extra_net}'")
+                    except Exception as e_net:
+                        log(f"Note: connecting to network '{extra_net}': {e_net}")
 
         # Step 4: Wait for services inside container to initialize
         import socket
@@ -1999,10 +1987,10 @@ ENTRYPOINT ["/entrypoint.sh"]
         controller = hp.ManagementApi(api_client)
         
         # Determine host and port for HEAppE to reach the cluster
-        if target_network:
+        if target_networks:
             target_host = container_name
             target_port = 22
-            log(f"Using Docker network addressing for HEAppE: {target_host}:{target_port} (network '{target_network}')")
+            log(f"Using Docker network addressing for HEAppE: {target_host}:{target_port} (networks: {', '.join(target_networks)})")
         else:
             target_host = "127.0.0.1"
             target_port = port
