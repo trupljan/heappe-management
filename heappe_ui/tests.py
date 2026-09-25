@@ -3901,6 +3901,128 @@ class SshKeysAndCredentialsVersionGatingTests(TestCase):
         self.assertTrue(render_context["is_v6_5_0_plus"])
 
 
+class CleanVersionResolutionTests(SimpleTestCase):
+    """Test suite for resolve_clean_version and branch-to-clean-version handling."""
+
+    def test_resolve_clean_version_direct_semver(self):
+        from heappe_ui.DeployService import resolve_clean_version
+        self.assertEqual(resolve_clean_version("v6.5.0"), "v6.5.0")
+        self.assertEqual(resolve_clean_version("6.4.17"), "6.4.17")
+        self.assertEqual(resolve_clean_version("V6.3.3"), "V6.3.3")
+        self.assertEqual(resolve_clean_version("v6.0.0"), "v6.0.0")
+
+    def test_resolve_clean_version_embedded_branch_version(self):
+        from heappe_ui.DeployService import resolve_clean_version
+        self.assertEqual(resolve_clean_version("release/v6.5.0"), "v6.5.0")
+        self.assertEqual(resolve_clean_version("release/6.4.17"), "v6.4.17")
+        self.assertEqual(resolve_clean_version("tags/v6.2.1"), "v6.2.1")
+
+    def test_resolve_clean_version_feature_branch_with_old_version(self):
+        from heappe_ui.DeployService import resolve_clean_version
+        resolved = resolve_clean_version(
+            version_or_ref="feature/qsheduler_machine_info_endpoint",
+            old_version="v6.4.17"
+        )
+        self.assertEqual(resolved, "v6.4.17")
+
+    def test_resolve_clean_version_feature_branch_fallback(self):
+        from heappe_ui.DeployService import resolve_clean_version
+        resolved = resolve_clean_version("feature/qsheduler_machine_info_endpoint")
+        self.assertEqual(resolved, "v6.5.0")
+
+    def test_resolve_clean_version_git_describe(self):
+        from heappe_ui.DeployService import resolve_clean_version
+        import subprocess
+
+        # Using current repo directory which has tags
+        resolved = resolve_clean_version(
+            version_or_ref="feature/new_feature",
+            compose_dir="."
+        )
+        # Should resolve to git tag reachable or highest tag, never feature/...
+        self.assertNotIn("/", resolved)
+        self.assertNotIn("feature", resolved)
+
+    def test_update_init_with_branch_name_sanitizes_appsettings_and_swagger(self):
+        import tempfile
+        import shutil
+        from heappe_ui.DeployService import HEAppEDeployService, HEAppEConfig
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            instance_name = "test_branch_inst"
+            confs_dir = os.path.join(temp_dir, instance_name, "app", "confs")
+            core_dir = os.path.join(temp_dir, instance_name, "heappe-core")
+            os.makedirs(confs_dir, exist_ok=True)
+            os.makedirs(core_dir, exist_ok=True)
+
+            # Create existing appsettings with valid version
+            existing_appsettings = {
+                "ApplicationAPISettings": {
+                    "DeploymentSettings": {
+                        "Version": "v6.4.17"
+                    },
+                    "SwaggerDocSettings": {
+                        "Description": "HEAppE middleware API v6.4.17"
+                    }
+                }
+            }
+            with open(os.path.join(confs_dir, "appsettings.json"), "w", encoding="utf-8") as f:
+                json.dump(existing_appsettings, f)
+
+            existing_ds = {
+                "ApplicationAPIConfiguration": {
+                    "DeploymentConfiguration": {
+                        "Version": "v6.4.17"
+                    }
+                }
+            }
+            with open(os.path.join(confs_dir, "appsettings-data.json"), "w", encoding="utf-8") as f:
+                json.dump(existing_ds, f)
+
+            service = HEAppEDeployService(HEAppEConfig(base_path=temp_dir))
+            # Call update_init with a branch name containing slashes
+            res = service.update_init(instance_name, "feature/qsheduler_machine_info_endpoint")
+            self.assertEqual(res["status"], "success")
+
+            # Check appsettings.json
+            with open(os.path.join(confs_dir, "appsettings.json"), "r", encoding="utf-8") as f:
+                updated_settings = json.load(f)
+
+            app_ver = updated_settings["ApplicationAPISettings"]["DeploymentSettings"]["Version"]
+            # Must NOT contain slashes or the branch name
+            self.assertNotIn("/", app_ver)
+            self.assertNotIn("feature", app_ver)
+            self.assertEqual(app_ver, "v6.4.17")
+
+            swagger_desc = updated_settings["ApplicationAPISettings"]["SwaggerDocSettings"]["Description"]
+            self.assertNotIn("feature/", swagger_desc)
+            self.assertIn("v6.4.17", swagger_desc)
+
+            # Check appsettings-data.json
+            with open(os.path.join(confs_dir, "appsettings-data.json"), "r", encoding="utf-8") as f:
+                updated_ds = json.load(f)
+            ds_ver = updated_ds["ApplicationAPIConfiguration"]["DeploymentConfiguration"]["Version"]
+            self.assertNotIn("/", ds_ver)
+            self.assertEqual(ds_ver, "v6.4.17")
+
+            # Now test when old_version itself had slashes (e.g. from prior buggy version)
+            updated_settings["ApplicationAPISettings"]["DeploymentSettings"]["Version"] = "feature/old_buggy_branch"
+            with open(os.path.join(confs_dir, "appsettings.json"), "w", encoding="utf-8") as f:
+                json.dump(updated_settings, f)
+
+            # update_init should archive safely without crashing on file paths with slashes
+            res2 = service.update_init(instance_name, "v6.5.0")
+            self.assertEqual(res2["status"], "success")
+
+            with open(os.path.join(confs_dir, "appsettings.json"), "r", encoding="utf-8") as f:
+                final_settings = json.load(f)
+            self.assertEqual(final_settings["ApplicationAPISettings"]["DeploymentSettings"]["Version"], "v6.5.0")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+
 
 
 

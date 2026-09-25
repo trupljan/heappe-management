@@ -286,6 +286,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
         data_staging_token = generate_secure_password()
 
         log_message("Initializing configuration files and directory structure...")
+        clean_ver_str = service.resolve_clean_version(config.repo_branch, instance_name=instance_name)
         init_result = service.deploy_init(
             instance_name=instance_name,
             username="admin",
@@ -296,7 +297,7 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
             ports=ports,
             overwrite_existing=True,
             deployed_ip='localhost',
-            version=config.repo_branch
+            version=clean_ver_str
         )
         if init_result.get("status") == "error":
             raise RuntimeError(f"deploy_init failed: {init_result.get('message')}")
@@ -661,8 +662,9 @@ def handle_switch_branch_action(config, instance_name, no_cache=False, update_co
 
         # 6. Update configuration templates if requested
         if update_configs:
-            log_message(f"Updating configuration files (.env and appsettings) for version/branch: {target_ref}...")
-            service.update_init(instance_name=instance_name, version=target_ref)
+            clean_version = service.resolve_clean_version(target_ref, instance_name=instance_name)
+            log_message(f"Updating configuration files (.env and appsettings) for version: {clean_version} (branch: {target_ref})...")
+            service.update_init(instance_name=instance_name, version=clean_version)
             log_message("Configuration files successfully updated.")
         else:
             log_message("Preserving existing configuration files (update_configs=False).")
@@ -1872,8 +1874,9 @@ def handle_regenerate_configs_action(config, instance_name):
         log_message("Database status set to updating.")
 
         log_message("Updating configuration files (.env and appsettings.json)...")
-        service.update_init(instance_name=instance_name, version=config.repo_branch)
-        log_message("Configuration files successfully regenerated with new defaults and merged with existing values.")
+        clean_version = service.resolve_clean_version(config.repo_branch, instance_name=instance_name)
+        service.update_init(instance_name=instance_name, version=clean_version)
+        log_message(f"Configuration files successfully regenerated for version {clean_version} and merged with existing values.")
 
         log_message("Recreating and restarting containers with updated environment...")
 

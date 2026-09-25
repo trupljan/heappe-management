@@ -2,6 +2,7 @@ import json
 import hashlib
 import logging
 import os
+import re
 import shutil
 import subprocess
 from datetime import datetime
@@ -71,6 +72,80 @@ def get_instance_settings(instance_name:str= 'heappe_instance'):
         return None
 
 
+def resolve_clean_version(
+        version_or_ref: Optional[str] = None,
+        compose_dir: Optional[str] = None,
+        old_version: Optional[str] = None,
+        default_version: str = "v6.5.0"
+) -> str:
+    """
+    Resolve a branch, tag, or version string into a clean semantic version string
+    (e.g., 'v6.5.0', 'v6.4.17') without slashes or non-version branch names.
+    This ensures ASP.NET Core Swagger/OpenAPI route '/swagger/{Version}/swagger.json'
+    and Swagger UI operate correctly without 404 route errors.
+    """
+    # 1. Direct semantic version check (e.g. "v6.5.0", "6.4.17", "V6.3.3", "v6.2.2")
+    if version_or_ref:
+        v_str = str(version_or_ref).strip()
+        if re.match(r'^[vV]?\d+(?:\.\d+)+$', v_str):
+            return v_str
+
+    # 2. Check if version_or_ref contains a semantic version tag (e.g. "release/v6.5.0", "tags/v6.4.17")
+    if version_or_ref:
+        v_str = str(version_or_ref).strip()
+        m = re.search(r'[vV]\d+\.\d+(?:\.\d+)*', v_str)
+        if not m:
+            m = re.search(r'(?<=/)\d+\.\d+(?:\.\d+)*', v_str)
+        if m:
+            val = m.group(0)
+            return val if val.startswith(('v', 'V')) else f"v{val}"
+
+    # 3. If compose_dir is provided and has a git repository, query git for nearest version tag
+    if compose_dir and os.path.exists(os.path.join(compose_dir, ".git")):
+        for cmd in [
+            ["git", "describe", "--tags", "--match", "v[0-9]*", "--match", "[0-9]*", "--abbrev=0"],
+            ["git", "describe", "--tags", "--abbrev=0"]
+        ]:
+            try:
+                res = subprocess.run(cmd, cwd=compose_dir, capture_output=True, text=True, check=False, timeout=5)
+                if res.returncode == 0 and res.stdout.strip():
+                    tag = res.stdout.strip()
+                    if re.match(r'^[vV]?\d+(?:\.\d+)+$', tag):
+                        return tag
+                    m_tag = re.search(r'[vV]?\d+\.\d+(?:\.\d+)*', tag)
+                    if m_tag:
+                        val = m_tag.group(0)
+                        return val if val.startswith(('v', 'V')) else f"v{val}"
+            except Exception:
+                pass
+
+        # Try finding highest tag in git repository
+        try:
+            res = subprocess.run(
+                ["git", "tag", "-l", "v[0-9]*", "--sort=-v:refname"],
+                cwd=compose_dir, capture_output=True, text=True, check=False, timeout=5
+            )
+            if res.returncode == 0 and res.stdout.strip():
+                first_tag = res.stdout.strip().splitlines()[0].strip()
+                if re.match(r'^[vV]?\d+(?:\.\d+)+$', first_tag):
+                    return first_tag
+        except Exception:
+            pass
+
+    # 4. Fallback to existing old_version if it is a valid semantic version (and not "unknown")
+    if old_version and old_version.lower() not in ("unknown", "none", ""):
+        old_str = str(old_version).strip()
+        if re.match(r'^[vV]?\d+(?:\.\d+)+$', old_str):
+            return old_str
+        m_old = re.search(r'[vV]?\d+\.\d+(?:\.\d+)*', old_str)
+        if m_old:
+            val = m_old.group(0)
+            return val if val.startswith(('v', 'V')) else f"v{val}"
+
+    # 5. Default fallback
+    return default_version or "v6.5.0"
+
+
 class HEAppEDeployService:
     """Service to manage HEAppE deployment tasks."""
 
@@ -78,6 +153,23 @@ class HEAppEDeployService:
         """Initialize the service with optional configuration."""
         self.config = config or HEAppEConfig()
         self.logger = logger
+
+    def resolve_clean_version(
+            self,
+            version_or_ref: Optional[str] = None,
+            instance_name: Optional[str] = None,
+            old_version: Optional[str] = None
+    ) -> str:
+        """Resolve branch or version to a clean semver string for this instance."""
+        compose_dir = None
+        if instance_name:
+            compose_dir = os.path.join(self.config.base_path, instance_name, self.config.target_dir)
+        return resolve_clean_version(
+            version_or_ref=version_or_ref,
+            compose_dir=compose_dir,
+            old_version=old_version,
+            default_version="v6.5.0"
+        )
 
     import os
     import shutil
@@ -375,14 +467,15 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         """Generate appsettings.json and merge with old settings."""
         # This is a placeholder for the actual implementation
         # You would generate new appsettings and then merge with old_appsettings
-        app_fn, _ = self._get_generators_for_version(version)
+        clean_version = self.resolve_clean_version(version)
+        app_fn, _ = self._get_generators_for_version(clean_version)
 
         new_appsettings = app_fn(
             instance_name="instance",
             sa_password="Passw0rd",
             port=5000,
             automigrate=True,
-            version=version,
+            version=clean_version,
             deployed_ip="localhost"
         )
 
@@ -401,19 +494,19 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             overwrite_existing: bool = False
     ) -> Dict[str, Any]:
         """Generate appsettings.json and appsettings-data.json files for HEAppE instance."""
-        version = version or self.config.default_version
+        clean_version = self.resolve_clean_version(version or self.config.default_version, instance_name=instance_name)
         deployed_ip = deployed_ip or self.config.default_ip
 
-        print(f"Generating appsettings for version: {version}")
+        print(f"Generating appsettings for version: {clean_version}")
 
-        app_fn, data_fn = self._get_generators_for_version(version)
+        app_fn, data_fn = self._get_generators_for_version(clean_version)
 
         appsettings = app_fn(
             instance_name=instance_name,
             sa_password=sa_password,
             port=port_app,
             automigrate=automigrate,
-            version=version,
+            version=clean_version,
             deployed_ip=deployed_ip
         )
 
@@ -422,7 +515,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             sa_password=sa_password,
             data_staging_token=data_staging_token,
             port=port_staging,
-            version=version
+            version=clean_version
         )
 
         print(f"Generated appsettings: {appsettings}")
@@ -520,13 +613,14 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             self.clone_repository(instance_name, overwrite_existing)
 
             # Generate configuration files
+            clean_version = self.resolve_clean_version(version, instance_name=instance_name)
             env_path = self.generate_env_file(instance_name, vault_password, sa_password, ports, overwrite_existing)
             seed_data = self.generate_seed_file(username, password, instance_name, overwrite_existing)
             appsettings = self.generate_appsettings_files(
                 instance_name=instance_name,
                 port_app=ports.get("app_port") if ports else 5000,
                 port_staging=ports.get("data_staging_port") if ports else 5001,
-                version=version,
+                version=clean_version,
                 deployed_ip=deployed_ip,
                 sa_password=sa_password,
                 data_staging_token=data_staging_token,
@@ -605,24 +699,27 @@ PWD={self.config.base_path}{instance_name}/heappe-core
 
                 old_version = old_appsettings.get("ApplicationAPISettings", {}).get("DeploymentSettings", {}).get("Version", "")
                 old_version = old_version or "unknown"
-                # change version in old appsettings to the new version
-                if version:
+                clean_version = self.resolve_clean_version(version, instance_name=instance_name, old_version=old_version)
+
+                # change version in old appsettings to the clean version
+                if clean_version:
                     if "ApplicationAPISettings" not in old_appsettings:
                         old_appsettings["ApplicationAPISettings"] = {}
                     if "DeploymentSettings" not in old_appsettings["ApplicationAPISettings"]:
                         old_appsettings["ApplicationAPISettings"]["DeploymentSettings"] = {}
-                    old_appsettings["ApplicationAPISettings"]["DeploymentSettings"]["Version"] = version
+                    old_appsettings["ApplicationAPISettings"]["DeploymentSettings"]["Version"] = clean_version
                     if "SwaggerDocSettings" not in old_appsettings["ApplicationAPISettings"]:
                         old_appsettings["ApplicationAPISettings"]["SwaggerDocSettings"] = {}
-                    old_appsettings["ApplicationAPISettings"]["SwaggerDocSettings"]["Description"] = f"HEAppE middleware API {version}"
+                    old_appsettings["ApplicationAPISettings"]["SwaggerDocSettings"]["Description"] = f"HEAppE middleware API {clean_version}"
 
                 # Generate configuration files
-                appsettings_new = self.generate_appsettings_and_merge_with_old(old_appsettings, version)
+                appsettings_new = self.generate_appsettings_and_merge_with_old(old_appsettings, clean_version)
 
                 # archive old appsettings
                 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                safe_old_version = re.sub(r'[/\\:\s]+', '_', old_version)
                 if os.path.exists(old_appsettings_path):
-                    archived_appsettings_path = os.path.join(self.config.base_path, instance_name, "app", "confs", f"appsettings_{old_version}_{timestamp}.json")
+                    archived_appsettings_path = os.path.join(self.config.base_path, instance_name, "app", "confs", f"appsettings_{safe_old_version}_{timestamp}.json")
                     shutil.copy2(old_appsettings_path, archived_appsettings_path)
                     self.logger.info(f"Archived old appsettings to: {archived_appsettings_path}")
                 # save new merged appsettings
@@ -639,24 +736,25 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                         with open(old_data_staging_path, "r", encoding="utf-8") as f:
                             old_data_staging = json.load(f)
                         old_ds_version = old_data_staging.get("ApplicationAPIConfiguration", {}).get("DeploymentConfiguration", {}).get("Version", "") or "unknown"
-                        archived_ds_path = os.path.join(self.config.base_path, instance_name, "app", "confs", f"appsettings-data_{old_ds_version}_{timestamp}.json")
+                        safe_old_ds_version = re.sub(r'[/\\:\s]+', '_', old_ds_version)
+                        archived_ds_path = os.path.join(self.config.base_path, instance_name, "app", "confs", f"appsettings-data_{safe_old_ds_version}_{timestamp}.json")
                         shutil.copy2(old_data_staging_path, archived_ds_path)
                         self.logger.info(f"Archived old appsettings-data to: {archived_ds_path}")
 
-                        if version:
+                        if clean_version:
                             if "ApplicationAPIConfiguration" not in old_data_staging:
                                 old_data_staging["ApplicationAPIConfiguration"] = {}
                             if "DeploymentConfiguration" not in old_data_staging["ApplicationAPIConfiguration"]:
                                 old_data_staging["ApplicationAPIConfiguration"]["DeploymentConfiguration"] = {}
-                            old_data_staging["ApplicationAPIConfiguration"]["DeploymentConfiguration"]["Version"] = version
+                            old_data_staging["ApplicationAPIConfiguration"]["DeploymentConfiguration"]["Version"] = clean_version
 
-                        _, data_fn = self._get_generators_for_version(version)
+                        _, data_fn = self._get_generators_for_version(clean_version)
                         new_ds = data_fn(
                             instance_name=instance_name,
                             sa_password="",
                             data_staging_token="",
                             port=5001,
-                            version=version
+                            version=clean_version
                         )
                         merged_ds = self.merge_keep_old(old_data_staging, new_ds)
                         with open(old_data_staging_path, "w", encoding="utf-8") as f:
@@ -679,7 +777,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 sa_password = ""
 
                 if os.path.exists(old_env_path):
-                    archived_env_path = os.path.join(self.config.base_path, instance_name, self.config.target_dir, f".env_{old_version}_{timestamp}")
+                    archived_env_path = os.path.join(self.config.base_path, instance_name, self.config.target_dir, f".env_{safe_old_version}_{timestamp}")
                     shutil.copy2(old_env_path, archived_env_path)
                     self.logger.info(f"Archived old .env to: {archived_env_path}")
 
