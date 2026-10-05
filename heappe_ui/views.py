@@ -1740,22 +1740,56 @@ def log_viewer_view(request):
 def fetch_new_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
     today = datetime.now().strftime('%Y-%m-%d')
+    selected_date = request.GET.get('date', today) or today
     service_filter = request.GET.get('service', 'API').upper()
     level_filter = request.GET.get('level', '').upper()
     search_query = request.GET.get('search', '').lower()
 
-    try:
-        offset = int(request.GET.get('offset', 0))
-    except ValueError:
-        offset = 0
+    raw_offset = request.GET.get('offset', '0')
+    is_dict_offset = False
+    offset_dict = {}
 
-    log_paths = get_log_file_paths(instance, today, service=service_filter)
+    if isinstance(raw_offset, str) and raw_offset.strip().startswith('{'):
+        try:
+            offset_dict = json.loads(raw_offset)
+            is_dict_offset = True
+        except Exception:
+            offset_dict = {}
+
+    num_offset = 0
+    if not is_dict_offset:
+        try:
+            num_offset = int(raw_offset)
+        except ValueError:
+            num_offset = 0
+
+    log_paths = get_log_file_paths(instance, selected_date, service=service_filter)
+    if not log_paths and selected_date == today:
+        utc_today = datetime.utcnow().strftime('%Y-%m-%d')
+        if utc_today != today:
+            log_paths = get_log_file_paths(instance, utc_today, service=service_filter)
+
+    # Initial tail request (offset = -1): capture current file ends
+    if (not is_dict_offset and num_offset == -1) or (is_dict_offset and offset_dict.get('__init__')):
+        new_offsets = {}
+        for item in log_paths:
+            lp = item[0] if isinstance(item, tuple) else item
+            if os.path.exists(lp):
+                new_offsets[lp] = os.path.getsize(lp)
+        ret_offset = new_offsets if (is_dict_offset or len(log_paths) > 1) else (list(new_offsets.values())[0] if new_offsets else 0)
+        return JsonResponse({
+            'entries': [],
+            'offset': ret_offset
+        })
 
     if not log_paths:
-        return JsonResponse({'entries': [], 'offset': offset})
+        return JsonResponse({
+            'entries': [],
+            'offset': offset_dict if is_dict_offset else num_offset
+        })
 
     new_entries = []
-    max_offset = offset
+    updated_offsets = dict(offset_dict)
 
     for item in log_paths:
         log_path = item[0] if isinstance(item, tuple) else item
@@ -1765,73 +1799,86 @@ def fetch_new_logs(request):
             continue
 
         file_size = os.path.getsize(log_path)
-        if offset == -1:
-            max_offset = max(max_offset, file_size)
+        cur_file_offset = offset_dict.get(log_path, num_offset if not is_dict_offset else 0)
+
+        # File was truncated or rolled
+        if cur_file_offset > file_size:
+            cur_file_offset = 0
+
+        if cur_file_offset >= file_size:
+            updated_offsets[log_path] = file_size
             continue
 
-        read_offset = 0 if offset > file_size else offset
-
         with open(log_path, 'rb') as f:
-            f.seek(read_offset)
+            f.seek(cur_file_offset)
             chunk = f.read()
 
-        if chunk:
-            decoded = chunk.decode('utf-8', errors='ignore')
+        if not chunk:
+            updated_offsets[log_path] = cur_file_offset
+            continue
+
+        is_json = log_path.endswith('.json') or '.json.' in os.path.basename(log_path)
+        decoded = chunk.decode('utf-8', errors='ignore')
+
+        if is_json:
             lines = decoded.splitlines(keepends=True)
+            processed_bytes = 0
+            for line in lines:
+                line_stripped = line.strip()
+                if not line_stripped:
+                    processed_bytes += len(line.encode('utf-8'))
+                    continue
+                parsed = parse_json_log_line(line_stripped, service=svc_tag)
+                if parsed:
+                    processed_bytes += len(line.encode('utf-8'))
+                    if matches_filters(parsed, level_filter, search_query, None, None):
+                        new_entries.append(parsed)
+                else:
+                    # Incomplete JSON line at boundary, leave for next read
+                    break
+            updated_offsets[log_path] = cur_file_offset + processed_bytes
+        else:
+            last_newline = chunk.rfind(b'\n')
+            if last_newline != -1 and last_newline < len(chunk) - 1:
+                valid_chunk = chunk[:last_newline + 1]
+                consumed_bytes = len(valid_chunk)
+                decoded_lines = valid_chunk.decode('utf-8', errors='ignore').splitlines(keepends=True)
+            else:
+                consumed_bytes = len(chunk)
+                decoded_lines = decoded.splitlines(keepends=True)
 
-            is_json = log_path.endswith('.json') or '.json.' in os.path.basename(log_path)
+            current_entry_lines = []
+            timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
 
-            if is_json:
-                processed_bytes = 0
-                for line in lines:
-                    line_stripped = line.strip()
-                    if not line_stripped:
-                        processed_bytes += len(line.encode('utf-8'))
-                        continue
-                    parsed = parse_json_log_line(line_stripped, service=svc_tag)
-                    if parsed:
-                        processed_bytes += len(line.encode('utf-8'))
+            for line in decoded_lines:
+                if timestamp_re.search(line[:30]):
+                    if current_entry_lines:
+                        entry_text = "".join(current_entry_lines)
+                        parsed = parse_log_line(entry_text, service=svc_tag)
                         if matches_filters(parsed, level_filter, search_query, None, None):
                             new_entries.append(parsed)
-                    else:
-                        break
-                max_offset = max(max_offset, read_offset + processed_bytes)
-            else:
-                max_offset = max(max_offset, read_offset + len(chunk))
-                current_entry_lines = []
-                timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+                    current_entry_lines = [line]
+                else:
+                    current_entry_lines.append(line)
 
-                for line in lines:
-                    if timestamp_re.search(line[:30]):
-                        if current_entry_lines:
-                            entry_text = "".join(current_entry_lines)
-                            parsed = parse_log_line(entry_text, service=svc_tag)
-                            if matches_filters(parsed, level_filter, search_query, None, None):
-                                new_entries.append(parsed)
-                        current_entry_lines = [line]
-                    else:
-                        current_entry_lines.append(line)
+            if current_entry_lines:
+                entry_text = "".join(current_entry_lines)
+                parsed = parse_log_line(entry_text, service=svc_tag)
+                if matches_filters(parsed, level_filter, search_query, None, None):
+                    new_entries.append(parsed)
 
-                if current_entry_lines:
-                    entry_text = "".join(current_entry_lines)
-                    parsed = parse_log_line(entry_text, service=svc_tag)
-                    if matches_filters(parsed, level_filter, search_query, None, None):
-                        new_entries.append(parsed)
-
-                if current_entry_lines:
-                    entry_text = "".join(current_entry_lines)
-                    parsed = parse_log_line(entry_text, service=svc_tag)
-                    if matches_filters(parsed, level_filter, search_query, None, None):
-                        new_entries.append(parsed)
-
-    if offset == -1:
-        return JsonResponse({'entries': [], 'offset': max_offset})
+            updated_offsets[log_path] = cur_file_offset + consumed_bytes
 
     new_entries.sort(key=lambda x: x.get('timestamp_str') or '')
 
+    if is_dict_offset or len(log_paths) > 1:
+        ret_offset = updated_offsets
+    else:
+        ret_offset = list(updated_offsets.values())[0] if updated_offsets else 0
+
     return JsonResponse({
         'entries': new_entries,
-        'offset': max_offset
+        'offset': ret_offset
     })
 
 @login_required

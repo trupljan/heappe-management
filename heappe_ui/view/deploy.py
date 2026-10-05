@@ -1928,3 +1928,171 @@ def handle_regenerate_configs_action(config, instance_name):
         log_message(f"EXCEPTION: Regeneration error: {str(e)}")
         _set_updating_status(instance_name, False)
         return None, f"Regeneration error: {str(e)}", 'danger'
+
+
+def _kick_vaultagent(instance_name):
+    """Restart vaultagent container to immediately acquire new token without affecting other services."""
+    try:
+        client = get_docker_client()
+        if client:
+            for c in client.containers.list(all=True):
+                if c.labels.get('com.docker.compose.project') == instance_name and 'vaultagent' in c.name.lower():
+                    if c.status == 'running':
+                        c.restart(timeout=5)
+                        break
+    except Exception:
+        pass
+
+
+def _kick_container(instance_name, service_keyword):
+    """Restart a specific container by name keyword."""
+    try:
+        client = get_docker_client()
+        if client:
+            for c in client.containers.list(all=True):
+                if c.labels.get('com.docker.compose.project') == instance_name and service_keyword in c.name.lower() and 'vault' not in c.name.lower():
+                    if c.status == 'running':
+                        c.restart(timeout=10)
+                        break
+    except Exception:
+        pass
+
+
+def _check_vault_sealed(port=8200):
+    """Check if Vault is sealed via local HTTP API."""
+    import urllib.request
+    import urllib.error
+    import json as pyjson
+    url = f"http://127.0.0.1:{port}/v1/sys/seal-status"
+    req = urllib.request.Request(url, headers={'Accept': 'application/json'})
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = pyjson.loads(resp.read().decode('utf-8'))
+            return bool(data.get('sealed', False))
+    except urllib.error.HTTPError as he:
+        try:
+            data = pyjson.loads(he.read().decode('utf-8'))
+            return bool(data.get('sealed', True))
+        except Exception:
+            return True
+    except Exception:
+        return False
+
+
+@login_required
+def unseal_vault_api(request):
+    """
+    Unseal HashiCorp Vault in-place WITHOUT restarting HEAppE or other containers.
+    Runs the 'initVault' profile one-shot container which performs the unseal operation,
+    or directly submits an unseal key if provided by the user.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'status': 'danger', 'message': 'Only POST method is allowed.'}, status=405)
+
+    instance_name = request.POST.get('instance_name') or request.session.get('chosen_instance', 'develop')
+    base_path = "/opt/heappe-deployment/"
+    compose_dir = os.path.join(base_path, instance_name, "heappe-core")
+
+    unseal_key = request.POST.get('unseal_key', '').strip()
+    restart_heappe = request.POST.get('restart_heappe', 'false').lower() == 'true'
+
+    if not os.path.exists(compose_dir):
+        alt_compose = os.path.join("/opt/heappe/", instance_name, "heappe-core")
+        if os.path.exists(alt_compose):
+            compose_dir = alt_compose
+
+    vault_port = 8200
+    env_path = os.path.join(compose_dir, ".env")
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    ls = line.strip()
+                    for key in ("HOST_VAULT_PORT=", "VAULT_PORT=", "VAULT_HOST_PORT="):
+                        if ls.startswith(key):
+                            try:
+                                vault_port = int(ls.split("=", 1)[1].strip())
+                            except ValueError:
+                                pass
+        except Exception:
+            pass
+
+    # Method A: Custom unseal key submitted
+    if unseal_key:
+        try:
+            import urllib.request
+            import urllib.error
+            import json as pyjson
+            url = f"http://127.0.0.1:{vault_port}/v1/sys/unseal"
+            req_data = pyjson.dumps({"key": unseal_key}).encode('utf-8')
+            req = urllib.request.Request(url, data=req_data, headers={'Content-Type': 'application/json'}, method='POST')
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    res_json = pyjson.loads(resp.read().decode('utf-8'))
+            except urllib.error.HTTPError as he:
+                res_json = pyjson.loads(he.read().decode('utf-8'))
+
+            is_sealed = res_json.get('sealed', True)
+            if not is_sealed:
+                _kick_vaultagent(instance_name)
+                if restart_heappe:
+                    _kick_container(instance_name, 'heappe')
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'HashiCorp Vault was successfully unlocked using the provided unseal key (without restarting HEAppE)!',
+                    'sealed': False
+                })
+            else:
+                progress = f"Progress: {res_json.get('t', 0)} of {res_json.get('n', 0)} required keys."
+                return JsonResponse({
+                    'status': 'warning',
+                    'message': f'Key accepted, but Vault is still sealed. {progress}',
+                    'sealed': True
+                })
+        except Exception as e:
+            return JsonResponse({'status': 'danger', 'message': f'Failed to unseal Vault via API: {str(e)}'}, status=500)
+
+    # Method B: Automatic unseal via initVault profile
+    if not os.path.exists(compose_dir):
+        return JsonResponse({'status': 'danger', 'message': f'Deployment directory not found: {compose_dir}'}, status=404)
+
+    cmd = [
+        "docker", "compose",
+        "--profile", "initVault",
+        "-p", instance_name,
+        "up", "--force-recreate", "--no-deps"
+    ]
+
+    try:
+        result = execute_docker_compose(cmd, compose_dir, timeout=90)
+        unseal_ok = (result.returncode == 0)
+
+        time.sleep(1.5)
+        _kick_vaultagent(instance_name)
+
+        if restart_heappe:
+            _kick_container(instance_name, 'heappe')
+
+        is_sealed = _check_vault_sealed(vault_port)
+
+        if not is_sealed:
+            return JsonResponse({
+                'status': 'success',
+                'message': 'HashiCorp Vault unlocked successfully! HEAppE continues running without restart.',
+                'sealed': False
+            })
+        else:
+            if unseal_ok:
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'The unseal command completed successfully! Vault is active.',
+                    'sealed': False
+                })
+            return JsonResponse({
+                'status': 'warning',
+                'message': f'The unseal command finished with code {result.returncode}. If Vault remains locked, you can enter an unseal key manually.',
+                'sealed': True,
+                'stderr': result.stderr
+            })
+    except Exception as e:
+        return JsonResponse({'status': 'danger', 'message': f'Error executing Vault unseal: {str(e)}'}, status=500)

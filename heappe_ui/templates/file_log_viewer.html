@@ -685,7 +685,12 @@
             const levelVal = document.querySelector('select[name="level"]').value;
             const serviceVal = document.querySelector('select[name="service"]').value;
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
-            const response = await fetch(`${baseUrl}?offset=${logOffset}&level=${levelVal}&search=${searchVal}&service=${serviceVal}`);
+            const dateInput = document.querySelector('input[name="date"]');
+            const dateVal = dateInput ? encodeURIComponent(dateInput.value) : '';
+            const offsetParam = typeof logOffset === 'object' ? encodeURIComponent(JSON.stringify(logOffset)) : logOffset;
+
+            const response = await fetch(`${baseUrl}?offset=${offsetParam}&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}`);
+            if (!response.ok) return;
             const data = await response.json();
             
             if (data.entries && data.entries.length > 0) {
@@ -713,11 +718,11 @@
                 }
                 
                 entryCountDisplay.textContent = consoleContent.querySelectorAll('.log-entry').length;
-            } else { 
+            } else if (data.offset !== undefined) { 
                 logOffset = data.offset; 
             }
         } catch (e) { 
-            console.error(e); 
+            console.error("Error pulling live logs:", e); 
         }
     }
 
@@ -730,23 +735,35 @@
             const levelVal = document.querySelector('select[name="level"]').value;
             const serviceVal = document.querySelector('select[name="service"]').value;
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
-            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}`).then(r => r.json()).then(data => {
-                logOffset = data.offset;
-                
-                const activeHtml = '<span class="pulse-dot"></span>Active';
-                if (liveStatus) {
-                    liveStatus.innerHTML = activeHtml;
-                    liveStatus.className = "small d-flex align-items-center gap-1.5 live-status-active";
-                }
-                if (headerLiveStatus) {
-                    headerLiveStatus.innerHTML = 'Live: Active';
-                    headerLiveStatus.className = "font-monospace small live-status-active text-success";
-                }
-                
-                if (!liveInterval) {
-                    liveInterval = setInterval(pullLogs, 2000);
-                }
-            });
+            const dateInput = document.querySelector('input[name="date"]');
+            const dateVal = dateInput ? encodeURIComponent(dateInput.value) : '';
+
+            // Use offset=-1 to tail current file ends
+            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}`)
+                .then(r => r.json())
+                .then(data => {
+                    logOffset = data.offset !== undefined ? data.offset : {};
+                    
+                    const activeHtml = '<span class="pulse-dot"></span>Active';
+                    if (liveStatus) {
+                        liveStatus.innerHTML = activeHtml;
+                        liveStatus.className = "small d-flex align-items-center gap-1.5 live-status-active";
+                    }
+                    if (headerLiveStatus) {
+                        headerLiveStatus.innerHTML = '<span class="pulse-dot d-inline-block rounded-circle me-1" style="width:6px;height:6px;background:#22c55e;"></span>Live: Active';
+                        headerLiveStatus.className = "font-monospace small live-status-active text-success d-inline-flex align-items-center";
+                    }
+                    
+                    if (!liveInterval) {
+                        liveInterval = setInterval(pullLogs, 2000);
+                    }
+                })
+                .catch(err => {
+                    console.error("Failed to initialize live log stream:", err);
+                    if (headerLiveStatus) {
+                        headerLiveStatus.textContent = 'Live: Error';
+                    }
+                });
         } else {
             if (liveInterval) {
                 clearInterval(liveInterval);
@@ -772,6 +789,23 @@
     if (headerLiveToggle) {
         headerLiveToggle.addEventListener('change', function() {
             updateLiveState(this.checked);
+        });
+    }
+
+    const serviceSelectEl = document.querySelector('select[name="service"]');
+    if (serviceSelectEl) {
+        serviceSelectEl.addEventListener('change', function() {
+            if (headerLiveToggle && headerLiveToggle.checked) {
+                updateLiveState(true);
+            }
+        });
+    }
+    const dateInputFilterEl = document.querySelector('input[name="date"]');
+    if (dateInputFilterEl) {
+        dateInputFilterEl.addEventListener('change', function() {
+            if (headerLiveToggle && headerLiveToggle.checked) {
+                updateLiveState(true);
+            }
         });
     }
 

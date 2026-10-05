@@ -92,6 +92,7 @@ urlpatterns = [
     path("logs/context/", views.logs_context_api, name="logs_context_api"),
     path('logs/<str:container_id>/', views.container_logs_view, name='container_logs'),
     path("fetch-new-logs/", views.fetch_new_logs, name="fetch_new_logs"),
+    path('vault/unseal/', views.unseal_vault_api, name='unseal_vault_api'),
 
     path('api/check-updates/', views.check_for_updates, name='check_updates'),
     path('api/heappe-check/<str:min_version>/', views.heappe_check_api, name='heappe_check_api'),

@@ -710,8 +710,159 @@
 </div>
 {% endif %}
 
+<!-- Unseal Vault Modal -->
+{% if user.is_authenticated %}
+<div class="modal fade" id="unsealVaultModal" tabindex="-1" aria-labelledby="unsealVaultModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0 rounded-3">
+            <div class="modal-header bg-warning bg-opacity-10 border-warning-subtle py-3 px-4">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-shield-lock-fill text-warning fs-5"></i>
+                    <h5 class="modal-title fw-bold text-dark h6 mb-0" id="unsealVaultModalLabel">Unlock HashiCorp Vault</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="unsealModalCloseX"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div id="unseal-modal-alert" style="display: none;" class="alert mb-3"></div>
+
+                <p class="text-secondary small mb-3">
+                    HashiCorp Vault is currently <strong>sealed (locked)</strong>. In this state, cluster credentials and secret storage cannot be accessed by HEAppE.
+                </p>
+
+                <div class="card bg-light border-0 rounded-2 p-3 mb-3">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <i class="bi bi-lightning-charge-fill text-primary"></i>
+                        <span class="small fw-bold text-dark">Zero-Downtime Unlock</span>
+                    </div>
+                    <p class="text-muted small mb-0" style="font-size: 0.78rem;">
+                        Vault is unlocked in-place using the initialization container. <strong>HEAppE, database, and background services keep running without downtime or restart.</strong>
+                    </p>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-warning fw-bold py-2 shadow-xs d-flex align-items-center justify-content-center gap-2" id="btnRunAutoUnseal" onclick="submitVaultUnseal('');">
+                        <i class="bi bi-unlock-fill"></i>
+                        <span>Unlock Vault Now (Zero Downtime)</span>
+                    </button>
+                </div>
+
+                <div class="mt-3 text-center">
+                    <a class="text-decoration-none text-muted small" data-bs-toggle="collapse" href="#manualUnsealCollapse" role="button" aria-expanded="false" style="font-size: 0.75rem;">
+                        <i class="bi bi-key me-1"></i>Or provide custom unseal key manually
+                    </a>
+                </div>
+
+                <div class="collapse mt-3" id="manualUnsealCollapse">
+                    <div class="p-3 bg-white border rounded-2">
+                        <label class="form-label small fw-semibold text-secondary mb-1">Vault Unseal Key</label>
+                        <input type="password" class="form-control form-control-sm font-monospace" id="customUnsealKeyInput" placeholder="Enter Vault unseal key...">
+                        <div class="form-text small" style="font-size: 0.72rem;">If custom unseal keys are configured, enter one key share here.</div>
+                        <button type="button" class="btn btn-outline-secondary btn-sm mt-2 w-100 fw-semibold" onclick="submitCustomKeyUnseal();">
+                            <i class="bi bi-shield-check me-1"></i>Unlock with Key
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-3">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    function openUnsealVaultModal() {
+        const modalEl = document.getElementById('unsealVaultModal');
+        if (modalEl) {
+            const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+        }
+    }
+
+    function submitVaultUnseal(key) {
+        const btn = document.getElementById('btnRunAutoUnseal');
+        const alertEl = document.getElementById('unseal-modal-alert');
+        const origHtml = btn ? btn.innerHTML : '';
+
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Unlocking Vault...';
+        }
+        if (alertEl) {
+            alertEl.style.display = 'none';
+            alertEl.className = 'alert';
+        }
+
+        const formData = new FormData();
+        const instanceName = '{{ request.session.chosen_instance|default:"develop" }}';
+        formData.append('instance_name', instanceName);
+        if (key) {
+            formData.append('unseal_key', key);
+        }
+
+        fetch('{% url "unseal_vault_api" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+            if (alertEl) {
+                alertEl.style.display = 'block';
+                if (data.status === 'success') {
+                    alertEl.className = 'alert alert-success border-success-subtle text-success small py-2 px-3';
+                    alertEl.innerHTML = `<i class="bi bi-check-circle-fill me-1.5"></i> ${data.message}`;
+                    setTimeout(() => {
+                        const modalEl = document.getElementById('unsealVaultModal');
+                        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+                        if (modalInstance) modalInstance.hide();
+                        if (typeof loadHealth === 'function') {
+                            loadHealth();
+                        } else {
+                            window.location.reload();
+                        }
+                    }, 1200);
+                } else if (data.status === 'warning') {
+                    alertEl.className = 'alert alert-warning border-warning-subtle text-warning-emphasis small py-2 px-3';
+                    alertEl.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1.5"></i> ${data.message}`;
+                    if (typeof loadHealth === 'function') loadHealth();
+                } else {
+                    alertEl.className = 'alert alert-danger border-danger-subtle text-danger small py-2 px-3';
+                    alertEl.innerHTML = `<i class="bi bi-x-circle-fill me-1.5"></i> ${data.message}`;
+                }
+            }
+        })
+        .catch(err => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = origHtml;
+            }
+            if (alertEl) {
+                alertEl.style.display = 'block';
+                alertEl.className = 'alert alert-danger border-danger-subtle text-danger small py-2 px-3';
+                alertEl.innerHTML = `<i class="bi bi-x-circle-fill me-1.5"></i> Network error: ${err.message}`;
+            }
+        });
+    }
+
+    function submitCustomKeyUnseal() {
+        const input = document.getElementById('customUnsealKeyInput');
+        const key = input ? input.value.trim() : '';
+        if (!key) {
+            alert('Please enter a valid unseal key.');
+            return;
+        }
+        submitVaultUnseal(key);
+    }
+
     let currentUpdateBranch = 'HEAD';
 
     document.addEventListener('DOMContentLoaded', function() {

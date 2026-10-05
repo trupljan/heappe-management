@@ -332,6 +332,9 @@
                                     <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
                                 </form>
                                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                {% if 'vault' in container.name.lower and 'vaultagent' not in container.name.lower and 'init' not in container.name.lower and 'unseal' not in container.name.lower %}
+                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="openUnsealVaultModal();" title="Unlock / Unseal Vault without restart"><i class="bi bi-unlock-fill"></i></button>
+                                {% endif %}
                             </div>
                         </div>
                     </div>

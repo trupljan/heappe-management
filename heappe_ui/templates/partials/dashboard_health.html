@@ -76,9 +76,14 @@
                                     <span class="spinner-grow spinner-grow-sm text-success" role="status" style="width: 6px; height: 6px; animation-duration: 1.5s;"></span>Online
                                 </span>
                                 {% else %}
-                                <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1 rounded-pill fw-bold d-flex align-items-center gap-1.5" style="font-size: 0.7rem;">
-                                    <span class="spinner-grow spinner-grow-sm text-danger" role="status" style="width: 6px; height: 6px;"></span>Offline
-                                </span>
+                                <div class="d-flex align-items-center gap-1.5">
+                                    <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-2.5 py-1 rounded-pill fw-bold d-flex align-items-center gap-1.5" style="font-size: 0.7rem;">
+                                        <span class="spinner-grow spinner-grow-sm text-danger" role="status" style="width: 6px; height: 6px;"></span>{% if health.component.vault.info.sealed or health.component.vault.info.Sealed %}Sealed{% else %}Offline{% endif %}
+                                    </span>
+                                    <button type="button" class="btn btn-sm btn-outline-warning py-0.5 px-2 rounded-2 fw-semibold d-inline-flex align-items-center gap-1 text-nowrap btn-unseal-vault-trigger" style="font-size: 0.7rem;" title="Unlock / Unseal HashiCorp Vault without restarting HEAppE" data-bs-toggle="modal" data-bs-target="#unsealVaultModal">
+                                        <i class="bi bi-unlock-fill"></i> Unlock
+                                    </button>
+                                </div>
                                 {% endif %}
                             </div>
                             
@@ -99,6 +104,21 @@
                                         </div>
                                     </div>
                                     {% endfor %}
+                                    {% if health.component.vault.info.sealed or health.component.vault.info.Sealed %}
+                                    <div class="col-12 mt-2">
+                                        <div class="alert alert-warning border-warning-subtle p-2 mb-0 rounded-2 text-start">
+                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                                                <div class="small text-dark" style="font-size: 0.75rem;">
+                                                    <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
+                                                    <strong>Vault is sealed (locked).</strong> Cluster credentials and secret operations are unavailable.
+                                                </div>
+                                                <button type="button" class="btn btn-warning btn-sm py-1 px-3 fw-bold rounded-2 shadow-xs d-inline-flex align-items-center gap-1.5" style="font-size: 0.75rem;" data-bs-toggle="modal" data-bs-target="#unsealVaultModal">
+                                                    <i class="bi bi-unlock-fill"></i> Unlock Vault
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {% endif %}
                                 </div>
                             </details>
                             {% endif %}

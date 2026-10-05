@@ -3031,6 +3031,159 @@ class LogViewerJsonTests(TestCase):
             os.remove(tmp_path)
             user.delete()
 
+    def test_fetch_new_logs_with_dict_offset_and_date(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+        from heappe_ui.views import fetch_new_logs
+        import json as pyjson
+
+        factory = RequestFactory()
+        user = User.objects.create_user(username='testuser_logs2', password='password')
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            tmp.write('{"timestamp":"2026-10-05T09:34:15.000Z","level":"INFO","logger":"L","message":"LineA"}\n')
+            offset_a = tmp.tell()
+            tmp.write('{"timestamp":"2026-10-05T09:34:16.000Z","level":"WARN","logger":"L","message":"LineB"}\n')
+            offset_b = tmp.tell()
+            tmp_path = tmp.name
+
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
+                dict_offset = pyjson.dumps({tmp_path: offset_a})
+                req = factory.get(f'/fetch-new-logs/?offset={dict_offset}&date=2026-10-05')
+                req.user = user
+                req.session = {'chosen_instance': 'test'}
+                resp = fetch_new_logs(req)
+                self.assertEqual(resp.status_code, 200)
+                data = pyjson.loads(resp.content.decode('utf-8'))
+
+                self.assertEqual(len(data['entries']), 1)
+                self.assertEqual(data['entries'][0]['level'], 'WARN')
+                self.assertIn('LineB', data['entries'][0]['content'])
+                self.assertIsInstance(data['offset'], dict)
+                self.assertEqual(data['offset'][tmp_path], offset_b)
+        finally:
+            import os
+            os.remove(tmp_path)
+            user.delete()
+
+    def test_fetch_new_logs_initial_tail_minus_one(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+        from heappe_ui.views import fetch_new_logs
+        import json as pyjson
+
+        factory = RequestFactory()
+        user = User.objects.create_user(username='testuser_logs3', password='password')
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            tmp.write('{"timestamp":"2026-10-05T09:34:15.000Z","level":"INFO","logger":"L","message":"PriorLine"}\n')
+            end_pos = tmp.tell()
+            tmp_path = tmp.name
+
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
+                req = factory.get('/fetch-new-logs/?offset=-1')
+                req.user = user
+                req.session = {'chosen_instance': 'test'}
+                resp = fetch_new_logs(req)
+                self.assertEqual(resp.status_code, 200)
+                data = pyjson.loads(resp.content.decode('utf-8'))
+
+                # Should return no entries, and single-file integer offset should match end of file
+                self.assertEqual(len(data['entries']), 0)
+                self.assertEqual(data['offset'], end_pos)
+        finally:
+            import os
+            os.remove(tmp_path)
+            user.delete()
+
+
+class VaultUnsealApiTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="test_vault_user", password="password")
+
+    def test_unseal_vault_api_get_rejected(self):
+        from heappe_ui.view.deploy import unseal_vault_api
+        req = self.factory.get("/vault/unseal/")
+        req.user = self.user
+        req.session = {"chosen_instance": "develop"}
+        resp = unseal_vault_api(req)
+        self.assertEqual(resp.status_code, 405)
+
+    @mock.patch("heappe_ui.view.deploy.os.path.exists", return_value=True)
+    @mock.patch("heappe_ui.view.deploy.execute_docker_compose")
+    @mock.patch("heappe_ui.view.deploy._kick_vaultagent")
+    @mock.patch("heappe_ui.view.deploy._check_vault_sealed", return_value=False)
+    @mock.patch("time.sleep", return_value=None)
+    def test_unseal_vault_api_auto_success(self, mock_sleep, mock_check_sealed, mock_kick, mock_compose, mock_exists):
+        from heappe_ui.view.deploy import unseal_vault_api
+        mock_compose_res = mock.MagicMock()
+        mock_compose_res.returncode = 0
+        mock_compose_res.stdout = "initVault unsealed successfully"
+        mock_compose.return_value = mock_compose_res
+
+        req = self.factory.post("/vault/unseal/", {"instance_name": "develop"})
+        req.user = self.user
+        req.session = {"chosen_instance": "develop"}
+
+        resp = unseal_vault_api(req)
+        self.assertEqual(resp.status_code, 200)
+        import json as pyjson
+        data = pyjson.loads(resp.content.decode("utf-8"))
+        self.assertEqual(data["status"], "success")
+        self.assertFalse(data["sealed"])
+        mock_compose.assert_called_once()
+        mock_kick.assert_called_once_with("develop")
+
+    @mock.patch("heappe_ui.view.deploy.os.path.exists", return_value=True)
+    @mock.patch("heappe_ui.view.deploy.execute_docker_compose")
+    @mock.patch("heappe_ui.view.deploy._kick_vaultagent")
+    @mock.patch("heappe_ui.view.deploy._check_vault_sealed", return_value=True)
+    @mock.patch("time.sleep", return_value=None)
+    def test_unseal_vault_api_auto_failure(self, mock_sleep, mock_check_sealed, mock_kick, mock_compose, mock_exists):
+        from heappe_ui.view.deploy import unseal_vault_api
+        mock_compose_res = mock.MagicMock()
+        mock_compose_res.returncode = 1
+        mock_compose_res.stderr = "Failed to run container"
+        mock_compose.return_value = mock_compose_res
+
+        req = self.factory.post("/vault/unseal/", {"instance_name": "develop"})
+        req.user = self.user
+        req.session = {"chosen_instance": "develop"}
+
+        resp = unseal_vault_api(req)
+        self.assertEqual(resp.status_code, 200)
+        import json as pyjson
+        data = pyjson.loads(resp.content.decode("utf-8"))
+        self.assertEqual(data["status"], "warning")
+        self.assertTrue(data["sealed"])
+
+    @mock.patch("urllib.request.urlopen")
+    @mock.patch("heappe_ui.view.deploy._kick_vaultagent")
+    def test_unseal_vault_api_manual_key(self, mock_kick, mock_urlopen):
+        from heappe_ui.view.deploy import unseal_vault_api
+        import json as pyjson
+
+        mock_resp = mock.MagicMock()
+        mock_resp.read.return_value = pyjson.dumps({"sealed": False, "t": 1, "n": 1, "progress": 0}).encode("utf-8")
+        mock_urlopen.return_value.__enter__.return_value = mock_resp
+
+        req = self.factory.post("/vault/unseal/", {
+            "instance_name": "develop",
+            "unseal_key": "s.dummykey123"
+        })
+        req.user = self.user
+        req.session = {"chosen_instance": "develop"}
+
+        resp = unseal_vault_api(req)
+        self.assertEqual(resp.status_code, 200)
+        data = pyjson.loads(resp.content.decode("utf-8"))
+        self.assertEqual(data["status"], "success")
+        self.assertFalse(data["sealed"])
+        mock_kick.assert_called_once_with("develop")
+
 
 from django.test import SimpleTestCase
 
