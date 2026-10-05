@@ -1,0 +1,287 @@
+{% load custom_filters %}
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm bg-white mb-4">
+            <div class="card-header bg-white py-3 border-bottom d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-folder2-open text-primary fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold text-dark">SubProjects</h5>
+                    {% if sub_projects %}
+                    <span class="badge bg-light text-secondary border font-monospace ms-1">{{ sub_projects|length }}</span>
+                    {% endif %}
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    {% if sub_projects %}
+                    <div class="input-group input-group-sm" style="max-width: 220px;">
+                        <span class="input-group-text bg-white border-light-subtle text-muted"><i class="bi bi-search"></i></span>
+                        <input type="text" id="subprojectSearch" class="form-control border-light-subtle" placeholder="Search subprojects...">
+                    </div>
+                    {% endif %}
+                    <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#addSubProjectModal">
+                        <i class="bi bi-plus-lg me-1"></i>Add SubProject
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();" title="Reload subprojects">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if sub_projects %}
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" id="subprojectsTable" style="font-size: 0.9rem;">
+                        <thead class="table-light text-secondary small text-uppercase">
+                            <tr>
+                                <th class="ps-4" style="width: 10%;">ID</th>
+                                <th style="width: 22%;">Identifier</th>
+                                <th style="width: 28%;">Description</th>
+                                <th style="width: 18%;">Start Date</th>
+                                <th style="width: 17%;">End Date</th>
+                                <th class="text-end pe-4" style="width: 5%;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sp in sub_projects %}
+                            <tr class="subproject-row">
+                                <td class="ps-4 py-3">
+                                    <span class="badge bg-light text-secondary border font-monospace">#{{ sp.id }}</span>
+                                </td>
+                                <td class="py-3">
+                                    <div class="fw-bold text-dark font-monospace subproject-identifier">{{ sp.identifier }}</div>
+                                </td>
+                                <td class="py-3">
+                                    <span class="text-secondary small subproject-description">{{ sp.description|default:"-" }}</span>
+                                </td>
+                                <td class="py-3 font-monospace small text-secondary">
+                                    {{ sp.start_date|format_datetime:'%Y-%m-%d %H:%M'|default:"-" }}
+                                </td>
+                                <td class="py-3">
+                                    {% if sp.end_date %}
+                                        <span class="font-monospace small text-secondary">{{ sp.end_date|format_datetime:'%Y-%m-%d %H:%M' }}</span>
+                                    {% else %}
+                                        <span class="badge bg-light text-muted border border-light-subtle small fw-normal">No expiration</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end pe-4 py-3">
+                                    <div class="dropdown d-inline-block">
+                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle px-2.5 py-1 fw-semibold" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">
+                                            Manage
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-1">
+                                            <li>
+                                                <button type="button" class="dropdown-item py-1.5 small" onclick="openModifySubProjectModal('{{ sp.id }}', '{{ sp.identifier|escapejs }}', '{{ sp.description|default:''|escapejs }}', '{{ sp.start_date|format_datetime:'%Y-%m-%dT%H:%M' }}', '{{ sp.end_date|format_datetime:'%Y-%m-%dT%H:%M' }}')">
+                                                    <i class="bi bi-pencil me-1.5 text-primary"></i>Modify SubProject
+                                                </button>
+                                            </li>
+                                            <li><hr class="dropdown-divider my-1"></li>
+                                            <li>
+                                                <button type="button" class="dropdown-item py-1.5 small text-danger fw-semibold" onclick="openDeleteSubProjectModal('{{ sp.id }}', '{{ sp.identifier|escapejs }}')">
+                                                    <i class="bi bi-trash me-1.5"></i>Delete SubProject
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-folder2-open fs-1 mb-2 d-block text-secondary"></i>
+                    <p class="small mb-3">No SubProjects found for this project.</p>
+                    <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm px-3" data-bs-toggle="modal" data-bs-target="#addSubProjectModal">
+                        <i class="bi bi-plus-lg me-1"></i>Add SubProject
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add SubProject Modal -->
+<div class="modal fade" id="addSubProjectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold text-dark"><i class="bi bi-folder-plus me-1.5 text-primary"></i>Add SubProject</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'project_detail' project.id %}?tab=subprojects">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create_subproject">
+                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted fw-semibold">Identifier <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Required</span></label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white font-monospace fw-bold" name="Identifier" required maxlength="50" placeholder="e.g. SUB-01">
+                        <div class="form-text text-muted">Unique code or identifier for this subproject (max 50 chars).</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small text-muted fw-semibold">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                        <textarea class="form-control form-control-sm border-light-subtle bg-white" name="Description" rows="2" maxlength="100" placeholder="e.g. Phase 1 AI model fine-tuning"></textarea>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small text-muted fw-semibold">Start Date <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Required</span></label>
+                            <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white font-monospace" name="StartDate" id="new_subproject_start_date" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small text-muted fw-semibold">End Date <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                            <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white font-monospace" name="EndDate" id="new_subproject_end_date">
+                            <div class="form-text text-muted" style="font-size: 0.72rem;">Leave empty for no expiry.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light border-top">
+                    <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Create SubProject</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modify SubProject Modal -->
+<div class="modal fade" id="modifySubProjectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold text-dark"><i class="bi bi-pencil me-1.5 text-primary"></i>Modify SubProject</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'project_detail' project.id %}?tab=subprojects">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="modify_subproject">
+                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                <input type="hidden" id="mod_subproject_id" name="subproject_id">
+
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted fw-semibold">SubProject ID</label>
+                        <input type="text" class="form-control form-control-sm bg-light font-monospace" id="mod_subproject_id_display" readonly disabled>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small text-muted fw-semibold">Identifier <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Required</span></label>
+                        <input type="text" class="form-control form-control-sm border-light-subtle bg-white font-monospace fw-bold" name="Identifier" id="mod_subproject_identifier" required maxlength="50">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small text-muted fw-semibold">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                        <textarea class="form-control form-control-sm border-light-subtle bg-white" name="Description" id="mod_subproject_description" rows="2" maxlength="100"></textarea>
+                    </div>
+
+                    <div class="row g-2">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small text-muted fw-semibold">Start Date <span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Required</span></label>
+                            <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white font-monospace" name="StartDate" id="mod_subproject_start_date" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label small text-muted fw-semibold">End Date <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                            <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white font-monospace" name="EndDate" id="mod_subproject_end_date">
+                            <div class="form-text text-muted" style="font-size: 0.72rem;">Leave empty for no expiry.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light border-top">
+                    <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete SubProject Modal -->
+<div class="modal fade" id="deleteSubProjectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-danger bg-opacity-10 text-danger py-3 border-bottom border-danger-subtle">
+                <h5 class="modal-title fw-bold"><i class="bi bi-exclamation-triangle-fill me-2"></i>Delete SubProject</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'project_detail' project.id %}?tab=subprojects">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete_subproject">
+                <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                <input type="hidden" id="del_subproject_id" name="subproject_id">
+
+                <div class="modal-body p-4">
+                    <p class="mb-2">Are you sure you want to permanently delete the subproject <strong id="del_subproject_identifier_display" class="font-monospace text-dark"></strong>?</p>
+                    <div class="alert alert-warning d-flex align-items-center mb-0 py-2">
+                        <i class="bi bi-info-circle-fill me-2 flex-shrink-0"></i>
+                        <div class="small">This action cannot be undone. Associated job references and reporting will no longer link to this subproject.</div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light border-top">
+                    <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-sm btn-danger fw-bold px-3">Delete SubProject</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openModifySubProjectModal(id, identifier, description, startDate, endDate) {
+    document.getElementById('mod_subproject_id').value = id;
+    document.getElementById('mod_subproject_id_display').value = '#' + id;
+    document.getElementById('mod_subproject_identifier').value = identifier;
+    document.getElementById('mod_subproject_description').value = description;
+    document.getElementById('mod_subproject_start_date').value = startDate || '';
+    document.getElementById('mod_subproject_end_date').value = endDate || '';
+
+    const modal = new bootstrap.Modal(document.getElementById('modifySubProjectModal'));
+    modal.show();
+}
+
+function openDeleteSubProjectModal(id, identifier) {
+    document.getElementById('del_subproject_id').value = id;
+    document.getElementById('del_subproject_identifier_display').textContent = identifier;
+
+    const modal = new bootstrap.Modal(document.getElementById('deleteSubProjectModal'));
+    modal.show();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Set default start date for Add SubProject Modal if empty
+    const addModal = document.getElementById('addSubProjectModal');
+    if (addModal) {
+        addModal.addEventListener('show.bs.modal', function() {
+            const startInput = document.getElementById('new_subproject_start_date');
+            if (startInput && !startInput.value) {
+                const now = new Date();
+                now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+                startInput.value = now.toISOString().slice(0, 16);
+            }
+        });
+    }
+
+    // Live search for subprojects table
+    const searchInput = document.getElementById('subprojectSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const filter = this.value.toLowerCase().trim();
+            const rows = document.querySelectorAll('#subprojectsTable tbody tr.subproject-row');
+            rows.forEach(function(row) {
+                const identifierEl = row.querySelector('.subproject-identifier');
+                const descriptionEl = row.querySelector('.subproject-description');
+                const text = ((identifierEl ? identifierEl.textContent : '') + ' ' + (descriptionEl ? descriptionEl.textContent : '')).toLowerCase();
+                if (text.includes(filter)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+});
+</script>

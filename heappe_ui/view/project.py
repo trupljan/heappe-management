@@ -106,6 +106,9 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         if action == "create_credential": return create_credential(request, project_id)
         if action == "modify_credential": return modify_credential(request, project_id)
         if action == "delete_credential": return delete_credential(request, project_id)
+        if action == "create_subproject": return create_subproject(request, project_id)
+        if action == "modify_subproject": return modify_subproject(request, project_id)
+        if action == "delete_subproject": return delete_subproject(request, project_id)
 
     # Initialize context variables with defaults
     clusters = []
@@ -121,6 +124,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
     system_role_user_map = {}
     ui_features = {}
     project_queue_groups = []
+    sub_projects = []
 
     # Always fetch core project details
     project_data = controller.heappe_management_project_get(Id=project_id, SessionCode=session_code).to_dict()
@@ -402,7 +406,25 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
                     else:
                         print(f"[DEBUG] No proj_account found for {project_credential['username']}")
                         print(f"[DEBUG] Available accounts: {[pa['username'] for pa in project_accounts]}")
-                 
+
+    elif tab == "subprojects":
+        try:
+            try:
+                raw_subprojects = controller.heappe_management_sub_projects_get(
+                    project_id=project_id, session_code=session_code
+                )
+            except TypeError:
+                raw_subprojects = controller.heappe_management_sub_projects_get(
+                    ProjectId=project_id, SessionCode=session_code
+                )
+            if raw_subprojects:
+                for sp in raw_subprojects:
+                    sp_dict = sp.to_dict() if hasattr(sp, "to_dict") else sp
+                    sub_projects.append(sp_dict)
+        except Exception as ex:
+            print(f"Error fetching subprojects for project {project_id}: {ex}")
+            messages.error(request, f"Failed to load subprojects: {ex}")
+
     elif tab == "adaptor_users" and has_adaptor_users:
         try:
             adaptor_users = [u.to_dict() for u in controller.heappe_management_adaptor_users_in_project_get(
@@ -586,6 +608,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
         "command_templates": command_templates,
         "project_accounts": project_accounts,
         "project_credentials": project_credentials,
+        "sub_projects": sub_projects,
         "node_types": node_types,
         "all_cluster_node_types": all_cluster_node_types if tab == "commandtemplates" else [],
         "preset_templates": COMMAND_TEMPLATE_PRESETS if tab == "commandtemplates" else {},
@@ -1892,6 +1915,92 @@ def delete_credential(request: HttpRequest, project_id: int) -> HttpResponse:
         "Failed to delete HPC account credential"
     )
     reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=accounts")
+    return redirect(reload_url)
+
+
+@login_required
+def create_subproject(request: HttpRequest, project_id: int) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    identifier = request.POST.get("Identifier", "").strip()
+    description = request.POST.get("Description", "").strip() or None
+    start_date = _parse_datetime_local(request.POST.get("StartDate"))
+    if not start_date:
+        from django.utils import timezone
+        start_date = timezone.now()
+    end_date = _parse_datetime_local(request.POST.get("EndDate"))
+
+    payload_data = {
+        "ProjectId": int(project_id),
+        "Identifier": identifier,
+        "Description": description,
+        "StartDate": start_date,
+        "EndDate": end_date,
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_sub_project_post(**payload),
+        "SubProject created successfully!",
+        "Failed to create SubProject"
+    )
+    reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=subprojects")
+    return redirect(reload_url)
+
+
+@login_required
+def modify_subproject(request: HttpRequest, project_id: int, subproject_id: int = None) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    sub_id = subproject_id or request.POST.get("subproject_id") or request.POST.get("Id")
+    try:
+        sub_id = int(sub_id)
+    except (TypeError, ValueError):
+        messages.error(request, "Invalid SubProject ID.")
+        return redirect(f"/projects/{project_id}/?tab=subprojects")
+
+    identifier = request.POST.get("Identifier", "").strip()
+    description = request.POST.get("Description", "").strip() or None
+    start_date = _parse_datetime_local(request.POST.get("StartDate"))
+    end_date = _parse_datetime_local(request.POST.get("EndDate"))
+
+    payload_data = {
+        "Id": sub_id,
+        "Identifier": identifier,
+        "Description": description,
+        "StartDate": start_date,
+        "EndDate": end_date,
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_sub_project_put(**payload),
+        "SubProject updated successfully!",
+        "Failed to update SubProject"
+    )
+    reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=subprojects")
+    return redirect(reload_url)
+
+
+@login_required
+def delete_subproject(request: HttpRequest, project_id: int, subproject_id: int = None) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    sub_id = subproject_id or request.POST.get("subproject_id") or request.POST.get("Id")
+    try:
+        sub_id = int(sub_id)
+    except (TypeError, ValueError):
+        messages.error(request, "Invalid SubProject ID.")
+        return redirect(f"/projects/{project_id}/?tab=subprojects")
+
+    payload_data = {
+        "Id": sub_id,
+    }
+    payload = _create_payload(request.session_code, payload_data)
+    result = _handle_api_call(
+        request,
+        lambda: controller.heappe_management_sub_project_delete(**payload),
+        "SubProject deleted successfully!",
+        "Failed to delete SubProject"
+    )
+    reload_url = request.META.get('HTTP_REFERER', f"/projects/{project_id}/?tab=subprojects")
     return redirect(reload_url)
 
 

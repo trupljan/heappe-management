@@ -4022,6 +4022,153 @@ class CleanVersionResolutionTests(SimpleTestCase):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+class ProjectSubProjectTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testuser", password="password")
+
+    @mock.patch("heappe_ui.view.project.render")
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_project_detail_subprojects_tab_renders(self, mock_mgmt_api, mock_render):
+        from heappe_ui.view.project import project_detail
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_controller
+
+        proj_obj = mock.MagicMock()
+        proj_obj.to_dict.return_value = {"id": 1, "name": "Proj1"}
+        mock_controller.heappe_management_project_get.return_value = proj_obj
+
+        sp_mock = mock.MagicMock()
+        sp_mock.to_dict.return_value = {
+            "id": 10,
+            "identifier": "SUB-01",
+            "description": "Test subproject",
+            "start_date": "2026-01-01T00:00:00",
+            "end_date": "2026-12-31T23:59:59",
+            "project_id": 1
+        }
+        mock_controller.heappe_management_sub_projects_get.return_value = [sp_mock]
+
+        req = self.factory.get("/projects/1/?tab=subprojects")
+        req.user = self.user
+        req.session_code = "sess_123"
+        req.api_instance = mock.MagicMock()
+        req.session = {"middleware_deployed_version": "6.5.0"}
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(req, '_messages', FallbackStorage(req))
+
+        project_detail(req, project_id=1)
+        mock_controller.heappe_management_sub_projects_get.assert_called_once()
+        render_context = mock_render.call_args[0][2]
+        self.assertEqual(render_context["active_tab"], "subprojects")
+        self.assertEqual(len(render_context["sub_projects"]), 1)
+        self.assertEqual(render_context["sub_projects"][0]["identifier"], "SUB-01")
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_create_subproject_success(self, mock_mgmt_api):
+        from heappe_ui.view.project import create_subproject
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_controller
+        mock_controller.heappe_management_sub_project_post.return_value = {"Id": 11}
+
+        req = self.factory.post("/projects/1/subprojects/create/", {
+            "Identifier": "SUB-NEW",
+            "Description": "New description",
+            "StartDate": "2026-10-05T12:00",
+            "EndDate": "2027-10-05T12:00",
+        })
+        req.user = self.user
+        req.session_code = "sess_123"
+        req.api_instance = mock.MagicMock()
+        req.session = {"middleware_deployed_version": "6.5.0"}
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(req, '_messages', FallbackStorage(req))
+
+        response = create_subproject(req, project_id=1)
+        self.assertEqual(response.status_code, 302)
+        mock_controller.heappe_management_sub_project_post.assert_called_once()
+        call_kwargs = mock_controller.heappe_management_sub_project_post.call_args[1]
+        self.assertIn("body", call_kwargs)
+        self.assertEqual(call_kwargs["body"]["Identifier"], "SUB-NEW")
+        self.assertEqual(call_kwargs["body"]["ProjectId"], 1)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_modify_subproject_success(self, mock_mgmt_api):
+        from heappe_ui.view.project import modify_subproject
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_controller
+        mock_controller.heappe_management_sub_project_put.return_value = {"Id": 11}
+
+        req = self.factory.post("/projects/1/subprojects/11/modify/", {
+            "subproject_id": "11",
+            "Identifier": "SUB-MODIFIED",
+            "Description": "Updated desc",
+            "StartDate": "2026-10-05T12:00",
+            "EndDate": "",
+        })
+        req.user = self.user
+        req.session_code = "sess_123"
+        req.api_instance = mock.MagicMock()
+        req.session = {"middleware_deployed_version": "6.5.0"}
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(req, '_messages', FallbackStorage(req))
+
+        response = modify_subproject(req, project_id=1, subproject_id=11)
+        self.assertEqual(response.status_code, 302)
+        mock_controller.heappe_management_sub_project_put.assert_called_once()
+        call_kwargs = mock_controller.heappe_management_sub_project_put.call_args[1]
+        self.assertEqual(call_kwargs["body"]["Id"], 11)
+        self.assertEqual(call_kwargs["body"]["Identifier"], "SUB-MODIFIED")
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_delete_subproject_success(self, mock_mgmt_api):
+        from heappe_ui.view.project import delete_subproject
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_controller
+        mock_controller.heappe_management_sub_project_delete.return_value = "true"
+
+        req = self.factory.post("/projects/1/subprojects/11/delete/", {
+            "subproject_id": "11",
+        })
+        req.user = self.user
+        req.session_code = "sess_123"
+        req.api_instance = mock.MagicMock()
+        req.session = {"middleware_deployed_version": "6.5.0"}
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(req, '_messages', FallbackStorage(req))
+
+        response = delete_subproject(req, project_id=1, subproject_id=11)
+        self.assertEqual(response.status_code, 302)
+        mock_controller.heappe_management_sub_project_delete.assert_called_once()
+        call_kwargs = mock_controller.heappe_management_sub_project_delete.call_args[1]
+        self.assertEqual(call_kwargs["body"]["Id"], 11)
+
+    @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
+    def test_project_detail_post_action_subproject(self, mock_mgmt_api):
+        from heappe_ui.view.project import project_detail
+        mock_controller = mock.MagicMock()
+        mock_mgmt_api.return_value = mock_controller
+        mock_controller.heappe_management_sub_project_post.return_value = {"Id": 15}
+
+        req = self.factory.post("/projects/1/", {
+            "action": "create_subproject",
+            "Identifier": "SUB-DISPATCH",
+            "Description": "Via project detail post",
+            "StartDate": "2026-10-05T12:00",
+        })
+        req.user = self.user
+        req.session_code = "sess_123"
+        req.api_instance = mock.MagicMock()
+        req.session = {"middleware_deployed_version": "6.5.0"}
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(req, '_messages', FallbackStorage(req))
+
+        response = project_detail(req, project_id=1)
+        self.assertEqual(response.status_code, 302)
+        mock_controller.heappe_management_sub_project_post.assert_called_once()
+
+
+
 
 
 
