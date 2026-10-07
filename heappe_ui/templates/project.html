@@ -970,7 +970,7 @@
             <label class="form-label small text-muted fw-semibold">Select Adaptor User</label>
             <select name="adaptor_user" class="form-select border-light-subtle bg-white">
                 {% if not project.is_one_to_one_mapping %}
-                    <option value="">Service Account (All Users)</option>
+                    <option value="">Robot Account (All Users)</option>
                 {% endif %}
                 {% for u in adaptor_users %}
                     <option value="{{ u.id }}">{{ u.username }} (ID: {{ u.id }})</option>

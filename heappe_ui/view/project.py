@@ -348,7 +348,7 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
                     matched_users = [user["username"] for user in adaptor_users if user["id"] == project_credential["adaptor_user_id"]]
                     project_credential["adaptor_username"] = matched_users[0] if matched_users else f"Unknown (ID: {project_credential['adaptor_user_id']})"
                 else:
-                    project_credential["adaptor_username"] = "Service Account (All Users)"
+                    project_credential["adaptor_username"] = "Robot Account (All Users)"
                 
                 # add status safely
                 try:

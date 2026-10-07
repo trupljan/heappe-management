@@ -4083,6 +4083,74 @@ class CleanVersionResolutionTests(SimpleTestCase):
         resolved = resolve_clean_version("feature/qsheduler_machine_info_endpoint")
         self.assertEqual(resolved, "v6.5.0")
 
+    def test_extract_version_from_changelog_formats(self):
+        from heappe_ui.DeployService import extract_version_from_changelog
+        import tempfile
+        import shutil
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            # Test Keep a Changelog with [Unreleased] and bracketed versions
+            cl_path = os.path.join(temp_dir, "CHANGELOG.md")
+            with open(cl_path, "w", encoding="utf-8") as f:
+                f.write("""# Changelog
+All notable changes to this project will be documented in this file.
+
+## [Unreleased]
+### Added
+- WIP feature
+
+## [6.5.2] - 2024-05-10
+### Added
+- New endpoint
+
+## [6.4.17] - 2024-01-15
+### Fixed
+- Bugfix
+""")
+            self.assertEqual(extract_version_from_changelog(temp_dir), "v6.5.2")
+            self.assertEqual(extract_version_from_changelog(cl_path), "v6.5.2")
+
+            # Test simple header format '## v6.6.0'
+            with open(cl_path, "w", encoding="utf-8") as f:
+                f.write("""# Changes
+## v6.6.0 (2024-06-01)
+- Released version 6.6.0
+""")
+            self.assertEqual(extract_version_from_changelog(temp_dir), "v6.6.0")
+
+            # Test '### Version 7.0.1'
+            with open(cl_path, "w", encoding="utf-8") as f:
+                f.write("""# Project Changelog
+### Version 7.0.1
+- Major upgrade
+""")
+            self.assertEqual(extract_version_from_changelog(temp_dir), "v7.0.1")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_resolve_clean_version_from_changelog_on_develop_branch(self):
+        from heappe_ui.DeployService import resolve_clean_version
+        import tempfile
+        import shutil
+
+        temp_dir = tempfile.mkdtemp()
+        try:
+            cl_path = os.path.join(temp_dir, "CHANGELOG.md")
+            with open(cl_path, "w", encoding="utf-8") as f:
+                f.write("""# Changelog
+## [Unreleased]
+## [6.5.3] - 2024-07-20
+""")
+            # For develop branch with CHANGELOG present in compose_dir
+            resolved = resolve_clean_version(
+                version_or_ref="develop",
+                compose_dir=temp_dir
+            )
+            self.assertEqual(resolved, "v6.5.3")
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
     def test_resolve_clean_version_git_describe(self):
         from heappe_ui.DeployService import resolve_clean_version
         import subprocess

@@ -72,6 +72,72 @@ def get_instance_settings(instance_name:str= 'heappe_instance'):
         return None
 
 
+def extract_version_from_changelog(repo_or_changelog_path: Optional[str]) -> Optional[str]:
+    """
+    Extract the latest release version from a CHANGELOG file.
+    Searches for files like CHANGELOG.md, changelog.md, etc.
+    Parses version headers like '## [6.5.2]', '## v6.5.2', '## Version 6.5.2', etc.
+    Skips 'Unreleased' sections.
+    """
+    if not repo_or_changelog_path:
+        return None
+
+    file_path = repo_or_changelog_path
+    if os.path.isdir(repo_or_changelog_path):
+        candidate_names = [
+            "CHANGELOG.md", "changelog.md", "CHANGELOG", "ChangeLog.md",
+            "ChangeLog", "CHANGES.md", "changes.md", "HISTORY.md", "history.md"
+        ]
+        found = None
+        for name in candidate_names:
+            p = os.path.join(repo_or_changelog_path, name)
+            if os.path.isfile(p):
+                found = p
+                break
+        if not found:
+            return None
+        file_path = found
+
+    if not os.path.isfile(file_path):
+        return None
+
+    try:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line or line.startswith("<!--"):
+                    continue
+
+                # Skip unreleased / work in progress sections
+                if "unreleased" in line.lower() or "wip" in line.lower():
+                    continue
+
+                # Check for bracketed version: [6.5.2] or [v6.5.2]
+                m_bracket = re.search(r'\[[vV]?(\d+\.\d+(?:\.\d+)*)\]', line)
+                if m_bracket:
+                    ver = m_bracket.group(1)
+                    return f"v{ver}"
+
+                # Check for header lines starting with # (e.g. ## 6.5.2, ### v6.5.2, # Version 6.5.2)
+                if line.startswith("#"):
+                    m_ver = re.search(r'(?:version\s*|[vV])?(\d+\.\d+(?:\.\d+)*)', line, re.IGNORECASE)
+                    if m_ver:
+                        ver = m_ver.group(1)
+                        if ver.count(".") >= 1:
+                            return f"v{ver}"
+
+                # Check for lines starting directly with version: Version 6.5.2 or v6.5.2
+                m_direct = re.match(r'^(?:Version\s+|[vV])?(\d+\.\d+(?:\.\d+)*)\b', line, re.IGNORECASE)
+                if m_direct:
+                    ver = m_direct.group(1)
+                    if ver.count(".") >= 1:
+                        return f"v{ver}"
+    except Exception as e:
+        logger.warning(f"Error reading changelog from {file_path}: {e}")
+
+    return None
+
+
 def resolve_clean_version(
         version_or_ref: Optional[str] = None,
         compose_dir: Optional[str] = None,
@@ -100,7 +166,13 @@ def resolve_clean_version(
             val = m.group(0)
             return val if val.startswith(('v', 'V')) else f"v{val}"
 
-    # 3. If compose_dir is provided and has a git repository, query git for nearest version tag
+    # 3. Check CHANGELOG in compose_dir (e.g. when branch is 'develop', 'master', etc.)
+    if compose_dir and os.path.exists(compose_dir):
+        changelog_version = extract_version_from_changelog(compose_dir)
+        if changelog_version:
+            return changelog_version
+
+    # 4. If compose_dir is provided and has a git repository, query git for nearest version tag
     if compose_dir and os.path.exists(os.path.join(compose_dir, ".git")):
         for cmd in [
             ["git", "describe", "--tags", "--match", "v[0-9]*", "--match", "[0-9]*", "--abbrev=0"],
@@ -132,7 +204,7 @@ def resolve_clean_version(
         except Exception:
             pass
 
-    # 4. Fallback to existing old_version if it is a valid semantic version (and not "unknown")
+    # 5. Fallback to existing old_version if it is a valid semantic version (and not "unknown")
     if old_version and old_version.lower() not in ("unknown", "none", ""):
         old_str = str(old_version).strip()
         if re.match(r'^[vV]?\d+(?:\.\d+)+$', old_str):
@@ -142,7 +214,7 @@ def resolve_clean_version(
             val = m_old.group(0)
             return val if val.startswith(('v', 'V')) else f"v{val}"
 
-    # 5. Default fallback
+    # 6. Default fallback
     return default_version or "v6.5.0"
 
 
