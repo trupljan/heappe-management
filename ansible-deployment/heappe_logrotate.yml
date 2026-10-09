@@ -16,9 +16,8 @@
         mode: '0644'
         content: |
           # Logrotate configuration for HEAppE middleware & components
-          /opt/heappe/logs/*/*.log
-          /opt/heappe/logs/*/*.json
-          /opt/heappe/logs/Vault/*.log {
+          /opt/heappe-deployment/*/app/logs/*/*.log
+          /opt/heappe-deployment/*/app/logs/*/*.json  {
               daily
               rotate 14
               missingok
