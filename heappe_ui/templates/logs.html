@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load custom_filters %}
 
 {% block title %}System Logs Dashboard{% endblock %}
 
@@ -326,7 +327,7 @@
                     <tbody>
                         {% for log in logs %}
                         <tr class="terminal-row level-{{ log.LevelName|lower }} cursor-pointer" onclick="showLogContext(this)" data-date="{{ log.Date|date:'Y-m-d H:i:s.u' }}" data-instance="{{ log.InstanceName }}">
-                            <td class="ps-4 font-monospace text-secondary" style="font-size: 0.8rem;">{{ log.Date|date:"d.m.Y H:i:s" }}</td>
+                            <td class="ps-4 font-monospace text-secondary" style="font-size: 0.8rem;">{{ log.Date|format_datetime }}</td>
                             <td>
                                 <span class="badge 
                                     {% if log.LevelName == 'Debug' %}bg-secondary-subtle text-secondary

@@ -83,23 +83,33 @@ def heappe_version_ok(context, min_version):
 
 from datetime import datetime
 
+def _format_dt(dt, fmt):
+    if not fmt:
+        fmt = '%d.%m.%Y %H:%M:%S.%3f'
+    if '%3f' in fmt:
+        ms_str = f"{dt.microsecond // 1000:03d}"
+        fmt_without_ms = fmt.replace('%3f', '__MS_PLACEHOLDER__')
+        formatted = dt.strftime(fmt_without_ms)
+        return formatted.replace('__MS_PLACEHOLDER__', ms_str)
+    return dt.strftime(fmt)
+
 @register.filter
-def format_datetime(value, format_str='%d.%m.%Y %H:%M:%S'):
+def format_datetime(value, format_str='%d.%m.%Y %H:%M:%S.%3f'):
     if not value:
         return ""
     if hasattr(value, 'strftime'):
-        return value.strftime(format_str)
+        return _format_dt(value, format_str)
     
     if isinstance(value, str):
         value_clean = value.replace('T', ' ').replace('Z', '').strip()
         if '.' in value_clean:
             base, sub = value_clean.split('.', 1)
-            sub_clean = sub[:6]
+            sub_clean = (sub + '000000')[:6]
             value_clean = f"{base}.{sub_clean}"
             for fmt in ('%Y-%m-%d %H:%M:%S.%f', '%Y-%m-%d %H:%M:%S'):
                 try:
                     dt = datetime.strptime(value_clean, fmt)
-                    return dt.strftime(format_str)
+                    return _format_dt(dt, format_str)
                 except ValueError:
                     pass
         else:
@@ -107,10 +117,10 @@ def format_datetime(value, format_str='%d.%m.%Y %H:%M:%S'):
                 try:
                     dt = datetime.strptime(value_clean, fmt)
                     if ':' in fmt:
-                        return dt.strftime(format_str)
+                        return _format_dt(dt, format_str)
                     else:
-                        out_fmt = format_str if format_str != '%d.%m.%Y %H:%M:%S' else '%d.%m.%Y'
-                        return dt.strftime(out_fmt)
+                        out_fmt = format_str if format_str not in ('%d.%m.%Y %H:%M:%S', '%d.%m.%Y %H:%M:%S.%3f') else '%d.%m.%Y'
+                        return _format_dt(dt, out_fmt)
                 except ValueError:
                     pass
             

@@ -1357,6 +1357,33 @@ class JobStatusViewTests(TestCase):
         self.assertEqual(format_task_priority("6"), "High")
         self.assertEqual(format_task_priority(999), "999")
 
+    def test_format_datetime_filter(self):
+        from datetime import datetime
+        from heappe_ui.templatetags.custom_filters import format_datetime
+
+        # None / empty
+        self.assertEqual(format_datetime(None), "")
+        self.assertEqual(format_datetime(""), "")
+
+        # datetime object with subseconds
+        dt = datetime(2026, 10, 8, 22, 28, 35, 123456)
+        self.assertEqual(format_datetime(dt), "08.10.2026 22:28:35.123")
+
+        # ISO string with 7 decimal places (nanoseconds / datetime2)
+        iso_str = "2026-10-08T22:28:35.1234567Z"
+        self.assertEqual(format_datetime(iso_str), "08.10.2026 22:28:35.123")
+
+        # ISO string without subseconds
+        iso_no_sub = "2026-10-08T22:28:35Z"
+        self.assertEqual(format_datetime(iso_no_sub), "08.10.2026 22:28:35.000")
+
+        # Custom format without ms
+        self.assertEqual(format_datetime(dt, "%Y-%m-%d %H:%M"), "2026-10-08 22:28")
+        self.assertEqual(format_datetime(iso_str, "%Y-%m-%dT%H:%M"), "2026-10-08T22:28")
+
+        # Date only string
+        self.assertEqual(format_datetime("2026-10-08"), "08.10.2026")
+
     def test_dashboard_jobs_history_template_null_safe(self):
         from django.template.loader import render_to_string
 
