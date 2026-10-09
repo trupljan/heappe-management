@@ -1,0 +1,44 @@
+---
+- name: Deploy logrotate configuration for HEAppE instances
+  hosts: heappe_servers # or your target inventory group (all / heappe_instances)
+  become: true
+  tasks:
+    - name: Ensure logrotate is installed
+      ansible.builtin.package:
+        name: logrotate
+        state: present
+
+    - name: Deploy HEAppE logrotate configuration
+      ansible.builtin.copy:
+        dest: /etc/logrotate.d/heappe
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # Logrotate configuration for HEAppE middleware & components
+          /opt/heappe/logs/*/*.log
+          /opt/heappe/logs/*/*.json
+          /opt/heappe/logs/Vault/*.log {
+              daily
+              rotate 14
+              missingok
+              notifempty
+              compress
+              delaycompress
+              copytruncate
+              dateext
+              dateformat -%Y%m%d
+              create 0640 root root
+          }
+
+    - name: Verify logrotate configuration syntax (dry-run)
+      ansible.builtin.command:
+        cmd: logrotate -d /etc/logrotate.d/heappe
+      changed_when: false
+
+    - name: Ensure logrotate systemd timer is active
+      ansible.builtin.systemd:
+        name: logrotate.timer
+        state: started
+        enabled: true
+      ignore_errors: true
