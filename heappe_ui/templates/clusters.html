@@ -26,6 +26,19 @@
                 <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" id="spinUpSlurmBtn">
                     <i class="bi bi-rocket me-1"></i>Spin up Test Slurm
                 </button>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm dropdown-toggle qs-menu-toggle" id="qschedulerMenuBtn"
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-cpu me-1"></i>QScheduler
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="qschedulerMenuBtn">
+                        <li><button type="button" class="dropdown-item small qs-open-btn" data-qs-action="new"><i class="bi bi-rocket-takeoff me-2 text-primary"></i>Deploy new instance</button></li>
+                        <li><button type="button" class="dropdown-item small qs-open-btn" data-qs-action="existing"><i class="bi bi-plus-circle me-2 text-success"></i>Add machine to instance</button></li>
+                        <li><button type="button" class="dropdown-item small qs-open-btn" data-qs-action="update"><i class="bi bi-arrow-repeat me-2 text-info"></i>Update instance (git)</button></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><button type="button" class="dropdown-item small text-danger qs-open-btn" data-qs-action="undeploy"><i class="bi bi-trash me-2"></i>Undeploy instance</button></li>
+                    </ul>
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-success fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#importClusterModal">
                     <i class="bi bi-upload me-1"></i>Import Cluster
                 </button>
@@ -173,6 +186,19 @@
                         <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" id="spinUpSlurmBtnEmpty">
                             <i class="bi bi-rocket me-1"></i>Spin up Test Slurm
                         </button>
+                        <div class="btn-group">
+                    <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm dropdown-toggle qs-menu-toggle" id="qschedulerMenuBtnEmpty"
+                            data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="bi bi-cpu me-1"></i>QScheduler
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="qschedulerMenuBtnEmpty">
+                        <li><button type="button" class="dropdown-item small qs-open-btn" data-qs-action="new"><i class="bi bi-rocket-takeoff me-2 text-primary"></i>Deploy new instance</button></li>
+                        <li><button type="button" class="dropdown-item small qs-open-btn" data-qs-action="existing"><i class="bi bi-plus-circle me-2 text-success"></i>Add machine to instance</button></li>
+                        <li><button type="button" class="dropdown-item small qs-open-btn" data-qs-action="update"><i class="bi bi-arrow-repeat me-2 text-info"></i>Update instance (git)</button></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><button type="button" class="dropdown-item small text-danger qs-open-btn" data-qs-action="undeploy"><i class="bi bi-trash me-2"></i>Undeploy instance</button></li>
+                    </ul>
+                </div>
                         <a href="{% url 'cluster_create' %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
                             <i class="bi bi-plus-lg me-1"></i>Add Cluster Now
                         </a>
@@ -590,4 +616,5 @@
         }
     });
 </script>
+{% include 'partials/qscheduler_deploy_modal.html' %}
 {% endblock %}
