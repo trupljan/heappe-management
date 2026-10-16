@@ -35,6 +35,10 @@ urlpatterns = [
     path('clusters/new/', views.cluster_create, name='cluster_create'),
     path('clusters/setup-slurm/', views.setup_slurm_view, name='setup_slurm'),
     path('clusters/setup-slurm-status/', views.setup_slurm_status_view, name='setup_slurm_status'),
+    path('clusters/setup-qscheduler/', views.setup_qscheduler_view, name='setup_qscheduler'),
+    path('clusters/setup-qscheduler-status/', views.setup_qscheduler_status_view, name='setup_qscheduler_status'),
+    path('clusters/setup-qscheduler-defaults/', views.setup_qscheduler_defaults_view, name='setup_qscheduler_defaults'),
+    path('clusters/qscheduler-manage/', views.qscheduler_manage_view, name='qscheduler_manage'),
 
     # Queues
     path('queues/', views.queues_view, name='queues_view'),
