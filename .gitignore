@@ -1,5 +1,10 @@
 db.sqlite3
 venv/
+.venv/
 __pycache__/
 .vscode/
 /.idea/*
+*.jar
+py4heappe/heappe_v6/
+heappe_v6_temp/
+metadata_last_modified.txt

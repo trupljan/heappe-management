@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block title %}Admin Jobs Monitoring{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Admin Jobs Monitoring</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <!-- Header Banner -->
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4 pb-2 border-bottom">
+        <div class="d-flex align-items-center gap-3">
+            <div class="p-2.5 bg-primary bg-opacity-10 text-primary rounded-3">
+                <i class="bi bi-speedometer2 fs-3"></i>
+            </div>
+            <div>
+                <h4 class="mb-0 fw-bold text-dark">Admin Jobs Monitoring</h4>
+                <span class="text-muted small">System-wide keyset-paginated job monitoring and cursor tracking (`GetJobsMonitoring`)</span>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" onclick="location.reload();" class="btn btn-sm btn-outline-primary fw-semibold shadow-sm">
+                <i class="bi bi-arrow-clockwise me-1"></i>Refresh List
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter & Paging Control Bar -->
+    <div class="card border-0 shadow-sm rounded-3 bg-white mb-4">
+        <div class="card-body p-3">
+            <form method="get" class="row g-3 align-items-center">
+                <div class="col-md-3 col-sm-6">
+                    <label class="form-label small fw-bold text-secondary mb-1">Page Size</label>
+                    <select name="page_size" class="form-select form-select-sm border-secondary-subtle" onchange="this.form.submit()">
+                        <option value="20" {% if page_size == 20 %}selected{% endif %}>20 jobs per page</option>
+                        <option value="50" {% if page_size == 50 %}selected{% endif %}>50 jobs per page</option>
+                        <option value="100" {% if page_size == 100 %}selected{% endif %}>100 jobs per page</option>
+                        <option value="200" {% if page_size == 200 %}selected{% endif %}>200 jobs per page</option>
+                    </select>
+                </div>
+                {% if last_job_id %}
+                <input type="hidden" name="last_job_id" value="{{ last_job_id }}">
+                {% endif %}
+                <div class="col-md-9 col-sm-6 text-end">
+                    <span class="text-muted small me-2">Showing cursor page ending at Job ID: <strong class="font-monospace text-dark">#{{ last_job_id|default:"Start" }}</strong></span>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Jobs Table -->
+    <div class="card border-0 shadow-sm rounded-3 bg-white overflow-hidden mb-4">
+        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+            <h5 class="h6 mb-0 fw-bold text-dark"><i class="bi bi-list-task text-primary me-2"></i>Monitored Jobs</h5>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2.5 py-1 fw-bold">{{ jobs|length }} Jobs Loaded</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.88rem;">
+                <thead class="table-light text-secondary small text-uppercase">
+                    <tr>
+                        <th class="ps-4">Job ID</th>
+                        <th>Job Name</th>
+                        <th>State</th>
+                        <th>Submitter</th>
+                        <th>Cluster</th>
+                        <th>Created / Submitted</th>
+                        <th>Start / End Time</th>
+                        <th class="text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job in jobs %}
+                    <tr>
+                        <td class="ps-4 font-monospace fw-bold text-primary">#{{ job.id }}</td>
+                        <td class="fw-bold text-dark">{{ job.name }}</td>
+                        <td>
+                            {% with st=job.state|stringformat:"s"|lower %}
+                            {% if st == '1' or st == 'configuring' %}
+                                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1 rounded-pill fw-bold">CONFIGURING</span>
+                            {% elif st == '2' or st == 'submitted' %}
+                                <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle px-2 py-1 rounded-pill fw-bold">SUBMITTED</span>
+                            {% elif st == '4' or st == 'queued' %}
+                                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1 rounded-pill fw-bold">QUEUED</span>
+                            {% elif st == '8' or st == 'running' %}
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 rounded-pill fw-bold">RUNNING</span>
+                            {% elif st == '16' or st == 'finished' %}
+                                <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill fw-bold">FINISHED</span>
+                            {% elif st == '32' or st == 'failed' %}
+                                <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-2 py-1 rounded-pill fw-bold">FAILED</span>
+                            {% elif st == '64' or st == 'canceled' %}
+                                <span class="badge bg-dark text-white px-2 py-1 rounded-pill fw-bold">CANCELED</span>
+                            {% else %}
+                                <span class="badge bg-light text-secondary border px-2 py-1 rounded-pill fw-bold">{{ job.state|upper }}</span>
+                            {% endif %}
+                            {% endwith %}
+                        </td>
+                        <td><span class="font-monospace text-secondary">{{ job.submitted_by }}</span></td>
+                        <td><span class="badge bg-light text-dark border">{{ job.cluster }}</span></td>
+                        <td class="font-monospace small text-muted">
+                            {{ job.creation_time|format_datetime|default:"-" }}
+                        </td>
+                        <td class="font-monospace small text-muted">
+                            {{ job.start_time|format_datetime|default:"-" }}
+                        </td>
+                        <td class="text-end pe-4">
+                            <a href="{% url 'job_status_view' job.id %}" class="btn btn-sm btn-outline-primary py-1 px-2 fw-semibold" title="View Job Details">
+                                <i class="bi bi-eye-fill me-1"></i>Details
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-2 text-secondary d-block mb-2"></i>
+                            No jobs found for the current cursor position.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Keyset Pagination Footer -->
+        <div class="card-footer bg-light py-3 d-flex align-items-center justify-content-between">
+            <a href="{% url 'admin_jobs_monitoring_view' %}?page_size={{ page_size }}" class="btn btn-sm btn-outline-secondary fw-semibold">
+                <i class="bi bi-chevron-double-left me-1"></i>First Page
+            </a>
+            {% if next_last_job_id %}
+            <a href="{% url 'admin_jobs_monitoring_view' %}?page_size={{ page_size }}&last_job_id={{ next_last_job_id }}" class="btn btn-sm btn-primary fw-bold px-3">
+                Next Page (Last ID: #{{ next_last_job_id }}) <i class="bi bi-chevron-right ms-1"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -14,15 +14,22 @@ def ensure_heappe_version(
     error_message: str,
     fallback_url: str,
 ):
-    controller = hp.HealthApi(request.api_instance)
-    health_info = controller.heappe_health_get()
+    try:
+        controller = hp.HealthApi(request.api_instance)
+        health_info = controller.heappe_health_get()
+        version = health_info.version.lstrip("vV") if health_info and hasattr(health_info, 'version') and health_info.version else ""
+    except Exception:
+        version = ""
 
-    # clean v/V prefix
-    version = health_info.version.lstrip("vV")
+    from .utils import clean_ver
+
 
     # if version is too low → stop and redirect
-    if version < min_version:
-        messages.error(request, error_message)
+    if clean_ver(version) < clean_ver(min_version):
+        try:
+            messages.error(request, error_message)
+        except Exception:
+            pass
         reload_url = request.META.get("HTTP_REFERER", fallback_url)
         return redirect(reload_url)
 

@@ -1,66 +1,593 @@
 {% extends "base.html" %}
 
+{% block title %}Available Clusters{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Clusters</li>
+{% endblock %}
 
 {% block content %}
-
-<div class="container">
-    <div class="card mb-4 w-90 mx-auto shadow-sm p-0">
-        <div class="card-header d-flex align-items-center">
-            <strong>Available Clusters</strong>
-            <div class="ms-auto d-flex align-items-center">
-                <a href="{% url 'cluster_create' %}" class="btn btn-sm btn-primary me-2">Add New</a>
-                <button class="btn btn-outline-secondary" onclick="location.reload();">Reload</button>
+<div class="container-fluid py-2">
+    <div class="card border-0 shadow-sm rounded-3 bg-white">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-server text-primary fs-5"></i>
+                <h5 class="h6 mb-0 fw-bold text-dark">Available Clusters</h5>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-grow-1 justify-content-end">
+                <div class="input-group input-group-sm" style="max-width: 250px;">
+                    <span class="input-group-text bg-white border-light-subtle text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" id="clusterSearch" class="form-control border-light-subtle" placeholder="Search clusters...">
+                </div>
+                <button type="button" class="btn btn-sm btn-danger fw-semibold d-none" id="bulkDeleteBtn" data-bs-toggle="modal" data-bs-target="#bulkDeleteModal">
+                    <i class="bi bi-trash me-1"></i>Delete Selected (<span id="selectCount">0</span>)
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" id="spinUpSlurmBtn">
+                    <i class="bi bi-rocket me-1"></i>Spin up Test Slurm
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#importClusterModal">
+                    <i class="bi bi-upload me-1"></i>Import Cluster
+                </button>
+                <a href="{% url 'cluster_create' %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
+                    <i class="bi bi-plus-lg me-1"></i>Add New Cluster
+                </a>
+                <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();" title="Refresh">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
             </div>
         </div>
-        <div class="">
-            {% if clusters %}
-                <div class="table-responsive">
-                    <table class="table table-striped mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th scope="col">ID</th>
-                                <th scope="col">Name</th>
-                                <th scope="col">Description</th>
-                                <th scope="col">Master Node Name</th>
-                                <th scope="col">Domain Name</th>
-                                <th scope="col">Scheduler</th>
-                                <th scope="col">Time Zone</th>
-                                <th scope="col">Port</th>
-                                <th scope="col">Protocol</th>
-                                <th scope="col">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for cluster in clusters %}
-                            <tr>
-                                <td>{{ cluster.id }}</td>
-                                <td>{{ cluster.name }}</td>
-                                <td>{{ cluster.description }}</td>
-                                <td>{{ cluster.master_node_name|default:"-" }}</td>
-                                <td>{{ cluster.domain_name|default:"-" }}</td>
-                                <td>{{ cluster.scheduler_name|default:"-" }}</td>
-                                <td>{{ cluster.time_zone|default:"-" }}</td>
-                                <td>{{ cluster.port|default:"-" }}</td>
-                                <td>{{ cluster.connection_protocol_name|default:"-" }}</td>
 
-                                <td>
-                                    <a href="{% url 'cluster_detail' cluster.id %}" class="btn btn-sm btn-primary me-1">Detail</a>
-                                    <a href="{% url 'cluster_delete' cluster.id %}"
-                                       class="btn btn-sm btn-danger"
-                                       onclick="return confirm('Are you sure you want to delete this cluster?');">
-                                       Delete
-                                    </a>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+        <div class="card-body p-0">
+            {% if clusters %}
+                <form method="post" id="bulkDeleteForm" action="{% url 'cluster_list' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="bulk_delete">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4" style="width: 5%;">
+                                        <input type="checkbox" class="form-check-input" id="selectAll">
+                                    </th>
+                                    <th style="width: 8%;">ID</th>
+                                    <th style="width: 25%;">Name &amp; Description</th>
+                                    <th style="width: 25%;">Master Node &amp; Domain</th>
+                                    <th style="width: 22%;">Scheduler &amp; Connection</th>
+                                    <th class="text-end pe-4" style="width: 15%;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cluster in clusters %}
+                                <tr>
+                                    <td class="ps-4">
+                                        <input type="checkbox" name="selected_ids" value="{{ cluster.id }}" class="form-check-input select-item">
+                                    </td>
+                                    <td class="font-monospace text-secondary fw-semibold">#{{ cluster.id }}</td>
+                                    <td>
+                                        <div class="fw-bold text-dark" style="font-size: 0.95rem;">{{ cluster.name }}</div>
+                                        <div class="text-muted small mt-0.5" style="font-size: 0.8rem;">{{ cluster.description|default:"No description" }}</div>
+                                    </td>
+                                    <td>
+                                        <div class="small text-dark fw-semibold d-flex align-items-center gap-1.5">
+                                            <i class="bi bi-hdd-network text-muted"></i>{{ cluster.master_node_name|default:"-" }}
+                                        </div>
+                                        <div class="text-muted small mt-1 d-flex align-items-center gap-1.5" style="font-size: 0.75rem;">
+                                            <i class="bi bi-globe text-muted"></i>{{ cluster.domain_name|default:"-" }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="small text-dark fw-semibold d-flex align-items-center gap-1.5">
+                                            <i class="bi bi-cpu text-muted"></i>{{ cluster.scheduler_name|default:"-" }}
+                                        </div>
+                                        <div class="text-muted small mt-1 d-flex align-items-center gap-1.5" style="font-size: 0.75rem;">
+                                            <i class="bi bi-shield-check text-muted"></i>{{ cluster.connection_protocol_name|default:"-" }}
+                                            <span class="badge bg-light text-secondary border font-monospace px-1.5 py-0.5">Port {{ cluster.port }}</span>
+                                        </div>
+                                    </td>
+                                    <td class="text-end pe-4">
+                                        <div class="d-flex gap-2 justify-content-end">
+                                            <a href="{% url 'cluster_detail' cluster.id %}" class="btn btn-sm btn-outline-primary fw-semibold px-2.5" title="View details">
+                                                <i class="bi bi-eye me-1"></i>Detail
+                                            </a>
+                                            <button type="button"
+                                                    class="btn btn-sm btn-outline-danger px-2.5"
+                                                    title="Delete cluster"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#deleteClusterModal{{ cluster.id }}">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                <!-- Delete Confirmation Modal -->
+                                <div class="modal fade" id="deleteClusterModal{{ cluster.id }}" tabindex="-1" aria-labelledby="deleteClusterLabel{{ cluster.id }}" aria-hidden="true" data-bs-backdrop="static">
+                                    <div class="modal-dialog modal-dialog-centered">
+                                        <div class="modal-content border-0 shadow-lg rounded-3">
+                                            <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                                                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="deleteClusterLabel{{ cluster.id }}">
+                                                    <i class="bi bi-exclamation-triangle-fill"></i>
+                                                    <span>Delete Cluster</span>
+                                                </h5>
+                                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body p-4 text-center">
+                                                <p class="text-secondary small mb-2">You are about to permanently delete the cluster:</p>
+                                                <h5 class="fw-bold text-dark my-3 font-monospace">{{ cluster.name }}</h5>
+                                                <div class="alert alert-danger border-0 rounded-3 small mb-0 d-flex gap-2 text-start">
+                                                    <i class="bi bi-exclamation-octagon-fill text-danger fs-5 flex-shrink-0"></i>
+                                                    <div><strong>Warning:</strong> This action is irreversible. All queues and associated configurations will be removed.</div>
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                                                <a href="{% url 'cluster_delete' cluster.id %}" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                                                    <i class="bi bi-trash me-1"></i>Delete Cluster
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
+
+                <!-- Bulk Delete Modal -->
+                <div class="modal fade" id="bulkDeleteModal" tabindex="-1" aria-labelledby="bulkDeleteLabel" aria-hidden="true" data-bs-backdrop="static">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content border-0 shadow-lg rounded-3">
+                            <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="bulkDeleteLabel">
+                                    <i class="bi bi-exclamation-triangle-fill"></i>
+                                    <span>Confirm Bulk Delete</span>
+                                </h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body p-4 text-center">
+                                <p class="text-secondary small mb-2">You are about to permanently delete the selected clusters:</p>
+                                <h5 class="fw-bold text-dark my-3"><span id="bulkDeleteCount">0</span> clusters</h5>
+                                <div class="alert alert-danger border-0 rounded-3 small mb-0 d-flex gap-2 text-start">
+                                    <i class="bi bi-exclamation-octagon-fill text-danger fs-5 flex-shrink-0"></i>
+                                    <div><strong>Warning:</strong> This action is irreversible. All queues and associated configurations for the selected clusters will be permanently removed.</div>
+                                </div>
+                            </div>
+                            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="confirmBulkDeleteBtn">
+                                    <i class="bi bi-trash me-1"></i>Delete Selected
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             {% else %}
-                <p class="mb-0">No clusters available.</p>
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-server fs-1 mb-3 d-block text-secondary"></i>
+                    <p class="mb-1 fw-semibold">No clusters available</p>
+                    <p class="small text-secondary mb-3">Add your first cluster to start managing HEAppE infrastructure.</p>
+                    <div class="d-flex justify-content-center gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" id="spinUpSlurmBtnEmpty">
+                            <i class="bi bi-rocket me-1"></i>Spin up Test Slurm
+                        </button>
+                        <a href="{% url 'cluster_create' %}" class="btn btn-sm btn-primary fw-bold shadow-sm">
+                            <i class="bi bi-plus-lg me-1"></i>Add Cluster Now
+                        </a>
+                    </div>
+                </div>
             {% endif %}
         </div>
     </div>
 </div>
 
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const searchInput = document.getElementById('clusterSearch');
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                const query = this.value.toLowerCase().trim();
+                const tbody = document.querySelector('table tbody');
+                if (!tbody) return;
+                
+                const rows = tbody.querySelectorAll('tr:not(.no-results-row)');
+                let matches = 0;
+                rows.forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    if (text.includes(query)) {
+                        row.style.setProperty('display', '', 'important');
+                        matches++;
+                    } else {
+                        row.style.setProperty('display', 'none', 'important');
+                    }
+                });
+                
+                let noResults = document.getElementById('noClusterResults');
+                if (matches === 0 && query !== '') {
+                    if (!noResults) {
+                        noResults = document.createElement('tr');
+                        noResults.id = 'noClusterResults';
+                        noResults.className = 'no-results-row';
+                        noResults.innerHTML = `<td colspan="6" class="text-center py-4 text-muted"><i class="bi bi-search fs-4 d-block mb-2 text-secondary"></i>No matching clusters found.</td>`;
+                        tbody.appendChild(noResults);
+                    }
+                } else {
+                    if (noResults) {
+                        noResults.remove();
+                    }
+                }
+            });
+        }
+
+        // Bulk selection logic
+        const selectAll = document.getElementById('selectAll');
+        const selectItems = document.querySelectorAll('.select-item');
+        const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+        const selectCount = document.getElementById('selectCount');
+        const bulkDeleteCount = document.getElementById('bulkDeleteCount');
+        const confirmBulkDeleteBtn = document.getElementById('confirmBulkDeleteBtn');
+        const bulkDeleteForm = document.getElementById('bulkDeleteForm');
+
+        function updateBulkDeleteState() {
+            const checkedCount = document.querySelectorAll('.select-item:checked').length;
+            if (checkedCount > 0) {
+                bulkDeleteBtn.classList.remove('d-none');
+                selectCount.textContent = checkedCount;
+                bulkDeleteCount.textContent = checkedCount;
+            } else {
+                bulkDeleteBtn.classList.add('d-none');
+            }
+            if (selectAll) {
+                selectAll.checked = (checkedCount === selectItems.length && selectItems.length > 0);
+            }
+        }
+
+        if (selectAll) {
+            selectAll.addEventListener('change', function () {
+                const isChecked = this.checked;
+                // Only toggle visible items
+                const tbody = document.querySelector('table tbody');
+                const rows = tbody.querySelectorAll('tr');
+                rows.forEach(row => {
+                    if (row.style.display !== 'none') {
+                        const cb = row.querySelector('.select-item');
+                        if (cb) cb.checked = isChecked;
+                    }
+                });
+                updateBulkDeleteState();
+            });
+        }
+
+        selectItems.forEach(item => {
+            item.addEventListener('change', updateBulkDeleteState);
+        });
+
+        if (confirmBulkDeleteBtn) {
+            confirmBulkDeleteBtn.addEventListener('click', function () {
+                bulkDeleteForm.submit();
+            });
+        }
+    });
+</script>
+
+<!-- Import Cluster Modal -->
+<div class="modal fade" id="importClusterModal" tabindex="-1" aria-labelledby="importClusterLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <form method="post" action="{% url 'cluster_import' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-header bg-success text-white border-0 py-3 px-4" style="background: linear-gradient(135deg, #198754 0%, #157347 100%) !important;">
+                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="importClusterLabel">
+                        <i class="bi bi-upload"></i>
+                        <span>Import Cluster Configuration</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <p class="text-secondary small mb-3">
+                        Upload a cluster configuration file (`.json`) exported from another instance.
+                    </p>
+                    <div class="mb-3">
+                        <label for="configFile" class="form-label small fw-bold text-dark">Configuration JSON File</label>
+                        <input class="form-control form-control-sm" type="file" id="configFile" name="config_file" accept=".json" required>
+                    </div>
+                    <div class="alert alert-info border-0 rounded-3 small mb-0 d-flex gap-2">
+                        <i class="bi bi-info-circle-fill text-info fs-5 flex-shrink-0"></i>
+                        <div>This will import the cluster settings, file transfer methods, queues, and queue groups. Projects will not be imported.</div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                        <i class="bi bi-check-lg me-1"></i>Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Slurm Confirmation Modal -->
+<div class="modal fade" id="slurmConfirmModal" tabindex="-1" aria-labelledby="slurmConfirmLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%) !important;">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="slurmConfirmLabel">
+                    <i class="bi bi-rocket-takeoff-fill"></i>
+                    <span>Spin up Slurm Test Simulator?</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-secondary mb-4">
+                    This action will automatically build and start a complete test Slurm cluster inside an isolated Docker container, and fully register and configure it in the selected HEAppE instance.
+                </p>
+
+                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-info-circle text-primary me-2"></i>What exactly does this process do:</h6>
+
+                <div class="row g-3 mb-4">
+                    <!-- Step 1 -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="bg-primary bg-opacity-10 text-primary rounded p-2 d-inline-flex">
+                                    <i class="bi bi-box-seam fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">1. Build Docker Image</h6>
+                                    <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
+                                        Locally builds a Docker image <code>slurm-simulator-img:latest</code> (based on Ubuntu 22.04) containing Slurmctld, Slurmd, Slurmdbd, Munge, and MariaDB.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Step 2 -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="bg-success bg-opacity-10 text-success rounded p-2 d-inline-flex">
+                                    <i class="bi bi-play-circle fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">2. Start Container</h6>
+                                    <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
+                                        Runs a <code>slurm-simulator-{id}</code> container in the background, mapping its internal SSH port 22 to a random free host port (e.g., 2222).
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="bg-info bg-opacity-10 text-info rounded p-2 d-inline-flex">
+                                    <i class="bi bi-server fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">3. Register in HEAppE</h6>
+                                    <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
+                                        Creates a new Cluster, File Transfer Method (SFTP/SCP), CPU/GPU Queue Groups (Node Type Aggregations) with accounting formulas, and CPU/GPU Queues (Node Types) in HEAppE.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Step 4 -->
+                    <div class="col-md-6">
+                        <div class="card h-100 border-0 bg-light p-3 rounded-3">
+                            <div class="d-flex align-items-start gap-3">
+                                <div class="bg-warning bg-opacity-10 text-warning-emphasis rounded p-2 d-inline-flex">
+                                    <i class="bi bi-key fs-5"></i>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">4. Create SSH Credentials</h6>
+                                    <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
+                                        Creates a test Project, assigns it to the cluster/queue groups, generates SSH keys for the simulator user, and initializes script root directories.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning border-0 rounded-3 small mb-0 d-flex gap-3 text-start">
+                    <i class="bi bi-exclamation-triangle-fill text-warning fs-4 flex-shrink-0"></i>
+                    <div>
+                        <strong>Important Note:</strong> Make sure the <strong>Docker</strong> daemon is running on your machine. The first build can take 15–30 seconds depending on package download speeds. You can easily monitor or stop the running container later in the <strong>Deployments</strong> tab.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="confirmSpinUpSlurmBtn">
+                    <i class="bi bi-rocket-takeoff-fill me-1"></i>Continue and Run
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Slurm Setup Modal -->
+<div class="modal fade" id="slurmSetupModal" tabindex="-1" aria-labelledby="slurmSetupLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="slurmSetupLabel">
+                    <i class="bi bi-rocket"></i>
+                    <span>Spinning up Slurm Test Cluster</span>
+                </h5>
+            </div>
+            <div class="modal-body p-4">
+                <div class="text-center mb-3" id="slurm-setup-spinner">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <p class="text-muted mt-2 small">Building Docker image, starting container, and configuring HEAppE...</p>
+                </div>
+                <div id="slurm-setup-success-alert" class="alert alert-success border-0 rounded-3 small mb-3 d-none">
+                    <h6 class="alert-heading fw-bold d-flex align-items-center gap-2"><i class="bi bi-check-circle-fill"></i>Setup Successful!</h6>
+                    <p class="mb-2">Your test Slurm cluster has been successfully created and configured in HEAppE.</p>
+                    <div class="bg-white p-3 rounded border border-success-subtle font-monospace text-dark mt-2 mb-3">
+                        <strong class="d-block mb-1">SSH Connection Details:</strong>
+                        ssh heappeslurm@localhost -p <span id="slurm-ssh-port">2222</span> (password: <strong>pass</strong>)
+                    </div>
+                    <div class="bg-white border border-success-subtle rounded-3 p-3 d-flex align-items-start gap-3">
+                        <div class="bg-success bg-opacity-10 text-success rounded p-2 d-inline-flex flex-shrink-0">
+                            <i class="bi bi-arrow-right-circle-fill fs-5"></i>
+                        </div>
+                        <div>
+                            <p class="mb-1 fw-semibold text-dark" style="font-size: 0.85rem;">What's next?</p>
+                            <p class="mb-2 text-secondary" style="font-size: 0.8rem; line-height: 1.4;">Head over to <strong>Projects</strong> to configure your first Command Template and submit a test job to the Slurm cluster.</p>
+                            <a href="{% url 'project_list' %}" class="btn btn-success btn-sm fw-bold rounded-3 shadow-sm px-3" id="slurmGoToProjectsInlineBtn">
+                                <i class="bi bi-folder2-open me-1"></i>Go to Projects
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div id="slurm-setup-error-alert" class="alert alert-danger border-0 rounded-3 small mb-3 d-none">
+                    <h6 class="alert-heading fw-bold d-flex align-items-center gap-1.5"><i class="bi bi-exclamation-octagon-fill"></i>Setup Failed</h6>
+                    <div id="slurm-setup-error-text"></div>
+                </div>
+                <label class="form-label fw-bold text-secondary mb-2 small"><i class="bi bi-journal-text me-1"></i>Setup logs:</label>
+                <pre id="slurm-setup-logs" class="p-3 mb-0 rounded text-light bg-dark font-monospace" style="height: 300px; overflow-y: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap; border: 1px solid #343a40;"></pre>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2" id="slurm-setup-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2 d-none" id="slurmSetupCloseBtn" data-bs-dismiss="modal">Close</button>
+                <a href="{% url 'project_list' %}" class="btn btn-success btn-sm fw-bold rounded-3 shadow-sm px-3 py-2 d-none" id="slurmGoToProjectsBtn">
+                    <i class="bi bi-folder2-open me-1"></i>Go to Projects &rarr;
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const spinUpBtn = document.getElementById('spinUpSlurmBtn');
+        const spinUpBtnEmpty = document.getElementById('spinUpSlurmBtnEmpty');
+        
+        const slurmConfirmModal = new bootstrap.Modal(document.getElementById('slurmConfirmModal'));
+        const confirmSpinUpSlurmBtn = document.getElementById('confirmSpinUpSlurmBtn');
+        
+        const slurmSetupModal = new bootstrap.Modal(document.getElementById('slurmSetupModal'));
+        const logElement = document.getElementById('slurm-setup-logs');
+        const spinner = document.getElementById('slurm-setup-spinner');
+        const successAlert = document.getElementById('slurm-setup-success-alert');
+        const errorAlert = document.getElementById('slurm-setup-error-alert');
+        const errorText = document.getElementById('slurm-setup-error-text');
+        const sshPortSpan = document.getElementById('slurm-ssh-port');
+        const closeBtn = document.getElementById('slurmSetupCloseBtn');
+        
+        let pollInterval = null;
+
+        function startSlurmSetup() {
+            // Reset modal UI
+            logElement.textContent = 'Initializing setup...';
+            spinner.classList.remove('d-none');
+            successAlert.classList.add('d-none');
+            errorAlert.classList.add('d-none');
+            closeBtn.classList.add('d-none');
+            
+            slurmSetupModal.show();
+            
+            // Call POST to setup-slurm/
+            fetch("{% url 'setup_slurm' %}", {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    // Start polling
+                    pollSlurmStatus();
+                } else {
+                    showError(data.message || 'Failed to initiate Slurm setup.');
+                }
+            })
+            .catch(err => {
+                showError(err.message || 'Network error.');
+            });
+        }
+
+        function pollSlurmStatus() {
+            if (pollInterval) clearInterval(pollInterval);
+            
+            pollInterval = setInterval(() => {
+                fetch("{% url 'setup_slurm_status' %}")
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Update logs
+                        logElement.textContent = data.logs || 'No logs yet...';
+                        logElement.scrollTop = logElement.scrollHeight;
+                        
+                        if (!data.is_running) {
+                            clearInterval(pollInterval);
+                            spinner.classList.add('d-none');
+                            closeBtn.classList.remove('d-none');
+                            
+                            if (data.success) {
+                                successAlert.classList.remove('d-none');
+                                sshPortSpan.textContent = data.port || '2222';
+                                // Show the "Go to Projects" footer button
+                                const goToProjectsBtn = document.getElementById('slurmGoToProjectsBtn');
+                                if (goToProjectsBtn) goToProjectsBtn.classList.remove('d-none');
+                                // Enable page reload when closed (if user clicks Close instead)
+                                document.getElementById('slurmSetupModal').addEventListener('hidden.bs.modal', function () {
+                                    location.reload();
+                                }, { once: true });
+                            } else {
+                                showError(data.error || 'Setup completed with errors.');
+                            }
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('Error polling Slurm status:', err);
+                });
+            }, 1500);
+        }
+
+        function showError(msg) {
+            if (pollInterval) clearInterval(pollInterval);
+            spinner.classList.add('d-none');
+            errorAlert.classList.remove('d-none');
+            errorText.textContent = msg;
+            closeBtn.classList.remove('d-none');
+        }
+
+        if (spinUpBtn) {
+            spinUpBtn.addEventListener('click', function() {
+                slurmConfirmModal.show();
+            });
+        }
+        if (spinUpBtnEmpty) {
+            spinUpBtnEmpty.addEventListener('click', function() {
+                slurmConfirmModal.show();
+            });
+        }
+        if (confirmSpinUpSlurmBtn) {
+            confirmSpinUpSlurmBtn.addEventListener('click', function() {
+                slurmConfirmModal.hide();
+                startSlurmSetup();
+            });
+        }
+
+        // Handle auto-trigger if url parameter is set
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('action') === 'spin-slurm') {
+            slurmConfirmModal.show();
+            // clean up the URL parameters so it doesn't prompt again on refresh
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    });
+</script>
 {% endblock %}

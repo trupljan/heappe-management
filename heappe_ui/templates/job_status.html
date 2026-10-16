@@ -1,184 +1,340 @@
 {% extends "base.html" %}
+{% load custom_filters %}
+
+{% block title %}Job Status - {{ job.name }}{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'project_list' %}" class="text-decoration-none text-secondary">Projects</a></li>
+    {% if project %}
+        <li class="breadcrumb-item"><a href="{% url 'project_detail' project.id %}" class="text-decoration-none text-secondary">{{ project.name }}</a></li>
+    {% endif %}
+    <li class="breadcrumb-item active" aria-current="page">Job #{{ job.id }} Status</li>
+{% endblock %}
 
 {% block content %}
+<div class="container-fluid py-2">
 
-<div class="container my-5" style="max-width: 1400px;">
-  <!-- Job Details -->
-  <div class="card shadow rounded-4 mb-5 border-0">
-    <div class="card-header bg-primary text-bg-primary d-flex align-items-center rounded-top-4 p-4">
-      <h3 class="mb-0"><i class="bi bi-briefcase me-2"></i> Job Details</h3>
-      <button class="btn btn-outline-light btn-sm ms-auto">
-        <i class="bi bi-arrow-clockwise" onclick="location.reload();"></i> Reload
-      </button>
-    </div>
-    <div class="card-body p-4">
-      <div class="row g-4">
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Job ID</h6>
-            <p class="fs-6 mb-0 text-dark">{{ job.id }}</p>
-          </div>
+    <!-- Header and Mode Switcher -->
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2.5">
+            <i class="bi bi-briefcase-fill text-primary fs-3"></i>
+            <div>
+                <h4 class="mb-0 fw-bold text-dark">Job Details: {{ job.name }}</h4>
+                <span class="text-muted small">ID: <strong class="font-monospace text-secondary">{{ job.id }}</strong></span>
+            </div>
         </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Job Name</h6>
-            <p class="fs-6 mb-0 text-dark">{{ job.name }}</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">State</h6>
-            {% if job.state == 1 %}
-              <span class="badge text-bg-secondary">Configuring</span>
-            {% elif job.state == 2 %}
-              <span class="badge text-bg-info">Submitted</span>
-            {% elif job.state == 4 %}
-              <span class="badge text-bg-warning">Queued</span>
-            {% elif job.state == 8 %}
-              <span class="badge text-bg-primary">Running</span>
-            {% elif job.state == 16 %}
-              <span class="badge text-bg-success">Finished</span>
-            {% elif job.state == 32 %}
-              <span class="badge text-bg-danger">Failed</span>
-            {% elif job.state == 64 %}
-              <span class="badge text-bg-dark">Canceled</span>
-            {% elif job.state == 128 %}
-              <span class="badge text-bg-warning">Waiting</span>
-            {% elif job.state == 256 %}
-              <span class="badge text-bg-secondary">Deleted</span>
-            {% else %}
-              <span class="badge bg-light text-dark border">Unknown</span>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <!-- Sleek Auto-Refresh Control -->
+            <div class="d-flex align-items-center gap-3 bg-white border border-light-subtle px-3 py-1.5 rounded-3 shadow-xs" style="font-size: 0.8rem; min-height: 38px;">
+                <!-- Play/Pause Button -->
+                <button id="toggle-refresh-btn" class="btn btn-link p-0 border-0 d-flex align-items-center justify-content-center" style="width: 20px; height: 20px; transition: color 0.15s ease-in-out; text-decoration: none; outline: none; box-shadow: none;" onclick="toggleAutoRefresh();" title="Pause Auto-refresh">
+                    <i id="refresh-icon" class="bi bi-pause-circle-fill fs-5 text-primary"></i>
+                </button>
+                
+                <!-- Divider -->
+                <div class="vr text-light-subtle" style="height: 16px;"></div>
+
+                <!-- Timer info and bar -->
+                <div class="d-flex align-items-center gap-2 text-muted">
+                    <div class="progress" style="width: 60px; height: 5px; background-color: #f1f3f5; border-radius: 10px;">
+                        <div id="refresh-progress" class="progress-bar bg-primary rounded-pill" role="progressbar" style="width: 100%; transition: width 1s linear;"></div>
+                    </div>
+                    <span id="refresh-text" style="min-width: 125px;">Auto-refresh in <strong id="refresh-counter" class="text-dark font-monospace">10</strong>s</span>
+                </div>
+            </div>
+
+            <button id="reload-status-btn" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
+                <i class="bi bi-arrow-clockwise me-1.5"></i>Reload Status
+            </button>
+            <a href="{% url 'job_status_view' job_id %}?force_direct=1" class="btn btn-sm btn-warning text-dark fw-bold px-3 py-2 rounded-3 shadow-xs" title="Force direct cluster query bypassing cached state">
+                <i class="bi bi-lightning-charge-fill me-1.5"></i>Force Direct Query
+            </a>
+            {% if project %}
+            <a href="{% url 'project_detail' project.id %}" class="btn btn-sm btn-outline-secondary fw-semibold px-3 py-2 rounded-3 shadow-xs">
+                <i class="bi bi-arrow-left me-1.5"></i>Back
+            </a>
             {% endif %}
-          </div>
         </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Creation Time</h6>
-            <p class="fs-6 mb-0 text-dark">{{ job.creation_time }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="row g-4 mt-2">
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Submit Time</h6>
-            <p class="mb-0 text-dark">{{ job.submit_time|default:"Not yet submitted" }}</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Start Time</h6>
-            <p class="mb-0 text-dark">{{ job.start_time|default:"Not started" }}</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">End Time</h6>
-            <p class="mb-0 text-dark">{{ job.end_time|default:"Not finished" }}</p>
-          </div>
-        </div>
-        <div class="col-md-3">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Allocated Time</h6>
-            <p class="mb-0 text-dark">{{ job.total_allocated_time|default:"N/A" }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="row g-4 mt-2">
-        <div class="col-md-12">
-          <div class="p-3 bg-white rounded-3 shadow-sm border h-100">
-            <h6 class="fw-bold text-dark mb-2">Sub Project</h6>
-            <p class="mb-0 text-dark">{{ job.sub_project|default:"None" }}</p>
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
 
-  <!-- Task Information -->
-  <h4 class="text-primary mb-4"><i class="bi bi-list-task me-2"></i> Tasks</h4>
-  <div class="row g-4">
-    {% for task in job.tasks %}
-      <div class="col-md-6 col-lg-4">
-        <div class="card shadow-sm border-0 rounded-3 h-100">
-          <div class="card-header bg-light d-flex justify-content-between align-items-center p-3">
-            <span class="fw-bold text-dark">Task #{{ task.id }}</span>
-            {% if task.state == 1 %}
-              <span class="badge text-bg-secondary">Configuring</span>
-            {% elif task.state == 2 %}
-              <span class="badge text-bg-info">Submitted</span>
-            {% elif task.state == 4 %}
-              <span class="badge text-bg-warning">Queued</span>
-            {% elif task.state == 8 %}
-              <span class="badge text-bg-primary">Running</span>
-            {% elif task.state == 16 %}
-              <span class="badge text-bg-success">Finished</span>
-            {% elif task.state == 32 %}
-              <span class="badge text-bg-danger">Failed</span>
-            {% elif task.state == 64 %}
-              <span class="badge text-bg-dark">Canceled</span>
-            {% elif task.state == 128 %}
-              <span class="badge text-bg-warning">Waiting</span>
-            {% elif task.state == 256 %}
-              <span class="badge text-bg-secondary">Deleted</span>
-            {% else %}
-              <span class="badge bg-light text-dark border">Unknown</span>
-            {% endif %}
-          </div>
-          <div class="card-body p-4">
-            <p class="mb-2"><strong>Name:</strong> {{ task.name }}</p>
-            <p class="mb-2"><strong>Priority:</strong> {{ task.priority }}</p>
-            <p class="mb-2"><strong>Allocated Time:</strong> {{ task.allocated_time|default:"N/A" }}</p>
-            <p class="mb-2"><strong>Cores:</strong> {{ task.allocated_core_ids|join:", "|default:"None" }}</p>
-            <p class="mb-2"><strong>Start:</strong> {{ task.start_time|default:"Not started" }}</p>
-            <p class="mb-2"><strong>End:</strong> {{ task.end_time|default:"Not finished" }}</p>
-
-            <hr class="my-3">
-            <h6 class="fw-bold text-dark mb-2">Node Type</h6>
-            <p class="mb-1 text-dark">{{ task.node_type.name }} (ID: {{ task.node_type.id }})</p>
-            <p class="small text-muted">{{ task.node_type.description }}</p>
-
-            <h6 class="fw-bold text-dark mt-3 mb-2">Project</h6>
-            <p class="mb-1 text-dark">{{ task.node_type.project.name }} (ID: {{ task.node_type.project.id }})</p>
-            <p class="small text-muted">{{ task.node_type.project.description }}</p>
-            <p class="mb-2"><strong>Accounting string:</strong> {{ task.node_type.project.accounting_string }}</p>
-
-            <hr class="my-3">
-            <p class="mb-2"><strong>Error:</strong> {{ task.error_message|default:"None" }}</p>
-            <p class="mb-2"><strong>CPU HT:</strong> {{ task.cpu_hyper_threading|default:"N/A" }}</p>
-            <p class="mb-2"><strong>Reason:</strong> {{ task.reason|default:"None" }}</p>
-          </div>
-        </div>
-      </div>
-    {% endfor %}
-  </div>
+    <div id="job-status-container">
+        {% include "job_status_content.html" %}
+    </div>
 </div>
 
-<style>
-/* Minimal custom CSS for modern enhancements */
-.card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
+<!-- File Viewer Modal -->
+<div class="modal fade" id="fileViewerModal" tabindex="-1" aria-labelledby="fileViewerModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-light py-3">
+                <h5 class="modal-title fw-bold text-dark" id="fileViewerModalLabel">
+                    <i class="bi bi-file-earmark-text-fill text-primary me-2"></i>
+                    File: <span id="modal-filename" class="font-monospace text-secondary small"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0 position-relative">
+                <!-- Spinner -->
+                <div id="file-spinner" class="position-absolute top-50 start-50 translate-middle d-none text-center">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <div class="text-muted small mt-2">Fetching file content...</div>
+                </div>
+                <!-- Error message -->
+                <div id="file-error" class="alert alert-danger m-3 d-none">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <span id="file-error-text"></span>
+                </div>
+                <!-- Content display -->
+                <pre class="m-0 p-4 bg-dark text-light font-monospace small" id="file-content" style="max-height: 70vh; overflow: auto; white-space: pre-wrap; word-break: break-all;"></pre>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                <a href="#" id="modal-download-btn" class="btn btn-sm btn-primary fw-bold px-3">
+                    <i class="bi bi-download me-1.5"></i>Download Full File
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
 
-.card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-}
+{% endblock %}
 
-.btn-outline-light {
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
+{% block extra_scripts %}
+<script>
+    let activeModalJobId = null;
+    let activeModalFilePath = null;
+    let fileModal = null;
 
-.btn-outline-light:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-}
+    document.addEventListener("DOMContentLoaded", function() {
+        let timeLeft = 10;
+        let isPaused = localStorage.getItem('auto_refresh_paused') === 'true';
+        
+        const counterEl = document.getElementById("refresh-counter");
+        const progressEl = document.getElementById("refresh-progress");
+        const iconEl = document.getElementById("refresh-icon");
+        const btnEl = document.getElementById("toggle-refresh-btn");
+        const textEl = document.getElementById("refresh-text");
+        const reloadBtn = document.getElementById("reload-status-btn");
+        
+        // Initialize Modal and listener to reset active file on close
+        const modalEl = document.getElementById('fileViewerModal');
+        if (modalEl) {
+            fileModal = new bootstrap.Modal(modalEl);
+            modalEl.addEventListener('hidden.bs.modal', function () {
+                activeModalJobId = null;
+                activeModalFilePath = null;
+            });
+        }
 
-.badge {
-  padding: 0.5em 1em;
-  border-radius: 0.5rem;
-}
-</style>
+        function updateUI() {
+            if (isPaused) {
+                if (iconEl) {
+                    iconEl.className = "bi bi-play-circle-fill fs-5 text-success";
+                }
+                if (btnEl) {
+                    btnEl.title = "Resume Auto-refresh";
+                }
+                if (progressEl) {
+                    progressEl.classList.remove("bg-primary");
+                    progressEl.classList.add("bg-secondary-subtle");
+                    progressEl.style.width = "100%";
+                }
+                if (textEl) {
+                    textEl.innerHTML = '<span class="text-secondary fw-semibold"><i class="bi bi-pause-fill me-1"></i>Refresh paused</span>';
+                }
+            } else {
+                if (iconEl) {
+                    iconEl.className = "bi bi-pause-circle-fill fs-5 text-primary";
+                }
+                if (btnEl) {
+                    btnEl.title = "Pause Auto-refresh";
+                }
+                if (progressEl) {
+                    progressEl.classList.remove("bg-secondary-subtle");
+                    progressEl.classList.add("bg-primary");
+                    const percentage = (timeLeft / 10) * 100;
+                    progressEl.style.width = percentage + "%";
+                }
+                if (textEl) {
+                    textEl.innerHTML = 'Auto-refresh in <strong id="refresh-counter" class="text-dark font-monospace">' + timeLeft + '</strong>s';
+                }
+            }
+        }
 
+        window.toggleAutoRefresh = function() {
+            isPaused = !isPaused;
+            localStorage.setItem('auto_refresh_paused', isPaused);
+            updateUI();
+        };
+
+        function refreshJobStatusBackground() {
+            // Reset timer immediately to avoid double triggers/spamming on slow networks
+            timeLeft = 10;
+            updateUI();
+
+            if (reloadBtn) {
+                reloadBtn.disabled = true;
+                const icon = reloadBtn.querySelector("i");
+                if (icon) {
+                    const origClass = icon.className;
+                    icon.className = "spinner-border spinner-border-sm me-1.5";
+                    icon.style.borderWidth = "0.15em";
+                    reloadBtn.dataset.origClass = origClass;
+                }
+            }
+
+            const url = "{% url 'job_status_partial' job_id %}";
+            return fetch(url)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.text();
+                })
+                .then(htmlContent => {
+                    const container = document.getElementById("job-status-container");
+                    if (container) {
+                        container.innerHTML = htmlContent;
+                    }
+                    // Refresh opened file content too if any is active
+                    refreshActiveFileContent();
+                })
+                .catch(error => {
+                    console.error("Failed to refresh job status in background:", error);
+                })
+                .finally(() => {
+                    if (reloadBtn) {
+                        reloadBtn.disabled = false;
+                        const icon = reloadBtn.querySelector("i");
+                        if (icon) {
+                            icon.className = reloadBtn.dataset.origClass || "bi bi-arrow-clockwise me-1.5";
+                            icon.style.borderWidth = "";
+                        }
+                    }
+                });
+        }
+
+        if (reloadBtn) {
+            reloadBtn.addEventListener("click", function() {
+                refreshJobStatusBackground();
+            });
+        }
+
+        // Initialize UI
+        updateUI();
+        
+        const timer = setInterval(function() {
+            if (isPaused) return;
+
+            timeLeft -= 1;
+            updateUI();
+
+            if (timeLeft <= 0) {
+                refreshJobStatusBackground();
+            }
+        }, 1000);
+    });
+
+    function refreshActiveFileContent() {
+        if (!activeModalJobId || !activeModalFilePath) return;
+
+        const contentEl = document.getElementById('file-content');
+        const errorEl = document.getElementById('file-error');
+
+        const url = "{% url 'download_job_file' 0 %}".replace('0', activeModalJobId) + `?file_path=${encodeURIComponent(activeModalFilePath)}&action=view`;
+        fetch(url)
+            .then(response => {
+                return response.text().then(text => {
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        if (!response.ok) {
+                            throw new Error(`Server error (${response.status})`);
+                        } else {
+                            throw new Error(`Invalid response format`);
+                        }
+                    }
+                    if (!response.ok) {
+                        throw new Error(data.error || `Server error (${response.status})`);
+                    }
+                    return data;
+                });
+            })
+            .then(data => {
+                const wasAtBottom = contentEl.scrollHeight - contentEl.clientHeight <= contentEl.scrollTop + 50;
+                contentEl.textContent = data.content;
+                errorEl.classList.add('d-none');
+                
+                if (wasAtBottom) {
+                    contentEl.scrollTop = contentEl.scrollHeight;
+                }
+            })
+            .catch(error => {
+                console.error("Failed to auto-refresh file content:", error);
+            });
+    }
+
+    function viewJobFile(jobId, filePath) {
+        activeModalJobId = jobId;
+        activeModalFilePath = filePath;
+
+        const contentEl = document.getElementById('file-content');
+        const spinnerEl = document.getElementById('file-spinner');
+        const errorEl = document.getElementById('file-error');
+        const downloadBtn = document.getElementById('modal-download-btn');
+        const filenameEl = document.getElementById('modal-filename');
+
+        // Reset modal state
+        filenameEl.textContent = filePath;
+        contentEl.textContent = '';
+        contentEl.classList.add('d-none');
+        errorEl.classList.add('d-none');
+        spinnerEl.classList.remove('d-none');
+        
+        // Set download button URL dynamically
+        const downloadUrl = "{% url 'download_job_file' 0 %}".replace('0', jobId) + `?file_path=${encodeURIComponent(filePath)}&action=download`;
+        downloadBtn.href = downloadUrl;
+
+        if (fileModal) {
+            fileModal.show();
+        }
+
+        const url = "{% url 'download_job_file' 0 %}".replace('0', jobId) + `?file_path=${encodeURIComponent(filePath)}&action=view`;
+        fetch(url)
+            .then(response => {
+                return response.text().then(text => {
+                    let data;
+                    try {
+                        data = JSON.parse(text);
+                    } catch (e) {
+                        if (!response.ok) {
+                            throw new Error(`Server error (${response.status})`);
+                        } else {
+                            throw new Error(`Invalid response format`);
+                        }
+                    }
+                    if (!response.ok) {
+                        throw new Error(data.error || `Server error (${response.status})`);
+                    }
+                    return data;
+                });
+            })
+            .then(data => {
+                spinnerEl.classList.add('d-none');
+                contentEl.textContent = data.content;
+                contentEl.classList.remove('d-none');
+                // Scroll to bottom initially for stdout/stderr logs
+                contentEl.scrollTop = contentEl.scrollHeight;
+            })
+            .catch(error => {
+                spinnerEl.classList.add('d-none');
+                document.getElementById('file-error-text').textContent = error.message;
+                errorEl.classList.remove('d-none');
+            });
+    }
+</script>
 {% endblock %}

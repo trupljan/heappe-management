@@ -19,6 +19,7 @@ def accounting_view(request, project_id:int):
     import time
     import os
     from django.conf import settings
+    disable_cache = getattr(settings, 'DISABLE_CACHE', False)
 
     timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
     last_global_mod = 0.0
@@ -32,7 +33,7 @@ def accounting_view(request, project_id:int):
     def get_cached_metadata(key, api_call, model_class_name):
         cache_val = request.session.get(key)
         cache_time = request.session.get(f"{key}_time", 0)
-        if not cache_val or (time.time() - cache_time > 300) or (cache_time < last_global_mod):
+        if disable_cache or not cache_val or (time.time() - cache_time > 300) or (cache_time < last_global_mod):
             try:
                 raw_data = api_call()
                 cache_val = [controller.api_client.sanitize_for_serialization(x) for x in raw_data] if raw_data else []
@@ -129,7 +130,7 @@ def accounting_view(request, project_id:int):
                                         validity_from == active_accounting.validity_from and accounting.id > active_accounting.id):
                             active_accounting = accounting
 
-                # označení aktivního
+                # Mark active
                 for accounting in project_agg.group.accountings:
                     accounting.is_active = accounting == active_accounting
 
@@ -150,6 +151,7 @@ def accounting_view(request, project_id:int):
     context['queue_groups'] = available_queue_groups
     context['project_id'] = project_id
     context['project'] = project
+    context['total_allocation'] = sum(a.allocation_amount for a in project_aggregations if a.allocation_amount)
 
     return render(request, "accounting.html", context)
 
@@ -185,7 +187,7 @@ def assign_queue_group_to_project(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def unassign_queue_group_from_project(request: HttpRequest) -> HttpResponse:
-    """mapping_id je Id záznamu ProjectClusterNodeTypeAggregation"""
+    """mapping_id is the Id of ProjectClusterNodeTypeAggregation record"""
     controller = hp.ManagementApi(request.api_instance)
     project_id = int(request.POST.get("ProjectId"))
     mapping_id = int(request.POST.get("MappingId"))

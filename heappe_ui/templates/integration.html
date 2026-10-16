@@ -1,0 +1,1064 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}API Integration Workspace | HEAppE Admin{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active text-primary fw-semibold" aria-current="page">API Integration</li>
+{% endblock %}
+
+{% block content %}
+<style>
+    /* Prevent any page horizontal overflow */
+    body, html {
+        overflow-x: hidden;
+    }
+    
+    /* Workspace container layout - fits 100% of parent width cleanly */
+    .workspace-container {
+        display: flex;
+        height: 72vh;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+        border: 1px solid #e9ecef;
+        margin-bottom: 2rem;
+    }
+    
+    .workspace-sidebar {
+        width: 320px;
+        min-width: 320px;
+        background: #fff;
+        border-right: 1px solid #e9ecef;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+    
+    .workspace-main {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        overflow-y: auto;
+        background: #fdfdfd;
+        padding: 1.5rem;
+    }
+    
+    .api-search-container {
+        padding: 1rem;
+        border-bottom: 1px solid #e9ecef;
+        background: #f8f9fa;
+    }
+    
+    .api-list {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 0.5rem;
+    }
+    
+    .api-class-header {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #6c757d;
+        padding: 0.75rem 0.5rem 0.25rem 0.5rem;
+        letter-spacing: 0.5px;
+    }
+    
+    .api-item {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: none;
+        background: transparent;
+        border-radius: 6px;
+        text-align: left;
+        font-size: 0.85rem;
+        color: #495057;
+        margin-bottom: 2px;
+        transition: all 0.15s ease;
+    }
+    
+    .api-item:hover {
+        background: #f1f3f5;
+        color: #0d6efd;
+    }
+    
+    .api-item.active {
+        background: #e7f1ff;
+        color: #0d6efd;
+        font-weight: 600;
+    }
+    
+    .method-badge {
+        font-size: 0.65rem;
+        font-weight: 800;
+        padding: 0.2rem 0.4rem;
+        border-radius: 4px;
+        margin-right: 0.5rem;
+        width: 50px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+    .method-get { background: #e3f2fd; color: #0d6efd; }
+    .method-post { background: #e8f5e9; color: #2e7d32; }
+    .method-put { background: #fff3e0; color: #ef6c00; }
+    .method-delete { background: #ffebee; color: #c62828; }
+    
+    /* Code editor dark block */
+    .json-editor-container {
+        position: relative;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #ced4da;
+    }
+    
+    .json-editor {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.85rem;
+        background: #1e1e1e;
+        color: #d4d4d4;
+        width: 100%;
+        height: 260px;
+        padding: 1rem;
+        border: none;
+        resize: vertical;
+        outline: none;
+    }
+    
+    .json-editor-tools {
+        display: flex;
+        background: #252526;
+        padding: 0.5rem 1rem;
+        border-top: 1px solid #3c3c3c;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+    
+    /* Response Pane styles with wrapping */
+    .response-pane {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+        margin-top: 1.5rem;
+    }
+    
+    .response-header {
+        background: #f8f9fa;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .response-body-pre {
+        background: #f8f9fa;
+        color: #212529;
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.85rem;
+        padding: 1rem;
+        margin-bottom: 0;
+        max-height: 400px;
+        overflow-y: auto;
+        overflow-x: auto;
+        border: none;
+        white-space: pre-wrap;      /* Wrap long JSON strings */
+        word-break: break-word;     /* Wrap long words (e.g. exception classes) */
+    }
+    
+    .response-headers-table {
+        font-size: 0.8rem;
+        margin-bottom: 0;
+    }
+    
+    /* Quick Selectors Card */
+    .selectors-card {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+        margin-bottom: 1.5rem;
+    }
+    
+    /* Responsive layout styling override to prevent overflow on smaller screens */
+    @media (max-width: 991.98px) {
+        .workspace-container {
+            flex-direction: column;
+            height: auto;
+            overflow: visible;
+        }
+        .workspace-sidebar {
+            width: 100%;
+            min-width: 100%;
+            height: 320px;
+            border-right: none;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .workspace-main {
+            height: auto;
+            overflow: visible;
+        }
+    }
+</style>
+
+<!-- Resource Pre-selectors Card -->
+<div class="card selectors-card">
+    <div class="card-body p-3">
+        <h6 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2">
+            <i class="bi bi-diagram-3 text-primary"></i> Hierarchical API Selectors
+        </h6>
+        <div class="row g-3">
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label small fw-semibold text-muted">Cluster</label>
+                <select class="form-select form-select-sm" id="global-cluster" onchange="onClusterChange()">
+                    <option value="">-- Select Cluster --</option>
+                    {% for c in clusters %}
+                    <option value="{{ c.id }}">{{ c.name }} (ID: {{ c.id }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label small fw-semibold text-muted">Project</label>
+                <select class="form-select form-select-sm" id="global-project" onchange="onProjectChange()" disabled>
+                    <option value="">-- Select Project --</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label small fw-semibold text-muted">Queue</label>
+                <select class="form-select form-select-sm" id="global-queue" onchange="onSelectorChange()" disabled>
+                    <option value="">-- Select Queue --</option>
+                </select>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <label class="form-label small fw-semibold text-muted">Command Template</label>
+                <select class="form-select form-select-sm" id="global-template" onchange="onSelectorChange()" disabled>
+                    <option value="">-- Select Template --</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="workspace-container">
+    <!-- Left API Directory -->
+    <div class="workspace-sidebar">
+        <div class="api-search-container">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                <input type="text" class="form-control border-start-0" id="search-input" placeholder="Search API methods..." onkeyup="filterApiList()">
+            </div>
+        </div>
+        <div class="api-list" id="api-list-container">
+            <!-- Populated via Javascript -->
+        </div>
+    </div>
+    
+    <!-- Right Workspace Area -->
+    <div class="workspace-main" id="workspace-main-area">
+        <!-- Empty State -->
+        <div class="d-flex flex-column align-items-center justify-content-center h-100 text-center py-5" id="empty-state">
+            <i class="bi bi-cpu text-muted" style="font-size: 4rem; opacity: 0.4;"></i>
+            <h5 class="fw-bold mt-3 text-secondary">API Integration Workspace</h5>
+            <p class="text-muted max-width-500" style="font-size: 0.9rem;">
+                Select a HEAppE API endpoint from the directory sidebar on the left. You can fill parameters, modify pre-populated payloads, inject resource IDs, and execute live queries to verify system integration.
+            </p>
+        </div>
+        
+        <!-- Active Endpoint Editor -->
+        <div class="d-none" id="active-endpoint-container">
+            <div class="d-flex justify-content-between align-items-start border-bottom pb-3 mb-4 flex-wrap gap-3">
+                <div style="min-width: 0; flex: 1;">
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <span class="badge method-badge" id="endpoint-method">POST</span>
+                        <h4 class="fw-bold mb-0 text-dark text-break" id="endpoint-title">heappe_health_get</h4>
+                    </div>
+                    <div class="text-muted small font-monospace mt-1.5 text-break" id="endpoint-raw-method" style="font-size: 0.75rem;"></div>
+                    <p class="text-muted small mt-2 mb-0" id="endpoint-desc">Fetches health status of HEAppE Middleware</p>
+                </div>
+                <div class="text-end flex-shrink-0">
+                    <span class="badge bg-light text-secondary border font-monospace" id="endpoint-api-class">HealthApi</span>
+                    <div class="small text-muted mt-1 font-monospace" id="endpoint-return-type">Returns: HealthExt</div>
+                </div>
+            </div>
+            
+            <form id="execution-form">
+                <!-- Query & Path Parameters -->
+                <div class="card mb-4 d-none" id="params-card">
+                    <div class="card-header bg-light py-2">
+                        <h6 class="fw-bold mb-0 text-secondary small"><i class="bi bi-input-cursor-text me-1"></i> Path &amp; Query Parameters</h6>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="row g-3" id="params-container">
+                            <!-- Dynamically loaded inputs -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- JSON Body Payload Editor -->
+                <div class="mb-4 d-none" id="body-editor-container">
+                    <label class="form-label small fw-bold text-secondary mb-2"><i class="bi bi-filetype-json me-1"></i> JSON Request Body</label>
+                    <div class="json-editor-container">
+                        <textarea class="json-editor" id="json-payload" placeholder="{ ... }" oninput="saveCurrentStateToCache()"></textarea>
+                        <div class="json-editor-tools">
+                            <button type="button" class="btn btn-sm btn-outline-light py-1 px-2.5" onclick="injectSelectedIdsToPayload()">
+                                <i class="bi bi-box-arrow-in-down me-1"></i>Inject Selector IDs
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-light py-1 px-2.5" onclick="formatJson()">
+                                <i class="bi text-info bi-code-square me-1"></i>Format JSON
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-flex align-items-center justify-content-between mb-4">
+                    <button type="button" class="btn btn-primary px-4 fw-bold shadow-sm d-flex align-items-center gap-2" id="btn-send" onclick="submitApiCall(event)">
+                        <i class="bi bi-send-fill"></i> Send Request
+                    </button>
+                </div>
+            </form>
+            
+            <!-- Result Console -->
+            <div class="response-pane d-none" id="response-container">
+                <div class="response-header">
+                    <div class="d-flex align-items-center gap-2">
+                        <h6 class="fw-bold mb-0 text-secondary"><i class="bi bi-terminal me-1"></i> Response Console</h6>
+                        <span class="badge" id="response-status">200 OK</span>
+                    </div>
+                    <span class="small text-muted font-monospace" id="response-time">Time: 120 ms</span>
+                </div>
+                
+                <ul class="nav nav-tabs border-bottom px-3 bg-light" id="responseTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active py-2 px-3 small border-0 bg-transparent text-secondary fw-semibold" id="body-tab" data-bs-toggle="tab" data-bs-target="#body-content" type="button" role="tab">Response Body</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link py-2 px-3 small border-0 bg-transparent text-secondary fw-semibold" id="headers-tab" data-bs-toggle="tab" data-bs-target="#headers-content" type="button" role="tab">Response Headers</button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link py-2 px-3 small border-0 bg-transparent text-secondary fw-semibold" id="request-tab" data-bs-toggle="tab" data-bs-target="#request-content" type="button" role="tab">Request Details</button>
+                    </li>
+                </ul>
+                <div class="tab-content" id="responseTabsContent">
+                    <!-- Body Content -->
+                    <div class="tab-pane fade show active" id="body-content" role="tabpanel">
+                        <div class="position-relative">
+                            <pre class="response-body-pre" id="response-body">{}</pre>
+                            <button type="button" class="btn btn-sm btn-outline-secondary position-absolute top-0 end-0 m-2" onclick="copyResponseToClipboard()">
+                                <i class="bi bi-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Headers Content -->
+                    <div class="tab-pane fade" id="headers-content" role="tabpanel">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped response-headers-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-3 py-2">Header Name</th>
+                                        <th class="py-2">Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="response-headers-body">
+                                    <!-- Rendered dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- Request Details Content -->
+                    <div class="tab-pane fade" id="request-content" role="tabpanel">
+                        <div class="p-3">
+                            <h6 class="small fw-bold text-secondary mb-1">Target API Class</h6>
+                            <code class="d-block bg-light p-2 rounded mb-3" id="req-details-class">ManagementApi</code>
+                            
+                            <h6 class="small fw-bold text-secondary mb-1">Method Called</h6>
+                            <code class="d-block bg-light p-2 rounded mb-3" id="req-details-method">heappe_management_projects_get</code>
+                            
+                            <h6 class="small fw-bold text-secondary mb-1">Path &amp; Query Params</h6>
+                            <pre class="bg-light p-2 rounded mb-3 font-monospace small" id="req-details-params">{}</pre>
+                            
+                            <h6 class="small fw-bold text-secondary mb-1">Raw Payload</h6>
+                            <pre class="bg-light p-2 rounded mb-0 font-monospace small" id="req-details-payload">{}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Parsed dynamically generated endpoints catalog
+    const discovery = JSON.parse('{{ discovery_json|escapejs }}');
+    // Parsed resource mapping associations
+    const resourceMap = JSON.parse('{{ resource_map_json|escapejs }}');
+    
+    let activeClass = '';
+    let activeMethod = '';
+    let activeEndpoint = null;
+    const workspaceCache = {};
+    
+    // Auto-generate UI API Directory on page load
+    document.addEventListener("DOMContentLoaded", function() {
+        renderApiDirectory();
+    });
+    
+    function getSwaggerName(apiClass, methodName) {
+        // 1. Convert apiClass (e.g. ClusterInformationApi) to snake_case
+        let classPrefix = apiClass.replace(/Api$/, "");
+        classPrefix = classPrefix.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+        
+        // 2. Remove heappe_ and class prefix from method name
+        let clean = methodName;
+        if (clean.startsWith("heappe_")) {
+            clean = clean.substring(7);
+        }
+        if (clean.startsWith(classPrefix + "_")) {
+            clean = clean.substring(classPrefix.length + 1);
+        }
+        
+        // 3. Remove HTTP method suffix
+        clean = clean.replace(/_(get|post|put|delete)$/, "");
+        
+        // 4. Convert snake_case to PascalCase (matching C#/Swagger method names)
+        return clean.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
+    }
+
+    function renderApiDirectory() {
+        const container = document.getElementById("api-list-container");
+        container.innerHTML = "";
+        
+        for (let apiClass in discovery) {
+            if (discovery[apiClass].length === 0) continue;
+            
+            const header = document.createElement("div");
+            header.className = "api-class-header";
+            header.innerText = apiClass.replace("Api", " API");
+            container.appendChild(header);
+            
+            discovery[apiClass].forEach(endpoint => {
+                const btn = document.createElement("button");
+                btn.className = "api-item";
+                btn.type = "button";
+                btn.id = `api-item-${apiClass}-${endpoint.method_name}`;
+                btn.onclick = () => selectEndpoint(apiClass, endpoint.method_name);
+                
+                const badge = document.createElement("span");
+                const m = endpoint.http_method.toLowerCase();
+                badge.className = `method-badge method-${m}`;
+                badge.innerText = endpoint.http_method;
+                btn.appendChild(badge);
+                
+                const text = document.createElement("span");
+                text.className = "text-truncate";
+                const cleanName = getSwaggerName(apiClass, endpoint.method_name);
+                text.innerText = cleanName;
+                text.title = endpoint.method_name;
+                btn.appendChild(text);
+                
+                container.appendChild(btn);
+            });
+        }
+    }
+    
+    function filterApiList() {
+        const val = document.getElementById("search-input").value.toLowerCase();
+        const items = document.querySelectorAll(".api-item");
+        
+        items.forEach(item => {
+            const cleanName = item.querySelector(".text-truncate").innerText.toLowerCase();
+            const fullName = item.querySelector(".text-truncate").title.toLowerCase();
+            
+            if (cleanName.includes(val) || fullName.includes(val)) {
+                item.classList.remove("d-none");
+            } else {
+                item.classList.add("d-none");
+            }
+        });
+        
+        const headers = document.querySelectorAll(".api-class-header");
+        headers.forEach(h => {
+            let next = h.nextElementSibling;
+            let hasVisible = false;
+            while (next && next.classList.contains("api-item")) {
+                if (!next.classList.contains("d-none")) {
+                    hasVisible = true;
+                    break;
+                }
+                next = next.nextElementSibling;
+            }
+            if (hasVisible) {
+                h.classList.remove("d-none");
+            } else {
+                h.classList.add("d-none");
+            }
+        });
+    }
+    
+    // Dynamic Selectors Filtering Logic
+    function onClusterChange() {
+        const clusterSelect = document.getElementById("global-cluster");
+        const projectSelect = document.getElementById("global-project");
+        const queueSelect = document.getElementById("global-queue");
+        const templateSelect = document.getElementById("global-template");
+        
+        const selectedClusterId = clusterSelect.value ? parseInt(clusterSelect.value) : null;
+        
+        // Reset Project Dropdown
+        projectSelect.innerHTML = '<option value="">-- Select Project --</option>';
+        projectSelect.disabled = !selectedClusterId;
+        
+        // Reset Queue Dropdown
+        queueSelect.innerHTML = '<option value="">-- Select Queue --</option>';
+        queueSelect.disabled = !selectedClusterId;
+        
+        // Reset Template Dropdown
+        templateSelect.innerHTML = '<option value="">-- Select Template --</option>';
+        templateSelect.disabled = true;
+        
+        if (selectedClusterId) {
+            // Filter projects assigned to this cluster
+            const filteredProjects = resourceMap.projects.filter(p => p.cluster_ids.includes(selectedClusterId));
+            filteredProjects.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p.id;
+                opt.innerText = `${p.name} (ID: ${p.id})`;
+                projectSelect.appendChild(opt);
+            });
+            
+            // Filter queues assigned to this cluster
+            const filteredQueues = resourceMap.queues.filter(q => q.cluster_id === selectedClusterId);
+            filteredQueues.forEach(q => {
+                const opt = document.createElement("option");
+                opt.value = q.id;
+                opt.innerText = `${q.name} (ID: ${q.id})`;
+                queueSelect.appendChild(opt);
+            });
+        }
+        
+        onSelectorChange();
+    }
+    
+    function onProjectChange() {
+        const projectSelect = document.getElementById("global-project");
+        const templateSelect = document.getElementById("global-template");
+        
+        const selectedProjectId = projectSelect.value ? parseInt(projectSelect.value) : null;
+        
+        // Reset Template Dropdown
+        templateSelect.innerHTML = '<option value="">-- Select Template --</option>';
+        templateSelect.disabled = !selectedProjectId;
+        
+        if (selectedProjectId) {
+            const projectObj = resourceMap.projects.find(p => p.id === selectedProjectId);
+            if (projectObj && projectObj.template_ids) {
+                // Filter templates assigned to this project
+                const filteredTemplates = resourceMap.templates.filter(t => projectObj.template_ids.includes(t.id));
+                filteredTemplates.forEach(t => {
+                    const opt = document.createElement("option");
+                    opt.value = t.id;
+                    opt.innerText = `${t.name} (ID: ${t.id})`;
+                    templateSelect.appendChild(opt);
+                });
+            }
+        }
+        
+        onSelectorChange();
+    }
+    
+    function saveCurrentStateToCache() {
+        if (!activeClass || !activeMethod) return;
+        const key = `${activeClass}-${activeMethod}`;
+        if (!workspaceCache[key]) {
+            workspaceCache[key] = { params: {}, payload: "", response: null };
+        }
+        
+        // Save parameters
+        const params = {};
+        if (activeEndpoint) {
+            activeEndpoint.params.forEach(p => {
+                if (p.name !== 'body' && p.name !== 'SessionCode') {
+                    const input = document.getElementById(`param-input-${p.name}`);
+                    if (input && input.type !== 'file') {
+                        params[p.name] = input.value;
+                    }
+                }
+            });
+        }
+        workspaceCache[key].params = params;
+        
+        // Save payload
+        const jsonTextarea = document.getElementById("json-payload");
+        if (jsonTextarea) {
+            workspaceCache[key].payload = jsonTextarea.value;
+        }
+    }
+
+    function saveResponseToCache(statusText, statusClass, durationText, bodyText, bodyColor, headersObj) {
+        if (!activeClass || !activeMethod) return;
+        const key = `${activeClass}-${activeMethod}`;
+        if (!workspaceCache[key]) {
+            workspaceCache[key] = { params: {}, payload: "", response: null };
+        }
+        workspaceCache[key].response = {
+            status: statusText,
+            statusClass: statusClass,
+            time: durationText,
+            body: bodyText,
+            bodyColor: bodyColor,
+            headers: headersObj
+        };
+    }
+
+    function getSelectorValueForParam(paramName) {
+        const lowerName = paramName.toLowerCase();
+        const globalProject = document.getElementById("global-project").value;
+        const globalCluster = document.getElementById("global-cluster").value;
+        const globalQueue = document.getElementById("global-queue").value;
+        const globalTemplate = document.getElementById("global-template").value;
+        
+        if ((lowerName === 'projectid' || lowerName === 'id' && activeMethod.includes('project')) && globalProject) {
+            return globalProject;
+        } else if ((lowerName === 'clusterid' || lowerName === 'id' && activeMethod.includes('cluster')) && globalCluster) {
+            return globalCluster;
+        } else if ((lowerName === 'queueid' || lowerName === 'nodetypeid' || lowerName === 'id' && activeMethod.includes('queue')) && globalQueue) {
+            return globalQueue;
+        } else if ((lowerName === 'commandtemplateid' || lowerName === 'templateid' || lowerName === 'id' && activeMethod.includes('template')) && globalTemplate) {
+            return globalTemplate;
+        }
+        return "";
+    }
+
+    function selectEndpoint(apiClass, methodName) {
+        // Save current state of the active endpoint before switching
+        saveCurrentStateToCache();
+        
+        document.querySelectorAll(".api-item").forEach(el => el.classList.remove("active"));
+        const item = document.getElementById(`api-item-${apiClass}-${methodName}`);
+        if (item) item.classList.add("active");
+        
+        activeClass = apiClass;
+        activeMethod = methodName;
+        activeEndpoint = discovery[apiClass].find(e => e.method_name === methodName);
+        
+        document.getElementById("empty-state").classList.add("d-none");
+        document.getElementById("active-endpoint-container").classList.remove("d-none");
+        
+        const swaggerName = getSwaggerName(apiClass, methodName);
+        document.getElementById("endpoint-title").innerText = swaggerName;
+        document.getElementById("endpoint-raw-method").innerText = methodName;
+        document.getElementById("endpoint-desc").innerText = activeEndpoint.description || "No description provided.";
+        document.getElementById("endpoint-api-class").innerText = apiClass;
+        document.getElementById("endpoint-return-type").innerText = `Returns: ${activeEndpoint.return_type}`;
+        
+        const badge = document.getElementById("endpoint-method");
+        badge.className = `badge method-badge method-${activeEndpoint.http_method.toLowerCase()}`;
+        badge.innerText = activeEndpoint.http_method;
+        
+        // Reset Send Button state
+        const btnSend = document.getElementById("btn-send");
+        if (btnSend) {
+            btnSend.disabled = false;
+            btnSend.innerHTML = `<i class="bi bi-send-fill"></i> Send Request`;
+        }
+        
+        const key = `${apiClass}-${methodName}`;
+        const cached = workspaceCache[key];
+        
+        // Render Path/Query Parameter inputs
+        const paramsCard = document.getElementById("params-card");
+        const paramsContainer = document.getElementById("params-container");
+        paramsContainer.innerHTML = "";
+        
+        const otherParams = activeEndpoint.params.filter(p => p.name !== 'body' && p.name !== 'SessionCode');
+        if (otherParams.length > 0) {
+            paramsCard.classList.remove("d-none");
+            otherParams.forEach(p => {
+                const col = document.createElement("div");
+                col.className = "col-md-6";
+                
+                const label = document.createElement("label");
+                label.className = "form-label small fw-semibold text-dark mb-1";
+                label.innerHTML = `${p.name} <span class="text-muted font-monospace" style="font-size: 0.75rem;">(${p.type})</span>`;
+                col.appendChild(label);
+                
+                const input = document.createElement("input");
+                input.className = "form-control form-control-sm";
+                if (p.name === 'files') {
+                    input.type = "file";
+                    input.multiple = true;
+                    input.name = "files";
+                } else {
+                    input.type = "text";
+                    input.placeholder = p.description || `Enter value for ${p.name}`;
+                }
+                input.id = `param-input-${p.name}`;
+                input.oninput = saveCurrentStateToCache;
+                
+                // Load cached parameter value if available
+                if (cached && cached.params && cached.params.hasOwnProperty(p.name)) {
+                    input.value = cached.params[p.name];
+                } else {
+                    // Fallback to top hierarchy selectors if not cached
+                    const selectorVal = getSelectorValueForParam(p.name);
+                    if (selectorVal) {
+                        input.value = selectorVal;
+                    }
+                }
+                
+                col.appendChild(input);
+                paramsContainer.appendChild(col);
+            });
+        } else {
+            paramsCard.classList.add("d-none");
+        }
+        
+        // Render Body JSON editor
+        const bodyContainer = document.getElementById("body-editor-container");
+        const jsonTextarea = document.getElementById("json-payload");
+        
+        const hasBody = activeEndpoint.params.some(p => p.name === 'body');
+        if (hasBody) {
+            bodyContainer.classList.remove("d-none");
+            if (cached && cached.payload !== undefined && cached.payload !== "") {
+                jsonTextarea.value = cached.payload;
+            } else {
+                let template = activeEndpoint.payload_template || {};
+                if (template.hasOwnProperty("SessionCode")) {
+                    template["SessionCode"] = ""; 
+                }
+                template = injectIdsRecursive(template);
+                jsonTextarea.value = JSON.stringify(template, null, 2);
+            }
+        } else {
+            bodyContainer.classList.add("d-none");
+            jsonTextarea.value = "";
+        }
+        
+        // Restore response from cache if available
+        const responseContainer = document.getElementById("response-container");
+        if (cached && cached.response) {
+            responseContainer.classList.remove("d-none");
+            
+            const statusBadge = document.getElementById("response-status");
+            statusBadge.innerText = cached.response.status;
+            statusBadge.className = "badge " + cached.response.statusClass;
+            
+            document.getElementById("response-time").innerText = cached.response.time;
+            
+            const bodyPre = document.getElementById("response-body");
+            bodyPre.innerText = cached.response.body;
+            bodyPre.style.color = cached.response.bodyColor;
+            
+            const headersBody = document.getElementById("response-headers-body");
+            headersBody.innerHTML = "";
+            const headers = cached.response.headers || {};
+            for (let key in headers) {
+                const tr = document.createElement("tr");
+                const tdKey = document.createElement("td");
+                tdKey.className = "ps-3 py-2 font-monospace fw-bold text-secondary";
+                tdKey.innerText = key;
+                tr.appendChild(tdKey);
+                
+                const tdVal = document.createElement("td");
+                tdVal.className = "py-2 font-monospace";
+                tdVal.innerText = headers[key];
+                tr.appendChild(tdVal);
+                
+                headersBody.appendChild(tr);
+            }
+            if (Object.keys(headers).length === 0) {
+                const tr = document.createElement("tr");
+                const td = document.createElement("td");
+                td.colSpan = 2;
+                td.className = "text-center text-muted py-3 small";
+                td.innerText = "No response headers available.";
+                tr.appendChild(td);
+                headersBody.appendChild(tr);
+            }
+        } else {
+            responseContainer.classList.add("d-none");
+        }
+    }
+    
+    function fillParameterInputsFromSelectors() {
+        if (!activeEndpoint) return;
+        
+        activeEndpoint.params.forEach(p => {
+            const input = document.getElementById(`param-input-${p.name}`);
+            if (!input) return;
+            
+            const val = getSelectorValueForParam(p.name);
+            if (val) {
+                input.value = val;
+            }
+        });
+        saveCurrentStateToCache();
+    }
+    
+    function onSelectorChange() {
+        // Update input parameter values if applicable
+        fillParameterInputsFromSelectors();
+        // Update JSON body editor
+        injectSelectedIdsToPayload();
+    }
+    
+    function injectIdsRecursive(obj) {
+        if (typeof obj !== 'object' || obj === null) return obj;
+        if (Array.isArray(obj)) {
+            return obj.map(item => injectIdsRecursive(item));
+        }
+        
+        let newObj = {};
+        for (let key in obj) {
+            let lowerKey = key.toLowerCase();
+            let val = obj[key];
+            
+            if (lowerKey === 'projectid') {
+                const selVal = document.getElementById('global-project').value;
+                val = selVal ? parseInt(selVal) : val;
+            } else if (lowerKey === 'clusterid') {
+                const selVal = document.getElementById('global-cluster').value;
+                val = selVal ? parseInt(selVal) : val;
+            } else if (lowerKey === 'queueid' || lowerKey === 'nodetypeid' || lowerKey === 'nodequeue') {
+                const selVal = document.getElementById('global-queue').value;
+                val = selVal ? parseInt(selVal) : val;
+            } else if (lowerKey === 'commandtemplateid' || lowerKey === 'templateid') {
+                const selVal = document.getElementById('global-template').value;
+                val = selVal ? parseInt(selVal) : val;
+            } else if (typeof val === 'object' && val !== null) {
+                val = injectIdsRecursive(val);
+            }
+            newObj[key] = val;
+        }
+        return newObj;
+    }
+    
+    function injectSelectedIdsToPayload() {
+        const textArea = document.getElementById("json-payload");
+        if (!textArea || !textArea.value.trim()) return;
+        
+        try {
+            let payload = JSON.parse(textArea.value);
+            payload = injectIdsRecursive(payload);
+            textArea.value = JSON.stringify(payload, null, 2);
+        } catch (e) {
+            // Silently skip if JSON is not currently valid (user typing)
+        }
+    }
+    
+    function formatJson() {
+        const textArea = document.getElementById("json-payload");
+        if (!textArea || !textArea.value.trim()) return;
+        
+        try {
+            const formatted = JSON.stringify(JSON.parse(textArea.value), null, 2);
+            textArea.value = formatted;
+        } catch (e) {
+            alert("Invalid JSON: " + e.message);
+        }
+    }
+    
+    function submitApiCall(event) {
+        event.preventDefault();
+        
+        const btnSend = document.getElementById("btn-send");
+        const responseContainer = document.getElementById("response-container");
+        
+        btnSend.disabled = true;
+        btnSend.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Sending...`;
+        
+        responseContainer.classList.add("d-none");
+        
+        const params = {};
+        let hasFiles = false;
+        const fileInputs = [];
+        if (activeEndpoint) {
+            activeEndpoint.params.forEach(p => {
+                if (p.name !== 'body' && p.name !== 'SessionCode') {
+                    const input = document.getElementById(`param-input-${p.name}`);
+                    if (input) {
+                        if (input.type === 'file') {
+                            if (input.files && input.files.length > 0) {
+                                hasFiles = true;
+                                fileInputs.push(input);
+                            }
+                        } else {
+                            params[p.name] = input.value;
+                        }
+                    }
+                }
+            });
+        }
+        
+        const payloadText = document.getElementById("json-payload").value;
+        
+        document.getElementById("req-details-class").innerText = activeClass;
+        document.getElementById("req-details-method").innerText = activeMethod;
+        document.getElementById("req-details-params").innerText = JSON.stringify(params, null, 2);
+        document.getElementById("req-details-payload").innerText = payloadText || "{}";
+        
+        let requestBody;
+        let headers = {
+            "X-CSRFToken": "{{ csrf_token }}"
+        };
+        
+        if (hasFiles) {
+            requestBody = new FormData();
+            requestBody.append("api_class", activeClass);
+            requestBody.append("method_name", activeMethod);
+            requestBody.append("params", JSON.stringify(params));
+            requestBody.append("payload", payloadText);
+            
+            fileInputs.forEach(input => {
+                const name = input.getAttribute("name") || "files";
+                for (let i = 0; i < input.files.length; i++) {
+                    requestBody.append(name, input.files[i]);
+                }
+            });
+        } else {
+            headers["Content-Type"] = "application/json";
+            requestBody = JSON.stringify({
+                api_class: activeClass,
+                method_name: activeMethod,
+                params: params,
+                payload: payloadText
+            });
+        }
+        
+        fetch("{% url 'execute_api_call' %}", {
+            method: "POST",
+            headers: headers,
+            body: requestBody
+        })
+        .then(response => {
+            return response.json().then(data => {
+                return { status: response.status, data: data };
+            });
+        })
+        .then(result => {
+            // Save response to cache
+            let statusClass = "bg-danger-subtle text-danger border border-danger-subtle";
+            if (result.status >= 200 && result.status < 300) {
+                statusClass = "bg-success-subtle text-success border border-success-subtle";
+            } else if (result.status >= 400 && result.status < 500) {
+                statusClass = "bg-warning-subtle text-warning-emphasis border border-warning-subtle";
+            }
+            
+            const duration = result.data.duration_ms !== undefined ? `${result.data.duration_ms} ms` : "N/A";
+            const durationText = `Duration: ${duration}`;
+            
+            let bodyText = "";
+            let bodyColor = "#212529";
+            if (result.data.error) {
+                bodyText = JSON.stringify(result.data.error, null, 2);
+                bodyColor = "#c62828";
+            } else {
+                bodyText = JSON.stringify(result.data.data, null, 2);
+            }
+            
+            saveResponseToCache(
+                `${result.status} ${getStatusText(result.status)}`,
+                statusClass,
+                durationText,
+                bodyText,
+                bodyColor,
+                result.data.headers || {}
+            );
+            
+            responseContainer.classList.remove("d-none");
+            
+            const statusBadge = document.getElementById("response-status");
+            statusBadge.innerText = `${result.status} ${getStatusText(result.status)}`;
+            statusBadge.className = "badge";
+            if (result.status >= 200 && result.status < 300) {
+                statusBadge.classList.add("bg-success-subtle", "text-success", "border", "border-success-subtle");
+            } else if (result.status >= 400 && result.status < 500) {
+                statusBadge.classList.add("bg-warning-subtle", "text-warning-emphasis", "border", "border-warning-subtle");
+            } else {
+                statusBadge.classList.add("bg-danger-subtle", "text-danger", "border", "border-danger-subtle");
+            }
+            
+            document.getElementById("response-time").innerText = durationText;
+            
+            const bodyPre = document.getElementById("response-body");
+            bodyPre.innerText = bodyText;
+            bodyPre.style.color = bodyColor;
+            
+            const headersBody = document.getElementById("response-headers-body");
+            headersBody.innerHTML = "";
+            const responseHeaders = result.data.headers || {};
+            for (let key in responseHeaders) {
+                const tr = document.createElement("tr");
+                const tdKey = document.createElement("td");
+                tdKey.className = "ps-3 py-2 font-monospace fw-bold text-secondary";
+                tdKey.innerText = key;
+                tr.appendChild(tdKey);
+                
+                const tdVal = document.createElement("td");
+                tdVal.className = "py-2 font-monospace";
+                tdVal.innerText = responseHeaders[key];
+                tr.appendChild(tdVal);
+                
+                headersBody.appendChild(tr);
+            }
+            if (Object.keys(responseHeaders).length === 0) {
+                const tr = document.createElement("tr");
+                const td = document.createElement("td");
+                td.colSpan = 2;
+                td.className = "text-center text-muted py-3 small";
+                td.innerText = "No response headers available.";
+                tr.appendChild(td);
+                headersBody.appendChild(tr);
+            }
+        })
+        .catch(err => {
+            btnSend.disabled = false;
+            btnSend.innerHTML = `<i class="bi bi-send-fill"></i> Send Request`;
+            
+            // Save response to cache
+            saveResponseToCache(
+                "500 Client Error",
+                "bg-danger-subtle text-danger border border-danger-subtle",
+                "Duration: N/A",
+                "Internal UI Exception: " + err.message,
+                "#c62828",
+                {}
+            );
+            
+            responseContainer.classList.remove("d-none");
+            
+            const statusBadge = document.getElementById("response-status");
+            statusBadge.innerText = "500 Client Error";
+            statusBadge.className = "badge bg-danger-subtle text-danger border border-danger-subtle";
+            
+            document.getElementById("response-time").innerText = "Duration: N/A";
+            
+            const bodyPre = document.getElementById("response-body");
+            bodyPre.innerText = "Internal UI Exception: " + err.message;
+            bodyPre.style.color = "#c62828";
+        });
+    }
+    
+    function getStatusText(status) {
+        const statuses = {
+            200: "OK", 201: "Created", 202: "Accepted", 204: "No Content",
+            400: "Bad Request", 401: "Unauthorized", 403: "Forbidden", 404: "Not Found",
+            500: "Internal Server Error", 502: "Bad Gateway", 503: "Service Unavailable"
+        };
+        return statuses[status] || "";
+    }
+    
+    function copyResponseToClipboard() {
+        const text = document.getElementById("response-body").innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Response JSON copied to clipboard!");
+        });
+    }
+</script>
+{% endblock %}

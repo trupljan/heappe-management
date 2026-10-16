@@ -1,8 +1,9 @@
 from django.conf import settings
 from django.urls import reverse
+from django.http import JsonResponse
 
 from .imports import *
-from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_view, login_required, ACCOUNTING_OPERATORS, ACCOUNTING_TIMES, ACCOUNTING_NUMBERS
+from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_view, login_required, ACCOUNTING_OPERATORS, ACCOUNTING_TIMES, ACCOUNTING_NUMBERS, _parse_datetime_local, clean_ver
 
 
 
@@ -11,7 +12,40 @@ from .utils import _create_payload, _handle_api_call, PROTOCOL_CHOICES, login_vi
 @login_required
 def queues_view(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
-    queues = [c.to_dict() for c in controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)]
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "bulk_delete":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for qid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {"Id": int(qid)})
+                    controller.heappe_management_cluster_node_type_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error deleting queue {qid}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully deleted {success_count} queue(s).")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to delete {len(selected_ids) - success_count} queue(s).")
+            cluster_id = request.POST.get("ClusterId")
+            if cluster_id:
+                return redirect(f"/clusters/{cluster_id}/?tab=queues")
+            return redirect("queues_view")
+
+    raw_queues = controller.heappe_management_cluster_node_types_get(SessionCode=request.session_code)
+    queues = [c.to_dict() for c in raw_queues] if raw_queues else []
+    
+    filetransfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code) or []
+    ftm_dict = {}
+    for ftm in filetransfer_methods:
+        protocol_name = dict(PROTOCOL_CHOICES).get(ftm.protocol, "Unknown")
+        ftm_dict[ftm.id] = f"{ftm.server_hostname} ({protocol_name})"
+        
+    for queue in queues:
+        queue['fileTransferMethodName'] = ftm_dict.get(queue.get('file_transfer_method_id'), 'N/A')
+        
     return render(request, "queues.html", {"queues": queues})
 
 @login_required
@@ -19,6 +53,26 @@ def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
     node_type = controller.heappe_management_cluster_node_type_get(Id=queue_id, SessionCode=request.session_code).to_dict()
     if request.method == "POST":
+        # check if cluster has scheduler_type == 32 (QScheduler)
+        scheduler_type = None
+        cluster_id = node_type.get("cluster_id")
+        if cluster_id:
+            try:
+                cluster_data = controller.heappe_management_cluster_get(Id=cluster_id, SessionCode=request.session_code).to_dict()
+                scheduler_type = cluster_data.get("scheduler_type")
+            except Exception as e:
+                print(f"Error fetching cluster in queue_detail: {e}")
+        
+        deployed_version = request.session.get("middleware_deployed_version", "")
+        is_v6_5_0_plus = clean_ver(deployed_version) >= [6, 5, 0]
+
+        queue_val = request.POST.get("Queue", "")
+        if scheduler_type == 32:
+            if not is_v6_5_0_plus:
+                if not queue_val.isdigit() or int(queue_val) <= 0:
+                    messages.error(request, "Validation Error: Queue identifier must be a valid positive integer representing the QScheduler Machine ID.")
+                    return redirect("queue_detail", queue_id=queue_id)
+
         # update queue
         payload_data = {
             "Id": queue_id,
@@ -85,7 +139,8 @@ def queue_detail(request: HttpRequest, queue_id: int) -> HttpResponse:
         "clusternodetypeaggregation": clusternodetypeaggregation,
         "cluster": cluster,
         "filetransfer_methods": cluster_filetransfer_methods,
-        "queue_groups": queue_groups
+        "queue_groups": queue_groups,
+        "PROTOCOL_CHOICES": PROTOCOL_CHOICES,
     })
 
 @login_required
@@ -108,10 +163,29 @@ def queue_create(request: HttpRequest, cluster_id:int) -> HttpResponse:
         return render(request, "queue.html", {
             "cluster": cluster,
             "filetransfer_methods": cluster_filetransfer_methods,
-            "queue_groups": queue_groups
+            "queue_groups": queue_groups,
+            "PROTOCOL_CHOICES": PROTOCOL_CHOICES,
         })
 
     if request.method == "POST":
+        # check if cluster has scheduler_type == 32 (QScheduler)
+        scheduler_type = None
+        try:
+            cluster_data = controller.heappe_management_cluster_get(Id=cluster_id, SessionCode=request.session_code).to_dict()
+            scheduler_type = cluster_data.get("scheduler_type")
+        except Exception as e:
+            print(f"Error fetching cluster in queue_create: {e}")
+        
+        deployed_version = request.session.get("middleware_deployed_version", "")
+        is_v6_5_0_plus = clean_ver(deployed_version) >= [6, 5, 0]
+
+        queue_val = request.POST.get("Queue", "")
+        if scheduler_type == 32:
+            if not is_v6_5_0_plus:
+                if not queue_val.isdigit() or int(queue_val) <= 0:
+                    messages.error(request, "Validation Error: Queue identifier must be a valid positive integer representing the QScheduler Machine ID.")
+                    return redirect("queue_create", cluster_id=cluster_id)
+
         payload_data = {
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),
@@ -148,12 +222,43 @@ def queue_delete(request: HttpRequest, queue_id: int) -> HttpResponse:
         "Queue deleted successfully!",
         "Failed to delete Queue"
     )
-    return redirect(f"/clusters/{cluster_id}/?tab=queues")
+    if cluster_id:
+        return redirect(f"/clusters/{cluster_id}/?tab=queues")
+    return redirect("queues_view")
 
 
 @login_required
 def queue_groups(request: HttpRequest) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action == "delete_queue_group":
+            group_id = int(request.POST.get("QueueGroupId"))
+            payload = _create_payload(request.session_code, {"Id": group_id})
+            _handle_api_call(
+                request,
+                lambda: controller.heappe_management_cluster_node_type_aggregation_delete(**payload),
+                "Queue Group deleted successfully!",
+                "Failed to delete Queue Group"
+            )
+            return redirect("queue_groups")
+        elif action == "bulk_delete":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for gid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {"Id": int(gid)})
+                    controller.heappe_management_cluster_node_type_aggregation_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error deleting queue group {gid}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully deleted {success_count} queue group(s).")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to delete {len(selected_ids) - success_count} queue group(s).")
+            return redirect("queue_groups")
+
     queue_groups = [g.to_dict() for g in controller.heappe_management_cluster_node_type_aggregations_get(SessionCode=request.session_code)]
     return render(request, "queue_groups.html", {"queue_groups": queue_groups})
 
@@ -180,6 +285,24 @@ def queue_group_detail(request: HttpRequest, group_id: int) -> HttpResponse:
             return assign_project_to_group(request, group_id)
         if action == "unassign_project_to_group":
             return unassign_project_to_group(request, group_id)
+        if action == "bulk_unassign_group":
+            selected_ids = request.POST.getlist("selected_ids")
+            success_count = 0
+            for pid in selected_ids:
+                try:
+                    payload = _create_payload(request.session_code, {
+                        "ClusterNodeTypeAggregationId": group_id,
+                        "ProjectId": int(pid)
+                    })
+                    controller.heappe_management_project_cluster_node_type_aggregation_delete(**payload)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error unassigning project {pid} from group {group_id}: {e}")
+            if success_count > 0:
+                messages.success(request, f"Successfully unassigned {success_count} project(s) from group.")
+            if len(selected_ids) > success_count:
+                messages.error(request, f"Failed to unassign {len(selected_ids) - success_count} project(s) from group.")
+            return redirect(f"{reverse('queue_group_detail', kwargs={'group_id': group_id})}?tab=projects")
 
 
     if request.method == "GET":
@@ -190,7 +313,17 @@ def queue_group_detail(request: HttpRequest, group_id: int) -> HttpResponse:
             queues = []
             for queue in all_queues:
                 if queue.cluster_node_type_aggregation and queue.cluster_node_type_aggregation.id == group_id:
-                    queues.append(queue)
+                    queues.append(queue.to_dict())
+            
+            filetransfer_methods = controller.heappe_management_file_transfer_methods_get(SessionCode=request.session_code) or []
+            ftm_dict = {}
+            for ftm in filetransfer_methods:
+                protocol_name = dict(PROTOCOL_CHOICES).get(ftm.protocol, "Unknown")
+                ftm_dict[ftm.id] = f"{ftm.server_hostname} ({protocol_name})"
+                
+            for queue in queues:
+                queue['fileTransferMethodName'] = ftm_dict.get(queue.get('file_transfer_method_id'), 'N/A')
+                
             context['queues'] = queues
         elif tab == "projects":
             all_projects = controller.heappe_management_projects_get(SessionCode=request.session_code) or []
@@ -254,10 +387,49 @@ def queue_group_create(request: HttpRequest) -> HttpResponse:
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),
             "AllocationType": allocation_type,
-            "ValidityFrom": None if request.POST.get("ValidityFrom") == "" else request.POST.get("ValidityFrom"),
-            "ValidityTo": None if request.POST.get("ValidityTo") == "" else request.POST.get("ValidityTo"),
+            "ValidityFrom": _parse_datetime_local(request.POST.get("ValidityFrom")),
+            "ValidityTo": _parse_datetime_local(request.POST.get("ValidityTo")),
         }
         payload = _create_payload(request.session_code, payload_data)
+        
+        is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.POST.get('format') == 'json'
+        
+        if is_ajax:
+            try:
+                result_obj = controller.heappe_management_cluster_node_type_aggregation_post(**payload)
+                if hasattr(result_obj, "data"):
+                    import json
+                    raw_data = result_obj.data
+                    if isinstance(raw_data, bytes):
+                        raw_data = raw_data.decode("utf-8")
+                    result = json.loads(raw_data)
+                else:
+                    result = result_obj.to_dict() if hasattr(result_obj, "to_dict") else result_obj
+                
+                if isinstance(result, str):
+                    import json
+                    try:
+                        result = json.loads(result)
+                    except Exception:
+                        pass
+                
+                new_id = None
+                if isinstance(result, dict):
+                    new_id = result.get('Id') or result.get('id')
+                elif hasattr(result_obj, 'Id'):
+                    new_id = result_obj.Id
+                elif hasattr(result_obj, 'id'):
+                    new_id = result_obj.id
+                else:
+                    new_id = result
+                
+                if new_id:
+                    return JsonResponse({"status": "success", "id": new_id, "name": payload_data["Name"]})
+                    
+                return JsonResponse({"status": "error", "message": "Failed to retrieve new Queue Group ID."}, status=400)
+            except Exception as e:
+                return JsonResponse({"status": "error", "message": str(e)}, status=400)
+
         result =  _handle_api_call(
             request,
             lambda: controller.heappe_management_cluster_node_type_aggregation_post(**payload),
@@ -283,8 +455,8 @@ def queue_group_modify(request: HttpRequest, group_id: int) -> HttpResponse:
             "Name": request.POST.get("Name"),
             "Description": request.POST.get("Description"),
             "AllocationType": allocation_type,
-            "ValidityFrom": None if request.POST.get("ValidityFrom") == "" else request.POST.get("ValidityFrom"),
-            "ValidityTo": None if request.POST.get("ValidityTo") == "" else request.POST.get("ValidityTo"),
+            "ValidityFrom": _parse_datetime_local(request.POST.get("ValidityFrom")),
+            "ValidityTo": _parse_datetime_local(request.POST.get("ValidityTo")),
         }
         payload = _create_payload(request.session_code, payload_data)
         result =  _handle_api_call(
@@ -354,8 +526,8 @@ def add_formula(request: HttpRequest, group_id: int) -> HttpResponse:
 
         payload_data = {
             "Formula": formula,
-            "ValidityFrom": None if validityFrom == "" else validityFrom,
-            "ValidityTo": None if validityTo == "" else validityTo,
+            "ValidityFrom": _parse_datetime_local(validityFrom),
+            "ValidityTo": _parse_datetime_local(validityTo),
         }
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
@@ -380,8 +552,8 @@ def edit_formula(request: HttpRequest, group_id: int) -> HttpResponse:
         payload_data = {
             "Id": formulaId,
             "Formula": formula,
-            "ValidityFrom": None if validityFrom == "" else validityFrom,
-            "ValidityTo": None if validityTo == "" else validityTo,
+            "ValidityFrom": _parse_datetime_local(validityFrom),
+            "ValidityTo": _parse_datetime_local(validityTo),
         }
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(

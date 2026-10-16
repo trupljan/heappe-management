@@ -1,55 +1,72 @@
-<div class="card mb-4 w-75 mx-auto shadow-sm">
-  <div class="card-header d-flex align-items-center">
-    <strong>Formulas</strong>
-    <div class="ms-auto">
-      <button class="btn btn-success btn-sm me-2" data-bs-toggle="modal" data-bs-target="#addFormulaModal">Create New</button>
-      <button class="btn btn-info btn-sm me-2" data-bs-toggle="modal" data-bs-target="#assignFormulaModal">Assign Existing</button>
-      <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">Reload</button>
+{% load custom_filters %}
+<div class="card border-0 shadow-sm rounded-3 bg-white overflow-hidden mb-4">
+  <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-journal-code text-primary fs-5"></i>
+      <h5 class="h6 mb-0 fw-bold text-dark">Accounting Formulas</h5>
+    </div>
+    <div class="d-flex align-items-center gap-1.5">
+      <button class="btn btn-sm btn-success fw-bold px-3 py-1.5 rounded-3 shadow-sm d-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#addFormulaModal">
+        <i class="bi bi-plus-lg"></i>Create New
+      </button>
+      <button class="btn btn-sm btn-outline-primary fw-semibold px-3 py-1.5 rounded-3" data-bs-toggle="modal" data-bs-target="#assignFormulaModal">
+        <i class="bi bi-link-45deg"></i>Assign Existing
+      </button>
+      <button class="btn btn-sm btn-outline-secondary py-1.5 rounded-3" onclick="location.reload();">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
     </div>
   </div>
 
   <div class="card-body p-0">
     {% if formulas %}
     <div class="table-responsive">
-      <table class="table table-striped mb-0">
-        <thead class="table-light">
+      <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+        <thead class="table-light text-secondary small text-uppercase">
           <tr>
-            <th>ID</th>
-            <th>Formula</th>
-            <th>Created At</th>
-            <th>Modified At</th>
-            <th>Validity From</th>
-            <th>Validity To</th>
-            <th>Actions</th>
+            <th class="ps-4" style="width: 8%;">ID</th>
+            <th style="width: 42%;">Accounting Formula</th>
+            <th style="width: 15%;">Validity From</th>
+            <th style="width: 15%;">Validity To</th>
+            <th style="width: 10%;">System Timestamps</th>
+            <th class="text-end pe-4" style="width: 10%;">Actions</th>
           </tr>
         </thead>
         <tbody>
           {% for formula in formulas %}
           <tr>
-            <td>{{ formula.id }}</td>
-            <td>{{ formula.formula }}</td>
-            <td>{{ formula.created_at }}</td>
-            <td>{{ formula.modified_at }}</td>
-            <td>{{ formula.validity_from }}</td>
-            <td>{{ formula.validity_to }}</td>
+            <td class="ps-4 font-monospace text-secondary small">#{{ formula.id }}</td>
+            <td class="font-monospace text-dark fw-bold" style="word-break: break-all;">{{ formula.formula }}</td>
+            <td class="text-secondary small">{{ formula.validity_from|format_datetime:"%d.%m.%Y %H:%M"|default:"—" }}</td>
+            <td class="text-secondary small">{{ formula.validity_to|format_datetime:"%d.%m.%Y %H:%M"|default:"—" }}</td>
             <td>
-              <div class="d-flex gap-1">
-                <button class="btn btn-sm btn-primary"
+              <div class="text-muted small" style="font-size: 0.75rem;" title="Created: {{ formula.created_at }}">
+                <i class="bi bi-calendar-plus me-1"></i>Created: {{ formula.created_at|date:"d.m.Y"|default:"-" }}
+              </div>
+              {% if formula.modified_at %}
+              <div class="text-muted small mt-0.5" style="font-size: 0.75rem;" title="Modified: {{ formula.modified_at }}">
+                <i class="bi bi-calendar-check me-1"></i>Modified: {{ formula.modified_at|date:"d.m.Y"|default:"-" }}
+              </div>
+              {% endif %}
+            </td>
+            <td class="text-end pe-4">
+              <div class="d-flex gap-1.5 justify-content-end">
+                <button class="btn btn-sm btn-outline-secondary fw-semibold px-2.5"
                         data-bs-toggle="modal"
                         data-bs-target="#editFormulaModal"
                         data-id="{{ formula.id }}"
                         data-formula="{{ formula.formula }}"
                         data-validity-from="{{ formula.validity_from }}"
                         data-validity-to="{{ formula.validity_to }}">
-                  Edit
+                  <i class="bi bi-pencil-fill me-1"></i>Edit
                 </button>
-                <form method="post">
+                <form method="post" class="m-0 p-0 d-inline">
                   {% csrf_token %}
                   <input type="hidden" name="action" value="unassign_formula"/>
                   <input type="hidden" name="FormulaId" value="{{ formula.id }}"/>
-                  <button type="submit" class="btn btn-sm btn-danger"
-                          onclick="return confirm('Are you sure you want to unassign this formula?');">
-                    Unassign
+                  <button type="submit" class="btn btn-sm btn-outline-danger"
+                          onclick="return confirm('Are you sure you want to unassign formula #{{ formula.id }}?');" title="Unassign from group">
+                    <i class="bi bi-trash"></i>
                   </button>
                 </form>
               </div>
@@ -60,145 +77,218 @@
       </table>
     </div>
     {% else %}
-    <p class="p-3 mb-0">No formulas available.</p>
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-journal-code fs-1 mb-2 d-block text-secondary"></i>
+      <p class="mb-0">No active accounting formulas assigned to this group.</p>
+    </div>
     {% endif %}
   </div>
 </div>
 
-<div class="modal fade" id="addFormulaModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
+<!-- Add Formula Modal -->
+<div class="modal fade" id="addFormulaModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow-lg rounded-3 text-dark">
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="add_formula">
-        <div class="modal-header">
-          <h5 class="modal-title">Add Formula</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        
+        <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+          <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2">
+            <i class="bi bi-plus-circle-fill text-success"></i>
+            <span>CREATE NEW ACCOUNTING FORMULA</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
-          <div class="row">
-            <div class="col-4 border-end">
-              <h6>Tokens</h6>
-              <div class="d-flex flex-wrap gap-1 mb-3">
-                {% for operand in ACCOUNTING_NUMBERS %}
-                  <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
-                {% endfor %}
+        
+        <div class="modal-body p-4">
+          <div class="row g-3">
+            <!-- Left panel: Tokens list -->
+            <div class="col-md-5 border-end pe-3">
+              <h6 class="text-uppercase text-secondary fw-bold small mb-3" style="font-size: 0.72rem; letter-spacing: 0.03em;">Standard Tokens</h6>
+              
+              <div class="mb-3">
+                <span class="text-muted d-block small mb-1.5">Numerical operands:</span>
+                <div class="d-flex flex-wrap gap-1.5">
+                  {% for operand in ACCOUNTING_NUMBERS %}
+                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle rounded-pill draggable px-2.5 py-1.5" style="cursor: grab; font-size: 0.75rem;" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                  {% endfor %}
+                </div>
               </div>
-              <div class="d-flex flex-wrap gap-1 mb-3">
-                {% for operand in ACCOUNTING_TIMES %}
-                  <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
-                {% endfor %}
+              
+              <div class="mb-3">
+                <span class="text-muted d-block small mb-1.5">Time metric operands:</span>
+                <div class="d-flex flex-wrap gap-1.5">
+                  {% for operand in ACCOUNTING_TIMES %}
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary-emphasis border border-secondary-subtle rounded-pill draggable px-2.5 py-1.5" style="cursor: grab; font-size: 0.75rem;" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                  {% endfor %}
+                </div>
               </div>
-              <div class="d-flex flex-wrap gap-1 mb-3">
-                {% for operator in ACCOUNTING_OPERATORS %}
-                  <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
-                {% endfor %}
+              
+              <div class="mb-3">
+                <span class="text-muted d-block small mb-1.5">Operators:</span>
+                <div class="d-flex flex-wrap gap-1.5">
+                  {% for operator in ACCOUNTING_OPERATORS %}
+                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle rounded-pill draggable px-2.5 py-1.5" style="cursor: grab; font-size: 0.75rem;" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
+                  {% endfor %}
+                </div>
               </div>
 
-              <hr>
-              <h6>Custom Value</h6>
-              <div class="input-group input-group-sm mb-2">
-                <input type="text" class="form-control custom-token-input" placeholder="e.g. 1.25 or Variable">
-                <button class="btn btn-dark add-custom-token-btn" type="button">Add</button>
+              <hr class="my-3">
+              <h6 class="text-uppercase text-secondary fw-bold small mb-2" style="font-size: 0.72rem; letter-spacing: 0.03em;">Custom Token Value</h6>
+              <div class="input-group input-group-sm mb-1">
+                <input type="text" class="form-control border-secondary-subtle custom-token-input" placeholder="e.g. 1.25 or Variable">
+                <button class="btn btn-dark add-custom-token-btn fw-bold px-3" type="button">Add</button>
               </div>
-              <small class="text-muted d-block mt-2">💡 Drag tokens or type custom values. Click to remove, drag to reorder.</small>
+              <small class="text-muted d-block mt-2" style="font-size: 0.75rem;">
+                <i class="bi bi-lightbulb-fill text-warning me-1"></i>Drag tokens or type custom values. Click added token to remove, drag to reorder.
+              </small>
             </div>
 
-            <div class="col-8">
-              <h6>Formula Builder</h6>
-              <div id="addFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light" style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
-              <input type="hidden" name="Formula" id="addFormulaInput">
+            <!-- Right panel: Formula Canvas -->
+            <div class="col-md-7 ps-3">
+              <h6 class="text-uppercase text-secondary fw-bold small mb-2" style="font-size: 0.72rem; letter-spacing: 0.03em;">Formula Dropzone Builder</h6>
+              <div id="addFormulaDropZone" class="formula-dropzone border border-primary border-opacity-25 rounded-3 p-3 bg-light" style="min-height:160px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px;"></div>
+              <input type="hidden" name="Formula" id="addFormulaInput" required>
             </div>
           </div>
-          <hr>
-          <div class="row">
-            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control" name="ValidityFrom"></div>
-            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control" name="ValidityTo"></div>
+          
+          <hr class="my-4">
+          
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Validity From</label>
+              <input type="datetime-local" class="form-control border-secondary-subtle py-2 font-monospace" name="ValidityFrom">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Validity To</label>
+              <input type="datetime-local" class="form-control border-secondary-subtle py-2 font-monospace" name="ValidityTo" value="9999-12-31T23:59" data-no-prefill="true">
+            </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Save</button>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        
+        <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-end gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+            <i class="bi bi-save me-1.5"></i>Save Formula
+          </button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
-<div class="modal fade" id="editFormulaModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
+<!-- Edit Formula Modal -->
+<div class="modal fade" id="editFormulaModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow-lg rounded-3 text-dark">
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="edit_formula">
         <input type="hidden" name="FormulaId" id="editFormulaId">
-        <div class="modal-header">
-          <h5 class="modal-title">Edit Formula</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        
+        <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+          <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2">
+            <i class="bi bi-pencil-square text-warning"></i>
+            <span>EDIT ACCOUNTING FORMULA</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
-          <div class="row">
-            <div class="col-4 border-end">
-              <h6>Tokens</h6>
-              <div class="d-flex flex-wrap gap-1 mb-3">
-                {% for operand in ACCOUNTING_NUMBERS %}
-                  <span class="badge rounded-pill bg-success draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
-                {% endfor %}
+        
+        <div class="modal-body p-4">
+          <div class="row g-3">
+            <!-- Left panel: Tokens list -->
+            <div class="col-md-5 border-end pe-3">
+              <h6 class="text-uppercase text-secondary fw-bold small mb-3" style="font-size: 0.72rem; letter-spacing: 0.03em;">Standard Tokens</h6>
+              
+              <div class="mb-3">
+                <span class="text-muted d-block small mb-1.5">Numerical operands:</span>
+                <div class="d-flex flex-wrap gap-1.5">
+                  {% for operand in ACCOUNTING_NUMBERS %}
+                    <span class="badge bg-success bg-opacity-10 text-success border border-success-subtle rounded-pill draggable px-2.5 py-1.5" style="cursor: grab; font-size: 0.75rem;" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                  {% endfor %}
+                </div>
               </div>
-              <div class="d-flex flex-wrap gap-1 mb-3">
-                {% for operand in ACCOUNTING_TIMES %}
-                  <span class="badge rounded-pill bg-secondary draggable" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
-                {% endfor %}
+              
+              <div class="mb-3">
+                <span class="text-muted d-block small mb-1.5">Time metric operands:</span>
+                <div class="d-flex flex-wrap gap-1.5">
+                  {% for operand in ACCOUNTING_TIMES %}
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary-emphasis border border-secondary-subtle rounded-pill draggable px-2.5 py-1.5" style="cursor: grab; font-size: 0.75rem;" draggable="true" data-value="{{ operand }}">{{ operand }}</span>
+                  {% endfor %}
+                </div>
               </div>
-              <div class="d-flex flex-wrap gap-1 mb-3">
-                {% for operator in ACCOUNTING_OPERATORS %}
-                  <span class="badge rounded-pill bg-primary draggable" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
-                {% endfor %}
+              
+              <div class="mb-3">
+                <span class="text-muted d-block small mb-1.5">Operators:</span>
+                <div class="d-flex flex-wrap gap-1.5">
+                  {% for operator in ACCOUNTING_OPERATORS %}
+                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary-subtle rounded-pill draggable px-2.5 py-1.5" style="cursor: grab; font-size: 0.75rem;" draggable="true" data-value="{{ operator }}">{{ operator }}</span>
+                  {% endfor %}
+                </div>
               </div>
 
-              <hr>
-              <h6>Custom Value</h6>
-              <div class="input-group input-group-sm mb-2">
-                <input type="text" class="form-control custom-token-input" placeholder="e.g. 100">
-                <button class="btn btn-dark add-custom-token-btn" type="button">Add</button>
+              <hr class="my-3">
+              <h6 class="text-uppercase text-secondary fw-bold small mb-2" style="font-size: 0.72rem; letter-spacing: 0.03em;">Custom Token Value</h6>
+              <div class="input-group input-group-sm mb-1">
+                <input type="text" class="form-control border-secondary-subtle custom-token-input" placeholder="e.g. 100">
+                <button class="btn btn-dark add-custom-token-btn fw-bold px-3" type="button">Add</button>
               </div>
             </div>
 
-            <div class="col-8">
-              <h6>Formula Builder</h6>
-              <div id="editFormulaDropZone" class="formula-dropzone border rounded p-3 bg-light" style="min-height:120px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 5px;"></div>
-              <input type="hidden" name="Formula" id="editFormulaInput">
+            <!-- Right panel: Formula Canvas -->
+            <div class="col-md-7 ps-3">
+              <h6 class="text-uppercase text-secondary fw-bold small mb-2" style="font-size: 0.72rem; letter-spacing: 0.03em;">Formula Dropzone Builder</h6>
+              <div id="editFormulaDropZone" class="formula-dropzone border border-primary border-opacity-25 rounded-3 p-3 bg-light" style="min-height:160px; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 6px;"></div>
+              <input type="hidden" name="Formula" id="editFormulaInput" required>
             </div>
           </div>
-          <hr>
-          <div class="row">
-            <div class="col-6 mb-3"><label>Validity From</label><input type="datetime-local" class="form-control" name="ValidityFrom" id="editValidityFrom"></div>
-            <div class="col-6 mb-3"><label>Validity To</label><input type="datetime-local" class="form-control" name="ValidityTo" id="editValidityTo"></div>
+          
+          <hr class="my-4">
+          
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Validity From</label>
+              <input type="datetime-local" class="form-control border-secondary-subtle py-2 font-monospace" name="ValidityFrom" id="editValidityFrom">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Validity To</label>
+              <input type="datetime-local" class="form-control border-secondary-subtle py-2 font-monospace" name="ValidityTo" id="editValidityTo" data-no-prefill="true">
+            </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Save Changes</button>
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        
+        <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-end gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+            <i class="bi bi-save me-1.5"></i>Save Changes
+          </button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+<!-- Assign Formula Modal -->
 <div class="modal fade" id="assignFormulaModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg rounded-3 text-dark">
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="assign_formula">
-        <div class="modal-header">
-          <h5 class="modal-title">Assign Existing Formula</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        
+        <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+          <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2">
+            <i class="bi bi-link-45deg text-success"></i>
+            <span>ASSIGN EXISTING FORMULA</span>
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
+        
+        <div class="modal-body p-4">
           <div class="mb-3">
-            <label>Select Formula</label>
-            <select class="form-select" name="FormulaId" required>
+            <label class="form-label small fw-bold text-secondary text-uppercase mb-2">Select Formula</label>
+            <select class="form-select border-secondary-subtle py-2.5 rounded-3" name="FormulaId" required>
               <option value="" selected disabled>-- Choose a formula --</option>
               {% for formula in all_formulas %}
                 <option value="{{ formula.id }}">{{ formula.formula }} (ID: {{ formula.id }})</option>
@@ -206,7 +296,11 @@
             </select>
           </div>
         </div>
-        <div class="modal-footer"><button type="submit" class="btn btn-primary">Assign</button><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button></div>
+        
+        <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-end gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">Assign Formula</button>
+        </div>
       </form>
     </div>
   </div>
@@ -224,7 +318,6 @@ function initFormulaBuilder(dropZoneId, inputId) {
   dropZone.addEventListener("drop", (e) => {
     e.preventDefault();
     const value = e.dataTransfer.getData("text/plain");
-    // Pokud hodnota existuje a netaháme zrovna element už uvnitř dropzóny (dragSrcEl)
     if (value && !dragSrcEl) {
       addToken(value);
     }
@@ -240,8 +333,7 @@ function initFormulaBuilder(dropZoneId, inputId) {
     if (!value || value.trim() === "") return;
     const span = document.createElement("span");
     span.textContent = value;
-    // Vlastní hodnoty dostanou jinou barvu (info), pokud nejsou v predefined (volitelné)
-    span.className = "badge bg-secondary p-2 shadow-sm";
+    span.className = "badge bg-secondary bg-opacity-20 text-dark border border-secondary border-opacity-50 p-2 shadow-xs rounded-3";
     span.dataset.value = value;
     span.draggable = true;
     span.style.cursor = "pointer";
@@ -297,7 +389,6 @@ function initFormulaBuilder(dropZoneId, inputId) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Inicializace drag & drop pro tokeny z panelu
   document.querySelectorAll(".draggable").forEach((item) => {
     item.addEventListener("dragstart", (e) => {
       e.dataTransfer.setData("text/plain", e.target.dataset.value);
@@ -307,7 +398,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const addBuilder = initFormulaBuilder("addFormulaDropZone", "addFormulaInput");
   const editBuilder = initFormulaBuilder("editFormulaDropZone", "editFormulaInput");
 
-  // Logika pro přidávání vlastních hodnot (Custom Tokens)
   document.querySelectorAll(".add-custom-token-btn").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       const modal = e.target.closest(".modal");

@@ -1,13 +1,38 @@
 #!/bin/bash
-BASE_DIR="/opt/heappe/heappe-admin-app"
+# Determine directories dynamically relative to script location to support various deployment layouts
+APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# If path contains /branches/<branch>, extract BASE_DIR as the parent of branches directory
+if [[ "$APP_DIR" =~ (.*)/branches/[^/]+ ]]; then
+    BASE_DIR="${BASH_REMATCH[1]}"
+    if [[ "$APP_DIR" =~ /branches/([^/]+) ]]; then
+        BRANCH_DIR_NAME="${BASH_REMATCH[1]}"
+    fi
+else
+    BASE_DIR="$APP_DIR"
+    BRANCH_DIR_NAME=""
+fi
+
 GIT_TAG=${GIT_TAG:-"main"}
-APP_DIR="${BASE_DIR}/branches/main"
 SERVICE_NAME="adminpanel"
 LOG_FILE="/var/log/deploy_${SERVICE_NAME}.log"
 STATIC_ROOT_DIR="${BASE_DIR}/static"
 
+# Resolve virtual environment directory dynamically
+if [ -n "$BRANCH_DIR_NAME" ] && [ -d "${BASE_DIR}/branches/.venv-${BRANCH_DIR_NAME}" ]; then
+    VENV_DIR="${BASE_DIR}/branches/.venv-${BRANCH_DIR_NAME}"
+elif [ -d "${BASE_DIR}/branches/.venv-main" ]; then
+    VENV_DIR="${BASE_DIR}/branches/.venv-main"
+elif [ -d "${APP_DIR}/venv" ]; then
+    VENV_DIR="${APP_DIR}/venv"
+else
+    if [ -n "$BRANCH_DIR_NAME" ]; then
+        VENV_DIR="${BASE_DIR}/branches/.venv-${BRANCH_DIR_NAME}"
+    else
+        VENV_DIR="${APP_DIR}/venv"
+    fi
+fi
 
-VENV_DIR="${BASE_DIR}/branches/.venv-main"
 VENV_PYTHON="${VENV_DIR}/bin/python"
 PIP_COMMAND="${VENV_DIR}/bin/pip"
 GIT_URL=${GIT_URL:-"origin"}
@@ -57,6 +82,7 @@ if [ -n "$GIT_USER" ] && [ -n "$GIT_PASS" ] && [ "$GIT_URL" != "origin" ]; then
     REMOTE_CHANGED=true
 fi
 
+git fetch origin --prune >> "$LOG_FILE" 2>&1 || true
 git fetch origin "+refs/tags/*:refs/tags/*" --force --prune >> "$LOG_FILE" 2>&1
 check_error
 

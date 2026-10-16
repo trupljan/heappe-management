@@ -1,43 +1,54 @@
 {% extends "base.html" %}
 {% load static %}
 
+{% block title %}HEAppE Admin Panel - Login{% endblock %}
 
+{% block sidebar %}{% endblock %}
+{% block header %}{% endblock %}
 
 {% block content %}
-
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-md-4">
-                <div class="card shadow-lg rounded-4">
-                    <div class="card-body p-4">
-                        <div class="text-center mb-4">
-                            <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" style="height:50px;" class="mb-2">
-                            <h5 class="fw-bold">HEAppE Admin Login</h5>
-                        </div>
-
-                        {% if error %}
-                            <div class="alert alert-danger py-2">{{ error }}</div>
-                        {% endif %}
-
-                        <form method="post">
-                            {% csrf_token %}
-                            <div class="mb-3">
-                                <label for="username" class="form-label">Username</label>
-                                <input type="text" class="form-control" id="username" name="username" required autofocus>
-                            </div>
-                            <div class="mb-3">
-                                <label for="password" class="form-label">Password</label>
-                                <input type="password" class="form-control" id="password" name="password" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">Log In</button>
-                        </form>
-                    </div>
+<div class="d-flex align-items-center justify-content-center min-vh-100 py-5" style="background-color: #f8f9fa;">
+    <div class="w-100 px-3" style="max-width: 420px;">
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-body p-4 p-sm-5">
+                <div class="text-center mb-4">
+                    <img src="https://heappe.it4i.cz/documentation/img/HEAppE_icon.png" alt="Logo" style="height: 48px;" class="mb-3">
+                    <h4 class="fw-bold text-dark mb-1">HEAppE Admin Panel</h4>
+                    <p class="text-secondary small mb-0">Sign in to manage active HEAppE instances</p>
                 </div>
-                <p class="text-center text-muted mt-3" style="font-size: 0.9rem;">
-                    &copy; {{ year|default:2025 }} HEAppE Admin
-                </p>
+
+                {% if error %}
+                    <div class="alert alert-danger border-0 shadow-sm py-2.5 small d-flex align-items-center gap-2" role="alert">
+                        <i class="bi bi-exclamation-circle-fill text-danger"></i>
+                        <div>{{ error }}</div>
+                    </div>
+                {% endif %}
+
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="username" class="form-label small text-muted fw-semibold">Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 border-light-subtle text-muted"><i class="bi bi-person"></i></span>
+                            <input type="text" class="form-control border-start-0 border-light-subtle bg-white" id="username" name="username" required autofocus placeholder="Enter your username">
+                        </div>
+                    </div>
+                    <div class="mb-4">
+                        <label for="password" class="form-label small text-muted fw-semibold">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0 border-light-subtle text-muted"><i class="bi bi-key"></i></span>
+                            <input type="password" class="form-control border-start-0 border-light-subtle bg-white" id="password" name="password" required placeholder="Enter your password">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm">
+                        <i class="bi bi-box-arrow-in-right me-1"></i> Log In
+                    </button>
+                </form>
             </div>
         </div>
+        <p class="text-center text-muted mt-4 small">
+            &copy; {% now "Y" %} HEAppE Admin &bull; IT4Innovations
+        </p>
     </div>
-
+</div>
 {% endblock %}

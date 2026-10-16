@@ -1,113 +1,993 @@
 {% extends "base.html" %}
+
 {% block title %}Log Viewer - {{ instance }}{% endblock %}
-{% block head %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Instance Log Viewer</li>
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid px-4 py-4 min-vh-100" style="background: #f8f9fa;">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h4 class="fw-bold text-dark mb-1">
-                <i class="bi bi-terminal text-primary me-2"></i>Log Viewer
-            </h4>
-            <p class="text-muted small mb-0">Instance: <b>{{ instance|upper }}</b></p>
+<style>
+    /* JetBrains Mono and Inter loading */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+    .log-viewer-container {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    /* Premium Metric Card and Sidebars */
+    .filter-card {
+        border: none !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04) !important;
+    }
+    
+    .filter-label {
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #64748b;
+        margin-bottom: 0.35rem;
+        display: block;
+        white-space: nowrap;
+    }
+
+    .filter-card .form-control-custom,
+    .filter-card .form-select {
+        height: 38px !important;
+        font-size: 0.82rem !important;
+        border-radius: 8px !important;
+        border: 1px solid #cbd5e1 !important;
+        background-color: #ffffff !important;
+        padding: 0.35rem 0.65rem !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02) !important;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .filter-card .form-control-custom:focus,
+    .filter-card .form-select:focus {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15) !important;
+        outline: none;
+    }
+
+    .btn-filter-apply {
+        height: 38px;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        box-shadow: 0 1px 2px rgba(13, 110, 253, 0.2);
+    }
+
+    .btn-filter-reset {
+        height: 38px;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* Light Console Card styles */
+    .console-card {
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
+        overflow: hidden;
+        background-color: #ffffff !important;
+    }
+
+    .console-header {
+        background-color: #f8fafc !important;
+        border-bottom: 1px solid #e2e8f0 !important;
+        padding: 0.75rem 1.25rem !important;
+    }
+
+    .console-body {
+        background-color: #f8fafc !important; /* soft light gray background for the console area */
+        overflow-y: auto;
+        overflow-x: auto;
+        height: calc(100% - 48px);
+        padding: 0 !important;
+    }
+
+    /* Fullscreen styling for console */
+    .console-card:fullscreen,
+    .console-card:-webkit-full-screen {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    .console-card:fullscreen .console-body,
+    .console-card:-webkit-full-screen .console-body {
+        flex-grow: 1 !important;
+        height: auto !important;
+    }
+
+    /* Scrollbar */
+    .console-body::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    .console-body::-webkit-scrollbar-track {
+        background: #ffffff;
+    }
+    .console-body::-webkit-scrollbar-thumb {
+        background: #e2e8f0;
+        border-radius: 4px;
+    }
+    .console-body::-webkit-scrollbar-thumb:hover {
+        background: #cbd5e1;
+    }
+
+    .log-console-content {
+        font-family: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+        font-size: 0.78rem;
+        line-height: 1.35;
+        color: #1e293b; /* slate-800 for high readability */
+        padding: 1rem !important;
+    }
+
+    /* Log line entries - Terminal Style (Light) */
+    .log-entry {
+        font-family: 'JetBrains Mono', monospace;
+        padding: 0.05rem 0.5rem;
+        margin: 0;
+        border-left: 3px solid transparent;
+        white-space: pre-wrap;
+        word-break: break-all;
+        border-bottom: none;
+        transition: background-color 0.1s ease;
+    }
+    .log-entry:hover {
+        background-color: #f1f5f9;
+    }
+
+    /* Severity border-left colors */
+    .log-entry-info { border-left-color: #3b82f6 !important; }
+    .log-entry-warn { border-left-color: #f59e0b !important; }
+    .log-entry-error { border-left-color: #ef4444 !important; }
+    .log-entry-debug { border-left-color: #94a3b8 !important; }
+
+    /* In-line tokens */
+    .log-level {
+        display: inline-block;
+        font-size: 0.72rem;
+        font-weight: 700;
+        width: 50px;
+        text-transform: uppercase;
+        margin-right: 8px;
+    }
+    .log-level-info {
+        color: #2563eb;
+    }
+    .log-level-warn {
+        color: #d97706;
+    }
+    .log-level-error {
+        color: #dc2626;
+    }
+    .log-level-debug {
+        color: #64748b;
+    }
+
+    .log-timestamp {
+        color: #64748b;
+        margin-right: 12px;
+        font-weight: 500;
+        display: inline-block;
+    }
+
+    .log-conn {
+        color: #7c3aed; /* violet */
+        margin-right: 12px;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    .log-user {
+        color: #ea580c; /* orange */
+        margin-right: 12px;
+        font-weight: 500;
+        display: inline-block;
+    }
+
+    .log-logger {
+        color: #0891b2; /* cyan/teal */
+        margin-right: 12px;
+        font-weight: 500;
+        display: inline-block;
+    }
+
+    .log-msg-separator {
+        display: inline;
+        margin-right: 4px;
+    }
+
+    .log-msg {
+        color: #1e293b;
+        display: inline;
+    }
+
+    .log-msg-fallback {
+        color: #1e293b;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Continuous, Clean JSON blocks without distracting frames */
+    .json-block {
+        background-color: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
+        display: inline;
+        white-space: pre-wrap; /* Wrap long lines inside JSON block */
+        word-break: break-all; /* Break long words/base64 strings */
+        font-size: 0.82rem;
+        font-family: 'JetBrains Mono', monospace;
+        color: #1e293b;
+    }
+
+    .json-key {
+        color: #2563eb; /* royal blue */
+        font-weight: 600;
+    }
+
+    .json-value-string {
+        color: #16a34a; /* green */
+    }
+
+    .json-value-number {
+        color: inherit;
+    }
+
+    .json-value-boolean {
+        color: #4f46e5; /* indigo */
+        font-weight: bold;
+    }
+
+    .json-value-null {
+        color: #64748b; /* slate gray */
+        font-style: italic;
+    }
+
+    .json-value-redacted {
+        background-color: #fee2e2;
+        color: #991b1b;
+        font-weight: bold;
+        padding: 1px 4px;
+        border-radius: 4px;
+    }
+
+    /* Glowing Live Indicator animation */
+    @keyframes pulse {
+        0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+        70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+        100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+    }
+    .pulse-dot {
+        width: 8px;
+        height: 8px;
+        background-color: #22c55e;
+        border-radius: 50%;
+        display: inline-block;
+        animation: pulse 1.8s infinite;
+    }
+
+    .live-status-active {
+        color: #22c55e !important;
+        font-weight: 600;
+    }
+
+    /* Toggleable metadata visibility */
+    .hide-timestamp .log-timestamp { display: none !important; }
+    .hide-conn .log-conn { display: none !important; }
+    .hide-user .log-user { display: none !important; }
+    .hide-logger .log-logger { display: none !important; }
+    .hide-service .log-service { display: none !important; }
+
+    .log-service {
+        display: inline-block;
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 4px;
+        margin-right: 8px;
+        text-transform: uppercase;
+        font-family: 'JetBrains Mono', monospace;
+    }
+    .log-service-api {
+        background-color: #f1f5f9;
+        color: #475569;
+        border: 1px solid #cbd5e1;
+    }
+    .log-service-datastaging {
+        background-color: #e0f2fe;
+        color: #0369a1;
+        border: 1px solid #bae6fd;
+    }
+    .log-service-ratelimit-api {
+        background-color: #f3e8ff;
+        color: #6b21a8;
+        border: 1px solid #e9d5ff;
+    }
+    .log-service-ratelimit-datastaging {
+        background-color: #cff4fc;
+        color: #055160;
+        border: 1px solid #9eeaf9;
+    }
+    .log-service-vault {
+        background-color: #fef3c7;
+        color: #92400e;
+        border: 1px solid #fde68a;
+    }
+    .log-service-deploy {
+        background-color: #dcfce7;
+        color: #15803d;
+        border: 1px solid #bbf7d0;
+    }
+    .log-service-update {
+        background-color: #ffedd5;
+        color: #c2410c;
+        border: 1px solid #fed7aa;
+    }
+    .log-service-default {
+        background-color: #f8fafc;
+        color: #334155;
+        border: 1px solid #e2e8f0;
+    }
+</style>
+
+<div class="container-fluid py-2 log-viewer-container">
+    <!-- Header Block -->
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-2.5">
+            <i class="bi bi-terminal-fill text-primary fs-3"></i>
+            <div>
+                <h4 class="mb-0 fw-bold text-dark">Log Viewer</h4>
+                <span class="text-muted small">Instance Context: <strong class="text-secondary font-monospace">{{ instance|upper }}</strong></span>
+            </div>
         </div>
-        <div>
-            <span class="badge bg-white text-dark border shadow-sm px-3 py-2">
-                Entries: <span id="entryCount">{{ logs|length }}</span>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-white text-secondary border shadow-sm px-3 py-2 fw-semibold d-flex align-items-center gap-1.5" style="border-radius: 8px;" id="utcClockHint">
+                <i class="bi bi-clock text-primary"></i> UTC: <span class="font-monospace text-dark fw-bold">--:--:--</span>
+            </span>
+            <span class="badge bg-white text-secondary border shadow-sm px-3 py-2 fw-semibold" style="border-radius: 8px;">
+                Entries: <span id="entryCount" class="text-primary font-monospace fw-bold">{{ logs_count }}</span>
             </span>
         </div>
     </div>
 
-    <div class="row g-4">
-        <div class="col-lg-3 col-xl-2">
-            <div class="card border-0 shadow-sm p-3">
-                <form method="GET">
-                    <h6 class="text-uppercase text-muted fw-bold small mb-3">Filter</h6>
-                    <div class="mb-2">
-                        <label class="small fw-bold">Date</label>
-                        <input type="date" name="date" class="form-control form-control-sm" value="{{ selected_date }}">
-                    </div>
-                    <div class="row g-1 mb-3">
-                        <div class="col-6"><input type="time" name="time_from" class="form-control form-control-sm" value="{{ time_from }}"></div>
-                        <div class="col-6"><input type="time" name="time_to" class="form-control form-control-sm" value="{{ time_to }}"></div>
-                    </div>
-                    <div class="mb-3">
-                        <input type="text" name="search" class="form-control form-control-sm" placeholder="Search..." value="{{ search_query }}">
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100 btn-sm fw-bold">Apply</button>
-                </form>
-                <hr>
-                <div class="d-flex align-items-center justify-content-between">
-                    <span class="small fw-bold text-danger">Live Tail</span>
-                    <div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="liveStreamToggle"></div>
-                </div>
-                <div id="liveStatus" class="small text-muted mt-1 fst-italic">Disconnected</div>
+    <!-- Top Control Bar -->
+    <div class="card filter-card p-3 bg-white mb-3">
+        <form method="GET" id="logFilterForm" class="d-flex flex-wrap align-items-end gap-2.5">
+            <div class="flex-grow-1" style="min-width: 150px; flex-basis: 0;">
+                <label class="filter-label">Log Source</label>
+                <select name="service" class="form-select form-control-custom w-100">
+                    <option value="API" {% if service_filter == "API" or not service_filter %}selected{% endif %}>HEAppE API</option>
+                    <option value="ALL" {% if service_filter == "ALL" %}selected{% endif %}>ALL LOGS</option>
+                    <option value="DATASTAGING" {% if service_filter == "DATASTAGING" %}selected{% endif %}>DataStaging API</option>
+                    <option value="RATELIMIT-API" {% if service_filter == "RATELIMIT-API" %}selected{% endif %}>RateLimit API</option>
+                    <option value="RATELIMIT-DATASTAGING" {% if service_filter == "RATELIMIT-DATASTAGING" %}selected{% endif %}>RateLimit DataStaging</option>
+                    <option value="VAULT" {% if service_filter == "VAULT" %}selected{% endif %}>Vault Logs</option>
+                    <option value="DEPLOY" {% if service_filter == "DEPLOY" %}selected{% endif %}>Deploy Log</option>
+                    <option value="UPDATE" {% if service_filter == "UPDATE" %}selected{% endif %}>Update Log</option>
+                </select>
             </div>
-        </div>
 
-        <div class="col-lg-9 col-xl-10">
-            <div class="card border-0 shadow-sm" style="height: 80vh;">
-                <div class="card-header bg-white py-2 border-bottom d-flex justify-content-between align-items-center">
-                    <span class="fw-bold small text-uppercase text-muted">Console Output</span>
-                    <button class="btn btn-xs btn-light border btn-sm" onclick="scrollToBottom()">Scroll to Bottom</button>
+            <div class="flex-grow-1" style="min-width: 135px; flex-basis: 0;">
+                <label class="filter-label">Date <span class="text-primary fw-normal" style="font-size:0.65rem;">(UTC)</span></label>
+                <input type="date" name="date" class="form-control form-control-custom w-100" value="{{ selected_date }}">
+            </div>
+            
+            <div class="flex-grow-1" style="min-width: 200px; flex-basis: 0;">
+                <label class="filter-label">Time Window <span class="text-primary fw-normal" style="font-size:0.65rem;">(UTC)</span></label>
+                <div class="d-flex gap-1.5 align-items-center">
+                    <input type="time" name="time_from" class="form-control form-control-custom w-100" value="{{ time_from }}" id="timeFromInput">
+                    <span class="text-muted small px-1">to</span>
+                    <input type="time" name="time_to" class="form-control form-control-custom w-100" value="{{ time_to }}" id="timeToInput">
                 </div>
-                <div class="card-body p-0" id="logWindow" style="overflow-y: auto; height: 100%; background: #fff;">
-                    <table class="table table-sm table-hover mb-0">
-                        <tbody id="logTableBody">
-                            {% for row_html in logs %}{{ row_html|safe }}{% empty %}
-                            <tr><td colspan="2" class="text-center py-5 text-muted">No logs found.</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+            </div>
+
+            <div class="flex-grow-1" style="min-width: 125px; flex-basis: 0;">
+                <label class="filter-label">Log Level</label>
+                <select name="level" class="form-select form-control-custom w-100">
+                    <option value="" {% if not level_filter %}selected{% endif %}>ALL LEVELS</option>
+                    <option value="DEBUG" {% if level_filter == "DEBUG" %}selected{% endif %}>DEBUG</option>
+                    <option value="INFO" {% if level_filter == "INFO" %}selected{% endif %}>INFO</option>
+                    <option value="WARN" {% if level_filter == "WARN" %}selected{% endif %}>WARN</option>
+                    <option value="ERROR" {% if level_filter == "ERROR" %}selected{% endif %}>ERROR</option>
+                </select>
+            </div>
+            
+            <div class="flex-grow-1" style="min-width: 150px; flex-basis: 0;">
+                <label class="filter-label">Search Text</label>
+                <input type="text" name="search" class="form-control form-control-custom w-100" placeholder="Filter..." value="{{ search_query }}">
+            </div>
+            
+            <div class="d-flex gap-2 ms-auto" style="min-width: 160px; flex-basis: 0;">
+                <button type="submit" id="applyFilterBtn" class="btn btn-primary btn-filter-apply w-100">
+                    <i class="bi bi-funnel-fill me-1"></i>Apply
+                </button>
+                <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-filter-reset w-100">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Log window pane -->
+    <div class="col-12">
+        <div class="card console-card" style="height: 72vh;" id="consoleCard">
+            <!-- Console Header -->
+            <div class="card-header console-header d-flex justify-content-between align-items-center flex-wrap gap-2 py-2">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-terminal text-secondary fs-6"></i>
+                    <span class="fw-bold small text-uppercase text-secondary font-monospace" style="font-size: 0.72rem; letter-spacing: 0.05em;">Console Output</span>
+                </div>
+                <div class="d-flex align-items-center gap-2.5 flex-wrap">
+                    <!-- Metadata Toggles -->
+                    <div class="d-flex align-items-center gap-2.5 border-end pe-3 text-secondary me-1" style="font-size: 0.72rem;">
+                        <span class="fw-bold text-uppercase text-muted" style="font-size: 0.65rem; letter-spacing: 0.03em;">Show:</span>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input metadata-toggle-cb" type="checkbox" id="toggle-service" checked data-class="hide-service" style="cursor: pointer;">
+                            <label class="form-check-label font-monospace" for="toggle-service" style="cursor: pointer; user-select: none;">Source</label>
+                        </div>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input metadata-toggle-cb" type="checkbox" id="toggle-timestamp" checked data-class="hide-timestamp" style="cursor: pointer;">
+                            <label class="form-check-label font-monospace" for="toggle-timestamp" style="cursor: pointer; user-select: none;">Time</label>
+                        </div>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input metadata-toggle-cb" type="checkbox" id="toggle-conn" checked data-class="hide-conn" style="cursor: pointer;">
+                            <label class="form-check-label font-monospace" for="toggle-conn" style="cursor: pointer; user-select: none;">Trace ID</label>
+                        </div>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input metadata-toggle-cb" type="checkbox" id="toggle-user" data-class="hide-user" style="cursor: pointer;">
+                            <label class="form-check-label font-monospace" for="toggle-user" style="cursor: pointer; user-select: none;">User</label>
+                        </div>
+                        <div class="form-check form-check-inline mb-0">
+                            <input class="form-check-input metadata-toggle-cb" type="checkbox" id="toggle-logger" data-class="hide-logger" style="cursor: pointer;">
+                            <label class="form-check-label font-monospace" for="toggle-logger" style="cursor: pointer; user-select: none;">Logger</label>
+                        </div>
+                    </div>
+                    <!-- Live Tail toggle inside header -->
+                    <div class="d-flex align-items-center gap-1.5 me-2 border rounded-pill py-0.5 px-2 bg-light" style="height: 26px;">
+                        <div class="form-check form-switch mb-0 d-flex align-items-center">
+                            <input class="form-check-input" type="checkbox" id="headerLiveStreamToggle" style="cursor: pointer; width: 1.8em; height: 0.9em; margin-top: 0;">
+                        </div>
+                        <span id="headerLiveStatus" class="font-monospace text-muted" style="font-size: 0.65rem; min-width: 45px; user-select: none;">Live: Off</span>
+                    </div>
+                    <button class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace" style="font-size: 0.7rem;" onclick="scrollToBottom()">Scroll to Bottom</button>
+                    <button class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace" style="font-size: 0.7rem;" onclick="exportConsoleView()" title="Export visible logs to a text file">
+                        <i class="bi bi-download text-secondary me-1"></i>Export View
+                    </button>
+                    <button id="fullscreenToggleBtn" class="btn btn-xs btn-outline-secondary btn-sm rounded-3 py-1 px-2.5 font-monospace" style="font-size: 0.7rem;" title="Toggle Fullscreen">
+                        <i class="bi bi-fullscreen text-secondary"></i>
+                    </button>
+                </div>
+            </div>
+            <!-- Console Body -->
+            <div class="card-body console-body" id="logWindow">
+                <div id="logConsole" class="log-console-content">
+                    <div id="logLoadingSpinner" class="d-flex flex-column justify-content-center align-items-center py-5 text-center my-4">
+                        <div class="spinner-border text-primary mb-3" style="width: 2.5rem; height: 2.5rem;" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">Loading HEAppE Logs...</h6>
+                        <p class="text-muted small mb-0 font-monospace" style="font-size: 0.75rem;">Reading and parsing log entries from instance files</p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
+<script id="initialLogsData" type="application/json">
+    {{ logs_json|safe }}
+</script>
+
 <script>
     let logOffset = 0;
     let liveInterval = null;
     const logWindow = document.getElementById('logWindow');
-    const tableBody = document.getElementById('logTableBody');
+    const consoleContent = document.getElementById('logConsole');
     const liveToggle = document.getElementById('liveStreamToggle');
+    const headerLiveToggle = document.getElementById('headerLiveStreamToggle');
     const liveStatus = document.getElementById('liveStatus');
+    const headerLiveStatus = document.getElementById('headerLiveStatus');
     const entryCountDisplay = document.getElementById('entryCount');
 
-    function scrollToBottom() { logWindow.scrollTop = logWindow.scrollHeight; }
-    window.onload = scrollToBottom;
+    function scrollToBottom() { 
+        logWindow.scrollTop = logWindow.scrollHeight; 
+    }
+
+    function escapeHtml(text) {
+        return text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function syntaxHighlightJson(json) {
+        json = escapeHtml(json);
+        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
+            let cls = 'json-value-number';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = 'json-key';
+                    return `<span class="${cls}">${match.slice(0, -1)}</span>:`;
+                } else {
+                    cls = 'json-value-string';
+                    if (match.includes('***REDACTED***')) {
+                        cls = 'json-value-redacted';
+                    }
+                }
+            } else if (/true|false/.test(match)) {
+                cls = 'json-value-boolean';
+            } else if (/null/.test(match)) {
+                cls = 'json-value-null';
+            }
+            return `<span class="${cls}">${match}</span>`;
+        });
+    }
+
+    function highlightJsonInText(text) {
+        let result = '';
+        let i = 0;
+        while (i < text.length) {
+            if (text[i] === '{') {
+                let braceCount = 1;
+                let j = i + 1;
+                let inString = false;
+                let escape = false;
+                while (j < text.length && braceCount > 0) {
+                    let char = text[j];
+                    if (escape) {
+                        escape = false;
+                    } else if (char === '\\') {
+                        escape = true;
+                    } else if (char === '"') {
+                        inString = !inString;
+                    } else if (!inString) {
+                        if (char === '{') braceCount++;
+                        else if (char === '}') braceCount--;
+                    }
+                    j++;
+                }
+                if (braceCount === 0) {
+                    let rawJson = text.substring(i, j);
+                    try {
+                        let parsed = JSON.parse(rawJson);
+                        let pretty = JSON.stringify(parsed);
+                        let highlighted = syntaxHighlightJson(pretty);
+                        result += `<span class="json-block">${highlighted}</span>`;
+                    } catch (e) {
+                        result += `<span class="json-raw">${escapeHtml(rawJson)}</span>`;
+                    }
+                    i = j;
+                } else {
+                    result += escapeHtml(text[i]);
+                    i++;
+                }
+            } else {
+                result += escapeHtml(text[i]);
+                i++;
+            }
+        }
+        return result;
+    }
+
+    function getServiceBadge(service) {
+        const svcUpper = (service || 'API').toUpperCase();
+        let badgeClass = 'log-service-default';
+        let label = service || 'API';
+
+        if (svcUpper.includes('RATELIMIT-API')) {
+            badgeClass = 'log-service-ratelimit-api';
+            label = 'RateLimit API';
+        } else if (svcUpper.includes('RATELIMIT-DATASTAGING')) {
+            badgeClass = 'log-service-ratelimit-datastaging';
+            label = 'RateLimit DS';
+        } else if (svcUpper.includes('DATASTAGING')) {
+            badgeClass = 'log-service-datastaging';
+            label = 'DataStaging';
+        } else if (svcUpper.includes('VAULT')) {
+            badgeClass = 'log-service-vault';
+            label = 'Vault';
+        } else if (svcUpper.includes('DEPLOY')) {
+            badgeClass = 'log-service-deploy';
+            label = 'Deploy';
+        } else if (svcUpper.includes('UPDATE')) {
+            badgeClass = 'log-service-update';
+            label = 'Update';
+        } else if (svcUpper.includes('API')) {
+            badgeClass = 'log-service-api';
+            label = 'HEAppE API';
+        }
+
+        return `<span class="log-service ${badgeClass}">${escapeHtml(label)}</span>`;
+    }
+
+    function formatLogEntry(content, level, service) {
+        const prefixRegex = /^(DEBUG|INFO|WARN|ERROR|FATAL)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\s+[A-Z]+)?)\s+(\[[^\]]+\])\s+(.*?)\s+([a-zA-Z0-9._-]+)\s+-\s+([\s\S]*)$/;
+        const match = content.match(prefixRegex);
+        
+        const serviceTag = getServiceBadge(service);
+
+        if (match) {
+            const matchedLevel = match[1];
+            const timestamp = match[2];
+            const connId = match[3];
+            const userInfo = match[4];
+            const logger = match[5];
+            const message = match[6];
+            
+            const highlightedMessage = highlightJsonInText(message);
+            
+            // Extract only the time part and append UTC if present in original timestamp
+            const timeMatch = timestamp.match(/(\d{2}:\d{2}:\d{2})/);
+            let timeOnly = timeMatch ? timeMatch[1] : timestamp;
+            if (timestamp.includes('UTC')) {
+                timeOnly += ' UTC';
+            }
+            
+            return serviceTag +
+                   `<span class="log-level log-level-${matchedLevel.toLowerCase()}">${escapeHtml(matchedLevel)}</span>` +
+                   `<span class="log-timestamp" title="${escapeHtml(timestamp)}">${escapeHtml(timeOnly)}</span>` +
+                   `<span class="log-conn">${escapeHtml(connId)}</span>` +
+                   `<span class="log-user">${escapeHtml(userInfo)}</span>` +
+                   `<span class="log-logger">${escapeHtml(logger)}</span>` +
+                   `<span class="log-msg-separator"> </span>` +
+                   `<span class="log-msg">${highlightedMessage}</span>`;
+        } else {
+            let highlighted = highlightJsonInText(content);
+            return serviceTag + `<span class="log-msg-fallback">${highlighted}</span>`;
+        }
+    }
+
+    function createLogEntryHtml(entry) {
+        const levelLower = (entry.level || 'INFO').toLowerCase();
+        const formatted = formatLogEntry(entry.content, entry.level, entry.service);
+        return `<div class="log-entry log-entry-${levelLower}">${formatted}</div>`;
+    }
+
+    function renderLogs(entries) {
+        consoleContent.innerHTML = '';
+        let html = '';
+        for (const entry of entries) {
+            html += createLogEntryHtml(entry);
+        }
+        if (html) {
+            consoleContent.insertAdjacentHTML('beforeend', html);
+        } else {
+            consoleContent.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No matching logs found.</div>';
+        }
+        scrollToBottom();
+        entryCountDisplay.textContent = consoleContent.querySelectorAll('.log-entry').length;
+    }
 
     async function pullLogs() {
         try {
             const baseUrl = "{% url 'fetch_new_logs' %}";
-            const response = await fetch(`${baseUrl}?offset=${logOffset}`);
+            const levelVal = document.querySelector('select[name="level"]').value;
+            const serviceVal = document.querySelector('select[name="service"]').value;
+            const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
+            const dateInput = document.querySelector('input[name="date"]');
+            const dateVal = dateInput ? encodeURIComponent(dateInput.value) : '';
+            const offsetParam = typeof logOffset === 'object' ? encodeURIComponent(JSON.stringify(logOffset)) : logOffset;
+
+            const response = await fetch(`${baseUrl}?offset=${offsetParam}&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}`);
+            if (!response.ok) return;
             const data = await response.json();
-            if (data.html) {
-                tableBody.insertAdjacentHTML('beforeend', data.html);
+            
+            if (data.entries && data.entries.length > 0) {
+                // Remove placeholder if present
+                const placeholder = consoleContent.querySelector('.text-muted');
+                if (placeholder) {
+                    consoleContent.innerHTML = '';
+                }
+                
+                let html = '';
+                for (const entry of data.entries) {
+                    html += createLogEntryHtml(entry);
+                }
+                consoleContent.insertAdjacentHTML('beforeend', html);
                 logOffset = data.offset;
                 scrollToBottom();
-                while (tableBody.children.length > 2000) { tableBody.removeChild(tableBody.firstChild); }
-                entryCountDisplay.textContent = tableBody.children.length;
-            } else { logOffset = data.offset; }
-        } catch (e) { console.error(e); }
+                
+                // Keep console memory clean (cap at 2000 lines)
+                const logEntries = consoleContent.querySelectorAll('.log-entry');
+                if (logEntries.length > 2000) {
+                    const toRemove = logEntries.length - 2000;
+                    for (let k = 0; k < toRemove; k++) {
+                        consoleContent.removeChild(logEntries[k]);
+                    }
+                }
+                
+                entryCountDisplay.textContent = consoleContent.querySelectorAll('.log-entry').length;
+            } else if (data.offset !== undefined) { 
+                logOffset = data.offset; 
+            }
+        } catch (e) { 
+            console.error("Error pulling live logs:", e); 
+        }
     }
 
-    liveToggle.addEventListener('change', function() {
-        if (this.checked) {
+    function updateLiveState(checked) {
+        if (liveToggle) liveToggle.checked = checked;
+        if (headerLiveToggle) headerLiveToggle.checked = checked;
+
+        if (checked) {
             const baseUrl = "{% url 'fetch_new_logs' %}";
-            fetch(`${baseUrl}?offset=-1`).then(r => r.json()).then(data => {
-                logOffset = data.offset;
-                liveStatus.innerHTML = '<i class="bi bi-circle-fill text-success small me-1"></i> Polling live...';
-                liveStatus.className = "small text-success fw-bold mt-1";
-                liveInterval = setInterval(pullLogs, 2000);
-            });
+            const levelVal = document.querySelector('select[name="level"]').value;
+            const serviceVal = document.querySelector('select[name="service"]').value;
+            const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
+            const dateInput = document.querySelector('input[name="date"]');
+            const dateVal = dateInput ? encodeURIComponent(dateInput.value) : '';
+
+            // Use offset=-1 to tail current file ends
+            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}`)
+                .then(r => r.json())
+                .then(data => {
+                    logOffset = data.offset !== undefined ? data.offset : {};
+                    
+                    const activeHtml = '<span class="pulse-dot"></span>Active';
+                    if (liveStatus) {
+                        liveStatus.innerHTML = activeHtml;
+                        liveStatus.className = "small d-flex align-items-center gap-1.5 live-status-active";
+                    }
+                    if (headerLiveStatus) {
+                        headerLiveStatus.innerHTML = '<span class="pulse-dot d-inline-block rounded-circle me-1" style="width:6px;height:6px;background:#22c55e;"></span>Live: Active';
+                        headerLiveStatus.className = "font-monospace small live-status-active text-success d-inline-flex align-items-center";
+                    }
+                    
+                    if (!liveInterval) {
+                        liveInterval = setInterval(pullLogs, 2000);
+                    }
+                })
+                .catch(err => {
+                    console.error("Failed to initialize live log stream:", err);
+                    if (headerLiveStatus) {
+                        headerLiveStatus.textContent = 'Live: Error';
+                    }
+                });
         } else {
-            if (liveInterval) clearInterval(liveInterval);
-            liveStatus.textContent = "Disconnected";
-            liveStatus.className = "small text-muted mt-1 fst-italic";
+            if (liveInterval) {
+                clearInterval(liveInterval);
+                liveInterval = null;
+            }
+            if (liveStatus) {
+                liveStatus.innerHTML = 'Off';
+                liveStatus.className = "small text-muted d-flex align-items-center gap-1.5 fst-italic";
+            }
+            if (headerLiveStatus) {
+                headerLiveStatus.innerHTML = 'Live: Off';
+                headerLiveStatus.className = "font-monospace small text-muted";
+            }
         }
-    });
+    }
+
+    if (liveToggle) {
+        liveToggle.addEventListener('change', function() {
+            updateLiveState(this.checked);
+        });
+    }
+
+    if (headerLiveToggle) {
+        headerLiveToggle.addEventListener('change', function() {
+            updateLiveState(this.checked);
+        });
+    }
+
+    const serviceSelectEl = document.querySelector('select[name="service"]');
+    if (serviceSelectEl) {
+        serviceSelectEl.addEventListener('change', function() {
+            if (headerLiveToggle && headerLiveToggle.checked) {
+                updateLiveState(true);
+            }
+        });
+    }
+    const dateInputFilterEl = document.querySelector('input[name="date"]');
+    if (dateInputFilterEl) {
+        dateInputFilterEl.addEventListener('change', function() {
+            if (headerLiveToggle && headerLiveToggle.checked) {
+                updateLiveState(true);
+            }
+        });
+    }
+
+    // Fullscreen toggle logic
+    const consoleCard = document.getElementById('consoleCard');
+    const fullscreenToggleBtn = document.getElementById('fullscreenToggleBtn');
+    
+    if (fullscreenToggleBtn && consoleCard) {
+        fullscreenToggleBtn.addEventListener('click', function() {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (consoleCard.requestFullscreen) {
+                    consoleCard.requestFullscreen();
+                } else if (consoleCard.webkitRequestFullscreen) {
+                    consoleCard.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        });
+    }
+    
+    function handleFullscreenChange() {
+        const icon = document.querySelector('#fullscreenToggleBtn i');
+        const isFullscreen = document.fullscreenElement || document.webkitFullscreenElement;
+        if (icon) {
+            if (isFullscreen) {
+                icon.className = 'bi bi-fullscreen-exit text-secondary';
+                fullscreenToggleBtn.setAttribute('title', 'Exit Fullscreen');
+            } else {
+                icon.className = 'bi bi-fullscreen text-secondary';
+                fullscreenToggleBtn.setAttribute('title', 'Toggle Fullscreen');
+            }
+        }
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    function exportConsoleView() {
+        const entries = [];
+        
+        const showTime = document.getElementById('toggle-timestamp').checked;
+        const showTrace = document.getElementById('toggle-conn').checked;
+        const showUser = document.getElementById('toggle-user').checked;
+        const showLogger = document.getElementById('toggle-logger').checked;
+        
+        const consoleEl = document.getElementById('logConsole');
+        if (!consoleEl) return;
+        
+        const rows = consoleEl.querySelectorAll('.log-entry');
+        rows.forEach(row => {
+            if (window.getComputedStyle(row).display === 'none') {
+                return;
+            }
+            
+            const levelEl = row.querySelector('.log-level');
+            const timeEl = row.querySelector('.log-timestamp');
+            const connEl = row.querySelector('.log-conn');
+            const userEl = row.querySelector('.log-user');
+            const loggerEl = row.querySelector('.log-logger');
+            const msgEl = row.querySelector('.log-msg') || row.querySelector('.log-msg-fallback');
+            
+            const lineParts = [];
+            
+            if (levelEl) {
+                lineParts.push(levelEl.textContent.trim().padEnd(5));
+            }
+            
+            if (timeEl && showTime) {
+                const fullTime = timeEl.getAttribute('title') || timeEl.textContent.trim();
+                lineParts.push(fullTime);
+            }
+            
+            if (connEl && showTrace) {
+                lineParts.push(connEl.textContent.trim());
+            }
+            
+            if (userEl && showUser) {
+                lineParts.push(userEl.textContent.trim());
+            }
+            
+            if (loggerEl && showLogger) {
+                lineParts.push(loggerEl.textContent.trim());
+            }
+            
+            if (msgEl) {
+                lineParts.push(msgEl.textContent.trim());
+            }
+            
+            entries.push(lineParts.join('  '));
+        });
+        
+        if (entries.length === 0) {
+            alert("No visible log entries to export.");
+            return;
+        }
+        
+        const textBlob = new Blob([entries.join('\n')], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(textBlob);
+        
+        const now = new Date();
+        const pad = (num) => String(num).padStart(2, '0');
+        const timestampStr = now.getFullYear() + 
+                             pad(now.getMonth() + 1) + 
+                             pad(now.getDate()) + '_' + 
+                             pad(now.getHours()) + 
+                             pad(now.getMinutes()) + 
+                             pad(now.getSeconds());
+                             
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `heappe_console_${timestampStr}.log`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    // Initial logs render
+    window.onload = function() {
+        // Initialize column visibility toggles
+        document.querySelectorAll('.metadata-toggle-cb').forEach(cb => {
+            const className = cb.getAttribute('data-class');
+            if (!cb.checked) {
+                consoleContent.classList.add(className);
+            }
+            cb.addEventListener('change', function() {
+                if (this.checked) {
+                    consoleContent.classList.remove(className);
+                } else {
+                    consoleContent.classList.add(className);
+                }
+            });
+        });
+
+        const logFilterForm = document.getElementById('logFilterForm');
+        if (logFilterForm) {
+            logFilterForm.addEventListener('submit', function() {
+                const btn = document.getElementById('applyFilterBtn');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Loading...';
+                }
+                if (consoleContent) {
+                    consoleContent.innerHTML = `
+                        <div class="d-flex flex-column justify-content-center align-items-center py-5 text-center my-4">
+                            <div class="spinner-border text-primary mb-3" style="width: 2.5rem; height: 2.5rem;" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <h6 class="fw-bold text-dark mb-1">Applying Filters &amp; Loading Logs...</h6>
+                            <p class="text-muted small mb-0 font-monospace" style="font-size: 0.75rem;">Reading and parsing matching records from HEAppE instance</p>
+                        </div>
+                    `;
+                }
+            });
+        }
+
+        const initialDataEl = document.getElementById('initialLogsData');
+        if (initialDataEl) {
+            try {
+                const initialLogs = JSON.parse(initialDataEl.textContent);
+                renderLogs(initialLogs);
+            } catch (e) {
+                console.error("Error parsing initial logs:", e);
+                consoleContent.innerHTML = '<div class="text-danger p-3">Failed to load initial logs.</div>';
+            }
+        }
+    };
+    // UTC clock hint for Time Window filter
+    function updateUtcClock() {
+        const hint = document.getElementById('utcClockHint');
+        if (!hint) return;
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const utcTime = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
+        const utcDate = `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())}`;
+        hint.innerHTML = `<i class="bi bi-clock text-primary me-1"></i> UTC: <span class="font-monospace text-dark fw-bold ms-1">${utcDate} ${utcTime}</span>`;
+    }
+    updateUtcClock();
+    setInterval(updateUtcClock, 1000);
 </script>
 {% endblock %}

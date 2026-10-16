@@ -15,6 +15,30 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Configure local py4heappe redirection and optional client regeneration
+try:
+    import sys
+    from heappe_generator import check_and_generate_client
+    check_and_generate_client(str(BASE_DIR))
+except Exception as e:
+    print(f"[settings] Client auto-generator check failed: {e}")
+
+try:
+    import py4heappe
+    local_heappe_v6 = BASE_DIR / "py4heappe" / "heappe_v6"
+    if local_heappe_v6.exists():
+        # Ensure local __init__.py exists in py4heappe/heappe_v6
+        init_file = local_heappe_v6 / "__init__.py"
+        if not init_file.exists():
+            init_file.touch()
+        # Prepend BASE_DIR/py4heappe to py4heappe.__path__ so that importing py4heappe.heappe_v6 resolves to local
+        repo_path_str = str(BASE_DIR / "py4heappe")
+        if repo_path_str not in py4heappe.__path__:
+            py4heappe.__path__.insert(0, repo_path_str)
+except Exception as e:
+    print(f"[settings] Failed to redirect py4heappe to local folder: {e}")
+
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -71,8 +95,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'heappe_ui.middleware.'
-    'HeappeSessionMiddleware',
+    'heappe_ui.middleware.HeappeSessionMiddleware',
+    'heappe_ui.middleware.HeappeExceptionMiddleware',
 ]
 
 ROOT_URLCONF = 'adminpanel.urls'
@@ -149,3 +173,50 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': True,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+    },
+}
+
+# Email Configurations from environment variables
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'localhost')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 25))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False').lower() in ('true', '1', 't')
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False').lower() in ('true', '1', 't')
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_TIMEOUT = int(os.getenv('EMAIL_TIMEOUT', 10))
+
+SUPPORT_EMAIL = os.getenv('SUPPORT_EMAIL', 'support.heappe@it4i.cz')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply.heappe@it4i.cz')
+
+# Cache control settings: Set to True to disable caching of metadata in user sessions completely.
+DISABLE_CACHE = True
+
+

@@ -1,16 +1,32 @@
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required
 
+# Predefined templates available for creation
+COMMAND_TEMPLATE_PRESETS = {
+    "test": {
+        "name": "TestTemplate",
+        "description": "Predefined test command template",
+        "executable_file_suffix": "test.sh",
+        "parameters": [
+            {
+                "Identifier": "inputParam",
+                "Description": "Input parameter for the test script",
+                "Query": None
+            }
+        ]
+    },
+    "generic": {
+        "name": "GenericCommandTemplate",
+        "description": "Generic command template",
+        "is_generic": True,
+        "parameters": []
+    }
+}
+
 @login_required
 def command_template_detail(request: HttpRequest, command_template_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
-    command_template = controller.heappe_management_command_template_get(
-        Id=command_template_id, SessionCode=request.session_code
-    ).to_dict()
-    project = controller.heappe_management_project_get(
-        Id=command_template['project_id'], SessionCode=request.session_code
-    ).to_dict()
-
+    session_code = request.session_code
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -26,6 +42,7 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
     import time
     import os
     from django.conf import settings
+    disable_cache = getattr(settings, 'DISABLE_CACHE', False)
 
     timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
     last_global_mod = 0.0
@@ -38,10 +55,48 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
 
     force_refresh = request.GET.get("refresh") == "1"
 
+    # Cache command template details
+    cache_key = f"command_template_detail_cache_{command_template_id}"
+    cache_time_key = f"command_template_detail_cache_{command_template_id}_time"
+
+    command_template = request.session.get(cache_key)
+    command_template_time = request.session.get(cache_time_key, 0)
+
+    is_from_cache = False
+    if not disable_cache and not force_refresh and command_template and (time.time() - command_template_time <= 300) and (command_template_time >= last_global_mod):
+        is_from_cache = True
+    else:
+        try:
+            command_template = controller.heappe_management_command_template_get(
+                Id=command_template_id, SessionCode=session_code
+            ).to_dict()
+            request.session[cache_key] = command_template
+            request.session[cache_time_key] = time.time()
+            command_template_time = request.session[cache_time_key]
+        except Exception as e:
+            print(f"Error fetching command template detail: {e}")
+            if not command_template:
+                raise e
+
+    if is_from_cache:
+        age = int(time.time() - command_template_time)
+        if age < 60:
+            template_cache_age_str = f"{age}s"
+        else:
+            template_cache_age_str = f"{age // 60}m {age % 60}s"
+    else:
+        template_cache_age_str = None
+
+    project = controller.heappe_management_project_get(
+        Id=command_template['project_id'], SessionCode=session_code
+    ).to_dict()
+
+    force_refresh = request.GET.get("refresh") == "1"
+
     # Cache clusters list
     clusters_cache = request.session.get("clusters_cache")
     clusters_time = request.session.get("clusters_cache_time", 0)
-    if force_refresh or not clusters_cache or (time.time() - clusters_time > 300) or (clusters_time < last_global_mod):
+    if disable_cache or force_refresh or not clusters_cache or (time.time() - clusters_time > 300) or (clusters_time < last_global_mod):
         clusters_raw = controller.heappe_management_clusters_get(SessionCode=request.session_code)
         clusters_cache = [c.to_dict() for c in clusters_raw]
         request.session["clusters_cache"] = clusters_cache
@@ -76,31 +131,7 @@ def command_template_detail(request: HttpRequest, command_template_id: int) -> H
         "command_template": command_template,
         "node_types": cluster_node_types,
         "project": project,
-    })
-
-@login_required
-def command_template_create(request: HttpRequest, project_id: int) -> HttpResponse:
-    controller = hp.ManagementApi(request.api_instance)
-
-    if request.method == "POST":
-        payload_data = {
-            "ProjectId": project_id,
-            "Name": request.POST.get("Name"),
-            "Description": request.POST.get("Description"),
-            "Command": request.POST.get("Command"),
-            "IsActive": request.POST.get("IsActive") == "on",
-        }
-        payload = _create_payload(request.session_code, payload_data)
-        return _handle_api_call(
-            request,
-            lambda: controller.heappe_management_command_template_post(**payload),
-            "Command Template created successfully!",
-            "Failed to create Command Template",
-            redirect_url=f"/projects/{project_id}/?tab=command_templates"
-        )
-
-    return render(request, "command_template_create.html", {
-        "project_id": project_id,
+        "template_cache_age_str": template_cache_age_str,
     })
 
 @login_required
@@ -150,17 +181,62 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
             "Failed to create Command Template"
         )
         if result:
+            # Check for preset parameter addition
+            preset_name = request.POST.get("preset")
+            if preset_name in COMMAND_TEMPLATE_PRESETS:
+                for param in COMMAND_TEMPLATE_PRESETS[preset_name].get("parameters", []):
+                    try:
+                        param_payload_data = {
+                            "CommandTemplateId": result['Id'],
+                            "Identifier": param["Identifier"],
+                            "Query": param.get("Query"),
+                            "Description": param.get("Description")
+                        }
+                        param_payload = _create_payload(request.session_code, param_payload_data)
+                        controller.heappe_management_command_template_parameter_post(**param_payload)
+                    except Exception as e:
+                        print(f"Error adding preset parameter {param['Identifier']}: {e}")
+                from django.urls import reverse
+                return redirect(f"{reverse('project_detail', kwargs={'project_id': project_id})}?tab=commandtemplates")
             return redirect("command_template_detail", command_template_id=result['Id'])
 
     controller = hp.ManagementApi(request.api_instance)
 
-    project = controller.heappe_management_project_get(
-        Id=project_id, SessionCode=request.session_code
-    ).to_dict()
+    try:
+        project = controller.heappe_management_project_get(
+            Id=project_id, SessionCode=request.session_code
+        ).to_dict()
+    except Exception as e:
+        print(f"Error fetching project {project_id}: {e}")
+        raise e
+
+    # Validate that project has a valid id before proceeding to render
+    if not project or not project.get('id'):
+        from django.contrib import messages as _messages
+        _messages.error(request, f"Project with ID {project_id} could not be loaded.")
+        return redirect("project_list")
+
+    # Handle preset prefill
+    preset_name = request.GET.get("preset")
+    preset_data = None
+    if preset_name in COMMAND_TEMPLATE_PRESETS:
+        p_info = COMMAND_TEMPLATE_PRESETS[preset_name]
+        key_scripts_dir = project.get('key_scripts_directory_path') or ''
+        if key_scripts_dir and not key_scripts_dir.endswith('/'):
+            exec_file = f"{key_scripts_dir}/{p_info['executable_file_suffix']}"
+        else:
+            exec_file = f"{key_scripts_dir}{p_info['executable_file_suffix']}"
+            
+        preset_data = {
+            "name": p_info["name"],
+            "description": p_info["description"],
+            "executable_file": exec_file
+        }
 
     import time
     import os
     from django.conf import settings
+    disable_cache = getattr(settings, 'DISABLE_CACHE', False)
 
     timestamp_file = os.path.join(settings.BASE_DIR, "metadata_last_modified.txt")
     last_global_mod = 0.0
@@ -176,7 +252,7 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
     # Cache clusters list
     clusters_cache = request.session.get("clusters_cache")
     clusters_time = request.session.get("clusters_cache_time", 0)
-    if force_refresh or not clusters_cache or (time.time() - clusters_time > 300) or (clusters_time < last_global_mod):
+    if disable_cache or force_refresh or not clusters_cache or (time.time() - clusters_time > 300) or (clusters_time < last_global_mod):
         clusters_raw = controller.heappe_management_clusters_get(SessionCode=request.session_code)
         clusters_cache = [c.to_dict() for c in clusters_raw]
         request.session["clusters_cache"] = clusters_cache
@@ -206,21 +282,149 @@ def command_template_create(request: HttpRequest, project_id: int) -> HttpRespon
                 ntype_dict['cluster_name'] = cluster_name
                 cluster_node_types.append(ntype_dict)
 
-    return render(request, 'command_template.html',
-                  {'node_types': cluster_node_types, 'project_id': project_id, 'project': project})
+    return render(request, 'command_template.html', {
+        'node_types': cluster_node_types,
+        'project_id': project_id,
+        'project': project,
+        'command_template': None,
+        'preset': preset_data,
+        'preset_name': preset_name or ''
+    })
+
+
+@login_required
+def command_template_copy(request: HttpRequest, command_template_id: int) -> HttpResponse:
+    controller = hp.ManagementApi(request.api_instance)
+    session_code = request.session_code
+
+    if request.method == "POST":
+        target_project_id = request.POST.get("ProjectId")
+        if not target_project_id:
+            from django.contrib import messages as _messages
+            _messages.error(request, "Please select a target project.")
+            return redirect("command_template_copy", command_template_id=command_template_id)
+
+        try:
+            target_project_id = int(target_project_id)
+        except (ValueError, TypeError):
+            from django.contrib import messages as _messages
+            _messages.error(request, "Invalid target project ID.")
+            return redirect("command_template_copy", command_template_id=command_template_id)
+
+        payload_data = {
+            "ProjectId": target_project_id,
+            "Name": request.POST.get("Name"),
+            "Description": request.POST.get("Description") or "",
+            "ExtendedAllocationCommand": request.POST.get("ExtendedAllocationCommand") or "",
+            "ExecutableFile": request.POST.get("ExecutableFile"),
+            "PreparationScript": request.POST.get("PreparationScript") or "",
+            "ClusterNodeTypeId": int(request.POST.get("ClusterNodeTypeId")) if request.POST.get("ClusterNodeTypeId") and request.POST.get("ClusterNodeTypeId") != "0" else None,
+            "IsEnabled": request.POST.get("IsEnabled") == "on",
+            "TemplateParameters": []
+        }
+        payload = _create_payload(request.session_code, payload_data)
+        result = _handle_api_call(
+            request,
+            lambda: controller.heappe_management_command_template_post(**payload),
+            "Command Template copied successfully!",
+            "Failed to copy Command Template"
+        )
+        if result:
+            new_id = result.get('Id') if isinstance(result, dict) else (getattr(result, 'id', None) or getattr(result, 'Id', None))
+
+            # Fetch source template parameters to duplicate
+            try:
+                src_template = controller.heappe_management_command_template_get(
+                    Id=command_template_id, SessionCode=session_code
+                )
+                src_template_dict = src_template.to_dict() if hasattr(src_template, 'to_dict') else src_template
+                parameters = src_template_dict.get('template_parameters') or []
+                if new_id:
+                    for param in parameters:
+                        p_dict = param if isinstance(param, dict) else (param.to_dict() if hasattr(param, 'to_dict') else param)
+                        param_payload_data = {
+                            "CommandTemplateId": new_id,
+                            "Identifier": p_dict.get("identifier") or p_dict.get("Identifier"),
+                            "Query": p_dict.get("query") or p_dict.get("Query"),
+                            "Description": p_dict.get("description") or p_dict.get("Description")
+                        }
+                        param_payload = _create_payload(request.session_code, param_payload_data)
+                        controller.heappe_management_command_template_parameter_post(**param_payload)
+            except Exception as e:
+                print(f"Error copying template parameters for template {command_template_id}: {e}")
+
+            # Invalidate cache for target project
+            cache_key = f"command_templates_cache_{target_project_id}"
+            cache_time_key = f"command_templates_cache_{target_project_id}_time"
+            request.session.pop(cache_key, None)
+            request.session.pop(cache_time_key, None)
+
+            if new_id:
+                return redirect("command_template_detail", command_template_id=new_id)
+            from django.urls import reverse
+            return redirect(f"{reverse('project_detail', kwargs={'project_id': target_project_id})}?tab=commandtemplates")
+
+    # GET: Load source template, projects, clusters, and node types
+    try:
+        src_template = controller.heappe_management_command_template_get(
+            Id=command_template_id, SessionCode=session_code
+        ).to_dict()
+    except Exception as e:
+        print(f"Error fetching source command template {command_template_id}: {e}")
+        raise e
+
+    try:
+        projects_raw = controller.heappe_management_projects_get(SessionCode=session_code)
+        projects = [p.to_dict() for p in projects_raw] if projects_raw else []
+    except Exception as e:
+        print(f"Error fetching projects: {e}")
+        projects = []
+
+    try:
+        clusters_raw = controller.heappe_management_clusters_get(SessionCode=session_code)
+        clusters = [c.to_dict() for c in clusters_raw] if clusters_raw else []
+    except Exception as e:
+        print(f"Error fetching clusters: {e}")
+        clusters = []
+
+    cluster_node_types = []
+    for cluster in clusters:
+        cluster_name = cluster.get('name', 'Unknown')
+        for ntype in cluster.get('node_types', []):
+            ntype_dict = ntype.copy() if isinstance(ntype, dict) else ntype.to_dict()
+            ntype_dict['cluster_name'] = cluster_name
+            cluster_node_types.append(ntype_dict)
+
+    source_project = None
+    if src_template.get('project_id'):
+        source_project = next((p for p in projects if p.get('id') == src_template['project_id']), None)
+
+    return render(request, 'command_template_copy.html', {
+        'source_template': src_template,
+        'projects': projects,
+        'source_project': source_project,
+        'node_types': cluster_node_types,
+    })
 
 
 @login_required
 def command_template_delete(request: HttpRequest, command_template_id: int) -> HttpResponse:
     controller = hp.ManagementApi(request.api_instance)
 
-    try:
-        template = controller.heappe_management_command_template_get(
-            Id=command_template_id, SessionCode=request.session_code
-        )
-        project_id = template.project_id
-    except Exception:
-        project_id = request.GET.get('project_id')
+    project_id = request.GET.get('project_id') or request.POST.get('project_id')
+    if not project_id:
+        try:
+            template = controller.heappe_management_command_template_get(
+                Id=command_template_id, SessionCode=request.session_code
+            )
+            if hasattr(template, 'to_dict'):
+                project_id = template.to_dict().get('project_id')
+            elif isinstance(template, dict):
+                project_id = template.get('project_id')
+            else:
+                project_id = getattr(template, 'project_id', None) or getattr(template, 'ProjectId', None)
+        except Exception as e:
+            print(f"Error fetching command template {command_template_id} to determine project_id: {e}")
 
     payload_data = {"CommandTemplateId": command_template_id}
     payload = _create_payload(request.session_code, payload_data)
@@ -233,6 +437,18 @@ def command_template_delete(request: HttpRequest, command_template_id: int) -> H
     )
 
     if project_id:
+        try:
+            project_id = int(project_id)
+        except (ValueError, TypeError):
+            project_id = None
+
+    if project_id:
+        # Invalidate command templates session cache
+        cache_key = f"command_templates_cache_{project_id}"
+        cache_time_key = f"command_templates_cache_{project_id}_time"
+        request.session.pop(cache_key, None)
+        request.session.pop(cache_time_key, None)
+
         response = redirect("project_detail", project_id=project_id)
         response['Location'] += "?tab=commandtemplates"
         return response

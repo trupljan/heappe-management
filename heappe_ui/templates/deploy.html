@@ -1,13 +1,23 @@
 {% extends "base.html" %}
 
 {% block content %}
+<link href="https://cdn.jsdelivr.net/npm/jsoneditor@9.5.6/dist/jsoneditor.min.css" rel="stylesheet" type="text/css">
+<script src="https://cdn.jsdelivr.net/npm/jsoneditor@9.5.6/dist/jsoneditor.min.js"></script>
+
 <div class="container mt-5">
     <div id="action-feedback"></div>
 
-    <div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; justify-content:center; align-items:center; color:white;">
-        <div class="spinner-border text-primary mb-3" style="width:4rem; height:4rem;" role="status"></div>
+    <div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.92); z-index:9999; flex-direction:column; justify-content:center; align-items:center; color:white;">
+        <div class="spinner-border text-info mb-3" style="width:4rem; height:4rem;" role="status"></div>
         <h4 id="loading-title" class="fw-bold">Operation in progress...</h4>
-        <p id="loading-subtext" class="text-muted">This action may take a few minutes. The page will refresh automatically.</p>
+        <p id="loading-subtext" class="text-muted mb-3">This action may take a few minutes. The page will refresh automatically.</p>
+        <ol id="restart-steps" style="display:none; list-style:none; padding:0; margin:0; text-align:left; min-width:280px;">
+            <li id="step-stop"    class="mb-1"><span class="step-icon me-2">&#9675;</span>Stopping all containers</li>
+            <li id="step-db"      class="mb-1"><span class="step-icon me-2">&#9675;</span>Starting database</li>
+            <li id="step-vault"   class="mb-1"><span class="step-icon me-2">&#9675;</span>Starting &amp; unsealing Vault</li>
+            <li id="step-services" class="mb-1"><span class="step-icon me-2">&#9675;</span>Starting remaining services</li>
+            <li id="step-done"    class="mb-1"><span class="step-icon me-2">&#9675;</span>Waiting for HEAppE to come online</li>
+        </ol>
     </div>
 
     <div class="row mb-4 align-items-center">
@@ -21,14 +31,14 @@
                 {% endif %}
             {% endif %}
         </div>
-        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+        <div class="col-md-4 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end gap-2 flex-wrap">
             {% if not instance_name %}
-                <button type="button" class="btn btn-primary btn-lg shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="deploy">
-                    <i class="bi bi-rocket-takeoff me-2"></i>Deploy Instance
-                </button>
             {% elif is_deployed %}
-                <button type="button" class="btn btn-outline-primary shadow-sm w-100 w-md-auto" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="update">
-                    <i class="bi bi-arrow-repeat me-2"></i>Update Instance
+                <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
+                    <i class="bi bi-git me-1.5"></i>Switch Branch &amp; Build
+                </button>
+                <button type="button" class="btn btn-outline-secondary shadow-sm open-maintenance-tab-btn" data-action="update">
+                    <i class="bi bi-arrow-repeat me-1.5"></i>Update Instance
                 </button>
             {% endif %}
         </div>
@@ -43,7 +53,7 @@
                         <strong class="text-warning-emphasis">Update Available:</strong> A new version of HEAppE Middleware is available (deployed: <code>{{ deployed_version }}</code>, latest: <code>{{ latest_version }}</code>).
                     </div>
                 </div>
-                <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#deployUpdateModal" data-action="update">
+                <button type="button" class="btn btn-warning btn-sm fw-bold shadow-sm open-maintenance-tab-btn" data-action="update">
                     <i class="bi bi-arrow-repeat me-1"></i>Update Now
                 </button>
             </div>
@@ -57,173 +67,428 @@
         {% endif %}
     {% endif %}
 
-    <div class="modal fade" id="deployUpdateModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content shadow-lg border-0">
-                <div class="modal-header bg-light">
-                    <h5 class="modal-title fw-bold" id="deployUpdateModalLabel">Instance Action</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body p-4">
-                    <form id="deploy-form" class="instance-action-form" style="display:none;">
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Instance Name</label>
-                            <input type="text" name="InstanceName" class="form-control" value="{{ instance_name }}" placeholder="e.g. my_server" pattern="^[a-z0-9_]+$" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Repository URL</label>
-                            <div class="input-group">
-                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
-                                <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags">
-                                    <i class="bi bi-arrow-clockwise"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Version (Tag/Branch)</label>
-                            <select name="RepositoryBranch" class="form-select branch-select" required>
-                                {% for branch in branches %}
-                                    <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
-                        </div>
-                        <input type="hidden" name="action" value="deploy">
-                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">Start Deployment</button>
-                    </form>
+    {% if instance_name %}
+    <!-- Tabbed Navigation -->
+    <ul class="nav nav-pills nav-fill mb-4 shadow-sm p-1.5 bg-white rounded-3 gap-1 flex-nowrap overflow-x-auto" id="deployTabs" role="tablist" style="border: 1px solid #dee2e6;">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="containers-tab" data-bs-toggle="tab" data-bs-target="#containers-pane" type="button" role="tab" aria-controls="containers-pane" aria-selected="true">
+                <i class="bi bi-cpu fs-5"></i>Containers &amp; Services
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="configs-tab" data-bs-toggle="tab" data-bs-target="#configs-pane" type="button" role="tab" aria-controls="configs-pane" aria-selected="false">
+                <i class="bi bi-folder2-open fs-5"></i>Configuration &amp; Files
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="telemetry-tab" data-bs-toggle="tab" data-bs-target="#telemetry-pane" type="button" role="tab" aria-controls="telemetry-pane" aria-selected="false">
+                <i class="bi bi-activity fs-5"></i>OpenTelemetry &amp; Tracing
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance-pane" type="button" role="tab" aria-controls="maintenance-pane" aria-selected="false">
+                <i class="bi bi-gear fs-5"></i>Maintenance &amp; Setup
+            </button>
+        </li>
+    </ul>
 
-                    <form id="update-form" class="instance-action-form" style="display:none;">
-                        {% csrf_token %}
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Instance Name</label>
-                            <input type="text" name="InstanceName" class="form-control bg-light" value="{{ instance_name }}" readonly>
+    <div class="tab-content" id="deployTabsContent">
+        <!-- Containers Tab Pane -->
+        <div class="tab-pane fade show active" id="containers-pane" role="tabpanel" aria-labelledby="containers-tab">
+            {% if is_deployed %}
+            <!-- Global actions -->
+            <div class="card mb-4 border-0 shadow-sm bg-light">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <h5 class="card-title mb-0 fw-bold">Global Container Actions</h5>
+                        {% if current_git_ref and current_git_ref.description %}
+                        <div class="small text-muted d-flex align-items-center gap-1.5">
+                            <i class="bi bi-git text-primary"></i>
+                            <span>Active HEAppE Branch:</span>
+                            <span class="badge bg-white text-dark border font-monospace">{{ current_git_ref.description }}</span>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Repository URL</label>
-                            <div class="input-group">
-                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
-                                <button class="btn btn-secondary fetch-branches-btn" type="button"><i class="bi bi-arrow-clockwise"></i></button>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Update to Version</label>
-                            <select name="RepositoryBranch" class="form-select branch-select" required>
-                                {% for branch in branches %}
-                                    <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
-                                {% endfor %}
-                            </select>
-                            <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
-                        </div>
-                        <input type="hidden" name="action" value="update">
-                        <div class="alert alert-danger py-2 small mb-3">
-                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                            <strong>Maintenance Required:</strong> Updating this instance will cause a <strong>short downtime</strong>.
-                            Make sure a maintenance window is planned and users are notified before proceeding.
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">Run Update</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {% if is_deployed %}
-    <div class="card mb-4 border-0 shadow-sm bg-light">
-        <div class="card-body">
-            <h5 class="card-title mb-3 fw-bold">Global Container Actions</h5>
-            <div class="d-flex flex-wrap gap-2">
-                <form id="start-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                    <input type="hidden" name="action" value="start_all">
-                    <button type="submit" class="btn btn-success w-100 px-4"><i class="bi bi-play-fill"></i> Start All</button>
-                </form>
-                <form id="restart-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                    <input type="hidden" name="action" value="restart_all">
-                    <button type="submit" class="btn btn-info text-white w-100 px-4"><i class="bi bi-arrow-clockwise"></i> Restart All</button>
-                </form>
-                <form id="down-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                    <input type="hidden" name="action" value="stop_all">
-                    <button type="submit" class="btn btn-danger w-100 px-4"><i class="bi bi-stop-fill"></i> Stop All</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4 mb-5">
-        {% for item in containers %}
-        {% with container=item.container ports=item.ports %}
-        <div class="col">
-            <div class="card h-100 shadow-sm border-0">
-                <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                    <h6 class="mb-0 fw-bold text-truncate" style="max-width: 70%;">{{ container.name }}</h6>
-                    <span class="badge {% if container.status == 'running' %}bg-success{% elif container.status == 'exited' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
-                        {{ container.status|title }}
-                    </span>
-                </div>
-                <div class="card-body py-2">
-                    <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                    <ul class="list-unstyled small mb-0">
-                        <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                        <li class="text-truncate"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                    </ul>
-                </div>
-                <div class="card-footer bg-white border-top-0 pb-3">
-                    <div class="btn-group w-100 shadow-sm">
-                        <form id="start-form-{{ container.id }}" class="w-100 container-control-form">
+                        {% endif %}
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <form id="start-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
                             {% csrf_token %}
                             <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                            <input type="hidden" name="container_id" value="{{ container.id }}">
-                            <input type="hidden" name="action" value="start">
-                            <button type="submit" class="btn btn-sm btn-outline-success h-100 w-100" {% if container.status == 'running' %}disabled{% endif %}><i class="bi bi-play-fill"></i></button>
+                            <input type="hidden" name="action" value="start_all">
+                            <button type="submit" class="btn btn-success w-100 px-4"><i class="bi bi-play-fill"></i> Start All</button>
                         </form>
-                        <form id="stop-form-{{ container.id }}" class="w-100 container-control-form">
+                        <form id="restart-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
                             {% csrf_token %}
                             <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                            <input type="hidden" name="container_id" value="{{ container.id }}">
-                            <input type="hidden" name="action" value="stop">
-                            <button type="submit" class="btn btn-sm btn-outline-warning h-100 w-100" {% if container.status != 'running' %}disabled{% endif %}><i class="bi bi-stop-fill"></i></button>
+                            <input type="hidden" name="action" value="restart_all">
+                            <button type="submit" class="btn btn-info text-white w-100 px-4"><i class="bi bi-arrow-clockwise"></i> Restart All</button>
                         </form>
-                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}"><i class="bi bi-terminal"></i></button>
-                        <button type="button" class="btn btn-sm btn-outline-dark w-100" data-bs-toggle="modal" data-bs-target="#fileManagerModal" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}"><i class="bi bi-files"></i></button>
+                        <form id="down-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
+                            {% csrf_token %}
+                            <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                            <input type="hidden" name="action" value="stop_all">
+                            <button type="submit" class="btn btn-danger w-100 px-4"><i class="bi bi-stop-fill"></i> Stop All</button>
+                        </form>
+                        <button type="button" class="btn btn-outline-primary px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
+                            <i class="bi bi-git me-1.5"></i> Switch Branch &amp; Build (Build &amp; Up)
+                        </button>
                     </div>
                 </div>
             </div>
-        </div>
-        {% endwith %}
-        {% endfor %}
-    </div>
 
-    <div class="modal fade" id="logsModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-xl">
-            <div class="modal-content bg-dark text-light border-0">
-                <div class="modal-header border-secondary">
-                    <h5 class="modal-title" id="logsModalLabel">Container Logs</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-0">
-                    <pre id="logs-content" class="p-3 mb-0" style="max-height:70vh; overflow-y:auto; white-space:pre-wrap; font-family: monospace; font-size: 13px;"></pre>
+            <!-- Startup banner (shown via JS after restart_all completes) -->
+            <div id="startup-banner" style="display:none;" class="alert border-0 shadow-sm mb-4 animate-fade-in" role="alert"
+                 style="background: linear-gradient(135deg,#0d6efd18,#0dcaf018); border-left: 4px solid #0dcaf0 !important;">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="spinner-border spinner-border-sm text-info flex-shrink-0" role="status"></div>
+                    <div>
+                        <strong class="text-info-emphasis">Instance is starting up</strong>
+                        <div class="text-muted small mt-1">Containers are coming online. This page will refresh automatically once HEAppE is ready.
+                            <span id="startup-elapsed" class="fw-semibold ms-1"></span>
+                        </div>
+                        <div id="startup-phase" class="mt-1 small fw-semibold text-info"></div>
+                    </div>
                 </div>
             </div>
-        </div>
-    </div>
+            {% endif %}
 
-    <div class="modal fade" id="fileManagerModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-xl">
-            <div class="modal-content shadow-lg border-0" style="height: 85vh;">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title"><i class="bi bi-folder2-open me-2"></i>File Manager: <span id="fm-container-name"></span></h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            <!-- API Services -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-2"><i class="bi bi-cpu text-primary"></i>API Services</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
+                {% for item in containers %}
+                {% if 'heappe' in item.container.name.lower or 'datastaging' in item.container.name.lower %}
+                {% with container=item.container ports=item.ports %}
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
+                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
+                                {% if container.status == 'running' %}
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% else %}
+                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                                {% endif %}
+                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
+                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
+                            <div class="btn-group shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-dark open-fm-tab-btn" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
+                                {% if 'heappe' in container.name.lower %}
+                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings.json" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center" title="Configure (appsettings.json)"><i class="bi bi-gear"></i></a>
+                                {% elif 'datastaging' in container.name.lower %}
+                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings-data.json" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center" title="Configure (appsettings-data.json)"><i class="bi bi-gear"></i></a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-body p-0 d-flex flex-column overflow-hidden">
+                {% endwith %}
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- Database Services -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-database text-info"></i>Database Services</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
+                {% for item in containers %}
+                {% if 'mssql' in item.container.name.lower or 'db' in item.container.name.lower %}
+                {% with container=item.container ports=item.ports %}
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
+                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
+                                {% if container.status == 'running' %}
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% else %}
+                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                                {% endif %}
+                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
+                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
+                            <div class="btn-group shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- Infrastructure & Security (Vault, SSH Agent) -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-shield-lock text-info"></i>Infrastructure &amp; Security (Vault, SSH Agent)</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
+                {% for item in containers %}
+                {% if 'heappe' not in item.container.name.lower and 'datastaging' not in item.container.name.lower and 'mssql' not in item.container.name.lower and 'db' not in item.container.name.lower and 'otel' not in item.container.name.lower and 'jaeger' not in item.container.name.lower and 'slurm' not in item.container.name.lower %}
+                {% if 'sshagent' not in item.container.name.lower and 'ssh-agent' not in item.container.name.lower or instance_name|add:"_" in item.container.name.lower %}
+                {% with container=item.container ports=item.ports %}
+                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
+                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
+                                {% if container.status == 'running' %}
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% else %}
+                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                                {% endif %}
+                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
+                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
+                            <div class="btn-group shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                {% if 'vault' in container.name.lower and 'vaultagent' not in container.name.lower and 'init' not in container.name.lower and 'unseal' not in container.name.lower %}
+                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="openUnsealVaultModal();" title="Unlock / Unseal Vault without restart"><i class="bi bi-unlock-fill"></i></button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- Telemetry & APM (Jaeger, OpenTelemetry) -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-activity text-info"></i>Telemetry &amp; APM (Jaeger, OpenTelemetry)</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-5">
+                {% for item in containers %}
+                {% if 'otel' in item.container.name.lower or 'jaeger' in item.container.name.lower %}
+                {% with container=item.container ports=item.ports %}
+                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
+                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
+                                {% if container.status == 'running' %}
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% else %}
+                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                                {% endif %}
+                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
+                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
+                            <div class="btn-group shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <!-- Slurm Simulators & Test Services -->
+            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-server text-warning"></i>Slurm Simulators &amp; Test Services</h5>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-5">
+                {% for item in containers %}
+                {% if 'slurm' in item.container.name.lower or 'sshagent' in item.container.name.lower or 'ssh-agent' in item.container.name.lower %}
+                {% if 'slurm' in item.container.name.lower or instance_name|add:"_" not in item.container.name.lower %}
+                {% with container=item.container ports=item.ports %}
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
+                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
+                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
+                                {% if container.status == 'running' %}
+                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% elif container.status == 'restarting' or container.status == 'created' %}
+                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                                {% else %}
+                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                                {% endif %}
+                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
+                            </span>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
+                            <ul class="list-unstyled small mb-0">
+                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
+                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
+                            </ul>
+                        </div>
+                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
+                            <div class="btn-group shadow-sm">
+                                <form id="start-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="start">
+                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
+                                </form>
+                                <form id="stop-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="stop">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
+                                </form>
+                                <form id="restart-form-{{ container.id }}" class="container-control-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="restart">
+                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
+                                </form>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
+                                <form id="delete-form-{{ container.id }}" class="container-control-form" onsubmit="return confirm('Are you sure you want to delete container {{ container.name }}?');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                                    <input type="hidden" name="action" value="delete">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Container"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% endif %}
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Configuration Explorer Tab Pane -->
+        <div class="tab-pane fade" id="configs-pane" role="tabpanel" aria-labelledby="configs-tab">
+            <div class="card border-0 shadow-sm rounded-3 overflow-hidden mb-5" style="height: 75vh; border: 1px solid #dee2e6 !important;">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3 border-bottom flex-wrap gap-2">
+                    <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-folder2-open me-2"></i>File Explorer: <span id="fm-container-name" class="text-primary"></span></h6>
+                    <!-- Quick Container Switcher -->
+                    <div class="btn-group btn-group-sm" id="fm-container-switcher"></div>
+                </div>
+                <div class="card-body p-0 d-flex flex-column overflow-hidden h-100" style="min-height: 0;">
                     <div id="fm-feedback"></div>
-                    <div class="row g-0 flex-grow-1">
-                        <div class="col-md-4 border-end bg-light d-flex flex-column h-100">
+                    <div class="row g-0 flex-grow-1 h-100" style="min-height: 0;">
+                        <div class="col-md-4 border-end bg-light d-flex flex-column h-100" style="min-height: 0;">
                             <div class="p-3 border-bottom">
                                 <nav aria-label="breadcrumb"><ol class="breadcrumb mb-2" id="breadcrumb-path"></ol></nav>
                                 <div class="input-group input-group-sm mb-2">
@@ -232,30 +497,57 @@
                                 </div>
                                 <button id="fm-go-up" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-arrow-up"></i> Go Up</button>
                             </div>
-                            <ul id="file-list" class="list-group list-group-flush overflow-auto flex-grow-1"></ul>
+                            <ul id="file-list" class="list-group list-group-flush overflow-auto flex-grow-1" style="min-height: 0;"></ul>
                         </div>
-                        <div class="col-md-8 d-flex flex-column h-100">
+                        <div class="col-md-8 d-flex flex-column h-100" style="min-height: 0;">
                             <ul class="nav nav-tabs px-3 pt-2 bg-light border-bottom" role="tablist">
                                 <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#editor-pane"><i class="bi bi-pencil"></i> Editor</button></li>
                                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#upload-pane"><i class="bi bi-upload"></i> Upload</button></li>
                             </ul>
-                            <div class="tab-content flex-grow-1 overflow-auto p-3">
-                                <div class="tab-pane fade show active h-100" id="editor-pane">
+                            <div class="tab-content flex-grow-1 overflow-hidden p-3" style="min-height: 0;">
+                                <div class="tab-pane fade show active h-100 d-flex flex-column" id="editor-pane" style="min-height: 0;">
                                     <div id="editor-ui" style="display:none;" class="h-100 d-flex flex-column">
-                                        <h6 class="text-muted small">Path: <span id="edit-file-name" class="fw-bold"></span></h6>
-                                        <textarea id="file-content" class="form-control flex-grow-1 mb-2 font-monospace" style="font-size: 13px;"></textarea>
-                                        <div class="d-flex gap-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom flex-wrap gap-2">
+                                            <h6 class="text-muted small mb-0">Path: <span id="edit-file-name" class="fw-bold text-dark"></span></h6>
+                                            <div id="json-editor-controls" class="d-flex align-items-center gap-2" style="display: none !important;">
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <button type="button" class="btn btn-outline-primary active" id="btn-mode-tree"><i class="bi bi-diagram-3"></i> Tree Editor</button>
+                                                    <button type="button" class="btn btn-outline-primary" id="btn-mode-split"><i class="bi bi-columns-gap"></i> Split View</button>
+                                                    <button type="button" class="btn btn-outline-primary" id="btn-mode-code"><i class="bi bi-code-slash"></i> Raw JSON</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div id="json-validation-status" class="mb-2" style="display: none;"></div>
+                                        <div id="json-restart-warning" class="alert alert-warning py-2 px-3 mb-2 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem; display: none;">
+                                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                            <strong>Notice</strong>: Changes to config files require restarting the instance to take effect.
+                                        </div>
+                                        <div class="d-flex flex-row flex-grow-1 gap-2 mb-2" style="min-height: 0;">
+                                            <!-- Visual Tree Editor Workspace -->
+                                            <div id="json-tree-wrapper" class="flex-grow-1 h-100" style="display: none; min-width: 0;">
+                                                <div id="json-tree-editor" class="h-100 w-100"></div>
+                                            </div>
+                                            <!-- Code Textarea Editor Workspace -->
+                                            <div id="json-code-wrapper" class="flex-grow-1 h-100" style="min-width: 0;">
+                                                <div class="editor-container h-100">
+                                                    <div id="editor-gutter">1</div>
+                                                    <textarea id="file-content" class="form-control font-monospace h-100" style="resize: none;"></textarea>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex gap-2 pb-2">
                                             <button id="save-file" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save</button>
+                                            <button id="restart-instance-btn" class="btn btn-warning btn-sm text-dark" style="display: none;"><i class="bi bi-arrow-clockwise"></i> Restart Instance</button>
                                             <button id="download-btn" class="btn btn-info btn-sm text-white"><i class="bi bi-download"></i> Download</button>
                                             <button id="delete-file" class="btn btn-danger btn-sm ms-auto"><i class="bi bi-trash"></i> Delete</button>
                                         </div>
                                     </div>
-                                    <div id="editor-placeholder" class="text-center mt-5 text-muted">
-                                        <i class="bi bi-file-earmark-text display-4"></i>
-                                        <p>Select a file to edit</p>
+                                    <div id="editor-placeholder" class="text-center my-auto text-muted">
+                                        <i class="bi bi-file-earmark-text display-4 d-block mb-2"></i>
+                                        <p class="mb-0">Select a file from the explorer to view/edit</p>
                                     </div>
                                 </div>
-                                <div class="tab-pane fade" id="upload-pane">
+                                <div class="tab-pane fade h-100 overflow-auto" id="upload-pane">
                                     <div class="p-4 border rounded bg-light">
                                         <h6>Upload to current directory</h6>
                                         <input type="file" id="upload-input" class="form-control mb-3" multiple>
@@ -271,8 +563,432 @@
                 </div>
             </div>
         </div>
+
+        <!-- OpenTelemetry Tab Pane -->
+        <div class="tab-pane fade" id="telemetry-pane" role="tabpanel" aria-labelledby="telemetry-tab">
+            <div class="row justify-content-center">
+                <div class="col-lg-8">
+                    <div class="card border-0 shadow-sm rounded-3 bg-white mb-5" style="border: 1px solid #dee2e6 !important;">
+                        <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                            <div class="d-flex align-items-center gap-2">
+                                <i class="bi bi-activity text-primary fs-5"></i>
+                                <h5 class="h6 mb-0 fw-bold text-dark">OpenTelemetry &amp; Distributed Tracing</h5>
+                            </div>
+
+                            <!-- Telemetry Status Indicator Badge -->
+                            <div id="telemetry-status-container">
+                                {% if otel_active %}
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1.5 rounded-pill fw-bold text-uppercase d-inline-flex align-items-center gap-1.5 animate-fade-in" style="font-size: 0.75rem;">
+                                        <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 8px; height: 8px;"></span>
+                                        Active
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-3 py-1.5 rounded-pill fw-bold text-uppercase d-inline-flex align-items-center gap-1.5 animate-fade-in" style="font-size: 0.75rem;">
+                                        <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: #dc3545;"></span>
+                                        Inactive
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="card-body p-4">
+                            <p class="text-muted small mb-4">
+                                Distributed request tracing records API interactions, database operations, and job execution details across the HEAppE middleware. This enables performance monitoring, call hierarchy diagrams, and deep diagnostics.
+                            </p>
+
+                            <div class="p-3 bg-light rounded-3 border mb-4">
+                                <div class="form-check form-switch d-flex align-items-center justify-content-between p-0">
+                                    <div>
+                                        <label for="otel-toggle-switch" class="fw-bold text-dark mb-0" style="cursor: pointer;">Enable Request Monitoring (OpenTelemetry)</label>
+                                        <div class="text-muted small mt-1">
+                                            This launches Jaeger APM and Otel-Collector containers to enable trace recording for <code>heappe</code> and <code>datastaging</code>.
+                                            <span class="text-warning fw-semibold d-block mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Enabling or disabling this feature automatically restarts HEAppE API services, causing temporary downtime.</span>
+                                        </div>
+                                    </div>
+                                    <div class="position-relative" style="margin-left: 20px;">
+                                        <input class="form-check-input ms-0" type="checkbox" id="otel-toggle-switch" style="width: 2.8em; height: 1.5em; cursor: pointer;" {% if not otel_disabled %}checked{% endif %}>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Jaeger Dashboard Link -->
+                            <div id="jaeger-dashboard-container" class="border-top pt-4 mt-4" style="{% if otel_disabled %}display: none;{% endif %}">
+                                <h6 class="fw-bold text-dark mb-3"><i class="bi bi-display me-2 text-primary"></i>Jaeger Analytics Portal</h6>
+                                <p class="text-muted small">
+                                    The Jaeger APM UI allows visual timeline queries, trace dependency graphs, and span inspection for analyzed HEAppE operations.
+                                </p>
+                                <a href="{% url 'jaeger_page' %}" id="jaeger-link-btn" class="btn btn-outline-primary fw-bold px-4 py-2 mt-2 shadow-sm rounded-3">
+                                    <i class="bi bi-display me-2"></i>Open Jaeger APM Dashboard
+                                </a>
+                                <div class="form-text small mt-2">
+                                    Port map: <code id="otel-jaeger-port-display">{{ jaeger_port }}</code>. Active Jaeger console URL: <a href="{{ jaeger_url }}" target="_blank" class="font-monospace text-decoration-none" id="jaeger-raw-link">{{ jaeger_url }}</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Maintenance & Setup Tab Pane -->
+        <div class="tab-pane fade" id="maintenance-pane" role="tabpanel" aria-labelledby="maintenance-tab">
+            <div class="row g-4 mb-5">
+                <!-- Switch Branch & Build Panel -->
+                <div class="col-xl-4 col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <h5 class="fw-bold text-dark mb-2"><i class="bi bi-git me-2 text-primary"></i>Switch Branch &amp; Build</h5>
+                            <p class="text-muted small mb-3">Switch the HEAppE middleware git branch or release tag, optionally regenerate configurations, rebuild the Docker services, and start containers (<code>build &amp; up</code>).</p>
+                            
+                            {% if current_git_ref and current_git_ref.description %}
+                            <div class="alert alert-light border d-flex align-items-center justify-content-between p-2.5 mb-3 rounded-2">
+                                <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Current checkout:</span>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis font-monospace border">{{ current_git_ref.description }}</span>
+                            </div>
+                            {% endif %}
+
+                            <form id="update-form" class="instance-action-form mt-auto">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Instance Name</label>
+                                    <input type="text" name="InstanceName" class="form-control bg-light fw-bold" value="{{ instance_name }}" readonly>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Repository URL</label>
+                                    <div class="input-group">
+                                        <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                        <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags &amp; Branches"><i class="bi bi-arrow-clockwise"></i></button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Target Branch / Release Tag</label>
+                                    <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
+                                        {% if branch_list %}
+                                        <optgroup label="Branches">
+                                            {% for b in branch_list %}
+                                                <option value="{{ b }}" {% if b == current_git_ref.branch or b == repo_branch %}selected{% endif %}>{{ b }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        {% if tag_list %}
+                                        <optgroup label="Release Tags">
+                                            {% for t in tag_list %}
+                                                <option value="{{ t }}" {% if t == current_git_ref.branch or t == repo_branch %}selected{% endif %}>{{ t }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        {% if not branch_list and not tag_list %}
+                                            {% for r in branches %}
+                                                <option value="{{ r }}" {% if r == current_git_ref.branch or r == repo_branch %}selected{% endif %}>{{ r }}</option>
+                                            {% endfor %}
+                                        {% endif %}
+                                    </select>
+                                    <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input custom-branch-toggle" type="checkbox" id="customBranchToggleMaint">
+                                        <label class="form-check-label small text-secondary" for="customBranchToggleMaint">Or enter custom branch/commit</label>
+                                    </div>
+                                    <input type="text" name="CustomBranch" class="form-control form-control-sm font-monospace mt-1.5 custom-branch-input" placeholder="e.g. feature/my-branch or commit hash" style="display:none;">
+                                </div>
+                                <div class="p-3 bg-light rounded-2 border mb-3">
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="clean_build" id="maintCleanBuild">
+                                        <label class="form-check-label small text-dark" for="maintCleanBuild">
+                                            <strong>Clean Docker build</strong> (<code>--no-cache</code>)
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="update_configs" id="maintUpdateConfigs" checked>
+                                        <label class="form-check-label small text-dark" for="maintUpdateConfigs">
+                                            <strong>Update configuration templates</strong> (<code>.env</code> &amp; <code>appsettings.json</code>)
+                                        </label>
+                                    </div>
+                                </div>
+                                <input type="hidden" name="action" value="switch_branch">
+                                <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-warning-emphasis p-3 rounded-3 mb-4 small d-flex align-items-start gap-2.5">
+                                    <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+                                    <div>
+                                        <strong>Maintenance Action:</strong> Switching branch will checkout the chosen branch, rebuild Docker images, and restart services causing a <strong>short downtime</strong>.
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold text-white shadow-sm mt-auto"><i class="bi bi-play-circle-fill me-1.5"></i>Switch Branch, Build &amp; Up</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Regenerate Configurations Panel -->
+                <div class="col-xl-4 col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-gear-wide-connected me-2 text-danger"></i>Regenerate Configs</h5>
+                            <p class="text-muted small mb-4">Regenerate and merge <code>.env</code> and <code>appsettings.json</code> with templates (e.g. to inject new configuration variables) and restart containers without pulling new code.</p>
+                            
+                            <form id="regenerate-configs-form" class="instance-action-form mt-auto">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Instance Name</label>
+                                    <input type="text" name="InstanceName" class="form-control bg-light fw-bold" value="{{ instance_name }}" readonly>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Current Configuration Tag</label>
+                                    <input type="text" class="form-control bg-light font-monospace fw-bold text-dark" value="{% if deployed_version %}V{{ deployed_version }}{% else %}{{ repo_branch }}{% endif %}" readonly>
+                                </div>
+                                <input type="hidden" name="Repository" value="{{ repo_url }}">
+                                <input type="hidden" name="RepositoryBranch" value="{% if deployed_version %}V{{ deployed_version }}{% else %}{{ repo_branch }}{% endif %}">
+                                <input type="hidden" name="action" value="regenerate_configs">
+                                <div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger-emphasis p-3 rounded-3 mb-4 small d-flex align-items-start gap-2.5">
+                                    <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+                                    <div>
+                                        <strong>Downtime Warning:</strong> Regenerating configs will merge defaults and restart all containers with <code>--force-recreate</code>, causing a <strong>short downtime</strong>.
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-danger w-100 py-2 fw-bold shadow-sm mt-auto"><i class="bi bi-gear-wide-connected me-1.5"></i>Regenerate &amp; Restart</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deploy New Instance Panel -->
+                <div class="col-xl-4 col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <h5 class="fw-bold text-dark mb-3"><i class="bi bi-rocket-takeoff me-2 text-primary"></i>Deploy New Instance</h5>
+                            <p class="text-muted small mb-4">Deploy a separate, new HEAppE Middleware server instance. This will register a new configuration and provision fresh database schema.</p>
+                            
+                            <form id="deploy-form" class="instance-action-form mt-auto">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">New Instance Name</label>
+                                    <input type="text" name="InstanceName" class="form-control" placeholder="e.g. my_test_env" pattern="^[a-z0-9_]+$" required>
+                                    <div class="form-text small">Only lowercase letters, numbers, and underscores are allowed.</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Repository URL</label>
+                                    <div class="input-group">
+                                        <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                        <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags"><i class="bi bi-arrow-clockwise"></i></button>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold text-secondary small">Deployment Tag/Branch</label>
+                                    <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
+                                        {% for branch in branches %}
+                                            <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
+                                </div>
+                                <input type="hidden" name="action" value="deploy">
+                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm mt-auto"><i class="bi bi-rocket-takeoff me-1.5"></i>Start Deployment</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Deploy New Instance Page (Directly) -->
+    <div class="row justify-content-center mb-5">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm mt-4">
+                <div class="card-body p-4">
+                    <h4 class="fw-bold mb-3"><i class="bi bi-rocket-takeoff text-primary me-2"></i>Deploy New Instance</h4>
+                    <p class="text-muted small mb-4">Deploy a new HEAppE Middleware server instance. This registers configuration keys and configures database tables.</p>
+                    
+                    <form id="deploy-form" class="instance-action-form">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Instance Name</label>
+                            <input type="text" name="InstanceName" class="form-control" placeholder="e.g. dev" pattern="^[a-z0-9_]+$" required>
+                            <div class="form-text small">Only lowercase letters, numbers, and underscores are allowed.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Repository URL</label>
+                            <div class="input-group">
+                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags"><i class="bi bi-arrow-clockwise"></i></button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Deployment Tag/Branch</label>
+                            <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
+                                {% for branch in branches %}
+                                    <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
+                        </div>
+                        <input type="hidden" name="action" value="deploy">
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm"><i class="bi bi-rocket-takeoff me-1.5"></i>Start Deployment</button>
+                    </form>
+                </div>
+            </div>
+        </div>
     </div>
     {% endif %}
+
+    <!-- Global Progress Modals -->
+    <!-- Switch Branch Modal -->
+    <div class="modal fade" id="switchBranchModal" tabindex="-1" aria-labelledby="switchBranchModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-3">
+                <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="switchBranchModalLabel">
+                        <i class="bi bi-git text-primary"></i>
+                        <span>Switch HEAppE Branch &amp; Build (Build &amp; Up)</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="switch-branch-modal-form" class="instance-action-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    <input type="hidden" name="action" value="switch_branch">
+                    <div class="modal-body p-4">
+                        {% if current_git_ref and current_git_ref.description %}
+                        <div class="alert alert-light border d-flex align-items-center justify-content-between p-2.5 mb-3 rounded-2">
+                            <span class="small text-muted"><i class="bi bi-info-circle me-1"></i>Current checkout:</span>
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis font-monospace border">{{ current_git_ref.description }}</span>
+                        </div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Repository URL</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                <button class="btn btn-outline-secondary fetch-branches-btn" type="button" title="Fetch Tags &amp; Branches"><i class="bi bi-arrow-clockwise"></i></button>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Target Branch / Release Tag</label>
+                            <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
+                                {% if branch_list %}
+                                <optgroup label="Branches">
+                                    {% for b in branch_list %}
+                                        <option value="{{ b }}" {% if b == current_git_ref.branch or b == repo_branch %}selected{% endif %}>{{ b }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endif %}
+                                {% if tag_list %}
+                                <optgroup label="Release Tags">
+                                    {% for t in tag_list %}
+                                        <option value="{{ t }}" {% if t == current_git_ref.branch or t == repo_branch %}selected{% endif %}>{{ t }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endif %}
+                                {% if not branch_list and not tag_list %}
+                                    {% for r in branches %}
+                                        <option value="{{ r }}" {% if r == current_git_ref.branch or r == repo_branch %}selected{% endif %}>{{ r }}</option>
+                                    {% endfor %}
+                                {% endif %}
+                            </select>
+                            <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input custom-branch-toggle" type="checkbox" id="customBranchToggleModal">
+                                <label class="form-check-label small text-secondary" for="customBranchToggleModal">Or enter custom branch/commit</label>
+                            </div>
+                            <input type="text" name="CustomBranch" class="form-control form-control-sm font-monospace mt-1.5 custom-branch-input" placeholder="e.g. feature/my-branch or commit hash" style="display:none;">
+                        </div>
+
+                        <div class="p-3 bg-light rounded-2 border mb-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="clean_build" id="modalCleanBuild">
+                                <label class="form-check-label small text-dark" for="modalCleanBuild">
+                                    <strong>Clean Docker build</strong> (<code>--no-cache</code>)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="update_configs" id="modalUpdateConfigs" checked>
+                                <label class="form-check-label small text-dark" for="modalUpdateConfigs">
+                                    <strong>Update configuration templates</strong> (<code>.env</code> &amp; <code>appsettings.json</code>)
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-warning-emphasis p-2.5 rounded-2 mb-0 small d-flex align-items-start gap-2">
+                            <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+                            <div>
+                                This will checkout the selected branch, rebuild Docker images, and run <code>docker compose up -d</code>.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0 py-2.5 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-2 px-3" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-2 px-4 shadow-sm">
+                            <i class="bi bi-play-circle-fill me-1.5"></i>Switch Branch, Build &amp; Up
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Update Progress Modal -->
+    <div class="modal fade" id="updateProgressModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="updateProgressModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content shadow-lg border-0">
+                <div class="modal-header bg-dark text-white border-0 py-3">
+                    <h5 class="modal-title fw-bold" id="updateProgressModalLabel">
+                        <i class="bi bi-arrow-repeat spin-icon me-2 text-primary"></i>HEAppE Middleware Update
+                    </h5>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <div class="text-center mb-4">
+                        <div class="spinner-border text-primary mb-3" style="width: 3rem; height: 3rem;" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <h5 class="fw-bold text-dark mb-1" id="update-status-title">Updating Instance...</h5>
+                        <p class="text-muted small mb-0">Please do not close this window or navigate away. The process might take up to 5 minutes.</p>
+                    </div>
+
+                    <label id="update-logs-label" class="form-label fw-bold text-secondary mb-2 small"><i class="bi bi-journal-text me-1"></i>Journal (Update Logs):</label>
+                    <div class="position-relative">
+                        <pre id="update-logs" class="p-3 mb-0 rounded text-light bg-dark font-monospace" style="height: 300px; overflow-y: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap; border: 1px solid #343a40;"></pre>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light border-0">
+                    <button type="button" id="update-close-btn" class="btn btn-primary w-100 fw-bold py-2 shadow-sm" style="display:none;" onclick="location.reload();">
+                        <i class="bi bi-check-lg me-1"></i>Reload Page & Continue
+                    </button>
+                    <div id="update-in-progress-footer" class="w-100 text-center text-muted small py-2">
+                        <i class="bi bi-info-circle me-1"></i>Performing background operations...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div class="modal fade" id="logsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content border-0" style="background:#0d1117;">
+                <div class="modal-header border-secondary py-2 px-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <span id="logs-live-dot" class="rounded-circle d-inline-block" style="width:8px;height:8px;background:#22c55e;box-shadow:0 0 6px #22c55e;animation:pulse 1.5s infinite;"></span>
+                        <h6 class="modal-title mb-0 text-light font-monospace" id="logsModalLabel">Container Logs &mdash; <span id="logs-container-name" class="text-info"></span></h6>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button id="logs-refresh-btn" type="button" class="btn btn-sm btn-outline-secondary text-light py-0 px-2" title="Refresh now">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                        <button id="logs-scroll-btn" type="button" class="btn btn-sm btn-outline-secondary text-light py-0 px-2" title="Scroll to bottom">
+                            <i class="bi bi-arrow-down"></i>
+                        </button>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div class="modal-body p-0">
+                    <pre id="logs-content" class="p-3 mb-0 text-light" style="max-height:72vh; overflow-y:auto; white-space:pre-wrap; font-family:'JetBrains Mono','Fira Mono',monospace; font-size:12.5px; background:#0d1117;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -282,21 +998,261 @@ let currentContainerId = null;
 let currentPath = '/opt/heappe/confs/';
 let selectedFilePath = null;
 let isPolling = false;
+let updatePollInterval = null;
+let treeEditor = null;
+let currentEditorMode = 'tree'; // 'tree', 'code', 'split'
+
+function startUpdatePolling(actionType = 'update') {
+    // Show update progress modal (non-dismissible)
+    const updateModalEl = document.getElementById('updateProgressModal');
+    if (!updateModalEl) return;
+    
+    const isUpdate = (actionType === true || actionType === 'update');
+    const isSwitch = (actionType === 'switch_branch');
+    const isRegen = (actionType === 'regenerate_configs');
+    
+    // Adjust modal titles and log labels based on actionType
+    if (isRegen) {
+        $('#updateProgressModalLabel').html('<i class="bi bi-gear-wide-connected spin-icon me-2 text-danger"></i>HEAppE Configuration Regeneration');
+        $('#update-status-title').text('Regenerating Configurations...');
+        $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Regeneration Logs):');
+    } else if (isSwitch) {
+        $('#updateProgressModalLabel').html('<i class="bi bi-git spin-icon me-2 text-primary"></i>HEAppE Switch Branch, Build & Up');
+        $('#update-status-title').text('Switching Branch, Building & Starting Containers...');
+        $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Build & Up Logs):');
+    } else if (isUpdate) {
+        $('#updateProgressModalLabel').html('<i class="bi bi-arrow-repeat spin-icon me-2 text-primary"></i>HEAppE Middleware Update');
+        $('#update-status-title').text('Updating Instance...');
+        $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Update Logs):');
+    } else {
+        $('#updateProgressModalLabel').html('<i class="bi bi-rocket-takeoff launch-icon me-2 text-success"></i>HEAppE Middleware Deployment');
+        $('#update-status-title').text('Deploying Instance...');
+        $('#update-logs-label').html('<i class="bi bi-journal-text me-1"></i>Journal (Deployment Logs):');
+    }
+
+    let updateModal = bootstrap.Modal.getInstance(updateModalEl);
+    if (!updateModal) {
+        updateModal = new bootstrap.Modal(updateModalEl, {
+            backdrop: 'static',
+            keyboard: false
+        });
+    }
+    updateModal.show();
+    
+    // Hide standard loading overlay just in case
+    if (typeof hideLoading === 'function') hideLoading();
+
+    const instanceName = "{{ instance_name }}";
+    const updateStatusUrl = `${basePath}/deploy/${instanceName}/update-status/`;
+
+    if (updatePollInterval) clearInterval(updatePollInterval);
+
+    function poll() {
+        $.ajax({
+            url: updateStatusUrl,
+            type: 'GET',
+            success: function(response) {
+                if (response.status === 'success') {
+                    // Display logs
+                    const logElement = $('#update-logs');
+                    logElement.text(response.logs || 'Initializing log stream...');
+                    logElement.scrollTop(logElement[0].scrollHeight);
+
+                    if (!response.is_updating) {
+                        // Action has finished!
+                        clearInterval(updatePollInterval);
+                        updatePollInterval = null;
+                        
+                        // Check if log contains success or error
+                        const logText = response.logs || '';
+
+                        // If logs are completely empty the background action either hasn't
+                        // started yet or this is a stale is_updating=True flag left over
+                        // from a previous completed run (e.g. after a migration/page reload).
+                        // Don't show "Failed" — close the modal silently instead.
+                        if (!logText.trim()) {
+                            const updateModalEl = document.getElementById('updateProgressModal');
+                            const updateModal = bootstrap.Modal.getInstance(updateModalEl);
+                            if (updateModal) updateModal.hide();
+                            return;
+                        }
+                        
+                        const isSuccess = logText.includes('SUCCESS:') || logText.includes('completed successfully.');
+                        
+                        // Adjust UI
+                        const $spinner = $('.modal-body .spinner-border');
+                        $spinner.removeClass('text-primary spinner-border').addClass(isSuccess ? 'bi bi-check-circle-fill text-success fs-1 mb-3' : 'bi bi-exclamation-octagon-fill text-danger fs-1 mb-3');
+                        $spinner.css('animation', 'none');
+                        
+                        if (isSuccess) {
+                            if (isRegen) {
+                                $('#update-status-title').text('Regeneration Succeeded!').removeClass('text-dark').addClass('text-success');
+                                $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Configurations regenerated successfully.</span>');
+                            } else if (isUpdate) {
+                                $('#update-status-title').text('Update Succeeded!').removeClass('text-dark').addClass('text-success');
+                                $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Instance updated successfully.</span>');
+                            } else {
+                                $('#update-status-title').text('Deployment Succeeded!').removeClass('text-dark').addClass('text-success');
+                                $('#update-in-progress-footer').html('<span class="text-success fw-bold"><i class="bi bi-check-circle-fill me-1"></i>Instance deployed successfully.</span>');
+                            }
+                        } else {
+                            if (isRegen) {
+                                $('#update-status-title').text('Regeneration Failed').removeClass('text-dark').addClass('text-danger');
+                                $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during configuration regeneration. See logs above.</span>');
+                            } else if (isUpdate) {
+                                $('#update-status-title').text('Update Failed').removeClass('text-dark').addClass('text-danger');
+                                $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during update. See logs above.</span>');
+                            } else {
+                                $('#update-status-title').text('Deployment Failed').removeClass('text-dark').addClass('text-danger');
+                                $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during deployment. See logs above.</span>');
+                            }
+                        }
+                        
+                        $('#update-close-btn').show();
+                    }
+                }
+            },
+            error: function() {
+                console.log("Failed to fetch update status.");
+            }
+        });
+    }
+
+    // Start polling immediately, then every 2 seconds
+    poll();
+    updatePollInterval = setInterval(poll, 2000);
+}
 
 $(document).ready(function() {
+    // --- OPENTELEMETRY TOGGLE SWITCH LOGIC ---
+    {% if instance_name %}
+    $('#otel-toggle-switch').on('change', function() {
+        const isChecked = $(this).is(':checked');
+        const action = isChecked ? 'enable' : 'disable';
+
+        // Show loading overlay
+        showLoading(
+            isChecked ? "Enabling OpenTelemetry..." : "Disabling OpenTelemetry...",
+            "Restarting heappe and datastaging services..."
+        );
+
+        $.ajax({
+            url: "{% url 'toggle_telemetry' instance_name %}",
+            method: "POST",
+            data: {
+                'action': action,
+                'csrfmiddlewaretoken': '{{ csrf_token }}'
+            },
+            success: function(response) {
+                hideLoading();
+                if (response.status === 'success') {
+                    // Update Status Badge
+                    if (isChecked) {
+                        $('#telemetry-status-container').html(`
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1.5 rounded-pill fw-bold text-uppercase d-inline-flex align-items-center gap-1.5 animate-fade-in" style="font-size: 0.75rem;">
+                                <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 8px; height: 8px;"></span>
+                                Active
+                            </span>
+                        `);
+                        $('#jaeger-dashboard-container').fadeIn();
+                        if (response.otel_jaeger_port) {
+                            $('#otel-jaeger-port-display').text(response.otel_jaeger_port);
+                            // Update jaeger URL dynamically
+                            const currentHost = window.location.hostname;
+                            const newJaegerUrl = `http://${currentHost}:${response.otel_jaeger_port}`;
+                            $('#jaeger-link-btn').attr('href', "{% url 'jaeger_page' %}");
+                            $('#jaeger-raw-link').attr('href', newJaegerUrl).text(newJaegerUrl);
+                        }
+                    } else {
+                        $('#telemetry-status-container').html(`
+                            <span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle px-3 py-1.5 rounded-pill fw-bold text-uppercase d-inline-flex align-items-center gap-1.5 animate-fade-in" style="font-size: 0.75rem;">
+                                <span class="d-inline-block rounded-circle" style="width: 8px; height: 8px; background-color: #dc3545;"></span>
+                                Inactive
+                            </span>
+                        `);
+                        $('#jaeger-dashboard-container').fadeOut();
+                    }
+
+                    // Show success feedback
+                    const alertHtml = `
+                        <div class="alert alert-success alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4 d-flex align-items-center gap-2" role="alert">
+                            <i class="bi bi-check-circle-fill text-success fs-5"></i>
+                            <div>${response.message}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                    $('#action-feedback').html(alertHtml);
+                } else {
+                    // Revert switch state
+                    $('#otel-toggle-switch').prop('checked', !isChecked);
+                    const alertHtml = `
+                        <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4 d-flex align-items-center gap-2" role="alert">
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
+                            <div>Error: ${response.message}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                    $('#action-feedback').html(alertHtml);
+                }
+            },
+            error: function(xhr) {
+                hideLoading();
+                // Revert switch state
+                $('#otel-toggle-switch').prop('checked', !isChecked);
+                const resp = xhr.responseJSON || {};
+                const errMsg = resp.message || "Network error occurred.";
+
+                let alertHtml;
+                if (resp.needs_regen) {
+                    // Special case: OTEL keys missing from .env – prompt user to regenerate configs
+                    alertHtml = `
+                        <div class="alert alert-warning alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4" role="alert">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="bi bi-exclamation-triangle-fill text-warning fs-5 flex-shrink-0 mt-1"></i>
+                                <div>
+                                    <strong>Configuration update required</strong>
+                                    <div class="small mt-1">${errMsg}</div>
+                                    <button type="button" class="btn btn-warning btn-sm fw-bold mt-2 shadow-sm"
+                                            onclick="bootstrap.Tab.getOrCreateInstance(document.querySelector('#maintenance-tab')).show(); window.scrollTo({top:0, behavior:'smooth'});">
+                                        <i class="bi bi-gear-wide-connected me-1"></i>Go to Maintenance tab
+                                    </button>
+                                </div>
+                            </div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                } else {
+                    alertHtml = `
+                        <div class="alert alert-danger alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-4 d-flex align-items-center gap-2" role="alert">
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5"></i>
+                            <div>Error: ${errMsg}</div>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    `;
+                }
+                $('#action-feedback').html(alertHtml);
+            }
+        });
+    });
+    {% endif %}
+
     // --- UI HELPERS ---
     window.showLoading = function(title = "Operation in progress...", subtext = "Page will refresh automatically when done.") {
         $('#loading-title').text(title);
         $('#loading-subtext').text(subtext);
         $('#loading-overlay').css('display','flex');
     }
-    function hideLoading() { $('#loading-overlay').css('display','none'); }
+    window.hideLoading = function() { $('#loading-overlay').css('display','none'); }
 
-    // --- AUTOMATIC LOADING STATE FOR REDIRECTED USERS ---
-    // If we have an instance name but it's not deployed yet, show the loader automatically
-    {% if instance_name and not is_deployed %}
-        showLoading("Deployment in progress...", "Your instance is being created. Please wait.");
-        startStatusPolling();
+    // --- AUTOMATIC UPDATE / DEPLOYMENT STATE ON PAGE LOAD ---
+    {% if instance_name and is_updating %}
+        startUpdatePolling({% if is_deployed %}'update'{% else %}'deploy'{% endif %});
+    {% endif %}
+
+    // --- AUTOMATIC RESTART STATE ON PAGE LOAD ---
+    {% if instance_name and restart_status and restart_status != 'none' and restart_status != 'done' and restart_status != 'failed' %}
+        runRestartPhases();
+        startStartupPolling();
     {% endif %}
 
     // --- DEPLOY / UPDATE LOGIC ---
@@ -305,31 +1261,86 @@ $(document).ready(function() {
         const action = form.find('input[name="action"]').val();
         e.preventDefault();
 
-        const modal = bootstrap.Modal.getInstance(document.getElementById('deployUpdateModal'));
-        if (modal) modal.hide();
+        // If switch branch modal was open, close it
+        const switchModalEl = document.getElementById('switchBranchModal');
+        if (switchModalEl) {
+            const sm = bootstrap.Modal.getInstance(switchModalEl);
+            if (sm) sm.hide();
+        }
 
-        const title = action === 'deploy' ? "Initiating Deployment..." : "Initiating Update...";
-        showLoading(title, "Please wait for the server response.");
-
-        $.ajax({
-            url: window.location.href, // This posts to the current URL (usually generic /deploy/)
-            type: 'POST',
-            data: form.serialize(),
-            success: function(response) {
-                // If this was a deploy action, the server should send a redirect URL
-                if (action === 'deploy' && response.redirect_url) {
-                    // Redirect immediately to the specific instance page
-                    window.location.href = response.redirect_url;
-                } else {
-                    // For updates or if no redirect provided, start polling on current page
-                    startStatusPolling();
-                }
-            },
-            error: function(xhr) {
-                hideLoading();
-                alert('Action failed: ' + (xhr.responseJSON?.message || 'Server Error'));
+        if (action === 'update' || action === 'switch_branch' || action === 'regenerate_configs') {
+            // Reset spinner & status text
+            const $spinner = $('.modal-body .spinner-border');
+            $spinner.removeClass('bi bi-check-circle-fill bi-exclamation-octagon-fill text-success text-danger fs-1 mb-3').addClass('spinner-border text-primary mb-3');
+            $spinner.css('animation', '');
+            
+            let titleText = 'Starting Update...';
+            let logText = 'Requesting update from server...';
+            let errorTitle = 'Update Request Failed';
+            let errorLog = 'FAILED to request update:\n';
+            if (action === 'switch_branch') {
+                titleText = 'Starting Branch Switch, Build & Up...';
+                logText = 'Requesting branch switch, build and up from server...';
+                errorTitle = 'Branch Switch Request Failed';
+                errorLog = 'FAILED to request branch switch:\n';
+            } else if (action === 'regenerate_configs') {
+                titleText = 'Starting Configuration Regeneration...';
+                logText = 'Requesting configuration regeneration...';
+                errorTitle = 'Regeneration Request Failed';
+                errorLog = 'FAILED to request configuration regeneration:\n';
             }
-        });
+
+            $('#update-status-title').text(titleText).removeClass('text-success text-danger').addClass('text-dark');
+            $('#update-logs').text(logText);
+            $('#update-close-btn').hide();
+            $('#update-in-progress-footer').html('<i class="bi bi-info-circle me-1"></i>Performing background operations...');
+
+            // Open updateProgressModal
+            const updateModalEl = document.getElementById('updateProgressModal');
+            let updateModal = bootstrap.Modal.getInstance(updateModalEl);
+            if (!updateModal) {
+                updateModal = new bootstrap.Modal(updateModalEl, {
+                    backdrop: 'static',
+                    keyboard: false
+                });
+            }
+            updateModal.show();
+
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: form.serialize(),
+                success: function(response) {
+                    startUpdatePolling(action);
+                },
+                error: function(xhr) {
+                    const errMsg = xhr.responseJSON?.message || 'Server Error';
+                    $('#update-logs').text(errorLog + errMsg);
+                    $('#update-status-title').text(errorTitle).removeClass('text-dark').addClass('text-danger');
+                    $spinner.removeClass('text-primary spinner-border').addClass('bi bi-exclamation-octagon-fill text-danger fs-1 mb-3');
+                    $('#update-close-btn').show();
+                }
+            });
+        } else {
+            // Deployment action
+            showLoading("Initiating Deployment...", "Please wait for the server response.");
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: form.serialize(),
+                success: function(response) {
+                    if (response.redirect_url) {
+                        window.location.href = response.redirect_url;
+                    } else {
+                        startStatusPolling();
+                    }
+                },
+                error: function(xhr) {
+                    hideLoading();
+                    alert('Action failed: ' + (xhr.responseJSON?.message || 'Server Error'));
+                }
+            });
+        }
     });
 
     function startStatusPolling() {
@@ -342,8 +1353,6 @@ $(document).ready(function() {
                 type: 'GET',
                 success: function(data) {
                     const html = $(data);
-                    // We check if the 'update' button exists in the response.
-                    // This implies the instance state is now 'deployed' in the view.
                     const deployedDetected = html.find('button[data-action="update"]').length > 0;
 
                     if (deployedDetected) {
@@ -355,21 +1364,145 @@ $(document).ready(function() {
                     console.log("Status check failed, retrying...");
                 }
             });
-        }, 5000); // Poll every 5 seconds
+        }, 5000);
     }
 
     // --- CONTAINER & GLOBAL ACTIONS ---
+    // ── Restart-All: phased progress + post-restart polling ──────────────────
+    const RESTART_PHASES = [
+        { id: 'step-stop',     label: 'Stopping all containers',          durationMs: 3000 },
+        { id: 'step-db',       label: 'Starting database…',               durationMs: 4000 },
+        { id: 'step-vault',    label: 'Starting & unsealing Vault…',      durationMs: 8000 },
+        { id: 'step-services', label: 'Starting remaining services…',     durationMs: 4000 },
+        { id: 'step-done',     label: 'Waiting for HEAppE to come online…', durationMs: 9999999 }
+    ];
+
+    function markStep(id, done) {
+        const $li = $('#' + id);
+        $li.find('.step-icon').html(done ? '&#10003;' : '<span class="spinner-grow spinner-grow-sm" style="width:10px;height:10px;"></span>');
+        $li.css('opacity', done ? 0.5 : 1);
+        if (!done) $li.css('font-weight', 'bold');
+    }
+
+    function runRestartPhases(callback) {
+        $('#restart-steps').show();
+        RESTART_PHASES.forEach(p => {
+            const $li = $('#' + p.id);
+            if ($li.length > 0) {
+                $li.find('.step-icon').html('&#9675;');
+                $li.css({ 'opacity': 1, 'font-weight': 'normal' });
+            }
+        });
+    }
+
+    let startupPollInterval = null;
+    let startupStartTime   = null;
+
+    function startStartupPolling() {
+        const instanceName = '{{ instance_name }}';
+        startupStartTime = Date.now();
+        $('#startup-banner').css('display', 'flex').removeClass('alert-danger').addClass('alert-info');
+        $('#startup-phase').text('Checking container status…');
+
+        function elapsed() {
+            const s = Math.floor((Date.now() - startupStartTime) / 1000);
+            return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+        }
+
+        if (startupPollInterval) clearInterval(startupPollInterval);
+        startupPollInterval = setInterval(function() {
+            $('#startup-elapsed').text('(' + elapsed() + ')');
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: {
+                    action: 'status_poll',
+                    InstanceName: instanceName,
+                    csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').first().val()
+                },
+                success: function(data) {
+                    if (!data || !data.containers) return;
+
+                    // If we have restart_status from backend, update the status phase
+                    if (data.restart_status && data.restart_status !== 'none') {
+                        const status = data.restart_status;
+
+                        if (status === 'restarting' || status === 'stopping' || status === 'db' || status === 'vault' || status === 'services') {
+                            $('#startup-phase').text('Restarting containers…');
+                        } else if (status === 'done') {
+                            $('#startup-phase').text('Waiting for HEAppE to come online…');
+
+                            const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                            const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
+                            if (heappe) {
+                                $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
+                            }
+                            if (heappe && heappe.status === 'running' && allUp) {
+                                clearInterval(startupPollInterval);
+                                hideLoading();
+                                $('#startup-phase').text('HEAppE is online — reloading…');
+                                setTimeout(() => location.reload(), 1500);
+                            }
+                        } else if (status === 'failed') {
+                            clearInterval(startupPollInterval);
+                            hideLoading();
+                            $('#startup-banner').removeClass('alert-info').addClass('alert-danger');
+                            $('#startup-phase').text('Restart failed: ' + (data.restart_error || 'Unknown error'));
+                        }
+                        return;
+                    }
+
+                    // Fallback to container-only polling
+                    const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                    const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
+                    if (heappe) {
+                        $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
+                    }
+                    if (heappe && heappe.status === 'running' && allUp) {
+                        clearInterval(startupPollInterval);
+                        hideLoading();
+                        $('#startup-phase').text('HEAppE is online — reloading…');
+                        setTimeout(() => location.reload(), 1500);
+                    }
+                },
+                error: function() { /* server may still be restarting — ignore */ }
+            });
+        }, 3000);
+    }
+
     $(document).on('submit', '.container-control-form, .global-control-form', function(e) {
         e.preventDefault();
-        const form = $(this);
-        showLoading("Executing action...", "Modifying container state.");
-        $.ajax({
-            url: window.location.href,
-            type: 'POST',
-            data: form.serialize(),
-            success: () => location.reload(),
-            error: (xhr) => { hideLoading(); alert('Error: ' + xhr.responseText); }
-        });
+        const form   = $(this);
+        const action = form.find('input[name="action"]').val();
+
+        if (action === 'restart_all') {
+            showLoading('Initiating Restart…', 'Sending restart command to server…');
+            runRestartPhases();
+            $.ajax({
+                url:  window.location.href,
+                type: 'POST',
+                data: form.serialize(),
+                success: function(data) {
+                    hideLoading();
+                    startStartupPolling();
+                    const banner = document.getElementById('startup-banner');
+                    if (banner) banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                },
+                error: function(xhr) {
+                    hideLoading();
+                    alert('Restart failed: ' + (xhr.responseJSON?.message || xhr.responseText || 'Server Error'));
+                }
+            });
+        } else {
+            showLoading('Executing action…', 'Modifying container state.');
+            $.ajax({
+                url:  window.location.href,
+                type: 'POST',
+                data: form.serialize(),
+                success: () => location.reload(),
+                error: (xhr) => { hideLoading(); alert('Error: ' + xhr.responseText); }
+            });
+        }
     });
 
     // --- BRANCH FETCHING ---
@@ -390,41 +1523,469 @@ $(document).ready(function() {
             data: { 'url': repoUrl },
             success: function(r) {
                 $branchSelect.empty();
-                r.branches.forEach(b => $branchSelect.append(new Option(b, b)));
+                if (r.branch_list && r.branch_list.length > 0) {
+                    const $groupBranches = $('<optgroup label="Branches"></optgroup>');
+                    r.branch_list.forEach(b => $groupBranches.append(new Option(b, b)));
+                    $branchSelect.append($groupBranches);
+                }
+                if (r.tag_list && r.tag_list.length > 0) {
+                    const $groupTags = $('<optgroup label="Release Tags"></optgroup>');
+                    r.tag_list.forEach(t => $groupTags.append(new Option(t, t)));
+                    $branchSelect.append($groupTags);
+                }
+                if ((!r.branch_list || !r.branch_list.length) && (!r.tag_list || !r.tag_list.length) && r.branches) {
+                    r.branches.forEach(b => $branchSelect.append(new Option(b, b)));
+                }
             },
-            error: () => alert('Error fetching tags'),
+            error: () => alert('Error fetching branches/tags'),
             complete: () => { $btn.prop('disabled', false); $spinner.hide(); }
         });
     });
 
-    // --- MODAL SETUP ---
-    $('#deployUpdateModal').on('show.bs.modal', function (e) {
-        const act = $(e.relatedTarget).data('action');
-        $(this).find('.modal-title').text(act === 'deploy' ? 'Deploy New Instance' : 'Update Instance');
-        $('#deploy-form').toggle(act === 'deploy');
-        $('#update-form').toggle(act === 'update');
+    // --- CUSTOM BRANCH TOGGLE ---
+    $(document).on('change', '.custom-branch-toggle', function() {
+        const $form = $(this).closest('form');
+        const $customInput = $form.find('.custom-branch-input');
+        const $select = $form.find('.branch-select');
+        if ($(this).is(':checked')) {
+            $customInput.show().focus();
+            $select.prop('disabled', true);
+        } else {
+            $customInput.hide().val('');
+            $select.prop('disabled', false);
+        }
+    });
+
+    // --- MAINTENANCE TAB ORCHESTRATION ---
+    $(document).on('click', '.open-maintenance-tab-btn', function(e) {
+        e.preventDefault();
+        const action = $(this).data('action');
+        
+        // Show the Maintenance tab
+        const tabEl = document.getElementById('maintenance-tab');
+        if (tabEl) {
+            new bootstrap.Tab(tabEl).show();
+        }
+        
+        // Scroll/focus form
+        if (action === 'update') {
+            const updateForm = document.getElementById('update-form');
+            if (updateForm) {
+                updateForm.scrollIntoView({ behavior: 'smooth' });
+                const repoInput = $(updateForm).find('input[name="Repository"]');
+                if (repoInput.length) repoInput.focus();
+            }
+        } else if (action === 'deploy') {
+            const deployForm = document.getElementById('deploy-form');
+            if (deployForm) {
+                deployForm.scrollIntoView({ behavior: 'smooth' });
+                const nameInput = $(deployForm).find('input[name="InstanceName"]');
+                if (nameInput.length) nameInput.focus();
+            }
+        }
     });
 
     // --- LOGS LOGIC ---
-    let logsInterval = null;
+    let logsInterval   = null;
+    let logsCurrentCid = null;      // persists across tab switches
+    let logsAutoScroll = true;      // follows tail unless user scrolls up
+    let logsFetching   = false;     // prevent overlapping requests
+
+    const $logsContent = $('#logs-content');
+    const $liveDot     = $('#logs-live-dot');
+
+    function fetchLogs() {
+        if (!logsCurrentCid || logsFetching) return;
+        logsFetching = true;
+        $.ajax({
+            url: `${basePath}/logs/${logsCurrentCid}/`,
+            type: 'GET',
+            timeout: 4000,
+            success: function(r) {
+                const pre = $logsContent[0];
+                const wasAtBottom = (pre.scrollHeight - pre.scrollTop - pre.clientHeight) < 40;
+                $logsContent.text(r.logs || 'No logs available.');
+                if (logsAutoScroll || wasAtBottom) {
+                    pre.scrollTop = pre.scrollHeight;
+                }
+                $liveDot.css({ background: '#22c55e', boxShadow: '0 0 6px #22c55e' });
+            },
+            error: function() {
+                $liveDot.css({ background: '#f59e0b', boxShadow: '0 0 6px #f59e0b' });
+            },
+            complete: function() { logsFetching = false; }
+        });
+    }
+
+    function startLogsPolling() {
+        clearInterval(logsInterval);
+        fetchLogs();
+        logsInterval = setInterval(fetchLogs, 2000);
+    }
+
+    function stopLogsPolling() {
+        clearInterval(logsInterval);
+        logsInterval = null;
+        $liveDot.css({ background: '#6b7280', boxShadow: 'none' });
+    }
+
+    // Smart auto-scroll: pause follow if user scrolls up
+    $logsContent.on('scroll', function() {
+        const pre = this;
+        logsAutoScroll = (pre.scrollHeight - pre.scrollTop - pre.clientHeight) < 40;
+    });
+
+    // Manual refresh & scroll-to-bottom buttons
+    $('#logs-refresh-btn').on('click', function() { fetchLogs(); });
+    $('#logs-scroll-btn').on('click', function() {
+        const pre = $logsContent[0];
+        pre.scrollTop = pre.scrollHeight;
+        logsAutoScroll = true;
+    });
+
+    // Page Visibility API — pause when tab is hidden, resume when visible
+    document.addEventListener('visibilitychange', function() {
+        if (!logsCurrentCid) return;
+        const modalVisible = $('#logsModal').hasClass('show');
+        if (!modalVisible) return;
+        if (document.hidden) {
+            stopLogsPolling();
+        } else {
+            startLogsPolling();
+        }
+    });
+
+    // Modal open: store cid + container name, reset state, start polling
     $('#logsModal').on('show.bs.modal', function(e) {
-        const cid = $(e.relatedTarget).data('container-id');
-        const fetch = () => {
-            $.get(`${basePath}/logs/${cid}/`, r => {
-                $('#logs-content').text(r.logs || 'No logs available');
-                const pre = document.getElementById('logs-content');
-                pre.scrollTop = pre.scrollHeight;
-            });
-        };
-        fetch();
-        logsInterval = setInterval(fetch, 3000);
-    }).on('hidden.bs.modal', () => clearInterval(logsInterval));
+        // relatedTarget is null when modal re-shows after tab switch — keep last cid
+        if (e.relatedTarget) {
+            logsCurrentCid = $(e.relatedTarget).data('container-id');
+            const cname = $(e.relatedTarget).closest('.card').find('h6').first().text().trim();
+            $('#logs-container-name').text(cname || logsCurrentCid.substring(0, 12));
+            $logsContent.text('');
+            logsAutoScroll = true;
+        }
+        if (!logsCurrentCid) return;
+        startLogsPolling();
+    }).on('hidden.bs.modal', function() {
+        stopLogsPolling();
+        // Do NOT clear logsCurrentCid — so re-open keeps context
+    });
 
     // --- FILE MANAGER LOGIC ---
-    $('#fileManagerModal').on('show.bs.modal', function(e) {
-        currentContainerId = $(e.relatedTarget).data('container-id');
-        $('#fm-container-name').text($(e.relatedTarget).data('container-name'));
+    let lastValidationResult = null;
+    let validationTimeout = null;
+
+    // Initialize JSON Editor
+    const jsonEditorContainer = document.getElementById("json-tree-editor");
+    if (jsonEditorContainer) {
+        const options = {
+            mode: 'tree',
+            modes: ['tree'],
+            onChange: function() {
+                try {
+                    const json = treeEditor.get();
+                    const path = selectedFilePath || '';
+                    if (path.endsWith('.ndjson') && Array.isArray(json)) {
+                        const ndjsonString = json.map(item => JSON.stringify(item)).join('\n');
+                        $('#file-content').val(ndjsonString);
+                    } else {
+                        $('#file-content').val(JSON.stringify(json, null, 2));
+                    }
+                    updateGutter();
+                    validateCurrentFile();
+                } catch (e) {
+                    // Ignore transient parsing errors during active typing/editing
+                }
+            }
+        };
+        treeEditor = new JSONEditor(jsonEditorContainer, options);
+    }
+
+    function switchEditorMode(mode) {
+        currentEditorMode = mode;
+        $('#json-editor-controls button').removeClass('active');
+        
+        if (mode === 'tree') {
+            $('#btn-mode-tree').addClass('active');
+            if (syncCodeToTree()) {
+                $('#json-tree-wrapper').show();
+                $('#json-code-wrapper').hide();
+            } else {
+                $('#btn-mode-code').addClass('active');
+            }
+        } else if (mode === 'split') {
+            $('#btn-mode-split').addClass('active');
+            if (syncCodeToTree()) {
+                $('#json-tree-wrapper').show();
+                $('#json-code-wrapper').show();
+            } else {
+                $('#btn-mode-code').addClass('active');
+            }
+        } else {
+            $('#btn-mode-code').addClass('active');
+            $('#json-tree-wrapper').hide();
+            $('#json-code-wrapper').show();
+        }
+    }
+
+    function syncCodeToTree() {
+        if (!treeEditor) return true;
+        const codeValue = $('#file-content').val();
+        try {
+            const path = selectedFilePath || '';
+            if (path.endsWith('.ndjson')) {
+                const lines = codeValue.split('\n').filter(l => l.trim() !== '');
+                const jsonArray = lines.map(line => JSON.parse(line));
+                treeEditor.set(jsonArray);
+            } else {
+                const parsed = JSON.parse(codeValue);
+                treeEditor.set(parsed);
+            }
+            return true;
+        } catch (e) {
+            alert(`Cannot switch to Tree View: Invalid JSON syntax. Please correct raw JSON errors first.\n\nError: ${e.message}`);
+            return false;
+        }
+    }
+
+    $(document).on('click', '#btn-mode-tree', function() {
+        switchEditorMode('tree');
+    });
+    $(document).on('click', '#btn-mode-split', function() {
+        switchEditorMode('split');
+    });
+    $(document).on('click', '#btn-mode-code', function() {
+        switchEditorMode('code');
+    });
+
+    function updateGutter() {
+        const textarea = document.getElementById('file-content');
+        const gutter = document.getElementById('editor-gutter');
+        if (!textarea || !gutter) return;
+
+        const linesCount = textarea.value.split('\n').length;
+        let numbers = [];
+        for (let i = 1; i <= linesCount; i++) {
+            numbers.push(i);
+        }
+        gutter.textContent = numbers.join('\n');
+        syncGutterScroll();
+    }
+
+    function syncGutterScroll() {
+        const textarea = document.getElementById('file-content');
+        const gutter = document.getElementById('editor-gutter');
+        if (!textarea || !gutter) return;
+        gutter.scrollTop = textarea.scrollTop;
+    }
+
+    function validateJsonContent(path, content) {
+        const isJson = path.endsWith('.json') || path.endsWith('.njson');
+        const isNjson = path.endsWith('.ndjson');
+        if (!isJson && !isNjson) return null;
+
+        if (isJson) {
+            try {
+                JSON.parse(content);
+                return { valid: true, pos: null };
+            } catch (e) {
+                const message = e.message;
+                let pos = null;
+                let displayError = message;
+
+                // Check if error contains position
+                const posMatch = message.match(/position (\d+)/i);
+                if (posMatch) {
+                    pos = parseInt(posMatch[1], 10);
+                    const sub = content.substring(0, pos);
+                    const lines = sub.split('\n');
+                    const line = lines.length;
+                    const column = lines[lines.length - 1].length + 1;
+                    const cleanMessage = message.replace(/\s*at\s*position\s*\d+/i, '');
+                    displayError = `Line ${line}, Col ${column}: ${cleanMessage}`;
+                } else {
+                    const lineColMatch = message.match(/at line (\d+) column (\d+)/i);
+                    if (lineColMatch) {
+                        const line = parseInt(lineColMatch[1], 10);
+                        const col = parseInt(lineColMatch[2], 10);
+                        const cleanMessage = message.replace(/\s*at\s*line\s*\d+\s*column\s*\d+/i, '');
+                        displayError = `Line ${line}, Col ${col}: ${cleanMessage}`;
+                        // Calculate position index
+                        const lines = content.split('\n');
+                        let currentPos = 0;
+                        for (let i = 0; i < Math.min(line - 1, lines.length); i++) {
+                            currentPos += lines[i].length + 1; // +1 for \n
+                        }
+                        currentPos += Math.min(col - 1, (lines[line - 1] || '').length);
+                        pos = currentPos;
+                    }
+                }
+                return { valid: false, error: displayError, pos: pos };
+            }
+        } else {
+            // NDJSON (.njson)
+            const lines = content.split('\n');
+            let currentPos = 0;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const trimmed = line.trim();
+                if (trimmed) {
+                    try {
+                        JSON.parse(trimmed);
+                    } catch (e) {
+                        const message = e.message;
+                        let linePos = 0;
+                        const posMatch = message.match(/position (\d+)/i);
+                        if (posMatch) {
+                            linePos = parseInt(posMatch[1], 10);
+                        }
+                        const leadingWhitespaceLen = line.length - line.trimStart().length;
+                        const absolutePos = currentPos + leadingWhitespaceLen + linePos;
+                        const cleanMessage = message.replace(/\s*at\s*position\s*\d+/i, '');
+                        const displayError = `Line ${i + 1}: ${cleanMessage}`;
+                        return { valid: false, error: displayError, pos: absolutePos };
+                    }
+                }
+                currentPos += line.length + 1; // +1 for \n
+            }
+            return { valid: true, pos: null };
+        }
+    }
+
+    function validateCurrentFile() {
+        const content = $('#file-content').val();
+        const path = selectedFilePath || '';
+        const isJson = path.endsWith('.json') || path.endsWith('.njson');
+        const isNjson = path.endsWith('.ndjson');
+
+        if (!isJson && !isNjson) {
+            $('#json-validation-status').hide().empty();
+            lastValidationResult = null;
+            return;
+        }
+
+        const result = validateJsonContent(path, content);
+        lastValidationResult = result;
+
+        const statusDiv = $('#json-validation-status');
+        statusDiv.empty().show();
+
+        if (result.valid) {
+            statusDiv.html(`
+                <div class="alert alert-success d-flex align-items-center py-2 px-3 m-0 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem;">
+                    <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                    <div><strong>Valid ${isJson ? 'JSON' : 'NDJSON'}</strong> - Content format is correct.</div>
+                </div>
+            `);
+        } else {
+            const locateBtn = result.pos !== null ? `
+                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 ms-2 flex-shrink-0" id="go-to-json-error" title="Go to error">
+                    <i class="bi bi-cursor"></i> Go to error
+                </button>
+            ` : '';
+
+            statusDiv.html(`
+                <div class="alert alert-danger d-flex align-items-center justify-content-between py-2 px-3 m-0 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem; width: 100%;">
+                    <div class="d-flex align-items-center flex-grow-1 min-w-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2 fs-5 flex-shrink-0"></i>
+                        <div class="text-truncate">
+                            <strong>Invalid ${isJson ? 'JSON' : 'NDJSON'}</strong>: ${result.error}
+                        </div>
+                    </div>
+                    ${locateBtn}
+                </div>
+            `);
+        }
+    }
+
+    // --- FILE MANAGER TAB SWITCHING AND AUTO-RESOLUTION ---
+    function populateContainerSwitcher() {
+        const switcher = $('#fm-container-switcher');
+        switcher.empty();
+        
+        $('.open-fm-tab-btn').each(function() {
+            const cid = $(this).data('container-id');
+            const name = $(this).data('container-name') || '';
+            const lowerName = name.toLowerCase();
+            
+            if (lowerName.includes('heappe') || lowerName.includes('datastaging')) {
+                const label = lowerName.includes('heappe') ? 'HEAppE API' : 'DataStaging API';
+                const btnClass = cid === currentContainerId ? 'btn-primary' : 'btn-outline-primary';
+                const btn = $(`<button type="button" class="btn btn-sm ${btnClass} fm-switch-container-btn" data-container-id="${cid}" data-container-name="${name}">${label}</button>`);
+                switcher.append(btn);
+            }
+        });
+    }
+
+    $(document).on('click', '.fm-switch-container-btn', function(e) {
+        e.preventDefault();
+        currentContainerId = $(this).data('container-id');
+        $('#fm-container-name').text($(this).data('container-name'));
+        
+        currentPath = '/opt/heappe/confs/';
+        
+        $('#editor-placeholder').show();
+        $('#editor-ui').hide();
+        $('#json-validation-status').hide().empty();
+        $('#json-restart-warning').hide();
+        $('#restart-instance-btn').hide();
+        lastValidationResult = null;
+        
+        populateContainerSwitcher();
         loadFileList();
+    });
+
+    $(document).on('click', '.open-fm-tab-btn', function(e) {
+        e.preventDefault();
+        currentContainerId = $(this).data('container-id');
+        $('#fm-container-name').text($(this).data('container-name'));
+        
+        // Reset currentPath when switching containers
+        currentPath = '/opt/heappe/confs/';
+        
+        // Reset editor placeholder/UI
+        $('#editor-placeholder').show();
+        $('#editor-ui').hide();
+        $('#json-validation-status').hide().empty();
+        $('#json-restart-warning').hide();
+        $('#restart-instance-btn').hide();
+        lastValidationResult = null;
+        
+        // Show the Configs tab
+        const tabEl = document.getElementById('configs-tab');
+        if (tabEl) {
+            new bootstrap.Tab(tabEl).show();
+        }
+        
+        populateContainerSwitcher();
+        loadFileList();
+    });
+
+    $('#configs-tab').on('shown.bs.tab', function(e) {
+        if (!currentContainerId) {
+            // Find container containing heappe in its name
+            const heappeBtn = $('.open-fm-tab-btn').filter(function() {
+                return ($(this).data('container-name') || '').toLowerCase().includes('heappe');
+            }).first();
+            
+            if (heappeBtn.length) {
+                currentContainerId = heappeBtn.data('container-id');
+                $('#fm-container-name').text(heappeBtn.data('container-name'));
+            } else {
+                // Fallback to the first open-fm-tab-btn
+                const firstBtn = $('.open-fm-tab-btn').first();
+                if (firstBtn.length) {
+                    currentContainerId = firstBtn.data('container-id');
+                    $('#fm-container-name').text(firstBtn.data('container-name'));
+                }
+            }
+            if (currentContainerId) {
+                currentPath = '/opt/heappe/confs/';
+                loadFileList();
+            }
+        }
+        populateContainerSwitcher();
     });
 
     function loadFileList() {
@@ -445,7 +2006,7 @@ $(document).ready(function() {
             files.forEach(f => {
                 const icon = f.type === 'directory' ? 'bi-folder-fill text-warning' : 'bi-file-earmark-code text-primary';
                 $('#file-list').append(`<li class="list-group-item list-group-item-action d-flex justify-content-between align-items-center cursor-pointer file-item" data-file="${f.name}" data-type="${f.type}">
-                    <span><i class="bi ${icon} me-2"></i>${f.name}</span>
+                     <span><i class="bi ${icon} me-2"></i>${f.name}</span>
                 </li>`);
             });
             updateBreadcrumb();
@@ -458,6 +2019,10 @@ $(document).ready(function() {
         if(type === 'directory') {
             currentPath = selectedFilePath + '/';
             loadFileList();
+            $('#json-validation-status').hide().empty();
+            $('#json-restart-warning').hide();
+            $('#restart-instance-btn').hide();
+            lastValidationResult = null;
         } else {
             $('#editor-placeholder').hide();
             $('#editor-ui').show();
@@ -465,7 +2030,30 @@ $(document).ready(function() {
             $('#edit-file-name').text(selectedFilePath);
             $.post(`${basePath}/container/${currentContainerId}/file/read/`, {
                 path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
-            }, r => $('#file-content').val(r.content || ''));
+            }, r => {
+                $('#file-content').val(r.content || '');
+                updateGutter();
+                validateCurrentFile();
+
+                const isJson = selectedFilePath.endsWith('.json') || selectedFilePath.endsWith('.njson');
+                if (isJson) {
+                    $('#json-editor-controls').show();
+                    const isConfig = selectedFilePath.includes('appsettings.json') || selectedFilePath.includes('appsettings-data.json') || selectedFilePath.includes('/confs/');
+                    if (isConfig) {
+                        $('#json-restart-warning').show();
+                        $('#restart-instance-btn').show();
+                    } else {
+                        $('#json-restart-warning').hide();
+                        $('#restart-instance-btn').hide();
+                    }
+                    switchEditorMode('tree');
+                } else {
+                    $('#json-editor-controls').hide();
+                    $('#json-restart-warning').hide();
+                    $('#restart-instance-btn').hide();
+                    switchEditorMode('code');
+                }
+            });
         }
     });
 
@@ -483,6 +2071,10 @@ $(document).ready(function() {
         e.preventDefault();
         currentPath = $(this).data('path') || '/';
         loadFileList();
+        $('#json-validation-status').hide().empty();
+        $('#json-restart-warning').hide();
+        $('#restart-instance-btn').hide();
+        lastValidationResult = null;
     });
 
     $('#fm-go-up').click(() => {
@@ -490,12 +2082,135 @@ $(document).ready(function() {
         p.pop();
         currentPath = '/' + p.join('/') + (p.length ? '/' : '');
         loadFileList();
+        $('#json-validation-status').hide().empty();
+        $('#json-restart-warning').hide();
+        $('#restart-instance-btn').hide();
+        lastValidationResult = null;
+    });
+
+    $('#file-content').on('input', function() {
+        updateGutter();
+        clearTimeout(validationTimeout);
+        validationTimeout = setTimeout(validateCurrentFile, 250);
+    });
+
+    $('#file-content').on('scroll', function() {
+        syncGutterScroll();
+    });
+
+    $(document).on('click', '#go-to-json-error', function() {
+        if (lastValidationResult && lastValidationResult.pos !== null) {
+            const textarea = document.getElementById('file-content');
+            if (textarea) {
+                textarea.focus();
+                textarea.setSelectionRange(lastValidationResult.pos, lastValidationResult.pos + 1);
+                const lineIndex = textarea.value.substring(0, lastValidationResult.pos).split('\n').length - 1;
+                const lineHeight = parseInt($(textarea).css('line-height')) || 18;
+                textarea.scrollTop = Math.max(0, (lineIndex - 5) * lineHeight);
+            }
+        }
+    });
+
+    $('#restart-instance-btn').click(function() {
+        const confirmRestart = confirm("Warning: This will restart all services in the HEAppE instance. Are you sure you want to proceed?");
+        if (!confirmRestart) return;
+
+        showLoading('Initiating Restart…', 'Sending restart command to server…');
+        runRestartPhases();
+
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: {
+                action: 'restart_all',
+                InstanceName: '{{ instance_name }}',
+                csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: function(data) {
+                hideLoading();
+                startStartupPolling();
+                const banner = document.getElementById('startup-banner');
+                if (banner) banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            },
+            error: function(xhr) {
+                hideLoading();
+                $('#restart-steps').hide();
+                RESTART_PHASES.forEach(p => {
+                    const $li = $('#' + p.id);
+                    if ($li.length > 0) {
+                        $li.find('.step-icon').html('&#9675;');
+                        $li.css({ 'opacity': 1, 'font-weight': 'normal' });
+                    }
+                });
+                alert('Restart failed: ' + (xhr.responseJSON?.message || xhr.responseText || 'Server Error'));
+            }
+        });
     });
 
     $('#save-file').click(() => {
+        if (lastValidationResult && !lastValidationResult.valid) {
+            const confirmSave = confirm(`Warning: The file contains invalid JSON/NDJSON syntax:\n\n${lastValidationResult.error}\n\nAre you sure you want to save anyway?`);
+            if (!confirmSave) {
+                if (lastValidationResult.pos !== null) {
+                    setTimeout(() => {
+                        const textarea = document.getElementById('file-content');
+                        if (textarea) {
+                            textarea.focus();
+                            textarea.setSelectionRange(lastValidationResult.pos, lastValidationResult.pos + 1);
+                            const lineIndex = textarea.value.substring(0, lastValidationResult.pos).split('\n').length - 1;
+                            const lineHeight = parseInt($(textarea).css('line-height')) || 18;
+                            textarea.scrollTop = Math.max(0, (lineIndex - 5) * lineHeight);
+                        }
+                    }, 50);
+                }
+                return;
+            }
+        }
         $.post(`${basePath}/container/${currentContainerId}/file/write/`, {
             path: selectedFilePath, content: $('#file-content').val(), instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
         }, () => alert('Saved successfully'));
+    });
+
+    $('#download-btn').click(() => {
+        if (!selectedFilePath) { alert('No file selected.'); return; }
+        $.post(`${basePath}/container/${currentContainerId}/file/download/`, {
+            path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+        }, r => {
+            if (r.status === 'success' && r.data) {
+                const byteChars = atob(r.data);
+                const byteNumbers = new Array(byteChars.length);
+                for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+                const blob = new Blob([new Uint8Array(byteNumbers)], { type: 'application/gzip' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = (r.filename || 'file') + '.tar.gz';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } else {
+                alert('Download failed: ' + (r.message || 'Unknown error'));
+            }
+        }).fail(() => alert('Download request failed.'));
+    });
+
+    $('#delete-file').click(() => {
+        if (!selectedFilePath) { alert('No file selected.'); return; }
+        if (!confirm(`Are you sure you want to delete ${selectedFilePath}?`)) return;
+        $.post(`${basePath}/container/${currentContainerId}/file/delete/`, {
+            path: selectedFilePath, instance_name: '{{ instance_name }}', csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+        }, r => {
+            if (r.status === 'success') {
+                alert('File deleted.');
+                selectedFilePath = '';
+                $('#editor-ui').hide();
+                $('#editor-placeholder').show();
+                loadFileList();
+            } else {
+                alert('Delete failed: ' + (r.message || 'Unknown error'));
+            }
+        }).fail(() => alert('Delete request failed.'));
     });
 
     $('#upload-action-btn').click(() => {
@@ -517,15 +2232,157 @@ $(document).ready(function() {
             reader.readAsDataURL(f);
         });
     });
+
+    // --- AUTOMATICALLY SWITCH TO MAINTENANCE TAB OR MODAL IF REQUESTED ---
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('action') === 'update') {
+        const tabEl = document.getElementById('maintenance-tab');
+        if (tabEl) {
+            new bootstrap.Tab(tabEl).show();
+            setTimeout(() => {
+                const updateForm = document.getElementById('update-form');
+                if (updateForm) {
+                    updateForm.scrollIntoView({ behavior: 'smooth' });
+                    const repoInput = $(updateForm).find('input[name="Repository"]');
+                    if (repoInput.length) repoInput.focus();
+                }
+            }, 300);
+        }
+    } else if (urlParams.get('action') === 'switch_branch') {
+        const switchModalEl = document.getElementById('switchBranchModal');
+        if (switchModalEl) {
+            new bootstrap.Modal(switchModalEl).show();
+        }
+    }
 });
 </script>
 
 <style>
+    .spin-icon {
+        display: inline-block;
+        animation: spin-anim 2s linear infinite;
+    }
+    @keyframes spin-anim {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .launch-icon {
+        display: inline-block !important;
+        animation: launch-anim 0.9s ease-in-out infinite;
+        transform-origin: center center;
+    }
+    @keyframes launch-anim {
+        0%   { transform: rotate(-20deg) scale(1); }
+        50%  { transform: rotate(20deg) scale(1.15); }
+        100% { transform: rotate(-20deg) scale(1); }
+    }
+    #update-logs {
+        font-family: 'Courier New', Courier, monospace;
+        background-color: #121212 !important;
+        color: #a8ffb2 !important; /* Soft terminal green */
+        border: 1px solid #222 !important;
+        box-shadow: inset 0 0 12px rgba(0,0,0,0.9);
+    }
     .cursor-pointer { cursor: pointer; }
-    .file-item:hover { background-color: #f8f9fa; }
+    .file-item {
+        transition: background-color 0.2s ease, padding-left 0.2s ease;
+    }
+    .file-item:hover {
+        background-color: #e9ecef;
+        padding-left: 1.25rem;
+    }
     .breadcrumb-item a { text-decoration: none; }
     #logs-content::-webkit-scrollbar { width: 8px; }
     #logs-content::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    #file-list::-webkit-scrollbar, #file-content::-webkit-scrollbar { width: 6px; height: 6px; }
+    #file-list::-webkit-scrollbar-thumb, #file-content::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    #file-list::-webkit-scrollbar-thumb:hover, #file-content::-webkit-scrollbar-thumb:hover { background: #999; }
+    #file-list {
+        scroll-behavior: smooth;
+    }
+    .editor-container {
+        display: flex;
+        flex-direction: row;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        background-color: #fff;
+        min-height: 0;
+        overflow: hidden;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .editor-container:focus-within {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+    }
+    #editor-gutter {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 0.5rem 0.5rem;
+        text-align: right;
+        background-color: #f8f9fa;
+        border-right: 1px solid #dee2e6;
+        color: #6c757d;
+        user-select: none;
+        pointer-events: none;
+        overflow: hidden;
+        white-space: pre;
+        min-width: 40px;
+    }
+    #file-content {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 0.5rem 0.75rem;
+        resize: none;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background-color: transparent;
+        margin: 0;
+        overflow-y: auto;
+    }
     #loading-overlay { display: none; }
+
+    /* Custom JSONEditor Styles */
+    .jsoneditor {
+        border: 1px solid #ced4da !important;
+        border-radius: 0.375rem !important;
+        background-color: #fff !important;
+    }
+    .jsoneditor-menu {
+        background-color: #0d6efd !important;
+        border-bottom: 1px solid #0b5ed7 !important;
+        padding: 4px 8px !important;
+    }
+    .jsoneditor-menu > button, .jsoneditor-menu > .jsoneditor-modes {
+        background-color: rgba(255, 255, 255, 0.15) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+        margin: 2px !important;
+        color: #fff !important;
+    }
+    .jsoneditor-menu > button:hover, .jsoneditor-menu > .jsoneditor-modes:hover {
+        background-color: rgba(255, 255, 255, 0.25) !important;
+    }
+    .jsoneditor-search input {
+        border-radius: 4px !important;
+        padding: 2px 6px !important;
+        outline: none !important;
+    }
+    .jsoneditor-outer {
+        border-radius: 0 0 0.375rem 0.375rem !important;
+    }
+    .jsoneditor-tree {
+        font-family: var(--bs-font-monospace), monospace !important;
+        font-size: 13px !important;
+        background-color: #fff !important;
+    }
+    a.jsoneditor-poweredby {
+        display: none !important;
+    }
+    .jsoneditor-separator {
+        display: none !important;
+    }
 </style>
 {% endblock content %}

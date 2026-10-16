@@ -14,6 +14,7 @@ class InstanceCredentials(models.Model):
     log_db_database = models.CharField(max_length=255)
     deployment_date_time = models.DateTimeField(auto_now_add=True)
     is_deployed = models.BooleanField(default=False)
+    is_updating = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.heappe_host} - {self.heappe_login} - {self.log_db_database}"

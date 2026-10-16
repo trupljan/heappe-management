@@ -1,0 +1,961 @@
+{% extends "base.html" %}
+
+{% block title %}Instance Configuration - {{ instance_name }}{% endblock %}
+
+{% block breadcrumbs %}
+<li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}">Dashboard</a></li>
+<li class="breadcrumb-item"><a href="{% url 'deploy_view' instance_name %}">Containers &amp; Services</a></li>
+<li class="breadcrumb-item active" aria-current="page">Configuration</li>
+{% endblock %}
+
+{% block content %}
+<!-- JSONEditor stylesheet and script -->
+<link href="https://cdn.jsdelivr.net/npm/jsoneditor@9.5.6/dist/jsoneditor.min.css" rel="stylesheet" type="text/css">
+<script src="https://cdn.jsdelivr.net/npm/jsoneditor@9.5.6/dist/jsoneditor.min.js"></script>
+
+<div class="container mt-5">
+    <div id="loading-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.92); z-index:9999; flex-direction:column; justify-content:center; align-items:center; color:white;">
+        <div class="spinner-border text-info mb-3" style="width:4rem; height:4rem;" role="status"></div>
+        <h4 id="loading-title" class="fw-bold">Operation in progress...</h4>
+        <p id="loading-subtext" class="text-muted mb-3">This action may take a few minutes. The page will refresh automatically.</p>
+        <ol id="restart-steps" style="display:none; list-style:none; padding:0; margin:0; text-align:left; min-width:280px;">
+            <li id="step-stop"    class="mb-1"><span class="step-icon me-2">&#9675;</span>Stopping all containers</li>
+            <li id="step-db"      class="mb-1"><span class="step-icon me-2">&#9675;</span>Starting database</li>
+            <li id="step-vault"   class="mb-1"><span class="step-icon me-2">&#9675;</span>Starting &amp; unsealing Vault</li>
+            <li id="step-services" class="mb-1"><span class="step-icon me-2">&#9675;</span>Starting remaining services</li>
+            <li id="step-done"    class="mb-1"><span class="step-icon me-2">&#9675;</span>Waiting for HEAppE to come online</li>
+        </ol>
+    </div>
+
+    <!-- Hidden Raw Content Container -->
+    <textarea id="raw-config-data" style="display: none;">{{ config_content }}</textarea>
+    {% csrf_token %}
+
+    <div class="row mb-4 align-items-center">
+        <div class="col-md-8">
+            <h2 class="mb-0 fw-bold">Configuration: <span class="text-primary">{{ instance_name }}</span></h2>
+            <p class="text-muted small mb-0">Manage settings for <code>/opt/heappe/confs/{{ selected_file }}</code> inside the container.</p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <a href="{% url 'deploy_view' instance_name %}" class="btn btn-outline-secondary shadow-sm w-100 w-md-auto">
+                <i class="bi bi-arrow-left me-2"></i>Back to Services
+            </a>
+        </div>
+    </div>
+
+    <!-- Configuration File Selector -->
+    <ul class="nav nav-pills mb-4 shadow-sm p-1.5 bg-white rounded-3 gap-1 border" style="max-width: fit-content;">
+        <li class="nav-item">
+            <a class="nav-link {% if selected_file == 'appsettings.json' %}active fw-bold{% endif %} py-2 px-3.5 rounded-2 d-flex align-items-center gap-2" href="?file=appsettings.json">
+                <i class="bi bi-file-earmark-code-fill"></i>HEAppE API (appsettings.json)
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if selected_file == 'appsettings-data.json' %}active fw-bold{% endif %} py-2 px-3.5 rounded-2 d-flex align-items-center gap-2" href="?file=appsettings-data.json">
+                <i class="bi bi-file-earmark-code-fill"></i>DataStaging API (appsettings-data.json)
+            </a>
+        </li>
+    </ul>
+
+    <!-- Startup banner (shown via JS after restart completes) -->
+    <div id="startup-banner" style="display:none; background: linear-gradient(135deg,#0d6efd18,#0dcaf018); border-left: 4px solid #0dcaf0 !important;" class="alert border-0 shadow-sm mb-4 animate-fade-in" role="alert">
+        <div class="d-flex align-items-center gap-3">
+            <div class="spinner-border spinner-border-sm text-info flex-shrink-0" role="status"></div>
+            <div>
+                <strong class="text-info-emphasis">Instance is starting up</strong>
+                <div class="text-muted small mt-1">Containers are coming online. This page will refresh automatically once HEAppE is ready.
+                    <span id="startup-elapsed" class="fw-semibold ms-1"></span>
+                </div>
+                <div id="startup-phase" class="mt-1 small fw-semibold text-info"></div>
+            </div>
+        </div>
+    </div>
+
+    {% if error_message %}
+        <div class="alert alert-danger shadow-sm border-0 d-flex align-items-center p-4 rounded-3 mb-5">
+            <i class="bi bi-exclamation-octagon-fill fs-1 me-3 flex-shrink-0 text-danger"></i>
+            <div>
+                <h5 class="alert-heading fw-bold mb-1">Configuration Unavailable</h5>
+                <p class="mb-0">{{ error_message }}</p>
+            </div>
+        </div>
+    {% else %}
+        <div class="card border-0 shadow-sm mb-5" style="height: 72vh;">
+            <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-primary active" id="btn-mode-form"><i class="bi bi-ui-checks"></i> Settings Form</button>
+                        <button type="button" class="btn btn-outline-primary" id="btn-mode-tree"><i class="bi bi-diagram-3"></i> Tree Editor</button>
+                        <button type="button" class="btn btn-outline-primary" id="btn-mode-split"><i class="bi bi-columns-gap"></i> Split View</button>
+                        <button type="button" class="btn btn-outline-primary" id="btn-mode-code"><i class="bi bi-code-slash"></i> Raw JSON</button>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-2 text-warning small fw-bold">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span>Restart is required to apply settings.</span>
+                </div>
+            </div>
+            
+            <div class="card-body p-3 d-flex flex-column overflow-hidden position-relative" style="min-height: 0;">
+                <div id="json-validation-status" class="mb-3" style="display: none;"></div>
+                
+                <!-- Editor Workspaces -->
+                <div class="d-flex flex-row flex-grow-1 gap-3 mb-3" style="min-height: 0;">
+                    <!-- Visual Tabbed Form Editor Workspace -->
+                    <div id="json-form-wrapper" class="flex-grow-1 h-100" style="min-width: 0;">
+                        <div class="row g-0 h-100 border rounded overflow-hidden">
+                            <!-- Left Section Tabs -->
+                            <div class="col-md-3 border-end bg-light p-3 overflow-auto h-100" id="form-tabs-list" style="max-height: 100%;">
+                                <!-- Dynamically populated tabs -->
+                            </div>
+                            <!-- Right Form content -->
+                            <div class="col-md-9 p-4 bg-white overflow-auto h-100 position-relative tab-content" id="form-tabs-content" style="max-height: 100%;">
+                                <!-- Dynamically populated panels -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Visual Tree Editor Workspace -->
+                    <div id="json-tree-wrapper" class="flex-grow-1 h-100" style="display: none; min-width: 0;">
+                        <div id="json-tree-editor" class="h-100 w-100"></div>
+                    </div>
+
+                    <!-- Code Textarea Editor Workspace -->
+                    <div id="json-code-wrapper" class="flex-grow-1 h-100" style="display: none; min-width: 0;">
+                        <div class="editor-container h-100">
+                            <div id="editor-gutter">1</div>
+                            <textarea id="file-content" class="form-control font-monospace"></textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Actions -->
+                <div class="d-flex gap-2.5 pt-2 border-top">
+                    <button id="save-file" class="btn btn-primary px-4 fw-bold shadow-sm"><i class="bi bi-save me-1.5"></i> Save Settings</button>
+                    <button id="restart-instance-btn" class="btn btn-warning px-4 fw-bold text-dark shadow-sm"><i class="bi bi-arrow-clockwise me-1.5"></i> Restart Instance</button>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+</div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+    let lastValidationResult = null;
+    let validationTimeout = null;
+    let treeEditor = null;
+    let currentEditorMode = 'form';
+
+    function showLoading(title, subtext) {
+        $('#loading-title').text(title || 'Operation in progress...');
+        $('#loading-subtext').text(subtext || 'Please wait.');
+        $('#loading-overlay').css('display', 'flex');
+    }
+
+    function hideLoading() {
+        $('#loading-overlay').hide();
+    }
+
+    // Initialize JSON Editor
+    const jsonEditorContainer = document.getElementById("json-tree-editor");
+    if (jsonEditorContainer) {
+        const options = {
+            mode: 'tree',
+            modes: ['tree'],
+            onChange: function() {
+                try {
+                    const json = treeEditor.get();
+                    $('#file-content').val(JSON.stringify(json, null, 2));
+                    updateGutter();
+                    validateCurrentFile();
+                } catch (e) {
+                    // Ignore transient parsing errors during active editing
+                }
+            }
+        };
+        treeEditor = new JSONEditor(jsonEditorContainer, options);
+
+        // Load initial data
+        const initialContent = $('#raw-config-data').val();
+        $('#file-content').val(initialContent);
+        updateGutter();
+        validateCurrentFile();
+        syncCodeToTree();
+        switchEditorMode('form');
+    }
+
+    // --- FORM EDITOR GENERATOR ---
+    function generateFormGui(json) {
+        const tabList = $('#form-tabs-list');
+        const tabContent = $('#form-tabs-content');
+        tabList.empty();
+        tabContent.empty();
+
+        const keys = Object.keys(json);
+        if (keys.length === 0) {
+            tabContent.html('<p class="text-muted">Empty configuration file.</p>');
+            return;
+        }
+
+        // Add Tip message
+        tabContent.append(`
+            <div class="alert alert-info py-2 px-3 mb-3 border-0 small d-flex align-items-center gap-2" style="border-radius: 6px;">
+                <i class="bi bi-lightbulb-fill text-warning"></i>
+                <div><strong>Tip</strong>: Use the <em>Tree Editor</em> or <em>Raw JSON</em> tabs to create brand new structural sections or custom root properties.</div>
+            </div>
+        `);
+
+        let first = true;
+        keys.forEach((key, index) => {
+            const tabId = `tab-sec-${index}`;
+            const navLinkId = `nav-link-${index}`;
+            
+            // Add tab button
+            tabList.append(`
+                <button class="nav-link text-start py-2.5 px-3 rounded mb-1.5 border-0 w-100 d-flex align-items-center justify-content-between ${first ? 'active' : ''}" 
+                        id="${navLinkId}" data-bs-target="#${tabId}" type="button" role="tab">
+                    <span class="text-truncate"><i class="bi bi-box-seam me-2 text-primary"></i>${key}</span>
+                </button>
+            `);
+
+            // Add tab content pane
+            const pane = $(`
+                <div class="tab-pane fade ${first ? 'show active' : ''} h-100 overflow-auto" id="${tabId}" role="tabpanel">
+                    <h5 class="fw-bold mb-3 border-bottom pb-2 text-dark">${key}</h5>
+                </div>
+            `);
+            tabContent.append(pane);
+
+            // Recursively render fields under this section
+            renderObjectFields(json[key], [key], pane);
+            first = false;
+        });
+    }
+
+    function renderObjectFields(obj, path, container) {
+        if (obj === null || obj === undefined) {
+            renderPrimitiveField("", "null", path, container);
+            return;
+        }
+        
+        if (typeof obj !== 'object') {
+            renderPrimitiveField(obj, typeof obj, path, container);
+            return;
+        }
+
+        if (Array.isArray(obj)) {
+            renderArrayFields(obj, path, container);
+            return;
+        }
+
+        // Object: loop keys
+        Object.keys(obj).forEach(key => {
+            const val = obj[key];
+            const nextPath = [...path, key];
+
+            if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+                // Nested object wrapper card
+                const card = $(`
+                    <div class="card border-0 bg-light mb-3" style="border-radius: 8px;">
+                        <div class="card-header bg-transparent border-0 fw-bold py-2 pb-0 small text-primary text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.05em;">
+                            <i class="bi bi-chevron-down me-1 text-muted"></i>${key}
+                        </div>
+                        <div class="card-body py-2 px-3"></div>
+                    </div>
+                `);
+                container.append(card);
+                renderObjectFields(val, nextPath, card.find('.card-body'));
+            } else if (Array.isArray(val)) {
+                renderArrayFields(val, nextPath, container);
+            } else {
+                renderPrimitiveField(val, key, nextPath, container);
+            }
+        });
+    }
+
+    function renderPrimitiveField(value, label, path, container) {
+        const pathStr = path.join('.');
+        let inputHtml = '';
+
+        if (typeof value === 'boolean') {
+            const checked = value ? 'checked' : '';
+            inputHtml = `
+                <div class="form-check form-switch mt-1">
+                    <input class="form-check-input form-gui-input" type="checkbox" id="field-${pathStr}" data-path="${pathStr}" data-type="boolean" ${checked}>
+                    <label class="form-check-label small text-muted" for="field-${pathStr}">Active / True</label>
+                </div>
+            `;
+        } else if (typeof value === 'number') {
+            inputHtml = `
+                <input class="form-control form-control-sm form-gui-input" type="number" id="field-${pathStr}" data-path="${pathStr}" data-type="number" value="${value}" style="font-size: 13px;">
+            `;
+        } else {
+            const displayVal = value === null ? '' : value;
+            inputHtml = `
+                <input class="form-control form-control-sm form-gui-input" type="text" id="field-${pathStr}" data-path="${pathStr}" data-type="string" value="${displayVal.replace(/"/g, '&quot;')}" style="font-size: 13px;">
+            `;
+        }
+
+        container.append(`
+            <div class="form-group mb-3">
+                <label class="small fw-semibold mb-1 text-secondary" style="font-size: 0.75rem;">${label}</label>
+                ${inputHtml}
+            </div>
+        `);
+    }
+
+    function renderArrayFields(arr, path, container) {
+        const pathStr = path.join('.');
+        const label = path[path.length - 1];
+
+        const arrayCard = $(`
+            <div class="card border border-warning-subtle mb-3" style="border-radius: 8px; border-style: dashed !important; background-color: #fcfbf7;">
+                <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center py-2 pb-0">
+                    <span class="small fw-bold text-warning-emphasis"><i class="bi bi-list-ol me-1"></i>${label} (Array)</span>
+                    <button type="button" class="btn btn-xs btn-outline-warning py-0 px-2 btn-add-array-item" data-path="${pathStr}">
+                        <i class="bi bi-plus-lg"></i> Add Item
+                    </button>
+                </div>
+                <div class="card-body py-2 px-3 array-items-container" data-path="${pathStr}"></div>
+            </div>
+        `);
+        container.append(arrayCard);
+        const itemsContainer = arrayCard.find('.array-items-container');
+
+        arr.forEach((item, index) => {
+            const itemPath = [...path, index];
+            
+            const row = $(`
+                <div class="d-flex align-items-start gap-2 mb-2 p-2 border rounded bg-white shadow-sm array-item-row" data-index="${index}">
+                    <div class="flex-grow-1"></div>
+                    <button type="button" class="btn btn-sm btn-outline-danger btn-delete-array-item py-1 px-2" data-path="${pathStr}" data-index="${index}">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            `);
+            itemsContainer.append(row);
+            renderObjectFields(item, itemPath, row.find('div:first'));
+        });
+    }
+
+    // --- SYNC GUI TO JSON CODE ---
+    function setJsonValueByPath(obj, path, val) {
+        const parts = path.split('.');
+        let current = obj;
+        for (let i = 0; i < parts.length - 1; i++) {
+            const p = parts[i];
+            if (Array.isArray(current) && /^\d+$/.test(p)) {
+                current = current[parseInt(p, 10)];
+            } else {
+                current = current[p];
+            }
+        }
+        const lastKey = parts[parts.length - 1];
+        if (Array.isArray(current) && /^\d+$/.test(lastKey)) {
+            current[parseInt(lastKey, 10)] = val;
+        } else {
+            current[lastKey] = val;
+        }
+    }
+
+    function updateJsonValueAtPath(pathStr, val) {
+        const rawCode = $('#file-content').val();
+        try {
+            const json = JSON.parse(rawCode);
+            setJsonValueByPath(json, pathStr, val);
+            const formatted = JSON.stringify(json, null, 2);
+            $('#file-content').val(formatted);
+            updateGutter();
+            validateCurrentFile();
+            if (treeEditor) treeEditor.set(json);
+        } catch (e) {
+            console.error("Failed to sync Form change: ", e);
+        }
+    }
+
+    // Change input event
+    $(document).on('change', '.form-gui-input', function() {
+        const pathStr = $(this).data('path');
+        const type = $(this).data('type');
+        let val;
+
+        if (type === 'boolean') {
+            val = $(this).is(':checked');
+        } else if (type === 'number') {
+            val = parseFloat($(this).val());
+            if (isNaN(val)) val = 0;
+        } else {
+            val = $(this).val();
+        }
+
+        updateJsonValueAtPath(pathStr, val);
+    });
+
+    // Delete array item
+    $(document).on('click', '.btn-delete-array-item', function() {
+        const pathStr = $(this).data('path');
+        const index = parseInt($(this).data('index'), 10);
+        const rawCode = $('#file-content').val();
+        try {
+            const json = JSON.parse(rawCode);
+            const parts = pathStr.split('.');
+            let current = json;
+            for (let i = 0; i < parts.length; i++) {
+                current = current[parts[i]];
+            }
+            if (Array.isArray(current)) {
+                current.splice(index, 1);
+                $('#file-content').val(JSON.stringify(json, null, 2));
+                updateGutter();
+                validateCurrentFile();
+                if (treeEditor) treeEditor.set(json);
+                // Re-render forms
+                generateFormGui(json);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    });
+
+    function resetObjectValues(obj) {
+        Object.keys(obj).forEach(k => {
+            if (obj[k] !== null && typeof obj[k] === 'object') {
+                resetObjectValues(obj[k]);
+            } else {
+                obj[k] = typeof obj[k] === 'number' ? 0 : (typeof obj[k] === 'boolean' ? false : "");
+            }
+        });
+    }
+
+    // Add array item
+    $(document).on('click', '.btn-add-array-item', function() {
+        const pathStr = $(this).data('path');
+        const rawCode = $('#file-content').val();
+        try {
+            const json = JSON.parse(rawCode);
+            const parts = pathStr.split('.');
+            let current = json;
+            for (let i = 0; i < parts.length; i++) {
+                current = current[parts[i]];
+            }
+            if (Array.isArray(current)) {
+                let newItem = "";
+                if (current.length > 0) {
+                    const prototype = current[0];
+                    if (typeof prototype === 'object' && prototype !== null) {
+                        newItem = JSON.parse(JSON.stringify(prototype));
+                        resetObjectValues(newItem);
+                    } else {
+                        newItem = typeof prototype === 'number' ? 0 : (typeof prototype === 'boolean' ? false : "");
+                    }
+                }
+                current.push(newItem);
+                $('#file-content').val(JSON.stringify(json, null, 2));
+                updateGutter();
+                validateCurrentFile();
+                if (treeEditor) treeEditor.set(json);
+                // Re-render forms
+                generateFormGui(json);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    });
+
+    // --- WORKSPACE MODES ---
+    function switchEditorMode(mode) {
+        currentEditorMode = mode;
+        $('.btn-group button').removeClass('active');
+        
+        $('#json-form-wrapper').hide();
+        $('#json-tree-wrapper').hide();
+        $('#json-code-wrapper').hide();
+
+        if (mode === 'form') {
+            $('#btn-mode-form').addClass('active');
+            if (syncCodeToForm()) {
+                $('#json-form-wrapper').show();
+            } else {
+                $('#btn-mode-code').addClass('active');
+                $('#json-code-wrapper').show();
+            }
+        } else if (mode === 'tree') {
+            $('#btn-mode-tree').addClass('active');
+            if (syncCodeToTree()) {
+                $('#json-tree-wrapper').show();
+            } else {
+                $('#btn-mode-code').addClass('active');
+                $('#json-code-wrapper').show();
+            }
+        } else if (mode === 'split') {
+            $('#btn-mode-split').addClass('active');
+            if (syncCodeToTree()) {
+                $('#json-tree-wrapper').show();
+                $('#json-code-wrapper').show();
+            } else {
+                $('#btn-mode-code').addClass('active');
+                $('#json-code-wrapper').show();
+            }
+        } else {
+            $('#btn-mode-code').addClass('active');
+            $('#json-code-wrapper').show();
+        }
+    }
+
+    function syncCodeToForm() {
+        const codeValue = $('#file-content').val();
+        try {
+            const parsed = JSON.parse(codeValue);
+            generateFormGui(parsed);
+            return true;
+        } catch (e) {
+            alert(`Cannot switch to Settings Form: Invalid JSON syntax. Please correct raw JSON errors first.\n\nError: ${e.message}`);
+            return false;
+        }
+    }
+
+    function syncCodeToTree() {
+        if (!treeEditor) return true;
+        const codeValue = $('#file-content').val();
+        try {
+            const parsed = JSON.parse(codeValue);
+            treeEditor.set(parsed);
+            return true;
+        } catch (e) {
+            alert(`Cannot switch to Tree View: Invalid JSON syntax. Please correct raw JSON errors first.\n\nError: ${e.message}`);
+            return false;
+        }
+    }
+
+    $(document).on('click', '#btn-mode-form', function() {
+        switchEditorMode('form');
+    });
+    $(document).on('click', '#btn-mode-tree', function() {
+        switchEditorMode('tree');
+    });
+    $(document).on('click', '#btn-mode-split', function() {
+        switchEditorMode('split');
+    });
+    $(document).on('click', '#btn-mode-code', function() {
+        switchEditorMode('code');
+    });
+
+    // Custom click handler for form tabs to ensure clickability on dynamic elements
+    $(document).on('click', '#form-tabs-list .nav-link', function(e) {
+        e.preventDefault();
+        $('#form-tabs-list .nav-link').removeClass('active');
+        $(this).addClass('active');
+        
+        const targetId = $(this).attr('data-bs-target');
+        $('#form-tabs-content .tab-pane').removeClass('show active');
+        $(targetId).addClass('show active');
+    });
+
+    function updateGutter() {
+        const textarea = document.getElementById('file-content');
+        const gutter = document.getElementById('editor-gutter');
+        if (!textarea || !gutter) return;
+
+        const linesCount = textarea.value.split('\n').length;
+        let numbers = [];
+        for (let i = 1; i <= linesCount; i++) {
+            numbers.push(i);
+        }
+        gutter.textContent = numbers.join('\n');
+        syncGutterScroll();
+    }
+
+    function syncGutterScroll() {
+        const textarea = document.getElementById('file-content');
+        const gutter = document.getElementById('editor-gutter');
+        if (!textarea || !gutter) return;
+        gutter.scrollTop = textarea.scrollTop;
+    }
+
+    function validateJsonContent(content) {
+        try {
+            JSON.parse(content);
+            return { valid: true, pos: null };
+        } catch (e) {
+            const message = e.message;
+            let pos = null;
+            let displayError = message;
+
+            const posMatch = message.match(/position (\d+)/i);
+            if (posMatch) {
+                pos = parseInt(posMatch[1], 10);
+                const sub = content.substring(0, pos);
+                const lines = sub.split('\n');
+                const line = lines.length;
+                const column = lines[lines.length - 1].length + 1;
+                const cleanMessage = message.replace(/\s*at\s*position\s*\d+/i, '');
+                displayError = `Line ${line}, Col ${column}: ${cleanMessage}`;
+            } else {
+                const lineColMatch = message.match(/at line (\d+) column (\d+)/i);
+                if (lineColMatch) {
+                    const line = parseInt(lineColMatch[1], 10);
+                    const col = parseInt(lineColMatch[2], 10);
+                    const cleanMessage = message.replace(/\s*at\s*line\s*\d+\s*column\s*\d+/i, '');
+                    displayError = `Line ${line}, Col ${col}: ${cleanMessage}`;
+                    
+                    const lines = content.split('\n');
+                    let currentPos = 0;
+                    for (let i = 0; i < Math.min(line - 1, lines.length); i++) {
+                        currentPos += lines[i].length + 1;
+                    }
+                    currentPos += Math.min(col - 1, (lines[line - 1] || '').length);
+                    pos = currentPos;
+                }
+            }
+            return { valid: false, error: displayError, pos: pos };
+        }
+    }
+
+    function validateCurrentFile() {
+        const content = $('#file-content').val();
+        const result = validateJsonContent(content);
+        lastValidationResult = result;
+
+        const statusDiv = $('#json-validation-status');
+        statusDiv.empty().show();
+
+        if (result.valid) {
+            statusDiv.html(`
+                <div class="alert alert-success d-flex align-items-center py-2 px-3 m-0 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem;">
+                    <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                    <div><strong>Valid JSON</strong> - Structure is correct.</div>
+                </div>
+            `);
+        } else {
+            const locateBtn = result.pos !== null ? `
+                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 ms-2 flex-shrink-0" id="go-to-json-error" title="Go to error">
+                    <i class="bi bi-cursor"></i> Go to error
+                </button>
+            ` : '';
+
+            statusDiv.html(`
+                <div class="alert alert-danger d-flex align-items-center justify-content-between py-2 px-3 m-0 border-0 shadow-sm animate-fade-in" style="border-radius: 8px; font-size: 0.875rem; width: 100%;">
+                    <div class="d-flex align-items-center flex-grow-1 min-w-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2 fs-5 flex-shrink-0"></i>
+                        <div class="text-truncate">
+                            <strong>Invalid JSON</strong>: ${result.error}
+                        </div>
+                    </div>
+                    ${locateBtn}
+                </div>
+            `);
+        }
+    }
+
+    $('#file-content').on('input', function() {
+        updateGutter();
+        clearTimeout(validationTimeout);
+        validationTimeout = setTimeout(validateCurrentFile, 250);
+    });
+
+    $('#file-content').on('scroll', function() {
+        syncGutterScroll();
+    });
+
+    $(document).on('click', '#go-to-json-error', function() {
+        if (lastValidationResult && lastValidationResult.pos !== null) {
+            const textarea = document.getElementById('file-content');
+            if (textarea) {
+                textarea.focus();
+                textarea.setSelectionRange(lastValidationResult.pos, lastValidationResult.pos + 1);
+                const lineIndex = textarea.value.substring(0, lastValidationResult.pos).split('\n').length - 1;
+                const lineHeight = parseInt($(textarea).css('line-height')) || 18;
+                textarea.scrollTop = Math.max(0, (lineIndex - 5) * lineHeight);
+            }
+        }
+    });
+
+    $('#save-file').click(() => {
+        if (lastValidationResult && !lastValidationResult.valid) {
+            alert(`Cannot save: The configuration contains invalid JSON syntax:\n\n${lastValidationResult.error}`);
+            return;
+        }
+
+        showLoading("Saving settings...", "Writing to configuration file.");
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: {
+                action: 'save',
+                content: $('#file-content').val(),
+                csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').val()
+            },
+            success: (r) => {
+                hideLoading();
+                if (r.status === 'success') {
+                    alert("Settings saved successfully. Click 'Restart Instance' to apply changes.");
+                } else {
+                    alert("Failed to save: " + r.message);
+                }
+            },
+            error: (xhr) => {
+                hideLoading();
+                alert("Error: " + (xhr.responseJSON?.message || xhr.responseText || 'Server Error'));
+            }
+        });
+    });
+
+    // ── Restart-All: phased progress + post-restart polling ──────────────────
+    const RESTART_PHASES = [
+        { id: 'step-stop',     label: 'Stopping all containers',          durationMs: 3000 },
+        { id: 'step-db',       label: 'Starting database…',               durationMs: 4000 },
+        { id: 'step-vault',    label: 'Starting & unsealing Vault…',      durationMs: 8000 },
+        { id: 'step-services', label: 'Starting remaining services…',     durationMs: 4000 },
+        { id: 'step-done',     label: 'Waiting for HEAppE to come online…', durationMs: 9999999 }
+    ];
+
+    function markStep(id, done) {
+        const $li = $('#' + id);
+        if ($li.length === 0) return;
+        $li.find('.step-icon').html(done ? '&#10003;' : '<span class="spinner-grow spinner-grow-sm" style="width:10px;height:10px;"></span>');
+        $li.css('opacity', done ? 0.5 : 1);
+        if (!done) $li.css('font-weight', 'bold');
+    }
+
+    function runRestartPhases(callback) {
+        $('#restart-steps').show();
+        RESTART_PHASES.forEach(p => {
+            const $li = $('#' + p.id);
+            if ($li.length > 0) {
+                $li.find('.step-icon').html('&#9675;');
+                $li.css({ 'opacity': 1, 'font-weight': 'normal' });
+            }
+        });
+    }
+
+    let startupPollInterval = null;
+    let startupStartTime   = null;
+
+    function startStartupPolling() {
+        const instanceName = '{{ instance_name }}';
+        startupStartTime = Date.now();
+        $('#startup-banner').css('display', 'flex').addClass('alert-info');
+        $('#startup-phase').text('Checking container status…');
+
+        function elapsed() {
+            const s = Math.floor((Date.now() - startupStartTime) / 1000);
+            return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+        }
+
+        if (startupPollInterval) clearInterval(startupPollInterval);
+        startupPollInterval = setInterval(function() {
+            $('#startup-elapsed').text('(' + elapsed() + ')');
+            $.ajax({
+                url: window.location.href,
+                type: 'POST',
+                data: {
+                    action: 'status_poll',
+                    InstanceName: instanceName,
+                    csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').first().val()
+                },
+                success: function(data) {
+                    if (!data || !data.containers) return;
+
+                    if (data.restart_status && data.restart_status !== 'none') {
+                        const status = data.restart_status;
+
+                        if (status === 'restarting' || status === 'stopping' || status === 'db' || status === 'vault' || status === 'services') {
+                            $('#startup-phase').text('Restarting containers…');
+                        } else if (status === 'done') {
+                            $('#startup-phase').text('Waiting for HEAppE to come online…');
+
+                            const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                            const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
+                            if (heappe) {
+                                $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
+                            }
+                            if (heappe && heappe.status === 'running' && allUp) {
+                                clearInterval(startupPollInterval);
+                                hideLoading();
+                                $('#startup-phase').text('HEAppE is online — reloading…');
+                                setTimeout(() => location.reload(), 1500);
+                            }
+                        } else if (status === 'failed') {
+                            clearInterval(startupPollInterval);
+                            hideLoading();
+                            $('#startup-banner').removeClass('alert-info').addClass('alert-danger');
+                            $('#startup-phase').text('Restart failed: ' + (data.restart_error || 'Unknown error'));
+                        }
+                        return;
+                    }
+
+                    // Fallback to container-only polling
+                    const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                    const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
+                    if (heappe) {
+                        $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
+                    }
+                    if (heappe && heappe.status === 'running' && allUp) {
+                        clearInterval(startupPollInterval);
+                        hideLoading();
+                        $('#startup-phase').text('HEAppE is online — reloading…');
+                        setTimeout(() => location.reload(), 1500);
+                    }
+                },
+                error: function() { /* server may still be restarting — ignore */ }
+            });
+        }, 3000);
+    }
+
+    $('#restart-instance-btn').click(function() {
+        const confirmRestart = confirm("Warning: This will restart all services in the HEAppE instance. Are you sure you want to proceed?");
+        if (!confirmRestart) return;
+
+        showLoading('Initiating Restart…', 'Sending restart command to server…');
+        runRestartPhases();
+
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: {
+                action: 'restart',
+                csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').first().val()
+            },
+            success: function(data) {
+                hideLoading();
+                startStartupPolling();
+                const banner = document.getElementById('startup-banner');
+                if (banner) banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            },
+            error: function(xhr) {
+                hideLoading();
+                $('#restart-steps').hide();
+                RESTART_PHASES.forEach(p => {
+                    const $li = $('#' + p.id);
+                    if ($li.length > 0) {
+                        $li.find('.step-icon').html('&#9675;');
+                        $li.css({ 'opacity': 1, 'font-weight': 'normal' });
+                    }
+                });
+                alert('Restart failed: ' + (xhr.responseJSON?.message || xhr.responseText || 'Server Error'));
+            }
+        });
+    });
+    // --- AUTOMATIC RESTART STATE ON PAGE LOAD ---
+    {% if instance_name and restart_status and restart_status != 'none' and restart_status != 'done' and restart_status != 'failed' %}
+        runRestartPhases();
+        startStartupPolling();
+    {% endif %}
+});
+</script>
+
+<style>
+    .editor-container {
+        display: flex;
+        flex-direction: row;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        background-color: #fff;
+        min-height: 0;
+        overflow: hidden;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .editor-container:focus-within {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.15);
+    }
+    #editor-gutter {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 0.5rem 0.5rem;
+        text-align: right;
+        background-color: #f8f9fa;
+        border-right: 1px solid #dee2e6;
+        color: #6c757d;
+        user-select: none;
+        pointer-events: none;
+        overflow: hidden;
+        white-space: pre;
+        min-width: 40px;
+    }
+    #file-content {
+        font-family: var(--bs-font-monospace), monospace;
+        font-size: 13px;
+        line-height: 1.5;
+        padding: 0.5rem 0.75rem;
+        resize: none;
+        border: none !important;
+        outline: none !important;
+        box-shadow: none !important;
+        background-color: transparent;
+        margin: 0;
+        overflow-y: auto;
+    }
+
+    /* Custom JSONEditor Styles */
+    .jsoneditor {
+        border: 1px solid #ced4da !important;
+        border-radius: 0.375rem !important;
+        background-color: #fff !important;
+    }
+    .jsoneditor-menu {
+        background-color: #0d6efd !important;
+        border-bottom: 1px solid #0b5ed7 !important;
+        padding: 4px 8px !important;
+    }
+    .jsoneditor-menu > button, .jsoneditor-menu > .jsoneditor-modes {
+        background-color: rgba(255, 255, 255, 0.15) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 4px !important;
+        margin: 2px !important;
+        color: #fff !important;
+    }
+    .jsoneditor-menu > button:hover, .jsoneditor-menu > .jsoneditor-modes:hover {
+        background-color: rgba(255, 255, 255, 0.25) !important;
+    }
+    .jsoneditor-search input {
+        border-radius: 4px !important;
+        padding: 2px 6px !important;
+        outline: none !important;
+    }
+    .jsoneditor-outer {
+        border-radius: 0 0 0.375rem 0.375rem !important;
+    }
+    .jsoneditor-tree {
+        font-family: var(--bs-font-monospace), monospace !important;
+        font-size: 13px !important;
+        background-color: #fff !important;
+    }
+    a.jsoneditor-poweredby {
+        display: none !important;
+    }
+    .jsoneditor-separator {
+        display: none !important;
+    }
+
+    /* Custom Forms Editor Styles */
+    #form-tabs-list .nav-link {
+        color: #495057;
+        font-weight: 500;
+        border-radius: 6px;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    #form-tabs-list .nav-link:not(.active):hover {
+        background-color: #e9ecef;
+    }
+    #form-tabs-list .nav-link.active {
+        background-color: #0d6efd;
+        color: #fff;
+    }
+    #form-tabs-list .nav-link.active:hover {
+        background-color: #0b5ed7;
+        color: #fff;
+    }
+    #form-tabs-list .nav-link.active i,
+    #form-tabs-list .nav-link.active:hover i {
+        color: #fff !important;
+    }
+    .btn-xs {
+        padding: 0.125rem 0.375rem;
+        font-size: 0.75rem;
+        border-radius: 0.25rem;
+    }
+</style>
+{% endblock content %}

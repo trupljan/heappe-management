@@ -1,78 +1,71 @@
-<style>
-  /* Základní styly pro lepší vzhled */
-  .copy-btn { font-size: 0.85rem; font-weight: 500; }
-  .copy-badge { animation: fadeIn 0.3s ease-in; font-size: 0.75em; }
-
-  /* Karty a tabulky */
-  .card { border: none; border-radius: 0.5rem; transition: box-shadow 0.3s; }
-  .card:hover { box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05) !important; }
-
-  /* Styl pro klíče - textový, žádné ikonky */
-  .key-row { background-color: #f8f9fa; border-radius: 4px; padding: 6px 10px; margin-bottom: 6px; border: 1px solid #e9ecef; }
-  .key-label { font-weight: bold; font-size: 0.8rem; color: #495057; display: inline-block; min-width: 70px; }
-  .key-code { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 0.85rem; color: #d63384; margin-right: 10px; }
-
-  /* Tlačítka v akcích */
-  .action-stack .btn { text-align: left; margin-bottom: 4px; }
-  .action-stack .btn:last-child { margin-bottom: 0; }
-
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-</style>
-
 {% extends "base.html" %}
-
+{% load custom_filters %}
 {% block title %}{% if project %}{{ project.name }}{% else %}New Project{% endif %}{% endblock %}
 
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'project_list' %}" class="text-decoration-none text-secondary">Projects</a></li>
+    <li class="breadcrumb-item active" aria-current="page">{% if project %}{{ project.name }}{% else %}New Project{% endif %}</li>
+{% endblock %}
+
 {% block content %}
-
-{% if project %}
-<nav class="navbar navbar-expand-lg navbar-light bg-white mb-4 shadow-sm sticky-top" style="z-index: 100;">
-  <div class="container">
-    <span class="navbar-brand mb-0 h1 d-none d-md-block fs-6 text-muted">Project Management</span>
-    <button class="navbar-toggler mx-auto" type="button" data-bs-toggle="collapse" data-bs-target="#projectNav">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse justify-content-center" id="projectNav">
-        <ul class="nav nav-pills nav-fill gap-2 py-2">
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'detail' %}active{% endif %}" href="?tab=detail">Project Detail</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'commandtemplates' %}active{% endif %}" href="?tab=commandtemplates">Command Templates</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'accounts' %}active{% endif %}" href="?tab=accounts">SSH Accounts</a>
-          </li>
-          {% if ui_features.adaptor_users %}
-          <li class="nav-item">
-            <a class="nav-link {% if active_tab == 'adaptor_users' %}active{% endif %}" href="?tab=adaptor_users">External User Management</a>
-          </li>
-          {% endif %}
-        </ul>
-    </div>
-  </div>
-</nav>
-{% endif %}
-
-<div class="container py-3">
+<style>
+  .collapse-arrow {
+    transition: transform 0.2s ease-in-out;
+  }
+  [aria-expanded="true"] .collapse-arrow {
+    transform: rotate(180deg);
+  }
+</style>
+<div class="container-fluid py-2">
+    {% if project %}
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs border-bottom mb-4 flex-nowrap overflow-x-auto">
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'detail' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=detail">
+                <i class="bi bi-info-circle me-1.5"></i>Project Detail
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'commandtemplates' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=commandtemplates">
+                <i class="bi bi-file-code me-1.5"></i>Command Templates
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'accounts' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=accounts">
+                <i class="bi bi-shield-lock me-1.5"></i>{% if is_v6_5_0_plus %}Credentials{% else %}SSH Keys{% endif %}
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'subprojects' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=subprojects">
+                <i class="bi bi-folder2-open me-1.5"></i>SubProjects
+            </a>
+        </li>
+        {% if ui_features.adaptor_users %}
+        <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'adaptor_users' %}active fw-bold text-primary{% else %}text-secondary{% endif %}" href="?tab=adaptor_users">
+                <i class="bi bi-people me-1.5"></i>External Users
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+    {% endif %}
 
     {% if active_tab == 'detail' %}
-
-    <div class="row justify-content-center">
-        <div class="col-lg-10 col-xl-9">
-
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h1 class="h3 mb-0">{% if project %}{{ project.Name }}{% else %}Create Project{% endif %}</h1>
-                {% if project %}
-                <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">
-                    Reload
-                </button>
-                {% endif %}
-            </div>
-
-            <div class="card shadow-sm mb-5">
-                <div class="card-header bg-transparent py-3">
-                    <strong class="text-primary">Project Information</strong>
+    <div class="row g-4">
+        <!-- Left Side: Project Config -->
+        <div class="col-lg-7">
+            <div class="card border-0 shadow-sm bg-white mb-4">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-gear text-primary fs-5"></i>
+                        <h5 class="h6 mb-0 fw-bold text-dark">Project Settings</h5>
+                    </div>
+                    {% if project %}
+                    <button class="btn btn-xs btn-outline-secondary" onclick="location.reload();" title="Reload settings">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                    {% endif %}
                 </div>
                 <div class="card-body p-4">
                     <form method="post">
@@ -81,347 +74,744 @@
 
                         <div class="row g-3">
                             {% if project %}
-                            <div class="col-md-2">
-                                <label class="form-label small text-muted">ID</label>
-                                <input type="number" class="form-control bg-light" value="{{ project.id }}" readonly disabled>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted fw-semibold">Project ID</label>
+                                <input type="number" class="form-control form-control-sm bg-light font-monospace" value="{{ project.id }}" readonly disabled>
                             </div>
-                            <div class="col-md-10">
-                                <label class="form-label small text-muted">Name</label>
-                                <input type="text" class="form-control fw-bold" name="Name" value="{{ project.name|default:'' }}">
+                            <div class="col-md-9">
+                                <label class="form-label small text-muted fw-semibold">Name</label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white fw-bold" name="Name" value="{{ project.name|default:'' }}" required>
                             </div>
                             {% else %}
                             <div class="col-12">
-                                <label class="form-label small text-muted">Name</label>
-                                <input type="text" class="form-control fw-bold" name="Name" value="{{ project.name|default:'' }}">
+                                <label class="form-label small text-muted fw-semibold">Project Name</label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white fw-bold" name="Name" value="{{ project.name|default:'' }}" required placeholder="Enter project name">
                             </div>
                             {% endif %}
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">PI Email</label>
-                                <input type="email" class="form-control" name="PIEmail" value="{{ project.PIEmail|default:'' }}"
-                                    {% if project %}readonly disabled{% endif %}>
+                                <label class="form-label small text-muted fw-semibold">PI Email <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="email" class="form-control form-control-sm border-light-subtle {% if project %}bg-light{% else %}bg-white{% endif %}" name="PIEmail" value="{{ project.PIEmail|default:'' }}" {% if project %}readonly disabled{% endif %} placeholder="pi@institution.cz">
+                                {% if project %}<div class="form-text text-muted"><i class="bi bi-lock me-1"></i>Cannot be changed after project creation.</div>{% endif %}
                             </div>
 
                             {% if v620_check and project %}
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">KeyScripts Path</label>
-                                <input type="text" class="form-control bg-light" name="KeyScriptsDirectoryPath" readonly disabled value="{{ project.key_scripts_directory_path|default:'' }}">
+                                <label class="form-label small text-muted fw-semibold">KeyScripts Directory Path</label>
+                                <input type="text" class="form-control form-control-sm bg-light font-monospace" readonly disabled value="{{ project.key_scripts_directory_path|default:'' }}">
+                                <div class="form-text text-muted"><i class="bi bi-lock me-1"></i>Read-only system path, managed by HEAppE.</div>
                             </div>
                             {% endif %}
 
                             <div class="col-12">
-                                <label class="form-label small text-muted">Description</label>
-                                <textarea class="form-control" name="Description" rows="3">{{ project.description|default:'' }}</textarea>
+                                <label class="form-label small text-muted fw-semibold">Description <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <textarea class="form-control form-control-sm border-light-subtle bg-white" name="Description" rows="3" placeholder="e.g. HPC simulation project for material design">{{ project.description|default:'' }}</textarea>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">Accounting String</label>
-                                <input type="text" class="form-control font-monospace" name="AccountingString"
-                                    value="{{ project.accounting_string|default:'' }}"
-                                    {% if project %}readonly disabled{% endif %}>
+                                <label class="form-label small text-muted fw-semibold">Accounting String {% if not project %}<span class="badge bg-danger bg-opacity-10 text-danger border border-danger-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Required</span>{% else %}<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Locked</span>{% endif %}</label>
+                                <input type="text" class="form-control form-control-sm font-monospace {% if project %}bg-light{% else %}border-light-subtle bg-white{% endif %}" name="AccountingString" value="{{ project.accounting_string|default:'' }}" {% if project %}readonly disabled{% else %}required{% endif %} placeholder="e.g. OPEN-28-5">
+                                {% if project %}<div class="form-text text-muted"><i class="bi bi-lock me-1"></i>Cannot be changed after project creation.</div>{% endif %}
                             </div>
-                             <div class="col-md-6">
-                                <label class="form-label small text-muted" for="UsageType">Usage Type</label>
-                                <select class="form-select" id="UsageType" name="UsageType">
-                                    <option value="" disabled selected>Select usage type</option>
-                                    <option value="1" {% if project.usage_type == 1 %}selected{% endif %}>NodeHours</option>
+
+                            <div class="col-md-6">
+                                <label class="form-label small text-muted fw-semibold" for="UsageType">Usage Type</label>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" id="UsageType" name="UsageType" required>
+                                    <option value="" disabled {% if project %}selected{% endif %}>Select usage type</option>
+                                    <option value="1" {% if not project or project.usage_type == 1 %}selected{% endif %}>NodeHours</option>
                                     <option value="2" {% if project.usage_type == 2 %}selected{% endif %}>CoreHours</option>
+                                    {% if is_v6_4_0_plus %}
+                                    <option value="3" {% if project.usage_type == 3 %}selected{% endif %}>Credits</option>
+                                    <option value="4" {% if project.usage_type == 4 %}selected{% endif %}>QPUSeconds</option>
+                                    {% endif %}
                                 </select>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">Start Date</label>
-                                <input type="datetime-local" class="form-control" name="StartDate" value="{{ project.start_date }}">
+                                <label class="form-label small text-muted fw-semibold">Start Date</label>
+                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="StartDate" value="{{ project.start_date|format_datetime:'%Y-%m-%dT%H:%M' }}" required>
                             </div>
 
                             <div class="col-md-6">
-                                <label class="form-label small text-muted">End Date</label>
-                                <input type="datetime-local" class="form-control" name="EndDate" value="{{ project.end_date }}">
+                                <label class="form-label small text-muted fw-semibold">End Date</label>
+                                <input type="datetime-local" class="form-control form-control-sm border-light-subtle bg-white" name="EndDate" value="{{ project.end_date|format_datetime:'%Y-%m-%dT%H:%M' }}" required>
                             </div>
 
-                            <div class="col-12 mt-4">
-                                <div class="card bg-light border-0">
-                                    <div class="card-body">
-                                        <div class="form-check mb-2">
-                                            <input type="checkbox" class="form-check-input" id="isOneToOneMapping" name="IsOneToOneMapping"
-                                                {% if project.is_one_to_one_mapping %}checked{% endif %}>
-                                            <label for="isOneToOneMapping" class="form-check-label">Map directly external users to internal accounts (1:1)</label>
-                                        </div>
-                                        <div class="form-check">
-                                            <input type="checkbox" class="form-check-input" id="useAccStr" name="UseAccountingStringForScheduler"
-                                                {% if project.use_accounting_string_for_scheduler %}checked{% endif %}>
-                                            <label for="useAccStr" class="form-check-label">Use Accounting String For Scheduler</label>
-                                        </div>
+                            <div class="col-12">
+                                <div class="p-3 bg-light rounded border border-light-subtle">
+                                    <div class="form-check mb-2.5">
+                                        <input type="checkbox" class="form-check-input border-light-subtle shadow-none" id="isOneToOneMapping" name="IsOneToOneMapping" {% if project.is_one_to_one_mapping %}checked{% endif %}>
+                                        <label for="isOneToOneMapping" class="form-check-label small text-dark fw-semibold">Map directly external users to internal accounts (1:1)</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input border-light-subtle shadow-none" id="useAccStr" name="UseAccountingStringForScheduler" {% if project.use_accounting_string_for_scheduler %}checked{% endif %}>
+                                        <label for="useAccStr" class="form-check-label small text-dark fw-semibold">Use Accounting String For Scheduler</label>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
-                            <button type="button" class="btn btn-outline-secondary px-4" onclick="history.back()">Back</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold px-4" onclick="history.back()">Back</button>
                             {% if project %}
-                                <button type="submit" class="btn btn-primary px-4" name="action" value="update_project">Update Project</button>
+                                <button type="submit" class="btn btn-sm btn-primary fw-bold px-4 shadow-sm"><i class="bi bi-check-lg me-1"></i>Update Project</button>
                             {% else %}
-                                <button type="submit" class="btn btn-success px-4" name="action" value="create_project">Create Project</button>
+                                <button type="submit" class="btn btn-sm btn-success fw-bold px-4 shadow-sm"><i class="bi bi-plus-lg me-1"></i>Create Project</button>
                             {% endif %}
                         </div>
                     </form>
                 </div>
             </div>
+        </div>
 
+        <!-- Right Side: Cluster Assignment & Active list -->
+        <div class="col-lg-5">
             {% if project %}
-            <div class="row g-4">
-                <div class="col-lg-6">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-header bg-transparent py-3">
-                            <strong class="text-primary">Assign to Cluster</strong>
+
+
+            <!-- Assign to Cluster -->
+            <div class="card border-0 shadow-sm bg-white mb-4">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi bi-link-45deg text-primary fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold text-dark">Assign to Cluster</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="project_assign_to_cluster">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label small text-muted fw-semibold">Select Cluster</label>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" name="ClusterId" id="ClusterIdSelect" required>
+                                    <option value="" disabled selected>Select a cluster...</option>
+                                    <optgroup label="Without Proxy">
+                                        {% for cluster in not_assigned_clusters %}
+                                            {% if not cluster.proxy_connection %}
+                                                <option value="{{ cluster.id }}" data-has-proxy="false">{{ cluster.name }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </optgroup>
+                                    <optgroup label="With Proxy">
+                                        {% for cluster in not_assigned_clusters %}
+                                            {% if cluster.proxy_connection %}
+                                                <option value="{{ cluster.id }}" data-has-proxy="true">{{ cluster.name }}</option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small text-muted fw-semibold">Scratch Path</label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ScratchStoragePath" required placeholder="e.g. /mnt/scratch/project_123">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small text-muted fw-semibold">Project Path <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5 py-0.5 small fw-semibold ms-1" style="font-size: 0.65rem;">Optional</span></label>
+                                <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="ProjectStoragePath" placeholder="e.g. /mnt/projects/project_123">
+                            </div>
+                            {% if is_v6_4_0_plus %}
+                            <div class="col-12">
+                                <label class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
+                                <select class="form-select form-select-sm border-light-subtle bg-white" name="PreferredAuthType" id="PreferredAuthTypeSelect" required>
+                                    <option value="" disabled>Select preferred auth type...</option>
+                                    <optgroup label="Without Proxy" id="optgroup-no-proxy">
+                                        {% for val, name in preferred_auth_types_no_proxy %}
+                                            <option value="{{ val }}" {% if val == 4 %}selected{% endif %}>{{ name }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    <optgroup label="With Proxy (at HEAppE Cluster)" id="optgroup-with-proxy">
+                                        {% for val, name in preferred_auth_types_with_proxy %}
+                                            <option value="{{ val }}">{{ name }}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                </select>
+                            </div>
+                            {% endif %}
+                            <div class="col-12 pt-2">
+                                <button type="submit" class="btn btn-sm btn-primary w-100 fw-bold shadow-sm">Assign Cluster</button>
+                            </div>
                         </div>
-                        <div class="card-body">
-                            <form method="post">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="project_assign_to_cluster">
-                                <div class="row g-3">
-                                    <div class="col-12">
-                                        <label class="form-label small text-muted">Select Cluster</label>
-                                        <select class="form-select" name="ClusterId" required>
-                                            <option value="" disabled selected>Select a cluster...</option>
-                                            {% for cluster in not_assigned_clusters %}
-                                                <option value="{{ cluster.id }}">{{ cluster.name }}</option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                    <div class="col-12">
-                                        <label class="form-label small text-muted">Scratch Path</label>
-                                        <input type="text" class="form-control" name="ScratchStoragePath" placeholder="/scratch/...">
-                                    </div>
-                                    <div class="col-12">
-                                        <label class="form-label small text-muted">Project Path</label>
-                                        <input type="text" class="form-control" name="ProjectStoragePath" placeholder="/projects/...">
-                                    </div>
-                                    <div class="col-12 pt-2">
-                                        <button type="submit" class="btn btn-primary w-100">Assign Cluster</button>
-                                    </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Active Assignments List -->
+            {% if project_assignments %}
+            <div class="card border-0 shadow-sm bg-white">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi bi-link-45deg-fill text-success fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold text-dark">Active Cluster Assignments</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        {% for assignment in project_assignments %}
+                        <div class="list-group-item p-3 border-bottom-light bg-transparent">
+                            <div class="d-flex justify-content-between align-items-start mb-2.5">
+                                <h6 class="mb-0 text-dark fw-bold"><i class="bi bi-hdd-network me-1.5 text-secondary"></i>{{ assignment.cluster_name }}</h6>
+                                <div class="dropdown">
+                                    <button class="btn btn-xs btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="font-size: 0.7rem;">
+                                        Manage
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow border-0">
+                                        <li>
+                                            <a class="dropdown-item py-1.5 small" href="#" onclick="openEditAssignmentModal('{{ assignment.cluster_id }}', '{{ assignment.cluster_name|escapejs }}', '{{ assignment.scratch_storage_path|escapejs }}', '{{ assignment.project_storage_path|escapejs }}', '{{ assignment.preferred_auth_type|default:'' }}', '{{ assignment.cluster_has_proxy|yesno:'true,false' }}')">
+                                                <i class="bi bi-pencil me-1.5"></i>Edit Paths
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider my-1"></li>
+                                        <li>
+                                             <form method="post" class="d-inline">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="delete_assignment">
+                                                <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
+                                                <input type="hidden" name="redirectTo" value="project_detail">
+                                                <button type="submit" class="dropdown-item py-1.5 small text-danger fw-semibold" onclick="return confirm('Are you sure you want to remove this assignment? This will permanently delete related command templates and cluster credentials for this project.')">
+                                                    <i class="bi bi-trash me-1.5"></i>Remove Assignment
+                                                </button>
+                                            </form>
+                                        </li>
+                                    </ul>
                                 </div>
-                            </form>
+                            </div>
+                            <div class="small text-muted font-monospace d-flex flex-column gap-1 bg-light p-2.5 rounded border border-light-subtle" style="font-size: 0.75rem;">
+                                <div class="row">
+                                    <div class="col-4 text-secondary">Scratch Path:</div>
+                                    <div class="col-8 text-break text-dark">{{ assignment.scratch_storage_path }}</div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-4 text-secondary">Project Path:</div>
+                                    <div class="col-8 text-break text-dark">{{ assignment.project_storage_path }}</div>
+                                </div>
+                                {% if is_v6_4_0_plus %}
+                                <div class="row">
+                                    <div class="col-4 text-secondary">Preferred Auth:</div>
+                                    <div class="col-8 text-break text-dark">{{ assignment.preferred_auth_type_name }}</div>
+                                </div>
+                                {% endif %}
+                            </div>
                         </div>
+                        {% endfor %}
                     </div>
                 </div>
+            </div>
+            {% endif %}
 
-                {% if project_assignments %}
-                <div class="col-lg-6">
-                    <div class="card shadow-sm h-100">
-                        <div class="card-header bg-transparent py-3">
-                            <strong class="text-success">Active Assignments</strong>
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="list-group list-group-flush">
-                                {% for assignment in project_assignments %}
-                                <div class="list-group-item p-3">
-                                    <div class="d-flex justify-content-between align-items-start mb-2">
-                                        <h5 class="mb-0 text-dark">{{ assignment.cluster_name }}</h5>
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                                Options
-                                            </button>
-                                            <ul class="dropdown-menu dropdown-menu-end">
-                                                <li>
-                                                    <a class="dropdown-item" href="#" onclick="openEditAssignmentModal('{{ assignment.cluster_id }}', '{{ assignment.cluster_name|escapejs }}', '{{ assignment.scratch_storage_path|escapejs }}', '{{ assignment.project_storage_path|escapejs }}')">
-                                                        Edit Paths
-                                                    </a>
-                                                </li>
-                                                <li><hr class="dropdown-divider"></li>
-                                                <li>
-                                                     <form method="post" class="d-inline">
-                                                        {% csrf_token %}
-                                                        <input type="hidden" name="action" value="delete_assignment">
-                                                        <input type="hidden" name="ClusterId" value="{{ assignment.cluster_id }}">
-                                                        <input type="hidden" name="redirectTo" value="project_detail">
-                                                        <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to remove this assignment?')">Remove Assignment</button>
-                                                    </form>
-                                                </li>
-                                            </ul>
-                                        </div>
+            <!-- Project Setup Checklist Card -->
+            <div class="card border-0 shadow-sm bg-white rounded-3 mb-4">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between" 
+                     style="cursor: pointer; user-select: none;" 
+                     data-bs-toggle="collapse" 
+                     data-bs-target="#checklistCollapse" 
+                     aria-expanded="{% if setup_checklist_completed == 7 %}false{% else %}true{% endif %}" 
+                     aria-controls="checklistCollapse">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-patch-check text-primary fs-5"></i>
+                        <h5 class="h6 mb-0 fw-bold text-dark">Project Setup Guide & Checklist</h5>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge {% if setup_checklist_completed == 7 %}bg-success-subtle text-success border border-success-subtle{% else %}bg-primary-subtle text-primary border border-primary-subtle{% endif %} px-2 py-0.5 small fw-semibold" style="font-size: 0.72rem;">
+                            {{ setup_checklist_completed }}/7 Steps
+                        </span>
+                        <i class="bi bi-chevron-down text-secondary collapse-arrow"></i>
+                    </div>
+                </div>
+                <div id="checklistCollapse" class="collapse {% if setup_checklist_completed < 7 %}show{% endif %}">
+                    <div class="card-body p-3.5">
+                        <p class="text-secondary small mb-3">Ensure that this project is fully configured by completing the checklist below to run jobs successfully.</p>
+                        
+                        <div class="d-flex flex-column gap-3">
+                            <!-- Step 1: Infrastructure Cluster -->
+                            <div class="d-flex align-items-start gap-2.5">
+                                <span class="fs-5 flex-shrink-0">
+                                    {% if setup_checklist.clusters_exist %}
+                                        <i class="bi bi-check-circle-fill text-success" title="Cluster exists"></i>
+                                    {% else %}
+                                        <i class="bi bi-dash-circle text-warning" title="No cluster registered"></i>
+                                    {% endif %}
+                                </span>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="small fw-bold text-dark">1. Infrastructure Cluster</span>
+                                        {% if not setup_checklist.clusters_exist %}
+                                        <a href="{% url 'cluster_create' %}" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-plus-lg me-1"></i>Add</a>
+                                        {% endif %}
                                     </div>
-                                    <div class="small text-muted">
-                                        <div class="row">
-                                            <div class="col-3 fw-bold">Scratch:</div>
-                                            <div class="col-9 text-break">{{ assignment.scratch_storage_path }}</div>
-                                        </div>
-                                        <div class="row mt-1">
-                                            <div class="col-3 fw-bold">Project:</div>
-                                            <div class="col-9 text-break">{{ assignment.project_storage_path }}</div>
-                                        </div>
-                                    </div>
+                                    <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">At least one HPC cluster must be registered in the system.</p>
                                 </div>
-                                {% endfor %}
+                            </div>
+
+                            <!-- Step 2: Project-Cluster Connection -->
+                            <div class="d-flex align-items-start gap-2.5">
+                                <span class="fs-5 flex-shrink-0">
+                                    {% if setup_checklist.project_cluster_linked %}
+                                        <i class="bi bi-check-circle-fill text-success" title="Project cluster linked"></i>
+                                    {% else %}
+                                        <i class="bi bi-dash-circle text-warning" title="No project assignment to cluster exists"></i>
+                                    {% endif %}
+                                </span>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="small fw-bold text-dark">2. Project-Cluster Assignment</span>
+                                    </div>
+                                    <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Assign this project to at least one Cluster (use the card below).</p>
+                                </div>
+                            </div>
+
+                            <!-- Step 3: Queue Configuration -->
+                            <div class="d-flex align-items-start gap-2.5">
+                                <span class="fs-5 flex-shrink-0">
+                                    {% if setup_checklist.queues_exist %}
+                                        <i class="bi bi-check-circle-fill text-success" title="Queue exists"></i>
+                                    {% else %}
+                                        <i class="bi bi-dash-circle text-warning" title="No queues defined"></i>
+                                    {% endif %}
+                                </span>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="small fw-bold text-dark">3. Queue Configuration</span>
+                                        {% if setup_checklist.project_cluster_linked and not setup_checklist.queues_exist %}
+                                            {% if project_assignments.0.cluster_id %}
+                                            <a href="{% url 'cluster_detail' project_assignments.0.cluster_id %}?tab=queues" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-gear me-1"></i>Configure</a>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                    <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Queues must be defined on the assigned clusters to process calculations.</p>
+                                </div>
+                            </div>
+
+                            <!-- Step 4: Queue Group (Aggregation) -->
+                            <div class="d-flex align-items-start gap-2.5">
+                                <span class="fs-5 flex-shrink-0">
+                                    {% if setup_checklist.project_group_linked %}
+                                        <i class="bi bi-check-circle-fill text-success" title="Queue group assigned"></i>
+                                    {% else %}
+                                        <i class="bi bi-dash-circle text-warning" title="Not assigned to any Queue Group"></i>
+                                    {% endif %}
+                                </span>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="small fw-bold text-dark">4. Queue Group (Aggregation)</span>
+                                        {% if not setup_checklist.project_group_linked %}
+                                            <a href="{% url 'queue_groups' %}" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-link me-1"></i>Link to Group</a>
+                                        {% endif %}
+                                    </div>
+                                    <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Assign this project to a Queue Group to organize compute resources.</p>
+                                </div>
+                            </div>
+
+                            <!-- Step 5: Accounting Formula -->
+                            <div class="d-flex align-items-start gap-2.5">
+                                <span class="fs-5 flex-shrink-0">
+                                    {% if setup_checklist.formulas_exist_and_mapped %}
+                                        <i class="bi bi-check-circle-fill text-success" title="Accounting formula mapped"></i>
+                                    {% else %}
+                                        <i class="bi bi-dash-circle text-warning" title="No accounting formula mapped"></i>
+                                    {% endif %}
+                                </span>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="small fw-bold text-dark">5. Accounting Formula</span>
+                                        {% if setup_checklist.project_group_linked and not setup_checklist.formulas_exist_and_mapped %}
+                                            <a href="{% url 'queue_groups' %}" class="btn btn-xs btn-outline-secondary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-gear me-1"></i>Configure</a>
+                                        {% endif %}
+                                    </div>
+                                    <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Assign an Accounting Formula to the queue group associated with this project.</p>
+                                </div>
+                            </div>
+
+                            <!-- Step 6: Command Template -->
+                            <div class="d-flex align-items-start gap-2.5">
+                                <span class="fs-5 flex-shrink-0">
+                                    {% if setup_checklist.command_template_exists %}
+                                        <i class="bi bi-check-circle-fill text-success" title="Command template exists"></i>
+                                    {% else %}
+                                        <i class="bi bi-dash-circle text-warning" title="No command templates exist for this project"></i>
+                                    {% endif %}
+                                </span>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="small fw-bold text-dark">6. Command Template</span>
+                                        {% if not setup_checklist.command_template_exists %}
+                                            <a href="?tab=commandtemplates" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-plus-lg me-1"></i>Create</a>
+                                        {% endif %}
+                                    </div>
+                                    <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Create at least one executable Command Template for this project.</p>
+                                </div>
+                            </div>
+
+                            <!-- Step 7: SSH Account -->
+                            <div class="d-flex align-items-start gap-2.5">
+                                <span class="fs-5 flex-shrink-0">
+                                    {% if setup_checklist.ssh_account_active %}
+                                        <i class="bi bi-check-circle-fill text-success" title="Active/initialized SSH account exists"></i>
+                                    {% else %}
+                                        <i class="bi bi-dash-circle text-warning" title="No active/initialized SSH accounts found"></i>
+                                    {% endif %}
+                                </span>
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <span class="small fw-bold text-dark">7. Active SSH Account</span>
+                                        {% if not setup_checklist.ssh_account_active %}
+                                            <a href="?tab=accounts" class="btn btn-xs btn-outline-primary py-0.5 px-1.5 fw-semibold" style="font-size: 0.65rem;"><i class="bi bi-shield-lock me-1"></i>Configure</a>
+                                        {% endif %}
+                                    </div>
+                                    <p class="text-muted small mb-0 mt-0.5" style="font-size: 0.72rem;">Register and initialize an SSH account on the target cluster for task execution.</p>
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
-                {% endif %}
             </div>
             {% endif %}
         </div>
     </div>
 
     {% elif active_tab == 'commandtemplates' %}
-
+    <!-- Command Templates Tab -->
     <div class="row justify-content-center">
-        <div class="col-12 col-xl-10">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
-                    <strong class="h5 mb-0">Command Templates</strong>
+        <div class="col-12">
+            {% if templates_cache_age_str %}
+            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between py-2 px-3 mb-3 small rounded">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-clock-history text-warning fs-5"></i>
+                    <div>
+                        You are viewing a cached version of the Command Templates list (loaded <strong>{{ templates_cache_age_str }}</strong> ago).
+                    </div>
+                </div>
+                <a href="?tab=commandtemplates&refresh=1" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold text-decoration-none shadow-sm text-nowrap">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Sync Now
+                </a>
+            </div>
+            {% endif %}
+
+            {% if project_queue_groups %}
+            <!-- Queue Groups Info Panel -->
+            <div class="card border-0 shadow-sm bg-white mb-3">
+                <div class="card-header bg-white py-2 px-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi bi-tags text-primary fs-6"></i>
+                    <span class="fw-bold text-dark small">Queue Groups</span>
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5 ms-1" style="font-size: 0.7rem;">{{ project_queue_groups|length }} assigned</span>
+                </div>
+                <div class="card-body p-2 px-3">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        {% for qg in project_queue_groups %}
+                        <a href="{% url 'queue_group_detail' qg.id %}" class="text-decoration-none">
+                            <div class="d-flex align-items-center gap-1.5 bg-light border border-light-subtle rounded px-2 py-1" style="font-size: 0.8rem;">
+                                <i class="bi bi-tags text-secondary" style="font-size: 0.75rem;"></i>
+                                <span class="fw-semibold text-dark">{{ qg.name }}</span>
+                                {% if qg.allocation_type %}
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary-subtle px-1.5" style="font-size: 0.65rem;">{{ qg.allocation_type }}</span>
+                                {% endif %}
+                                {% if qg.allocation_amount %}
+                                <span class="text-muted ps-1" style="font-size: 0.72rem; border-left: 1px solid #dee2e6;">
+                                    <i class="bi bi-clock ms-1 me-0.5"></i>{{ qg.allocation_amount }}
+                                    {% if project.usage_type == 1 %}NodeHours{% elif project.usage_type == 2 %}CoreHours{% elif project.usage_type == 3 %}Credits{% elif project.usage_type == 4 %}QPUSeconds{% endif %}
+                                </span>
+                                {% endif %}
+                                <span class="text-muted" style="font-size: 0.72rem; border-left: 1px solid #dee2e6;">
+                                    <i class="bi bi-list-ul ms-1 me-0.5"></i>{{ qg.queue_count }} queue{{ qg.queue_count|pluralize }}
+                                </span>
+                            </div>
+                        </a>
+                        {% endfor %}
+
+                    </div>
+                </div>
+            </div>
+            {% elif setup_checklist and not setup_checklist.project_group_linked %}
+            <!-- No Queue Group assigned warning -->
+            <div class="alert alert-warning border-warning shadow-sm d-flex align-items-center justify-content-between py-2 px-3 mb-3 small rounded">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-tags text-warning fs-5"></i>
+                    <div>This project is <strong>not assigned to any Queue Group</strong>. Jobs may not be accounted correctly.</div>
+                </div>
+                <a href="{% url 'queue_groups' %}" class="btn btn-sm btn-outline-warning py-1 px-3 fw-bold text-decoration-none shadow-sm text-nowrap">
+                    <i class="bi bi-link me-1"></i>Assign Group
+                </a>
+            </div>
+            {% endif %}
+
+            <div class="card border-0 shadow-sm bg-white mb-4">
+                <div class="card-header bg-white py-3 d-flex flex-wrap align-items-center justify-content-between gap-2 border-bottom">
                     <div class="d-flex align-items-center gap-2">
-                        <form method="get" class="d-flex align-items-center">
+                        <i class="bi bi-file-code text-primary fs-5"></i>
+                        <h5 class="h6 mb-0 fw-bold text-dark">Command Templates</h5>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <form method="get" class="d-flex align-items-center m-0">
                             <input type="hidden" name="tab" value="commandtemplates">
-                            <select name="project_filter" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 140px;">
+                            <select name="project_filter" class="form-select form-select-sm border-light-subtle" onchange="this.form.submit()" style="min-width: 140px;">
                                 <option value="all" {% if request.GET.project_filter == "all" %}selected{% endif %}>All Projects</option>
-                                <option value="shared" {% if request.GET.project_filter == "shared" %}selected{% endif %}>Shared</option>
-                                <option value="own" {% if not request.GET.project_filter or request.GET.project_filter == "own" %}selected{% endif %}>Own</option>
+                                <option value="shared" {% if request.GET.project_filter == "shared" %}selected{% endif %}>Shared Only</option>
+                                <option value="own" {% if not request.GET.project_filter or request.GET.project_filter == "own" %}selected{% endif %}>Own Only</option>
                             </select>
                         </form>
-                        <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-primary">Add New</a>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">Reload</button>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-danger fw-semibold d-none" id="templatesBulkDeleteBtn" data-bs-toggle="modal" data-bs-target="#templatesBulkDeleteModal">
+                                <i class="bi bi-trash me-1"></i>Delete Selected (<span id="templateSelectCount">0</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-success fw-bold shadow-sm d-flex align-items-center gap-1.5" data-bs-toggle="modal" data-bs-target="#presetTemplateModal">
+                                <i class="bi bi-lightning-charge-fill text-warning"></i> Add Preset Template
+                            </button>
+                            <a href="{% url 'command_template_create' project.id %}" class="btn btn-sm btn-outline-primary fw-bold shadow-sm">
+                                <i class="bi bi-plus-lg me-1"></i>Add Custom Template
+                            </a>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
                     </div>
                 </div>
 
                 <div class="card-body p-0">
                     {% if command_templates %}
-                        <div class="table-responsive">
-                            <table class="table table-hover align-middle mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th class="ps-4">Name</th>
-                                        <th>Executable</th>
-                                        <th>Queue / Cluster</th>
-                                        <th class="text-center">Status</th>
-                                        <th>Scope</th>
-                                        <th class="text-end pe-4">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for template in command_templates %}
-                                        <tr>
-                                            <td class="ps-4">
-                                                <div class="fw-bold">{{ template.name }}</div>
-                                                <small class="text-muted">{{ template.description|truncatechars:40 }}</small>
-                                            </td>
-                                            <td><code class="text-primary bg-light px-2 rounded">{{ template.executable_file }}</code></td>
-                                            <td>
-                                                {% for ntype in node_types %}
-                                                    {% if ntype.id == template.cluster_node_type_id %}
-                                                        <span class="badge bg-info text-dark">{{ ntype.name }}</span>
-                                                        {% if ntype.cluster_name %}
-                                                            <div class="small text-muted mt-1">{{ ntype.cluster_name }}</div>
-                                                        {% endif %}
-                                                    {% endif %}
-                                                {% endfor %}
-                                            </td>
-                                            <td class="text-center">
-                                                {% if template.is_enabled %}
-                                                    <span class="badge bg-success">Enabled</span>
-                                                {% else %}
-                                                    <span class="badge bg-secondary">Disabled</span>
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                {% if template.project_id == 0 %}
-                                                    <span class="badge rounded-pill border border-secondary text-secondary">Shared</span>
-                                                {% else %}
-                                                    <span class="badge rounded-pill bg-primary">Project {{ template.project_id }}</span>
-                                                {% endif %}
-                                            </td>
-                                            <td class="text-end pe-4">
-                                                <div class="btn-group btn-group-sm">
-                                                    <a href="{% url 'command_template_detail' template.id %}" class="btn btn-outline-primary">Detail</a>
-                                                    {% if template.project_id != 0 %}
-                                                        <a href="{% url 'submit_job_view' template.id %}" class="btn btn-outline-secondary">Test Job</a>
-                                                    {% endif %}
-                                                    <button type="button" class="btn btn-outline-danger"
-                                                            onclick="if(confirm('Delete template?')) { document.getElementById('del-templ-{{template.id}}').submit(); }">
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                                <form id="del-templ-{{template.id}}" method="post" action="{% url 'command_template_delete' template.id %}" class="d-none">
-                                                    {% csrf_token %}
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
+                        <!-- Filters and Search Bar -->
+                        <div class="p-3 bg-light border-bottom d-flex flex-wrap align-items-center gap-3">
+                            <div class="flex-grow-1" style="min-width: 250px;">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-white border-light-subtle"><i class="bi bi-search text-muted"></i></span>
+                                    <input type="text" id="templateSearchInput" class="form-control border-light-subtle bg-white" placeholder="Search by name, description, executable..." onkeyup="filterCommandTemplates()">
+                                </div>
+                            </div>
+                            <div style="min-width: 180px;">
+                                <select id="filterClusterSelect" class="form-select form-select-sm border-light-subtle bg-white" onchange="filterCommandTemplates()">
+                                    <option value="all">All Clusters/Queues</option>
+                                </select>
+                            </div>
+                            <div style="min-width: 130px;">
+                                <select id="filterStatusSelect" class="form-select form-select-sm border-light-subtle bg-white" onchange="filterCommandTemplates()">
+                                    <option value="all">All Statuses</option>
+                                    <option value="Enabled">Enabled</option>
+                                    <option value="Disabled">Disabled</option>
+                                </select>
+                            </div>
+                            <div style="min-width: 130px;">
+                                <select id="filterScopeSelect" class="form-select form-select-sm border-light-subtle bg-white" onchange="filterCommandTemplates()">
+                                    <option value="all">All Scopes</option>
+                                    <option value="Shared">Shared Only</option>
+                                    <option value="Project">Project Only</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold" onclick="resetTemplateFilters()">
+                                    <i class="bi bi-x-circle me-1"></i>Reset
+                                </button>
+                            </div>
+                            <div class="ms-md-auto text-secondary small fw-semibold" id="templateCountBadge">
+                                Total: {{ command_templates|length }} templates
+                            </div>
                         </div>
+
+                        <form id="templatesBulkForm" method="post" action="">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="bulk_delete_command_templates">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="ps-4" style="width: 4%;">
+                                                <div class="form-check">
+                                                    <input class="form-check-input select-all-templates border-light-subtle shadow-none" type="checkbox" id="selectAllTemplates">
+                                                </div>
+                                            </th>
+                                            <th style="width: 24%;">Template Details</th>
+                                            <th style="width: 24%;">Executable File</th>
+                                            <th style="width: 18%;">Queue / Cluster</th>
+                                            <th class="text-center" style="width: 10%;">Status</th>
+                                            <th style="width: 10%;">Scope</th>
+                                            <th class="text-end pe-4" style="width: 10%;">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for template in command_templates %}
+                                            <tr class="template-row"
+                                                data-name="{{ template.name|escape }}"
+                                                data-description="{{ template.description|escape }}"
+                                                data-executable="{{ template.executable_file|escape }}"
+                                                data-status="{% if template.is_enabled %}Enabled{% else %}Disabled{% endif %}"
+                                                data-scope="{% if template.project_id == 0 %}Shared{% else %}Project{% endif %}"
+                                                {% for ntype in node_types %}{% if ntype.id == template.cluster_node_type_id %}data-cluster="{{ ntype.cluster_name|default:''|escape }}" data-queue="{{ ntype.name|escape }}"{% endif %}{% endfor %}>
+                                                <td class="ps-4">
+                                                    {% if template.project_id != 0 %}
+                                                        <div class="form-check">
+                                                            <input class="form-check-input template-item-checkbox border-light-subtle shadow-none" type="checkbox" name="selected_ids" value="{{ template.id }}">
+                                                        </div>
+                                                    {% else %}
+                                                        <div class="form-check">
+                                                            <input class="form-check-input border-light-subtle shadow-none" type="checkbox" disabled title="Shared templates cannot be deleted from a project view">
+                                                        </div>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <div class="fw-bold text-dark" style="font-size: 0.9rem;">{{ template.name }}</div>
+                                                    <div class="text-muted small mt-0.5" style="font-size: 0.78rem;">{{ template.description|truncatechars:40 }}</div>
+                                                </td>
+                                                <td><code class="text-primary small bg-light border px-2 py-0.5 rounded font-monospace" style="font-size: 0.8rem;">{{ template.executable_file }}</code></td>
+                                                <td>
+                                                    {% for ntype in node_types %}
+                                                        {% if ntype.id == template.cluster_node_type_id %}
+                                                            <span class="badge bg-light text-secondary border px-2 py-1 small">{{ ntype.name }}</span>
+                                                            {% if ntype.cluster_name %}
+                                                                <div class="small text-muted mt-1" style="font-size: 0.72rem;"><i class="bi bi-hdd-network me-1"></i>{{ ntype.cluster_name }}</div>
+                                                            {% endif %}
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                </td>
+                                                <td class="text-center">
+                                                    {% if template.is_enabled %}
+                                                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2">Enabled</span>
+                                                    {% else %}
+                                                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2">Disabled</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    {% if template.project_id == 0 %}
+                                                        <span class="badge bg-light text-secondary border rounded-pill px-2.5">Shared</span>
+                                                    {% else %}
+                                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-2.5">Project</span>
+                                                    {% endif %}
+                                                </td>
+                                                <td class="text-end pe-4">
+                                                    <div class="d-flex gap-1.5 justify-content-end">
+                                                        <a href="{% url 'command_template_copy' template.id %}" class="btn btn-sm btn-outline-secondary px-2" title="Copy to Project...">
+                                                            <i class="bi bi-copy"></i>
+                                                        </a>
+                                                        <a href="{% url 'command_template_detail' template.id %}" class="btn btn-sm btn-outline-primary px-2.5">
+                                                            <i class="bi bi-pencil me-1"></i>Edit
+                                                        </a>
+                                                        {% if template.project_id != 0 %}
+                                                            <a href="{% url 'submit_job_view' template.id %}" class="btn btn-sm btn-outline-secondary px-2" title="Submit test job">
+                                                                <i class="bi bi-cpu"></i>
+                                                            </a>
+                                                        {% endif %}
+                                                        <button type="button" class="btn btn-sm btn-outline-danger px-2.5"
+                                                                onclick="if(confirm('Delete template?')) { deleteCommandTemplate('{% url 'command_template_delete' template.id %}?project_id={{ project.id }}'); }">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </form>
                     {% else %}
                         <div class="text-center py-5 text-muted">
-                            <p class="mb-0">No command templates available.</p>
+                            <i class="bi bi-file-code fs-1 mb-2 d-block text-secondary"></i>
+                            <p class="small mb-0">No command templates available.</p>
                         </div>
                     {% endif %}
+                </div>
+            </div>
+
+            <!-- Bulk Delete Command Templates Confirmation Modal -->
+            <div class="modal fade" id="templatesBulkDeleteModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content border-0 shadow-lg rounded-3 text-dark">
+                        <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                            <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2">
+                                <i class="bi bi-exclamation-triangle-fill"></i>
+                                <span>BULK DELETE COMMAND TEMPLATES</span>
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-4 text-center">
+                            <p class="mb-1 text-secondary small">
+                                You are about to permanently delete the selected command templates:
+                            </p>
+                            <h4 class="fw-bold text-dark my-3"><span id="templateBulkConfirmCount">0</span> Command Template(s)</h4>
+                            <div class="alert alert-danger border-0 rounded-3 small mb-0 d-flex gap-2 text-start">
+                                <i class="bi bi-exclamation-octagon-fill text-danger fs-5 flex-shrink-0"></i>
+                                <div>
+                                    <strong>Warning:</strong> This will permanently delete the selected command templates. This action cannot be undone.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-end gap-2">
+                            <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                            <button type="button" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" onclick="document.getElementById('templatesBulkForm').submit();">
+                                Delete Templates
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     {% elif active_tab == 'accounts' %}
-
+    <!-- HPC Credentials Tab -->
     <div class="row justify-content-center">
-        <div class="col-12 col-xl-11">
-            <div class="card shadow-sm mb-4">
-                <div class="card-header bg-white py-3 d-flex align-items-center justify-content-between">
-                    <strong class="h5 mb-0">HPC Accounts</strong>
-                    <div>
-                        <button type="button" class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addHpcAccountModal">Add Account</button>
-                        <button class="btn btn-outline-secondary btn-sm" onclick="location.reload();">Reload</button>
+        <div class="col-12">
+            <div class="card border-0 shadow-sm bg-white mb-4">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-shield-lock text-primary fs-5"></i>
+                        <h5 class="h6 mb-0 fw-bold text-dark">{% if is_v6_5_0_plus %}HPC Credentials{% else %}HPC SSH Keys{% endif %}</h5>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="{% if is_v6_5_0_plus %}#addCredentialModal{% else %}#addHpcAccountModal{% endif %}">
+                            <i class="bi bi-plus-lg me-1"></i>{% if is_v6_5_0_plus %}Add Credential{% else %}Add SSH Key{% endif %}
+                        </button>
+                        <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
                     </div>
                 </div>
                 <div class="card-body p-0">
+                {% if is_v6_5_0_plus %}
+                    {% include "project_credentials.html" %}
+                {% else %}
                     {% if project_accounts %}
                     <div class="table-responsive">
                         <table class="table table-hover align-top mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th class="ps-4" style="width: 15%;">Username / Type</th>
-                                    <th style="width: 50%;">Public Keys</th>
-                                    <th class="text-center" style="width: 10%;">Init</th>
-                                    <th class="text-end pe-4" style="width: 25%;">Actions</th>
+                                    <th class="ps-4" style="width: 20%;">Username & Key Type</th>
+                                    <th style="width: 48%;">Public Keys</th>
+                                    <th class="text-center" style="width: 12%;">HPC Status</th>
+                                    <th class="text-end pe-4" style="width: 20%;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for account in project_accounts %}
                                 <tr>
                                     <td class="ps-4 py-3">
-                                        <div class="fw-bold fs-5">{{ account.username }}</div>
-                                        <span class="badge bg-light text-dark border mt-1">{{ account.key_type_name }}</span>
+                                        <div class="fw-bold text-dark fs-6">{{ account.username }}</div>
+                                        <span class="badge bg-light text-secondary border font-monospace mt-1 px-2">{{ account.key_type_name }}</span>
                                     </td>
                                     <td class="py-3">
-                                        <div class="key-row d-flex align-items-center justify-content-between">
-                                            <div class="d-flex align-items-center overflow-hidden">
-                                                <span class="key-label">OpenSSH</span>
-                                                <span class="key-code text-truncate">
+                                        <!-- OpenSSH Row -->
+                                        <div class="bg-light p-2 rounded border border-light-subtle d-flex align-items-center justify-content-between mb-2 small">
+                                            <div class="d-flex align-items-center overflow-hidden gap-2">
+                                                <span class="fw-bold text-muted small" style="min-width: 60px;">OpenSSH:</span>
+                                                <span class="font-monospace text-truncate text-secondary" style="max-width: 250px;">
                                                     {{ account.public_key_open_ssh|slice:":15" }}...{{ account.public_key_open_ssh|slice:"-15:" }}
                                                 </span>
                                             </div>
                                             <div class="d-flex align-items-center">
-                                                <button class="btn btn-sm btn-white border copy-btn"
+                                                <button class="btn btn-xs btn-outline-secondary py-0.5 px-2" style="font-size: 0.72rem;"
                                                         onclick="copyToClipboard('{{ account.public_key_open_ssh|escapejs }}', 'open_ssh_feedback_{{ account.id }}')">
                                                     Copy
                                                 </button>
-                                                <span id="open_ssh_feedback_{{ account.id }}" class="badge bg-success ms-2 d-none copy-badge">Copied!</span>
+                                                <span id="open_ssh_feedback_{{ account.id }}" class="badge bg-success ms-2 d-none">Copied!</span>
                                             </div>
                                         </div>
 
-                                        <div class="key-row d-flex align-items-center justify-content-between mb-0">
-                                            <div class="d-flex align-items-center overflow-hidden">
-                                                <span class="key-label">PEM</span>
-                                                <span class="key-code text-truncate">
+                                        <!-- PEM Row -->
+                                        <div class="bg-light p-2 rounded border border-light-subtle d-flex align-items-center justify-content-between small">
+                                            <div class="d-flex align-items-center overflow-hidden gap-2">
+                                                <span class="fw-bold text-muted small" style="min-width: 60px;">PEM:</span>
+                                                <span class="font-monospace text-truncate text-secondary" style="max-width: 250px;">
                                                     {{ account.public_key_pem|slice:":15" }}...{{ account.public_key_pem|slice:"-15:" }}
                                                 </span>
                                             </div>
                                             <div class="d-flex align-items-center">
-                                                <button class="btn btn-sm btn-white border copy-btn"
+                                                <button class="btn btn-xs btn-outline-secondary py-0.5 px-2" style="font-size: 0.72rem;"
                                                         onclick="copyToClipboard('{{ account.public_key_pem|escapejs }}', 'pem_feedback_{{ account.id }}')">
                                                     Copy
                                                 </button>
-                                                <span id="pem_feedback_{{ account.id }}" class="badge bg-success ms-2 d-none copy-badge">Copied!</span>
+                                                <span id="pem_feedback_{{ account.id }}" class="badge bg-success ms-2 d-none">Copied!</span>
                                             </div>
                                         </div>
                                     </td>
@@ -431,46 +821,54 @@
                                         </div>
                                     </td>
                                     <td class="text-end pe-4 py-3">
-                                        <div class="d-grid gap-2 action-stack">
-                                            <form method="post" class="w-100">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="action" value="test_hpc_access">
-                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                <input type="hidden" name="username" value="{{ account.username }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-info w-100">Test Access</button>
-                                            </form>
-
-                                            <button type="button" class="btn btn-sm btn-outline-warning w-100"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#regenerateSshKeyModal"
-                                                    onclick="setUsernameInModal('{{ account.username }}')">
-                                                Regenerate Key
+                                        <div class="dropdown d-inline-block">
+                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle px-3 fw-semibold" type="button" data-bs-toggle="dropdown" data-bs-boundary="viewport" aria-expanded="false">
+                                                Manage SSH Account
                                             </button>
-
-                                            {% if v610_check %}
-                                            <button type="button" class="btn btn-sm btn-outline-dark w-100"
-                                                    data-bs-toggle="modal"
-                                                    data-bs-target="#renameAccountModal"
-                                                    onclick="setRenameAccountUsername('{{ account.username }}')">
-                                                Rename / Password
-                                            </button>
-                                            {% endif %}
-
-                                            <form method="post" class="w-100">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="action" value="initialize_hpc_account">
-                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                <input type="hidden" name="Username" value="{{ account.username }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-secondary w-100">Initialize</button>
-                                            </form>
-
-                                            <form method="post" class="w-100">
-                                                {% csrf_token %}
-                                                <input type="hidden" name="action" value="delete_hpc_account">
-                                                <input type="hidden" name="ProjectId" value="{{ project.id }}">
-                                                <input type="hidden" name="username" value="{{ account.username }}">
-                                                <button type="submit" class="btn btn-sm btn-outline-danger w-100" onclick="return confirm('Are you sure you want to delete this HPC account?')">Delete</button>
-                                            </form>
+                                            <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-1">
+                                                <li>
+                                                    <form method="post" class="m-0">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="action" value="test_hpc_access">
+                                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                        <input type="hidden" name="username" value="{{ account.username }}">
+                                                        <button type="submit" class="dropdown-item py-1.5 small"><i class="bi bi-plug me-1.5"></i>Test Access</button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <a class="dropdown-item py-1.5 small" href="#" data-bs-toggle="modal" data-bs-target="#regenerateSshKeyModal" onclick="setUsernameInModal('{{ account.username }}')">
+                                                        <i class="bi bi-arrow-repeat me-1.5"></i>Regenerate Key
+                                                    </a>
+                                                </li>
+                                                {% if v610_check %}
+                                                <li>
+                                                    <a class="dropdown-item py-1.5 small" href="#" data-bs-toggle="modal" data-bs-target="#renameAccountModal" onclick="setRenameAccountUsername('{{ account.username }}')">
+                                                        <i class="bi bi-pencil me-1.5"></i>Rename / Password
+                                                    </a>
+                                                </li>
+                                                {% endif %}
+                                                <li>
+                                                    <form method="post" class="m-0">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="action" value="initialize_hpc_account">
+                                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                        <input type="hidden" name="Username" value="{{ account.username }}">
+                                                        <button type="submit" class="dropdown-item py-1.5 small"><i class="bi bi-play-circle me-1.5"></i>Initialize</button>
+                                                    </form>
+                                                </li>
+                                                <li><hr class="dropdown-divider my-1"></li>
+                                                <li>
+                                                    <form method="post" class="m-0">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="action" value="delete_hpc_account">
+                                                        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+                                                        <input type="hidden" name="username" value="{{ account.username }}">
+                                                        <button type="submit" class="dropdown-item py-1.5 small text-danger fw-semibold" onclick="return confirm('Are you sure you want to delete this HPC account?')">
+                                                            <i class="bi bi-trash me-1.5"></i>Delete Account
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                            </ul>
                                         </div>
                                     </td>
                                 </tr>
@@ -480,22 +878,27 @@
                     </div>
                     {% else %}
                     <div class="text-center py-5 text-muted">
-                        <p class="mb-0">No SSH accounts available.</p>
+                        <i class="bi bi-shield-lock fs-1 mb-2 d-block text-secondary"></i>
+                        <p class="small mb-0">No SSH accounts available.</p>
                     </div>
                     {% endif %}
                 </div>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    {% elif active_tab == 'adaptor_users' %}
-    <div class="container-fluid px-lg-5">
-      {% include "adaptor_users_table.html" %}
-    </div>
-    {% endif %}
+    {% elif active_tab == 'subprojects' %}
+    <!-- SubProjects Tab -->
+    {% include "project_subprojects.html" %}
 
+    {% elif active_tab == 'adaptor_users' %}
+    <!-- External User Management Tab -->
+    {% include "adaptor_users_table.html" %}
+    {% endif %}
 </div>
 
+<!-- Modal for Editing Assignment -->
 <div class="modal fade" id="editAssignmentModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow">
@@ -504,70 +907,181 @@
         <input type="hidden" name="action" value="update_assignment">
         <input type="hidden" id="editClusterId" name="ClusterId">
         <input type="hidden" name="ProjectId" value="{{ project.id }}">
-        <div class="modal-header bg-light">
-          <h5 class="modal-title">Edit Assignment</h5>
+        <div class="modal-header bg-light py-3">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-pencil me-1 text-primary"></i>Edit Assignment Paths</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body p-4">
           <div class="mb-3">
-             <label class="form-label text-muted small">Cluster</label>
-             <div class="fw-bold fs-5" id="editClusterNameDisplay"></div>
+             <label class="form-label text-muted small fw-semibold">Cluster</label>
+             <div class="fw-bold text-dark fs-6" id="editClusterNameDisplay"></div>
           </div>
           <div class="mb-3">
-            <label class="form-label">Scratch Storage Path</label>
-            <input type="text" class="form-control" id="editScratchPath" name="ScratchStoragePath">
+            <label class="form-label small text-muted fw-semibold">Scratch Storage Path</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="editScratchPath" name="ScratchStoragePath" required>
           </div>
-          <div class="mb-3">
-            <label class="form-label">Project Storage Path</label>
-            <input type="text" class="form-control" id="editProjectPath" name="ProjectStoragePath">
+          <div class="mb-2">
+            <label class="form-label small text-muted fw-semibold">Project Storage Path</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white" id="editProjectPath" name="ProjectStoragePath" required>
           </div>
+          {% if is_v6_4_0_plus %}
+          <div class="mb-2">
+            <label class="form-label small text-muted fw-semibold">Preferred Auth Type</label>
+            <select class="form-select form-select-sm border-light-subtle bg-white" id="editPreferredAuthType" name="PreferredAuthType" required>
+                <option value="" disabled>Select preferred auth type...</option>
+                <optgroup label="Without Proxy" id="edit-optgroup-no-proxy">
+                    {% for val, name in preferred_auth_types_no_proxy %}
+                        <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="With Proxy (at HEAppE Cluster)" id="edit-optgroup-with-proxy">
+                    {% for val, name in preferred_auth_types_with_proxy %}
+                        <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+            </select>
+          </div>
+          {% endif %}
         </div>
-        <div class="modal-footer bg-light">
-          <button type="button" class="btn btn-link text-secondary text-decoration-none" data-bs-dismiss="modal">Cancel</button>
-          <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+        <div class="modal-footer bg-light border-top">
+          <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Save Changes</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+<div class="modal fade" id="addCredentialModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_credential">
+        <input type="hidden" name="ProjectId" value="{{ project.id }}">
+        
+        <div class="modal-header bg-light py-3">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-plus-lg me-1 text-primary"></i>Add HPC Credential</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        
+        <div class="modal-body p-4">
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold">Select Adaptor User</label>
+            <select name="adaptor_user" class="form-select border-light-subtle bg-white">
+                {% if not project.is_one_to_one_mapping %}
+                    <option value="">Robot Account (All Users)</option>
+                {% endif %}
+                {% for u in adaptor_users %}
+                    <option value="{{ u.id }}">{{ u.username }} (ID: {{ u.id }})</option>
+                {% endfor %}
+            </select>
+          </div>
+          
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold">HPC Username</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white font-monospace" name="username" required placeholder="e.g. hpc_user">
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small text-muted fw-semibold">Authentication Type</label>
+            <select name="auth_type" id="addAuthTypeSelect" class="form-select form-select-sm border-light-subtle bg-white" required onchange="toggleAddAuthFields()">
+                <option value="" disabled selected>Select authentication type...</option>
+                <optgroup label="Without Proxy">
+                    {% for val, name in preferred_auth_types_no_proxy %}
+                        <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+                <optgroup label="With Proxy (at HEAppE Cluster)">
+                    {% for val, name in preferred_auth_types_with_proxy %}
+                        <option value="{{ val }}">{{ name }}</option>
+                    {% endfor %}
+                </optgroup>
+            </select>
+          </div>
+
+          <!-- SSH Keypair Config Panel -->
+          <div id="addSshPanel" class="p-3 bg-light rounded border border-light-subtle mb-3" style="display: none;">
+            <div class="mb-3" id="addKeyGenRadioContainer">
+              <label class="form-label small text-muted fw-semibold d-block">Key Generation</label>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="key_gen" id="addGenKeyTrue" value="generate" checked onchange="toggleAddKeyGenFields()">
+                <label class="form-check-label small text-dark" for="addGenKeyTrue">Generate New Keypair</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" type="radio" name="key_gen" id="addGenKeyFalse" value="upload" onchange="toggleAddKeyGenFields()">
+                <label class="form-check-label small text-dark" for="addGenKeyFalse">Upload Existing Private Key</label>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label small text-muted fw-semibold">Passphrase (Optional)</label>
+              <input type="password" class="form-control form-control-sm border-light-subtle bg-white" name="cred_passphrase" placeholder="Key passphrase">
+            </div>
+
+            <div id="addUploadKeyContainer" class="mb-2" style="display: none;">
+              <label class="form-label small text-muted fw-semibold">Provided Private Key</label>
+              <textarea class="form-control form-control-sm border-light-subtle bg-white font-monospace small" name="provided_private_key" rows="5" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+            </div>
+          </div>
+
+          <!-- Password Config Panel -->
+          <div id="addPasswordPanel" class="p-3 bg-light rounded border border-light-subtle mb-3" style="display: none;">
+            <div class="mb-2">
+              <label class="form-label small text-muted fw-semibold">Password</label>
+              <input type="password" id="addPasswordInput" class="form-control form-control-sm border-light-subtle bg-white" name="cred_password" placeholder="HPC Password">
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer bg-light border-top">
+            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-sm btn-success fw-bold px-3">Create Credential</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal for Adding HPC Account -->
 <div class="modal fade" id="addHpcAccountModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow">
-      <div class="modal-header bg-light">
-          <h5 class="modal-title">Add New HPC Account</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
       <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="create_new_hpc_account">
         <input type="hidden" name="ProjectId" value="{{ project.id }}">
+        <div class="modal-header bg-light py-3">
+          <h5 class="modal-title fw-bold text-dark"><i class="bi bi-plus-lg me-1 text-primary"></i>Add SSH Key</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
         <div class="modal-body p-4">
           <div class="mb-3">
-            <label class="form-label">Username</label>
-            <input type="text" class="form-control" name="username" required placeholder="e.g. jdoe01">
+            <label class="form-label small text-muted fw-semibold">Username / Login</label>
+            <input type="text" class="form-control form-control-sm border-light-subtle bg-white" name="username" required placeholder="e.g. jdoe01">
           </div>
-          <div class="mb-3">
+          <div class="mb-2">
             <div class="d-grid">
-                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleField('password-field-add')">
+                <button type="button" class="btn btn-xs btn-outline-secondary fw-semibold py-1.5" onclick="toggleField('password-field-add')">
                     Set Initial Password (Optional)
                 </button>
             </div>
-            <div id="password-field-add" style="display: none;" class="mt-3 p-3 bg-light rounded">
-                <label class="form-label small text-muted">Password</label>
-                <input type="password" class="form-control" name="password">
+            <div id="password-field-add" style="display: none;" class="mt-3 p-3 bg-light rounded border border-light-subtle">
+                <label class="form-label small text-muted fw-semibold">Password</label>
+                <input type="password" class="form-control form-control-sm border-light-subtle bg-white" name="password" placeholder="Enter password">
             </div>
           </div>
         </div>
-        <div class="modal-footer bg-light">
-            <button type="button" class="btn btn-link text-secondary text-decoration-none" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-primary px-4">Create Account</button>
+        <div class="modal-footer bg-light border-top">
+            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Create SSH Key</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+<!-- Modal for Renaming HPC Account -->
 <div class="modal fade" id="renameAccountModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow">
@@ -576,29 +1090,30 @@
         <input type="hidden" name="action" value="rename_hpc_account">
         <input type="hidden" id="oldUsername" name="oldUsername">
         <input type="hidden" name="ProjectId" value="{{ project.id }}">
-        <div class="modal-header bg-light">
-            <h5 class="modal-title">Account Management</h5>
+        <div class="modal-header bg-light py-3">
+            <h5 class="modal-title fw-bold text-dark"><i class="bi bi-pencil me-1 text-primary"></i>Account Management</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body p-4">
-          <div class="mb-4">
-              <label class="form-label text-muted small">Update Username</label>
-              <input type="text" class="form-control form-control-lg" name="NewUsername" required id="renameDisplayOld">
-          </div>
           <div class="mb-3">
-               <label class="form-label text-muted small">Change Password (Optional)</label>
-               <input type="password" class="form-control" name="NewPassword" placeholder="Leave blank to keep current">
+              <label class="form-label small text-muted fw-semibold">Update Username</label>
+              <input type="text" class="form-control form-control-sm border-light-subtle bg-white font-monospace fw-bold" name="NewUsername" required id="renameDisplayOld">
+          </div>
+          <div class="mb-2">
+               <label class="form-label small text-muted fw-semibold">Change Password (Optional)</label>
+               <input type="password" class="form-control form-control-sm border-light-subtle bg-white" name="NewPassword" placeholder="Leave blank to keep current">
           </div>
         </div>
-        <div class="modal-footer bg-light">
-             <button type="button" class="btn btn-link text-secondary text-decoration-none" data-bs-dismiss="modal">Cancel</button>
-             <button type="submit" class="btn btn-primary px-4">Save Changes</button>
+        <div class="modal-footer bg-light border-top">
+             <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+             <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">Save Changes</button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
+<!-- Modal for Regenerating SSH Key -->
 <div class="modal fade" id="regenerateSshKeyModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content border-0 shadow">
@@ -607,28 +1122,101 @@
         <input type="hidden" name="action" value="regenerate_ssh_key">
         <input type="hidden" name="ProjectId" value="{{ project.id }}">
         <input type="hidden" name="username" id="modal-username-regen">
-        <div class="modal-header bg-warning bg-opacity-10">
-            <h5 class="modal-title text-warning text-opacity-75">Regenerate SSH Key</h5>
+        <div class="modal-header bg-warning bg-opacity-10 py-3">
+            <h5 class="modal-title fw-bold text-warning-emphasis"><i class="bi bi-exclamation-triangle-fill me-1.5"></i>Regenerate SSH Key</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body p-4 text-center">
-            <div class="mb-3 text-muted">You are about to regenerate the SSH key for:</div>
-            <h4 id="display-username-regen" class="mb-4"></h4>
+            <div class="mb-2 text-muted small">You are about to regenerate the SSH key for:</div>
+            <h4 id="display-username-regen" class="mb-4 fw-bold text-dark font-monospace"></h4>
 
-            <div class="alert alert-info small text-start">
-                This will invalidate the existing key. You may need to provide the password below if the account requires it.
+            <div class="alert alert-info border-0 shadow-sm small text-start mb-3">
+                <i class="bi bi-info-circle-fill me-1 text-info"></i>This will invalidate the existing key. You may need to provide the password below if the account requires it.
             </div>
 
-            <div class="mb-3 text-start">
-                <button type="button" class="btn btn-sm btn-outline-secondary w-100" onclick="toggleField('regen-pwd-field')">Enter Password (If required)</button>
+            <div class="mb-2 text-start">
+                <button type="button" class="btn btn-xs btn-outline-secondary fw-semibold w-100 py-1.5" onclick="toggleField('regen-pwd-field')">Enter Password (If required)</button>
                 <div id="regen-pwd-field" style="display: none;" class="mt-2">
-                    <input type="password" class="form-control" name="password" placeholder="HPC Password">
+                    <input type="password" class="form-control form-control-sm border-light-subtle bg-white" name="password" placeholder="HPC Password">
                 </div>
             </div>
         </div>
-        <div class="modal-footer bg-light">
-            <button type="button" class="btn btn-link text-secondary text-decoration-none" data-bs-dismiss="modal">Cancel</button>
-            <button type="submit" class="btn btn-warning px-4">Regenerate Now</button>
+        <div class="modal-footer bg-light border-top">
+            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-sm btn-warning fw-bold px-3">Regenerate Key</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- Modal for Preset Template Creation -->
+<div class="modal fade" id="presetTemplateModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_preset_template">
+        <div class="modal-header bg-success bg-opacity-10 py-3">
+            <h5 class="modal-title fw-bold text-success-emphasis">
+                <i class="bi bi-lightning-charge-fill text-warning me-1.5 animate-pulse"></i>Create Preset Template
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body p-4">
+            <div class="mb-3">
+                <label class="form-label small text-muted fw-semibold">Select Preset Template</label>
+                <select class="form-select border-light-subtle" id="presetSelect" name="preset_name" required>
+                    {% for key, val in preset_templates.items %}
+                        <option value="{{ key }}" data-desc="{{ val.description }}" data-suffix="{{ val.executable_file_suffix|default:'' }}" data-params="{% for p in val.parameters %}{{ p.Identifier }}{% if not forloop.last %}, {% endif %}{% endfor %}" data-generic="{% if val.is_generic %}true{% else %}false{% endif %}">
+                            {{ val.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label small text-muted fw-semibold">Cluster Node Type</label>
+                <select class="form-select border-light-subtle" name="ClusterNodeTypeId" required>
+                    <option value="" disabled selected>Select Cluster Node Type...</option>
+                    {% for nt in all_cluster_node_types %}
+                        <option value="{{ nt.id }}">
+                            {{ nt.cluster_name }} - {{ nt.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+                {% if not all_cluster_node_types %}
+                    <div class="form-text text-danger small mt-1.5">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>No cluster node types available. Please assign this project to a cluster first.
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Details Preview Card -->
+            <div class="card bg-light border-0 rounded p-3 mb-2 small text-muted">
+                <div id="presetExecutableFileRow" class="d-flex justify-content-between mb-2">
+                    <span class="fw-semibold text-dark">Executable File:</span>
+                    <span id="presetExecutableFile" class="font-monospace text-end text-break text-primary" style="max-width: 65%;"></span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="fw-semibold text-dark">Description:</span>
+                    <span id="presetDesc" class="text-end text-dark-emphasis" style="max-width: 65%;"></span>
+                </div>
+                <div id="presetParamsRow" class="d-flex justify-content-between">
+                    <span class="fw-semibold text-dark">Parameters to Create:</span>
+                    <span id="presetParams" class="font-monospace text-success-emphasis text-end" style="max-width: 65%;"></span>
+                </div>
+                <div id="presetGenericInfo" class="d-flex align-items-center gap-2 mt-2" style="display: none !important;">
+                    <i class="bi bi-info-circle text-info"></i>
+                    <span class="text-info-emphasis">Generic templates are created via a separate API and don't require an executable file.</span>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer bg-light border-top">
+            <button type="button" class="btn btn-sm btn-secondary fw-semibold px-3" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-sm btn-success fw-bold px-3" {% if not all_cluster_node_types %}disabled{% endif %}>
+                Create Template
+            </button>
         </div>
       </form>
     </div>
@@ -636,21 +1224,59 @@
 </div>
 
 <script>
-// --- Assignment Edit Logic ---
-function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath) {
+function openEditAssignmentModal(clusterId, clusterName, scratchPath, projectPath, preferredAuthType, clusterHasProxy) {
     document.getElementById('editClusterId').value = clusterId;
     document.getElementById('editClusterNameDisplay').innerText = clusterName;
     document.getElementById('editScratchPath').value = scratchPath;
     document.getElementById('editProjectPath').value = projectPath;
+    var prefAuthElem = document.getElementById('editPreferredAuthType');
+    if (prefAuthElem) {
+        prefAuthElem.value = preferredAuthType !== undefined && preferredAuthType !== null ? preferredAuthType : "";
+        var editPrefAuthOptgroup = document.getElementById('edit-optgroup-with-proxy');
+        if (editPrefAuthOptgroup) {
+            if (clusterHasProxy === 'true' || clusterHasProxy === true) {
+                editPrefAuthOptgroup.disabled = false;
+            } else {
+                editPrefAuthOptgroup.disabled = true;
+                if (['5', '6', '7', '8', '12'].includes(prefAuthElem.value)) {
+                    prefAuthElem.value = "";
+                }
+            }
+        }
+    }
     new bootstrap.Modal(document.getElementById('editAssignmentModal')).show();
 }
 
-// --- SSH Account Modal Logic ---
+document.addEventListener('DOMContentLoaded', function() {
+    var clusterSelect = document.getElementById('ClusterIdSelect');
+    if (clusterSelect) {
+        clusterSelect.addEventListener('change', function() {
+            var selectedOption = this.options[this.selectedIndex];
+            var hasProxy = selectedOption ? selectedOption.getAttribute('data-has-proxy') === 'true' : false;
+            var optgroupWithProxy = document.getElementById('optgroup-with-proxy');
+            var preferredAuthTypeSelect = document.getElementById('PreferredAuthTypeSelect');
+            
+            if (optgroupWithProxy) {
+                if (hasProxy) {
+                    optgroupWithProxy.disabled = false;
+                } else {
+                    optgroupWithProxy.disabled = true;
+                    if (preferredAuthTypeSelect && ['5', '6', '7', '8', '12'].includes(preferredAuthTypeSelect.value)) {
+                        preferredAuthTypeSelect.value = "";
+                    }
+                }
+            }
+        });
+        clusterSelect.dispatchEvent(new Event('change'));
+    }
+});
+
 function setUsernameInModal(username) {
     document.getElementById('modal-username-regen').value = username;
     document.getElementById('display-username-regen').innerText = username;
 }
 
+// Ensure setRenameAccountUsername exists
 function setRenameAccountUsername(username) {
     document.getElementById('oldUsername').value = username;
     document.getElementById('renameDisplayOld').value = username;
@@ -661,7 +1287,6 @@ function toggleField(elementId) {
     el.style.display = (el.style.display === 'none') ? 'block' : 'none';
 }
 
-// --- Copy to Clipboard Logic ---
 function copyToClipboard(text, feedbackId) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => showFeedback(feedbackId))
@@ -695,37 +1320,342 @@ function showFeedback(feedbackId) {
     }
 }
 
-// --- Asynchronous HPC Connection Status Checks ---
 document.addEventListener('DOMContentLoaded', function () {
     const placeholders = document.querySelectorAll('.hpc-status-placeholder');
     placeholders.forEach(function (el) {
         const username = el.getAttribute('data-username');
-        const checkUrl = "{% url 'project_detail' project.id %}";
+        const checkUrl = "{% if project %}{% url 'project_detail' project.id %}{% endif %}";
         if (username && checkUrl) {
             fetch(`${checkUrl}?action=check_hpc_status&username=${encodeURIComponent(username)}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data.is_initialized) {
-                        el.innerHTML = '<div class="text-success fw-bold">Active</div><small class="text-muted">●</small>';
+                        el.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle px-2">Active</span>';
                     } else {
-                        el.innerHTML = '<div class="text-danger fw-bold">Inactive</div><small class="text-muted">●</small>';
+                        el.innerHTML = '<span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2">Inactive</span>';
                     }
                 })
                 .catch(error => {
                     console.error('Error fetching status for ' + username, error);
-                    el.innerHTML = '<div class="text-danger fw-bold">Error</div><small class="text-muted">●</small>';
+                    el.innerHTML = '<span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2">Error</span>';
                 });
         }
     });
-});
 
-// Initialize Tooltips
-document.addEventListener('DOMContentLoaded', function () {
-    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-        return new bootstrap.Tooltip(tooltipTriggerEl);
+    // Preset template selection handling
+    const presetSelect = document.getElementById('presetSelect');
+    if (presetSelect) {
+        const projectKeyScriptsDir = "{{ project.key_scripts_directory_path|default:'' }}";
+        function updatePresetPreview() {
+            const selectedOpt = presetSelect.options[presetSelect.selectedIndex];
+            if (selectedOpt) {
+                const desc = selectedOpt.getAttribute('data-desc') || '';
+                const suffix = selectedOpt.getAttribute('data-suffix') || '';
+                const params = selectedOpt.getAttribute('data-params') || 'None';
+                const isGeneric = selectedOpt.getAttribute('data-generic') === 'true';
+                
+                const execRow = document.getElementById('presetExecutableFileRow');
+                const paramsRow = document.getElementById('presetParamsRow');
+                const genericInfo = document.getElementById('presetGenericInfo');
+                
+                if (isGeneric) {
+                    if (execRow) execRow.style.display = 'none';
+                    if (paramsRow) paramsRow.style.display = 'none';
+                    if (genericInfo) genericInfo.style.display = 'flex';
+                } else {
+                    if (execRow) execRow.style.display = 'flex';
+                    if (paramsRow) paramsRow.style.display = 'flex';
+                    if (genericInfo) genericInfo.style.display = 'none';
+                    
+                    let fullPath = projectKeyScriptsDir;
+                    if (fullPath && !fullPath.endsWith('/')) {
+                        fullPath += '/' + suffix;
+                    } else {
+                        fullPath += suffix;
+                    }
+                    document.getElementById('presetExecutableFile').innerText = fullPath;
+                    document.getElementById('presetParams').innerText = params;
+                }
+                
+                document.getElementById('presetDesc').innerText = desc;
+            }
+        }
+        presetSelect.addEventListener('change', updatePresetPreview);
+        updatePresetPreview();
+    }
+
+    // Toggle overflow visible on table-responsive when dropdown is open to prevent clipping
+    document.querySelectorAll('.table-responsive').forEach(function (el) {
+        el.addEventListener('show.bs.dropdown', function () {
+            el.style.overflow = 'visible';
+        });
+        el.addEventListener('hidden.bs.dropdown', function () {
+            el.style.overflow = '';
+        });
+    });
+
+    // Populate cluster filter dynamically from templates table using optgroups for parent clusters
+    const clusterMap = new Map();
+    document.querySelectorAll('.template-row').forEach(row => {
+        const cluster = row.getAttribute('data-cluster') || '';
+        const queue = row.getAttribute('data-queue') || '';
+        if (cluster || queue) {
+            const clusterKey = cluster || 'Other';
+            if (!clusterMap.has(clusterKey)) {
+                clusterMap.set(clusterKey, new Set());
+            }
+            if (queue) {
+                clusterMap.get(clusterKey).add(queue);
+            }
+        }
+    });
+
+    const filterClusterSelect = document.getElementById('filterClusterSelect');
+    if (filterClusterSelect) {
+        // Clear except the first option
+        filterClusterSelect.innerHTML = '<option value="all">All Clusters/Queues</option>';
+        
+        // Sort clusters and append optgroups
+        Array.from(clusterMap.keys()).sort().forEach(cluster => {
+            const optgroup = document.createElement('optgroup');
+            optgroup.label = cluster;
+            
+            // Sort queues within this cluster and append options
+            const queues = Array.from(clusterMap.get(cluster)).sort();
+            queues.forEach(queue => {
+                const option = document.createElement('option');
+                option.value = `${cluster === 'Other' ? '' : cluster}|${queue}`;
+                option.textContent = queue;
+                optgroup.appendChild(option);
+            });
+            
+            filterClusterSelect.appendChild(optgroup);
+        });
+    }
+
+    // Bulk selection logic for command templates
+    const selectAllTemplatesCheckbox = document.getElementById('selectAllTemplates');
+    const templateItemCheckboxes = document.querySelectorAll('.template-item-checkbox');
+
+    if (selectAllTemplatesCheckbox) {
+        selectAllTemplatesCheckbox.addEventListener('change', function () {
+            templateItemCheckboxes.forEach(cb => {
+                if (cb.offsetParent !== null) { // only select visible template rows
+                    cb.checked = selectAllTemplatesCheckbox.checked;
+                }
+            });
+            updateTemplatesBulkDeleteState();
+        });
+    }
+
+    templateItemCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateTemplatesBulkDeleteState);
     });
 });
-</script>
 
+// Bulk selection state updater
+function updateTemplatesBulkDeleteState() {
+    const selectAllTemplatesCheckbox = document.getElementById('selectAllTemplates');
+    const templateItemCheckboxes = document.querySelectorAll('.template-item-checkbox');
+    const templatesBulkDeleteBtn = document.getElementById('templatesBulkDeleteBtn');
+    const templateSelectCountLabel = document.getElementById('templateSelectCount');
+    const templateBulkConfirmCount = document.getElementById('templateBulkConfirmCount');
+
+    const checkedBoxes = document.querySelectorAll('.template-item-checkbox:checked');
+    const checkedCount = checkedBoxes.length;
+    if (templateSelectCountLabel) templateSelectCountLabel.textContent = checkedCount;
+    if (templateBulkConfirmCount) templateBulkConfirmCount.textContent = checkedCount;
+
+    if (checkedCount > 0) {
+        if (templatesBulkDeleteBtn) templatesBulkDeleteBtn.classList.remove('d-none');
+    } else {
+        if (templatesBulkDeleteBtn) templatesBulkDeleteBtn.classList.add('d-none');
+    }
+
+    if (selectAllTemplatesCheckbox) {
+        // Find visible checkboxes
+        const visibleCheckboxes = Array.from(templateItemCheckboxes).filter(cb => cb.offsetParent !== null);
+        const visibleCheckedCount = visibleCheckboxes.filter(cb => cb.checked).length;
+        selectAllTemplatesCheckbox.checked = (visibleCheckedCount === visibleCheckboxes.length && visibleCheckboxes.length > 0);
+    }
+}
+
+// Filter logic for command templates
+function filterCommandTemplates() {
+    const searchQuery = document.getElementById('templateSearchInput').value.toLowerCase().trim();
+    const clusterFilter = document.getElementById('filterClusterSelect').value;
+    const statusFilter = document.getElementById('filterStatusSelect').value;
+    const scopeFilter = document.getElementById('filterScopeSelect').value;
+    
+    let visibleCount = 0;
+    const rows = document.querySelectorAll('.template-row');
+    
+    rows.forEach(row => {
+        const name = (row.getAttribute('data-name') || '').toLowerCase();
+        const desc = (row.getAttribute('data-description') || '').toLowerCase();
+        const executable = (row.getAttribute('data-executable') || '').toLowerCase();
+        const status = row.getAttribute('data-status');
+        const scope = row.getAttribute('data-scope');
+        const cluster = row.getAttribute('data-cluster') || '';
+        const queue = row.getAttribute('data-queue') || '';
+        
+        const matchesSearch = !searchQuery || 
+            name.includes(searchQuery) || 
+            desc.includes(searchQuery) || 
+            executable.includes(searchQuery);
+            
+        let matchesCluster = true;
+        if (clusterFilter !== 'all') {
+            const [filterClust, filterQueue] = clusterFilter.split('|');
+            matchesCluster = (cluster === filterClust && queue === filterQueue);
+        }
+        
+        const matchesStatus = (statusFilter === 'all') || (status === statusFilter);
+        const matchesScope = (scopeFilter === 'all') || (scope === scopeFilter);
+        
+        if (matchesSearch && matchesCluster && matchesStatus && matchesScope) {
+            row.style.display = '';
+            visibleCount++;
+        } else {
+            row.style.display = 'none';
+            // Uncheck checkbox if row is hidden
+            const cb = row.querySelector('.template-item-checkbox');
+            if (cb) cb.checked = false;
+        }
+    });
+    
+    // Update bulk delete state since some rows might have been unchecked
+    updateTemplatesBulkDeleteState();
+    
+    // Update count badge
+    const badge = document.getElementById('templateCountBadge');
+    if (badge) {
+        if (searchQuery || clusterFilter !== 'all' || statusFilter !== 'all' || scopeFilter !== 'all') {
+            badge.textContent = `Showing ${visibleCount} of ${rows.length} templates`;
+        } else {
+            badge.textContent = `Total: ${rows.length} template${rows.length !== 1 ? 's' : ''}`;
+        }
+    }
+    
+    // Handle the "No templates match criteria" display
+    let noResultsRow = document.getElementById('templateNoResultsRow');
+    if (visibleCount === 0) {
+        if (!noResultsRow && rows.length > 0) {
+            const tbody = document.querySelector('.table-responsive table tbody');
+            if (tbody) {
+                noResultsRow = document.createElement('tr');
+                noResultsRow.id = 'templateNoResultsRow';
+                noResultsRow.innerHTML = `
+                    <td colspan="7" class="text-center py-4 text-muted">
+                        <i class="bi bi-search fs-4 mb-2 d-block text-secondary"></i>
+                        <p class="small mb-0">No command templates match your search filters.</p>
+                    </td>
+                `;
+                tbody.appendChild(noResultsRow);
+            }
+        } else if (noResultsRow) {
+            noResultsRow.style.display = '';
+        }
+    } else {
+        if (noResultsRow) {
+            noResultsRow.style.display = 'none';
+        }
+    }
+}
+
+function resetTemplateFilters() {
+    const searchInput = document.getElementById('templateSearchInput');
+    const clusterSelect = document.getElementById('filterClusterSelect');
+    const statusSelect = document.getElementById('filterStatusSelect');
+    const scopeSelect = document.getElementById('filterScopeSelect');
+    
+    if (searchInput) searchInput.value = '';
+    if (clusterSelect) clusterSelect.value = 'all';
+    if (statusSelect) statusSelect.value = 'all';
+    if (scopeSelect) scopeSelect.value = 'all';
+    
+    // Uncheck all item checkboxes
+    document.querySelectorAll('.template-item-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    
+    filterCommandTemplates();
+}
+
+function deleteCommandTemplate(actionUrl) {
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = actionUrl;
+    form.style.display = 'none';
+    const csrfInput = document.createElement('input');
+    csrfInput.type = 'hidden';
+    csrfInput.name = 'csrfmiddlewaretoken';
+    csrfInput.value = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    form.appendChild(csrfInput);
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function toggleAddAuthFields() {
+    const select = document.getElementById('addAuthTypeSelect');
+    const val = parseInt(select.value);
+    const sshPanel = document.getElementById('addSshPanel');
+    const keyGenContainer = document.getElementById('addKeyGenRadioContainer');
+    const uploadKeyContainer = document.getElementById('addUploadKeyContainer');
+    const uploadKeyTextarea = uploadKeyContainer.querySelector('textarea');
+    
+    const passwordPanel = document.getElementById('addPasswordPanel');
+    const passwordInput = document.getElementById('addPasswordInput');
+
+    const hasSshKey = [3, 4, 7, 8, 11, 12].includes(val);
+    const canGenerateKey = [3, 4, 7, 8].includes(val);
+    const hasPassword = [1, 2, 3, 5, 6, 7].includes(val);
+    const isPasswordRequired = [1, 3, 5, 7].includes(val);
+
+    if (hasSshKey) {
+        sshPanel.style.display = 'block';
+        if (canGenerateKey) {
+            if (keyGenContainer) keyGenContainer.style.display = 'block';
+            toggleAddKeyGenFields(); // Let the checked radio button decide
+        } else {
+            if (keyGenContainer) keyGenContainer.style.display = 'none';
+            // Force upload mode
+            document.getElementById('addGenKeyFalse').checked = true;
+            document.getElementById('addGenKeyTrue').checked = false;
+            uploadKeyContainer.style.display = 'block';
+            uploadKeyTextarea.required = true;
+        }
+    } else {
+        sshPanel.style.display = 'none';
+        uploadKeyTextarea.required = false;
+    }
+
+    if (hasPassword) {
+        passwordPanel.style.display = 'block';
+        passwordInput.required = isPasswordRequired;
+        if (!isPasswordRequired) {
+            passwordPanel.querySelector('label').textContent = "Password (Optional)";
+        } else {
+            passwordPanel.querySelector('label').textContent = "Password";
+        }
+    } else {
+        passwordPanel.style.display = 'none';
+        passwordInput.required = false;
+    }
+}
+
+function toggleAddKeyGenFields() {
+    const isUpload = document.getElementById('addGenKeyFalse').checked;
+    const container = document.getElementById('addUploadKeyContainer');
+    const textarea = container.querySelector('textarea');
+
+    if (isUpload) {
+        container.style.display = 'block';
+        textarea.required = true;
+    } else {
+        container.style.display = 'none';
+        textarea.required = false;
+    }
+}
+</script>
 {% endblock %}

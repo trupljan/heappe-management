@@ -1,0 +1,711 @@
+{% extends "base.html" %}
+{% load custom_filters %}
+
+{% block title %}Database Backups &amp; Restore{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">Database Backups</li>
+{% endblock %}
+
+{% block content %}
+<style>
+    /* 7-column grid layout for calendar days */
+    .row-cols-7 > * {
+        flex: 0 0 14.285714%;
+        max-width: 14.285714%;
+    }
+    
+    .calendar-day-cell {
+        min-height: 85px;
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.5rem;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: stretch;
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+    }
+    .calendar-day-cell:hover {
+        background-color: #f8fafc;
+        border-color: #cbd5e1;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.03);
+    }
+    .calendar-day-cell.other-month {
+        background-color: #f8fafc;
+        color: #cbd5e1 !important;
+        opacity: 0.45;
+        cursor: not-allowed;
+    }
+    .calendar-day-cell.other-month:hover {
+        transform: none;
+        box-shadow: none;
+        border-color: #e2e8f0;
+        background-color: #f8fafc;
+    }
+    .calendar-day-cell.has-backup {
+        background-color: #f0f9ff; /* subtle blue theme for standard backups */
+        border-color: #bae6fd;
+    }
+    .calendar-day-cell.has-backup:hover {
+        background-color: #e0f2fe;
+        border-color: #7dd3fc;
+    }
+    .calendar-day-cell.has-manual-backup {
+        background-color: #fff7ed; /* subtle orange/amber theme for manual backups */
+        border-color: #fed7aa;
+    }
+    .calendar-day-cell.has-manual-backup:hover {
+        background-color: #ffedd5;
+        border-color: #fdba74;
+    }
+</style>
+<div class="container-fluid py-2">
+    <!-- Info Banner -->
+    <div class="d-flex align-items-center gap-2.5 mb-4">
+        <i class="bi bi-database-fill-gear text-primary fs-3"></i>
+        <div>
+            <h4 class="mb-0 fw-bold text-dark">Database Backups &amp; Restore</h4>
+            <span class="text-muted small">Create backups, view database backup history, and restore data on the HEAppE middleware backend</span>
+        </div>
+    </div>
+
+    <!-- Quick Actions Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                <div class="card-body p-4 d-flex align-items-start gap-3">
+                    <div class="bg-primary bg-opacity-10 text-primary p-3 rounded-3">
+                        <i class="bi bi-database-add fs-3"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h5 class="fw-bold text-dark mb-1">Create Full Backup</h5>
+                        <p class="text-secondary small mb-3">Initiate a full backup of the entire middleware SQL database immediately. This includes all configuration, cluster metadata, user roles, and execution histories.</p>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="backup_full">
+                            <button type="submit" class="btn btn-sm btn-primary fw-bold px-3">
+                                <i class="bi bi-database-add me-1.5"></i>Trigger Full Backup
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm rounded-3 bg-white h-100">
+                <div class="card-body p-4 d-flex align-items-start gap-3">
+                    <div class="bg-info bg-opacity-10 text-info p-3 rounded-3">
+                        <i class="bi bi-journal-text fs-3 text-info"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h5 class="fw-bold text-dark mb-1">Backup Transaction Logs</h5>
+                        <p class="text-secondary small mb-3">Create a backup of the SQL database transaction logs to save changes made since the last full backup, keeping storage footprint minimal.</p>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="backup_logs">
+                            <button type="submit" class="btn btn-sm btn-info text-dark fw-bold px-3">
+                                <i class="bi bi-journal-text me-1.5"></i>Backup Transaction Logs
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Backups History Card -->
+    <div class="card border-0 shadow-sm rounded-3 bg-white">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-clock-history text-secondary fs-5"></i>
+                <h5 class="h6 mb-0 fw-bold text-dark">Backup History &amp; Recovery</h5>
+            </div>
+            <div class="d-flex align-items-center gap-3 flex-wrap justify-content-end flex-grow-1">
+                <!-- Search input -->
+                <div class="input-group input-group-sm d-none" style="max-width: 200px;" id="backupSearchContainer">
+                    <span class="input-group-text bg-white border-light-subtle text-muted"><i class="bi bi-search"></i></span>
+                    <input type="text" id="backupSearch" class="form-control border-light-subtle" placeholder="Search backups...">
+                </div>
+                <!-- View Toggle Buttons -->
+                <div class="btn-group btn-group-sm border rounded-3 p-0.5 bg-light" role="group" aria-label="Backup View Toggle">
+                    <button type="button" class="btn btn-sm btn-transparent text-secondary py-1 px-2.5" id="btnListView" onclick="switchBackupView('list')">
+                        <i class="bi bi-list-task me-1"></i>List
+                    </button>
+                    <button type="button" class="btn btn-sm btn-light fw-bold text-primary shadow-sm py-1 px-2.5" id="btnCalendarView" onclick="switchBackupView('calendar')">
+                        <i class="bi bi-calendar3 me-1"></i>Calendar
+                    </button>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();" title="Refresh">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            {% if backups %}
+                <div id="listViewContainer" class="table-responsive d-none">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4" style="width: 35%;">Backup File Name</th>
+                                <th style="width: 20%;">Backup Type</th>
+                                <th style="width: 15%;">File Size</th>
+                                <th style="width: 15%;">Created At</th>
+                                <th class="text-end pe-4" style="width: 15%;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for backup in backups %}
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="fw-bold text-dark font-monospace" style="font-size: 0.85rem;">{{ backup.file_name }}</div>
+                                    {% if backup.path %}
+                                        <div class="text-muted small mt-0.5" style="font-size: 0.75rem;"><i class="bi bi-folder2-open me-1"></i>{{ backup.path }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge {{ backup.badge_class }} border px-2 py-1 small fw-semibold" style="font-size: 0.75rem;">
+                                        {{ backup.type_name }}
+                                    </span>
+                                    {% if backup.retention_flags %}
+                                        <div class="mt-2 d-flex flex-wrap gap-1">
+                                            {% for flag in backup.retention_flags %}
+                                                <span class="badge {{ flag.class }} border px-2 py-0.5 text-uppercase" style="font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; border-radius: 4px;">
+                                                    {{ flag.label }}
+                                                </span>
+                                            {% endfor %}
+                                        </div>
+                                    {% elif backup.is_manual %}
+                                        <div class="mt-2">
+                                            <span class="badge border px-2 py-0.5 text-uppercase" style="font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; border-radius: 4px; background-color: #fff7ed; border-color: #fed7aa; color: #ea580c;">manual</span>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="text-secondary fw-semibold small font-monospace">
+                                        {{ backup.file_size_mb|floatformat:2 }} MB
+                                    </span>
+                                </td>
+                                <td class="text-secondary small font-monospace">
+                                    {{ backup.time_stamp|format_datetime }}
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button type="button" 
+                                            class="btn btn-sm btn-outline-danger fw-semibold px-3 py-1"
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#restoreModal"
+                                            data-filename="{{ backup.file_name }}">
+                                        <i class="bi bi-arrow-counterclockwise me-1"></i>Restore
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Calendar View Container -->
+                <div id="calendarViewContainer" class="p-4">
+                    <!-- Month Navigation & Legend -->
+                    <div class="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-2.5">
+                        <div class="d-flex align-items-center gap-2">
+                            <button class="btn btn-sm btn-outline-secondary rounded-3" type="button" onclick="prevMonth()">
+                                <i class="bi bi-chevron-left"></i>
+                            </button>
+                            <h6 class="mb-0 fw-bold text-dark text-capitalize font-monospace" id="calendarMonthLabel" style="min-width: 140px; text-align: center; font-size: 0.9rem;">Month YYYY</h6>
+                            <button class="btn btn-sm btn-outline-secondary rounded-3" type="button" onclick="nextMonth()">
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                        <!-- Legend -->
+                        <div class="d-flex align-items-center gap-3 text-secondary" style="font-size: 0.72rem;">
+                            <span class="d-flex align-items-center gap-1.5"><span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 text-uppercase" style="font-size: 0.6rem; border-radius: 4px;">daily</span></span>
+                            <span class="d-flex align-items-center gap-1.5"><span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-0.5 text-uppercase" style="font-size: 0.6rem; border-radius: 4px;">weekly</span></span>
+                            <span class="d-flex align-items-center gap-1.5"><span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-0.5 text-uppercase" style="font-size: 0.6rem; border-radius: 4px;">monthly</span></span>
+                            <span class="d-flex align-items-center gap-1.5"><span class="badge border px-2 py-0.5 text-uppercase" style="font-size: 0.6rem; border-radius: 4px; background-color: #fff7ed !important; border-color: #fed7aa !important; color: #ea580c !important;">manual</span></span>
+                        </div>
+                    </div>
+
+                    <!-- Calendar Grid Wrapper -->
+                    <div class="calendar-grid-wrapper border rounded-3 bg-light p-3" style="border-color: #e2e8f0 !important;">
+                        <!-- Weekdays Header -->
+                        <div class="row row-cols-7 text-center fw-bold text-secondary text-uppercase mb-2 font-monospace" style="font-size: 0.7rem; letter-spacing: 0.05em;">
+                            <div class="col py-2">Mon</div>
+                            <div class="col py-2">Tue</div>
+                            <div class="col py-2">Wed</div>
+                            <div class="col py-2">Thu</div>
+                            <div class="col py-2">Fri</div>
+                            <div class="col py-2">Sat</div>
+                            <div class="col py-2">Sun</div>
+                        </div>
+                        <!-- Days Grid -->
+                        <div class="row row-cols-7 g-2 text-center" id="calendarDaysGrid">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-database-dash fs-1 mb-3 d-block text-secondary"></i>
+                    <p class="mb-1 fw-semibold">No backups available</p>
+                    <p class="small text-secondary mb-0">No database backup files were found on the middleware server.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Restore Database Confirmation Modal -->
+<div class="modal fade" id="restoreModal" tabindex="-1" aria-labelledby="restoreModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="restoreModalLabel">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <span>Confirm Database Restore</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="post" action="{% url 'database_backups' %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="restore">
+                <input type="hidden" name="backup_file_name" id="restoreBackupFileNameInput">
+
+                <div class="modal-body p-4">
+                    <p class="text-secondary small mb-2 text-center">You are about to restore the HEAppE middleware database from backup file:</p>
+                    <h6 class="fw-bold text-center text-dark font-monospace my-3 p-2 bg-light rounded border border-light-subtle" id="displayBackupFileName"></h6>
+                    
+                    <div class="alert alert-warning border-0 rounded-3 small mb-4 d-flex gap-2 text-start">
+                        <i class="bi bi-exclamation-octagon-fill text-warning fs-5 flex-shrink-0"></i>
+                        <div>
+                            <strong>Critical Warning:</strong> This operation will overwrite all current database tables, settings, user sessions, active task definitions, and configurations. Active HEAppE middleware sessions may be interrupted.
+                        </div>
+                    </div>
+
+                    <div class="form-check form-switch p-3 bg-light rounded border border-light-subtle">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" value="true" id="include_logs" name="include_logs">
+                        <label class="form-check-label fw-bold text-secondary small text-uppercase" for="include_logs">Include Subsequent Transaction Logs</label>
+                        <div class="form-text small text-muted mt-1" style="font-size: 0.75rem;">If enabled, the restore operation will automatically seek and apply subsequent transaction log backups to recover up to the last known transaction point.</div>
+                    </div>
+                </div>
+
+                <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Confirm Restore
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Calendar Day Backups Details Modal -->
+<div class="modal fade" id="dayDetailsModal" tabindex="-1" aria-labelledby="dayDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-light border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="dayDetailsModalLabel">
+                    <i class="bi bi-calendar-event text-primary"></i>
+                    <span>Backups on <span id="displaySelectedDate"></span></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 50%;">Backup File Name</th>
+                                <th style="width: 20%;">Backup Type</th>
+                                <th style="width: 15%;">File Size</th>
+                                <th class="text-end" style="width: 15%;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dayBackupsListBody">
+                            <!-- Populated dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{ backups|json_script:"backups-json" }}
+
+<script>
+    // Load backups data embedded from Django
+    const backupsData = JSON.parse(document.getElementById('backups-json').textContent);
+
+    function formatTime(ts) {
+        if (!ts) return '';
+        let timePart = '';
+        if (ts.includes('T')) {
+            timePart = ts.split('T')[1].replace('Z', '');
+        } else if (ts.includes(' ')) {
+            timePart = ts.split(' ')[1];
+        } else {
+            return '';
+        }
+        if (timePart) {
+            timePart = timePart.split('.')[0];
+            return timePart + ' UTC';
+        }
+        return '';
+    }
+
+    let currentYear = new Date().getFullYear();
+    let currentMonth = new Date().getMonth(); // 0-11
+    
+    // Group backups by date string 'YYYY-MM-DD'
+    const backupsByDate = {};
+    backupsData.forEach(b => {
+        if (!b.time_stamp) return;
+        const datePart = b.time_stamp.split('T')[0];
+        if (!backupsByDate[datePart]) {
+            backupsByDate[datePart] = [];
+        }
+        backupsByDate[datePart].push(b);
+    });
+
+    // Default to the month of the latest backup in the list
+    let latestBackupDateObj = null;
+    backupsData.forEach(b => {
+        if (b.time_stamp) {
+            const d = new Date(b.time_stamp);
+            if (!isNaN(d.getTime())) {
+                if (!latestBackupDateObj || d > latestBackupDateObj) {
+                    latestBackupDateObj = d;
+                }
+            }
+        }
+    });
+    if (latestBackupDateObj) {
+        currentYear = latestBackupDateObj.getFullYear();
+        currentMonth = latestBackupDateObj.getMonth();
+    }
+
+    function switchBackupView(viewMode) {
+        const listBtn = document.getElementById('btnListView');
+        const calBtn = document.getElementById('btnCalendarView');
+        const listCont = document.getElementById('listViewContainer');
+        const calCont = document.getElementById('calendarViewContainer');
+        const searchInput = document.getElementById('backupSearchContainer');
+        
+        if (viewMode === 'calendar') {
+            listBtn.className = 'btn btn-sm btn-transparent text-secondary py-1 px-2.5';
+            calBtn.className = 'btn btn-sm btn-light fw-bold text-primary shadow-sm py-1 px-2.5';
+            listCont.classList.add('d-none');
+            calCont.classList.remove('d-none');
+            if (searchInput) searchInput.classList.add('d-none');
+            renderCalendar();
+        } else {
+            listBtn.className = 'btn btn-sm btn-light fw-bold text-primary shadow-sm py-1 px-2.5';
+            calBtn.className = 'btn btn-sm btn-transparent text-secondary py-1 px-2.5';
+            listCont.classList.remove('d-none');
+            calCont.classList.add('d-none');
+            if (searchInput) searchInput.classList.remove('d-none');
+        }
+    }
+
+    function prevMonth() {
+        if (currentMonth === 0) {
+            currentMonth = 11;
+            currentYear--;
+        } else {
+            currentMonth--;
+        }
+        renderCalendar();
+    }
+    
+    function nextMonth() {
+        if (currentMonth === 11) {
+            currentMonth = 0;
+            currentYear++;
+        } else {
+            currentMonth++;
+        }
+        renderCalendar();
+    }
+
+    function renderCalendar() {
+        const grid = document.getElementById('calendarDaysGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        document.getElementById('calendarMonthLabel').textContent = `${monthNames[currentMonth]} ${currentYear}`;
+        
+        const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+        let firstDayIndex = firstDayOfMonth.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+        firstDayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1; // Mon=0, ..., Sun=6
+        
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        const prevMonthDays = new Date(currentYear, currentMonth, 0).getDate();
+        
+        // Render previous month days
+        for (let i = firstDayIndex - 1; i >= 0; i--) {
+            const dayNum = prevMonthDays - i;
+            const cell = document.createElement('div');
+            cell.className = 'col';
+            cell.innerHTML = `
+                <div class="calendar-day-cell other-month">
+                    <span class="fw-bold small">${dayNum}</span>
+                </div>
+            `;
+            grid.appendChild(cell);
+        }
+        
+        // Render current month days
+        for (let day = 1; day <= daysInMonth; day++) {
+            const monthStr = String(currentMonth + 1).padStart(2, '0');
+            const dayStr = String(day).padStart(2, '0');
+            const dateKey = `${currentYear}-${monthStr}-${dayStr}`;
+            const dayBackups = backupsByDate[dateKey] || [];
+            
+            const cell = document.createElement('div');
+            cell.className = 'col';
+            
+            let backupContent = '';
+            let cellClass = 'calendar-day-cell';
+            
+            if (dayBackups.length > 0) {
+                const fullBackups = dayBackups.filter(b => b.type == 0 || String(b.type) == '0');
+                const logBackups = dayBackups.filter(b => b.type == 1 || String(b.type) == '1');
+                
+                const hasFullBackup = fullBackups.length > 0;
+                const hasManualBackup = fullBackups.some(fb => fb.is_manual);
+                 
+                if (hasFullBackup && hasManualBackup) {
+                    cellClass += ' has-manual-backup';
+                } else if (dayBackups.length > 0) {
+                    cellClass += ' has-backup';
+                }
+                
+                let dotHtml = '';
+                const categorySet = new Set();
+                fullBackups.forEach(fb => {
+                    if (fb.retention_flags) {
+                        fb.retention_flags.forEach(flag => {
+                            categorySet.add(flag.label);
+                        });
+                    }
+                });
+                
+                categorySet.forEach(cat => {
+                    let dotColor = '#6c757d';
+                    if (cat === 'daily') dotColor = '#198754';
+                    if (cat === 'weekly') dotColor = '#ffc107';
+                    if (cat === 'monthly') dotColor = '#dc3545';
+                    dotHtml += `<span class="rounded-circle d-inline-block me-1 animate-pulse" style="width: 7px; height: 7px; background-color: ${dotColor};" title="${cat}"></span>`;
+                });
+                
+                if (hasFullBackup && hasManualBackup) {
+                    dotHtml += `<span class="rounded-circle d-inline-block me-1" style="width: 7px; height: 7px; background-color: #ea580c;" title="manual"></span>`;
+                }
+                
+                let label = '';
+                if (fullBackups.length > 0) {
+                    const manualCount = fullBackups.filter(fb => fb.is_manual).length;
+                    const schedCount = fullBackups.length - manualCount;
+                    
+                    if (manualCount > 0 && schedCount > 0) {
+                        label += `<div class="fw-bold text-start mt-1" style="font-size: 0.65rem; color: #ea580c;"><i class="bi bi-database me-1"></i>Manual (${manualCount})</div>`;
+                        label += `<div class="fw-bold text-primary text-start mt-0.5" style="font-size: 0.65rem;"><i class="bi bi-database me-1"></i>Full (${schedCount})</div>`;
+                    } else if (manualCount > 0) {
+                        label += `<div class="fw-bold text-start mt-1" style="font-size: 0.65rem; color: #ea580c;"><i class="bi bi-database me-1"></i>Manual (${manualCount})</div>`;
+                    } else {
+                        label += `<div class="fw-bold text-primary text-start mt-1" style="font-size: 0.65rem;"><i class="bi bi-database me-1"></i>Full (${schedCount})</div>`;
+                    }
+                }
+                if (logBackups.length > 0) {
+                    label += `<div class="fw-semibold text-info text-start mt-0.5" style="font-size: 0.65rem;"><i class="bi bi-journal-text me-1"></i>Logs (${logBackups.length})</div>`;
+                }
+                
+                backupContent = `
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="fw-bold text-dark" style="font-size: 0.85rem;">${day}</span>
+                        <div class="d-flex align-items-center">${dotHtml}</div>
+                    </div>
+                    <div class="flex-grow-1 d-flex flex-column justify-content-center">
+                        ${label}
+                    </div>
+                `;
+                
+                cell.addEventListener('click', () => showDayDetails(dateKey, dayBackups));
+            } else {
+                backupContent = `
+                    <div class="d-flex align-items-center justify-content-between">
+                        <span class="fw-semibold text-secondary" style="font-size: 0.8rem;">${day}</span>
+                    </div>
+                    <div class="flex-grow-1"></div>
+                `;
+            }
+            
+            cell.innerHTML = `<div class="${cellClass}">${backupContent}</div>`;
+            grid.appendChild(cell);
+        }
+        
+        // Render next month days
+        const totalRendered = firstDayIndex + daysInMonth;
+        const remaining = totalRendered % 7 === 0 ? 0 : 7 - (totalRendered % 7);
+        for (let i = 1; i <= remaining; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'col';
+            cell.innerHTML = `
+                <div class="calendar-day-cell other-month">
+                    <span class="fw-bold small">${i}</span>
+                </div>
+            `;
+            grid.appendChild(cell);
+        }
+    }
+
+    function showDayDetails(dateKey, backups) {
+        const parts = dateKey.split('-');
+        const y = parts[0];
+        const m = parseInt(parts[1]) - 1;
+        const d = parseInt(parts[2]);
+        const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+        document.getElementById('displaySelectedDate').textContent = `${monthNames[m]} ${d}, ${y}`;
+        
+        const tbody = document.getElementById('dayBackupsListBody');
+        tbody.innerHTML = '';
+        
+        backups.forEach(b => {
+            let typeBadge = '';
+            if (b.type == 0 || String(b.type) == '0') {
+                typeBadge = `<span class="badge bg-primary border px-2 py-0.5 small fw-semibold">Full Backup</span>`;
+            } else if (b.type == 1 || String(b.type) == '1') {
+                typeBadge = `<span class="badge bg-info text-dark border px-2 py-0.5 small fw-semibold">Transaction Logs</span>`;
+            } else {
+                typeBadge = `<span class="badge bg-secondary border px-2 py-0.5 small fw-semibold">Unknown</span>`;
+            }
+            
+            let retFlagsHtml = '';
+            if (b.retention_flags && b.retention_flags.length > 0) {
+                retFlagsHtml += '<div class="mt-1.5 d-flex flex-wrap gap-1">';
+                b.retention_flags.forEach(flag => {
+                    retFlagsHtml += `<span class="badge ${flag.class} border px-2 py-0.5 text-uppercase" style="font-size: 0.58rem; font-weight: 700; border-radius: 4px;">${flag.label}</span>`;
+                });
+                retFlagsHtml += '</div>';
+            } else if (b.is_manual) {
+                retFlagsHtml += '<div class="mt-1.5">';
+                retFlagsHtml += `<span class="badge border px-2 py-0.5 text-uppercase" style="font-size: 0.58rem; font-weight: 700; border-radius: 4px; background-color: #fff7ed; border-color: #fed7aa; color: #ea580c;">manual</span>`;
+                retFlagsHtml += '</div>';
+            }
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td>
+                    <div class="fw-bold text-dark font-monospace" style="font-size: 0.8rem;">${b.file_name}</div>
+                    <div class="d-flex flex-wrap gap-3 mt-1 text-muted small" style="font-size: 0.72rem;">
+                        <span><i class="bi bi-clock me-1"></i>${formatTime(b.time_stamp)}</span>
+                        ${b.path ? `<span><i class="bi bi-folder2-open me-1"></i>${b.path}</span>` : ''}
+                    </div>
+                </td>
+                <td>
+                    ${typeBadge}
+                    ${retFlagsHtml}
+                </td>
+                <td>
+                    <span class="text-secondary fw-semibold font-monospace">${(b.file_size_mb || 0).toFixed(2)} MB</span>
+                </td>
+                <td class="text-end">
+                    <button type="button" class="btn btn-sm btn-outline-danger py-1 px-3 fw-semibold" onclick="triggerRestoreFromCalendar('${b.file_name}')">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Restore
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+        
+        const modal = new bootstrap.Modal(document.getElementById('dayDetailsModal'));
+        modal.show();
+    }
+
+    function triggerRestoreFromCalendar(fileName) {
+        const dayModalEl = document.getElementById('dayDetailsModal');
+        const dayModal = bootstrap.Modal.getInstance(dayModalEl);
+        if (dayModal) {
+            dayModal.hide();
+        }
+        
+        setTimeout(() => {
+            document.getElementById('restoreBackupFileNameInput').value = fileName;
+            document.getElementById('displayBackupFileName').textContent = fileName;
+            document.getElementById('include_logs').checked = false;
+            
+            const restoreModal = new bootstrap.Modal(document.getElementById('restoreModal'));
+            restoreModal.show();
+        }, 350);
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        // Search filter logic
+        const searchInput = document.getElementById('backupSearch');
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                const query = this.value.toLowerCase().trim();
+                const tbody = document.querySelector('table tbody');
+                if (!tbody) return;
+                
+                const rows = tbody.querySelectorAll('tr:not(.no-results-row)');
+                let matches = 0;
+                rows.forEach(row => {
+                    const text = row.textContent.toLowerCase();
+                    if (text.includes(query)) {
+                        row.style.setProperty('display', '', 'important');
+                        matches++;
+                    } else {
+                        row.style.setProperty('display', 'none', 'important');
+                    }
+                });
+                
+                let noResults = document.getElementById('noBackupResults');
+                if (matches === 0 && query !== '') {
+                    if (!noResults) {
+                        noResults = document.createElement('tr');
+                        noResults.id = 'noBackupResults';
+                        noResults.className = 'no-results-row';
+                        noResults.innerHTML = `<td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-search fs-4 d-block mb-2 text-secondary"></i>No matching backups found.</td>`;
+                        tbody.appendChild(noResults);
+                    }
+                } else {
+                    if (noResults) {
+                        noResults.remove();
+                    }
+                }
+            });
+        }
+
+        // Restore Modal payload setup
+        const restoreModal = document.getElementById('restoreModal');
+        if (restoreModal) {
+            restoreModal.addEventListener('show.bs.modal', function (event) {
+                const button = event.relatedTarget;
+                if (!button) return; // Triggered programmatically from calendar
+                const filename = button.getAttribute('data-filename');
+                if (!filename) return;
+                
+                document.getElementById('restoreBackupFileNameInput').value = filename;
+                document.getElementById('displayBackupFileName').textContent = filename;
+                document.getElementById('include_logs').checked = false;
+            });
+        }
+        
+        // Render the calendar by default on load
+        renderCalendar();
+    });
+</script>
+{% endblock %}
