@@ -724,9 +724,13 @@
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
             const dateInput = document.querySelector('input[name="date"]');
             const dateVal = dateInput ? encodeURIComponent(dateInput.value) : '';
+            const timeFromInput = document.getElementById('timeFromInput');
+            const timeToInput = document.getElementById('timeToInput');
+            const timeFromVal = timeFromInput ? encodeURIComponent(timeFromInput.value) : '';
+            const timeToVal = timeToInput ? encodeURIComponent(timeToInput.value) : '';
             const offsetParam = typeof logOffset === 'object' ? encodeURIComponent(JSON.stringify(logOffset)) : logOffset;
 
-            const response = await fetch(`${baseUrl}?offset=${offsetParam}&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}`);
+            const response = await fetch(`${baseUrl}?offset=${offsetParam}&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}&time_from=${timeFromVal}&time_to=${timeToVal}`);
             if (!response.ok) return;
             const data = await response.json();
             
@@ -786,9 +790,13 @@
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
             const dateInput = document.querySelector('input[name="date"]');
             const dateVal = dateInput ? encodeURIComponent(dateInput.value) : '';
+            const timeFromInput = document.getElementById('timeFromInput');
+            const timeToInput = document.getElementById('timeToInput');
+            const timeFromVal = timeFromInput ? encodeURIComponent(timeFromInput.value) : '';
+            const timeToVal = timeToInput ? encodeURIComponent(timeToInput.value) : '';
 
             // Use offset=-1 to tail current file ends
-            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}`)
+            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}&time_from=${timeFromVal}&time_to=${timeToVal}`)
                 .then(r => r.json())
                 .then(data => {
                     logOffset = data.offset !== undefined ? data.offset : {};
@@ -869,6 +877,26 @@
         dateInputFilterEl.addEventListener('change', function() {
             if (headerLiveToggle && headerLiveToggle.checked) {
                 updateLiveState(true);
+            }
+        });
+    }
+
+    const timeFromInputEl = document.getElementById('timeFromInput');
+    const timeToInputEl = document.getElementById('timeToInput');
+    if (timeFromInputEl && timeToInputEl) {
+        timeFromInputEl.addEventListener('change', function() {
+            if (this.value && !timeToInputEl.value) {
+                const parts = this.value.split(':');
+                if (parts.length >= 2) {
+                    let h = parseInt(parts[0], 10);
+                    let m = parseInt(parts[1], 10) + 30;
+                    if (m >= 60) {
+                        h = (h + Math.floor(m / 60)) % 24;
+                        m = m % 60;
+                    }
+                    const pad = n => String(n).padStart(2, '0');
+                    timeToInputEl.value = `${pad(h)}:${pad(m)}`;
+                }
             }
         });
     }

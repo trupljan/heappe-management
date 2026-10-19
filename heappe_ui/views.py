@@ -1483,32 +1483,80 @@ def parse_json_log_line(line, service="API"):
         if not isinstance(data, dict):
             return None
         
-        timestamp_str = data.get('timestamp')
-        if timestamp_str:
-            timestamp_str = timestamp_str.replace('T', ' ').split('.')[0].rstrip('Z')
+        # Support various casing and Serilog/OTel timestamp keys
+        raw_ts = (
+            data.get('timestamp') or 
+            data.get('Timestamp') or 
+            data.get('@t') or 
+            data.get('time') or 
+            data.get('Time') or 
+            data.get('date') or 
+            data.get('Date')
+        )
+        timestamp_str = None
+        if raw_ts and isinstance(raw_ts, str):
+            cleaned_ts = raw_ts.replace('T', ' ').rstrip('Z')
+            if '.' in cleaned_ts:
+                cleaned_ts = cleaned_ts.split('.')[0]
+            if '+' in cleaned_ts:
+                cleaned_ts = cleaned_ts.split('+')[0]
+            timestamp_str = cleaned_ts.strip()
             
-        level = data.get('level', 'INFO').upper()
+        raw_level = (
+            data.get('level') or 
+            data.get('Level') or 
+            data.get('@l') or 
+            data.get('severity') or 
+            'INFO'
+        )
+        level = str(raw_level).upper()
+        if 'INFO' in level:
+            level = 'INFO'
+        elif 'WARN' in level:
+            level = 'WARN'
+        elif 'ERR' in level or 'CRIT' in level or 'FATAL' in level:
+            level = 'ERROR'
+        elif 'DEBUG' in level or 'TRACE' in level or 'VERBOSE' in level:
+            level = 'DEBUG'
         
-        request_id = data.get('requestId')
+        request_id = (
+            data.get('requestId') or 
+            data.get('RequestId') or 
+            data.get('TraceId') or 
+            data.get('traceId')
+        )
+        if not request_id and isinstance(data.get('Properties'), dict):
+            request_id = data['Properties'].get('RequestId') or data['Properties'].get('TraceId')
         conn_str = f"[{request_id}]" if request_id else "[-]"
         
-        user_name = data.get('userName')
-        user_id = data.get('userId')
+        user_name = data.get('userName') or data.get('UserName')
+        user_id = data.get('userId') or data.get('UserId')
+        if not (user_name or user_id) and isinstance(data.get('Properties'), dict):
+            user_name = data['Properties'].get('UserName')
+            user_id = data['Properties'].get('UserId')
         if user_name or user_id:
             user_str = f"{user_name or ''}({user_id or ''})".strip()
         else:
             user_str = "-"
             
-        logger = data.get('logger', '')
-        message = data.get('message', '')
-        exception = data.get('exception', '')
+        logger = data.get('logger') or data.get('Logger') or data.get('SourceContext') or ''
+        message = (
+            data.get('message') or 
+            data.get('Message') or 
+            data.get('@m') or 
+            data.get('messageTemplate') or 
+            data.get('MessageTemplate') or 
+            data.get('@mt') or 
+            ''
+        )
+        exception = data.get('exception') or data.get('Exception') or ''
         
         if exception:
-            full_msg = f"{message}\n{exception}"
+            full_msg = f"{message}\n{exception}" if message else str(exception)
         else:
-            full_msg = message
+            full_msg = str(message)
             
-        formatted_content = f"{level}  {timestamp_str}  {conn_str}  {user_str}  {logger} - {full_msg}"
+        formatted_content = f"{level}  {timestamp_str or ''}  {conn_str}  {user_str}  {logger} - {full_msg}"
         
         return {
             'timestamp_str': timestamp_str,
@@ -1531,12 +1579,20 @@ def parse_log_line(line, service="API"):
         if parsed_json:
             return parsed_json
 
-    timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
-    timestamp_str = timestamp_match.group(1) if timestamp_match else None
+    ts_match = re.search(r'(\d{4}[-_/]\d{2}[-_/]\d{2}[T\s]\d{2}:\d{2}:\d{2})', line)
+    if ts_match:
+        timestamp_str = ts_match.group(1).replace('T', ' ').replace('/', '-').replace('_', '-')
+    else:
+        time_only_match = re.search(r'\b(\d{2}:\d{2}:\d{2})\b', line)
+        if time_only_match:
+            timestamp_str = time_only_match.group(1)
+        else:
+            timestamp_str = None
 
     level = "INFO"
-    if timestamp_match:
-        prefix = line[:timestamp_match.start()].strip().upper()
+    if ts_match or timestamp_str:
+        prefix_end = ts_match.start() if ts_match else line.find(timestamp_str)
+        prefix = line[:prefix_end].strip().upper() if prefix_end > 0 else ""
         if "ERROR" in prefix or "ERR" in prefix:
             level = "ERROR"
         elif "WARN" in prefix:
@@ -1546,18 +1602,20 @@ def parse_log_line(line, service="API"):
         elif "INFO" in prefix:
             level = "INFO"
         else:
-            if "ERROR" in line or "Exception" in line:
+            upper_line = line.upper()
+            if "ERROR" in upper_line or "EXCEPTION" in upper_line:
                 level = "ERROR"
-            elif "WARN" in line:
+            elif "WARN" in upper_line:
                 level = "WARN"
-            elif "DEBUG" in line:
+            elif "DEBUG" in upper_line:
                 level = "DEBUG"
     else:
-        if "ERROR" in line or "Exception" in line:
+        upper_line = line.upper()
+        if "ERROR" in upper_line or "EXCEPTION" in upper_line:
             level = "ERROR"
-        elif "WARN" in line:
+        elif "WARN" in upper_line:
             level = "WARN"
-        elif "DEBUG" in line:
+        elif "DEBUG" in upper_line:
             level = "DEBUG"
 
     svc = service
@@ -1568,22 +1626,28 @@ def parse_log_line(line, service="API"):
     if dash_idx != -1 and dash_idx < 150:
         msg = line[dash_idx + 3:]
         header = line[:dash_idx]
-        tokens = header.split()
-        conn_str = "[-]"
-        user_str = "-"
-        logger = ""
-        for t in tokens:
-            if t.startswith('[') and t.endswith(']'):
-                conn_str = t
-            elif '(' in t and t.endswith(')'):
-                user_str = t
-            elif '.' in t or 'Controller' in t:
-                logger = t
     else:
+        header = line
         msg = line
-        conn_str = "[-]"
-        user_str = "-"
-        logger = ""
+
+    tokens = header.split()
+    conn_str = "[-]"
+    user_str = "-"
+    logger = ""
+    for t in tokens:
+        if t.startswith('[') and t.endswith(']'):
+            conn_str = t
+        elif '(' in t and t.endswith(')'):
+            user_str = t
+        elif '.' in t or 'Controller' in t:
+            logger = t
+
+    if dash_idx == -1 and conn_str != "[-]":
+        conn_idx = line.find(conn_str)
+        if conn_idx != -1:
+            candidate_msg = line[conn_idx + len(conn_str):].strip()
+            if candidate_msg:
+                msg = candidate_msg
 
     return {
         'timestamp_str': timestamp_str,
@@ -1601,21 +1665,33 @@ def matches_filters(parsed, level_filter, search_query, time_from, time_to):
     if not level_filter and not search_query and not time_from and not time_to:
         return True
 
-    if level_filter and parsed['level'] != level_filter:
+    if level_filter and parsed.get('level') != level_filter:
         return False
         
-    if parsed.get('timestamp_str'):
-        try:
-            time_part = parsed['timestamp_str'].split(' ')[1]
-            if time_from and time_part < (time_from + ":00"):
-                return False
-            if time_to and time_part > (time_to + ":59"):
-                return False
-        except Exception:
-            pass
+    if time_from or time_to:
+        ts = parsed.get('timestamp_str')
+        if not ts:
+            return False
+
+        time_match = re.search(r'(\d{2}:\d{2}(?::\d{2})?)', str(ts))
+        if not time_match:
+            return False
+
+        time_part = time_match.group(1)
+        if len(time_part) == 5:
+            time_part += ":00"
+
+        tf = (time_from + ":00") if (time_from and len(time_from) == 5) else (time_from or "")
+        tt = (time_to + ":59") if (time_to and len(time_to) == 5) else (time_to or "")
+
+        if tf and time_part < tf:
+            return False
+        if tt and time_part > tt:
+            return False
             
     if search_query:
-        if search_query not in parsed['content'].lower():
+        content = parsed.get('content', '')
+        if search_query not in content.lower():
             return False
             
     return True
@@ -1646,7 +1722,7 @@ def log_file_sort_key(file_entry):
 
 
 def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, search_query=None, time_from=None, time_to=None):
-    timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+    timestamp_re = re.compile(r'(?:\d{4}[-_/]\d{2}[-_/]\d{2}[T\s])?\d{2}:\d{2}:\d{2}')
     entries_count = 0
     
     normalized = []
@@ -1684,7 +1760,7 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
             current_entry_lines = []
             
             for line in get_lines_backwards(log_path):
-                ts_match = timestamp_re.search(line[:30])
+                ts_match = timestamp_re.search(line[:35])
                 
                 if ts_match:
                     current_entry_lines.append(line)
@@ -1801,13 +1877,26 @@ def get_log_file_path(instance, date_str, service="API"):
 @login_required
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
-    today = datetime.now().strftime('%Y-%m-%d')
-    selected_date = request.GET.get('date', today)
-    time_from = request.GET.get('time_from', '')
-    time_to = request.GET.get('time_to', '')
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    selected_date = request.GET.get('date', today) or today
+    time_from = request.GET.get('time_from', '').strip()
+    time_to = request.GET.get('time_to', '').strip()
     search_query = request.GET.get('search', '').lower()
     level_filter = request.GET.get('level', '').upper()
     service_filter = request.GET.get('service', 'API').upper()
+
+    effective_time_to = time_to
+    if time_from and not effective_time_to:
+        try:
+            parts = time_from.split(':')
+            h = int(parts[0]) + 1
+            m = int(parts[1])
+            if h >= 24:
+                effective_time_to = "23:59"
+            else:
+                effective_time_to = f"{h:02d}:{m:02d}"
+        except Exception:
+            effective_time_to = ""
 
     log_paths = get_log_file_paths(instance, selected_date, service=service_filter)
     
@@ -1818,7 +1907,7 @@ def log_viewer_view(request):
             level_filter=level_filter,
             search_query=search_query,
             time_from=time_from,
-            time_to=time_to
+            time_to=effective_time_to
         ))
         entries.reverse()
     except Exception as e:
@@ -1836,7 +1925,7 @@ def log_viewer_view(request):
         'logs_count': len(entries),
         'selected_date': selected_date,
         'time_from': time_from,
-        'time_to': time_to,
+        'time_to': time_to or effective_time_to,
         'search_query': search_query,
         'level_filter': level_filter,
         'service_filter': service_filter,
@@ -1851,11 +1940,13 @@ MAX_CHUNK_READ_BYTES = 512 * 1024  # 512 KB per file read chunk
 @login_required
 def fetch_new_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.utcnow().strftime('%Y-%m-%d')
     selected_date = request.GET.get('date', today) or today
     service_filter = request.GET.get('service', 'API').upper()
     level_filter = request.GET.get('level', '').upper()
     search_query = request.GET.get('search', '').lower()
+    time_from = request.GET.get('time_from', '').strip()
+    time_to = request.GET.get('time_to', '').strip()
 
     raw_offset = request.GET.get('offset', '0')
     is_dict_offset = False
@@ -1959,7 +2050,7 @@ def fetch_new_logs(request):
                 parsed = parse_json_log_line(line_stripped, service=svc_tag)
                 if parsed:
                     processed_bytes += len(line.encode('utf-8'))
-                    if matches_filters(parsed, level_filter, search_query, None, None):
+                    if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                         new_entries.append(parsed)
                     if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL:
                         break
@@ -1980,16 +2071,16 @@ def fetch_new_logs(request):
                 decoded_lines = decoded.splitlines(keepends=True)
 
             current_entry_lines = []
-            timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+            timestamp_re = re.compile(r'(?:\d{4}[-_/]\d{2}[-_/]\d{2}[T\s])?\d{2}:\d{2}:\d{2}')
 
             lines_consumed_bytes = 0
             for line in decoded_lines:
                 line_len = len(line.encode('utf-8'))
-                if timestamp_re.search(line[:30]):
+                if timestamp_re.search(line[:35]):
                     if current_entry_lines:
                         entry_text = "".join(current_entry_lines)
                         parsed = parse_log_line(entry_text, service=svc_tag)
-                        if matches_filters(parsed, level_filter, search_query, None, None):
+                        if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                             new_entries.append(parsed)
                     current_entry_lines = [line]
                 else:
@@ -2001,7 +2092,7 @@ def fetch_new_logs(request):
             if current_entry_lines and len(new_entries) < MAX_LOG_ENTRIES_PER_PULL:
                 entry_text = "".join(current_entry_lines)
                 parsed = parse_log_line(entry_text, service=svc_tag)
-                if matches_filters(parsed, level_filter, search_query, None, None):
+                if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                     new_entries.append(parsed)
 
             updated_offsets[log_path] = cur_file_offset + (lines_consumed_bytes if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL else consumed_bytes)

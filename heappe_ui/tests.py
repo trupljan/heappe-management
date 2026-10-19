@@ -3261,6 +3261,53 @@ class LogViewerJsonTests(TestCase):
             os.remove(act_path)
             user.delete()
 
+    def test_matches_filters_time_filtering(self):
+        from heappe_ui.views import matches_filters
+        entry_night = {'timestamp_str': '2026-10-15 23:56:15', 'level': 'INFO', 'content': 'Night log'}
+        entry_iso_night = {'timestamp_str': '2026-10-15T23:56:15.127Z', 'level': 'INFO', 'content': 'ISO Night log'}
+        entry_noon = {'timestamp_str': '2026-10-15 12:15:00', 'level': 'INFO', 'content': 'Noon log'}
+        entry_time_only = {'timestamp_str': '12:20:00', 'level': 'INFO', 'content': 'Time only log'}
+        entry_no_ts = {'timestamp_str': None, 'level': 'INFO', 'content': 'No timestamp log'}
+
+        # Filter: 12:03 to 12:30
+        self.assertFalse(matches_filters(entry_night, "", "", "12:03", "12:30"))
+        self.assertFalse(matches_filters(entry_iso_night, "", "", "12:03", "12:30"))
+        self.assertTrue(matches_filters(entry_noon, "", "", "12:03", "12:30"))
+        self.assertTrue(matches_filters(entry_time_only, "", "", "12:03", "12:30"))
+        self.assertFalse(matches_filters(entry_no_ts, "", "", "12:03", "12:30"))
+
+        # Exact boundaries
+        entry_boundary_start = {'timestamp_str': '2026-10-15 12:03:00', 'level': 'INFO', 'content': 'Start boundary'}
+        entry_boundary_end = {'timestamp_str': '2026-10-15 12:30:59', 'level': 'INFO', 'content': 'End boundary'}
+        entry_outside_end = {'timestamp_str': '2026-10-15 12:31:00', 'level': 'INFO', 'content': 'Outside end'}
+        self.assertTrue(matches_filters(entry_boundary_start, "", "", "12:03", "12:30"))
+        self.assertTrue(matches_filters(entry_boundary_end, "", "", "12:03", "12:30"))
+        self.assertFalse(matches_filters(entry_outside_end, "", "", "12:03", "12:30"))
+
+    def test_parse_json_log_line_serilog_pascalcase(self):
+        from heappe_ui.views import parse_json_log_line
+        serilog_json = (
+            '{"Timestamp":"2026-10-15T23:56:15.1272345+00:00","Level":"Information",'
+            '"MessageTemplate":"User {UserName} logged in","Properties":{"UserName":"johndoe","RequestId":"req789"},'
+            '"SourceContext":"HEAppE.Controllers.AuthController"}'
+        )
+        parsed = parse_json_log_line(serilog_json)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed['level'], 'INFO')
+        self.assertEqual(parsed['timestamp_str'], '2026-10-15 23:56:15')
+        self.assertEqual(parsed['conn'], '[req789]')
+        self.assertEqual(parsed['logger'], 'HEAppE.Controllers.AuthController')
+        self.assertIn('User {UserName} logged in', parsed['content'])
+
+    def test_parse_log_line_time_only(self):
+        from heappe_ui.views import parse_log_line
+        line = "INFO  23:56:15 [7ce0d92b6028f1334700c96bfd41f5eb] AuthMiddleware: Anonymous endpoint detected."
+        parsed = parse_log_line(line)
+        self.assertIsNotNone(parsed)
+        self.assertEqual(parsed['level'], 'INFO')
+        self.assertEqual(parsed['timestamp_str'], '23:56:15')
+        self.assertEqual(parsed['conn'], '[7ce0d92b6028f1334700c96bfd41f5eb]')
+
 
 class VaultUnsealApiTests(TestCase):
     def setUp(self):
@@ -5078,3 +5125,67 @@ class QSchedulerManageTests(TestCase):
         self.assertIn("--health-cmd", args)
         self.assertEqual(args[-4:], ["qscheduler:new", "serve", "--port", "4301"])
         self.assertNotIn("abcdef123456", sum((a for _, a in nets), []))
+
+
+class InstanceConfigOidcActionTests(TestCase):
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from heappe_ui.models import InstanceCredentials
+        self.user = User.objects.create_user(username="admin_user", password="password123")
+        self.client.force_login(self.user)
+        self.instance = InstanceCredentials.objects.create(
+            instance_name="test_inst",
+            heappe_host="127.0.0.1",
+            heappe_login="admin",
+            heappe_password="secret_password",
+            heappe_port="5000",
+            log_db_host="127.0.0.1",
+            log_db_port="1433",
+            log_db_user="sa",
+            log_db_password="sa_password",
+            log_db_database="log_db"
+        )
+
+    @mock.patch("heappe_ui.view.deploy.docker.from_env")
+    def test_oidc_action_empty_authority(self, mock_docker):
+        mock_container = mock.MagicMock()
+        mock_container.labels = {'com.docker.compose.project': 'test_inst', 'com.docker.compose.service': 'heappe'}
+        mock_container.name = 'test_inst_heappe'
+        mock_docker.return_value.containers.list.return_value = [mock_container]
+
+        response = self.client.post(f"/deploy/test_inst/config/", {
+            "action": "test_oidc",
+            "authority": ""
+        })
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertEqual(data["status"], "danger")
+        self.assertIn("cannot be empty", data["message"])
+
+    @mock.patch("heappe_ui.view.deploy.docker.from_env")
+    @mock.patch("urllib.request.urlopen")
+    def test_oidc_action_successful_discovery(self, mock_urlopen, mock_docker):
+        mock_container = mock.MagicMock()
+        mock_container.labels = {'com.docker.compose.project': 'test_inst', 'com.docker.compose.service': 'heappe'}
+        mock_container.name = 'test_inst_heappe'
+        mock_docker.return_value.containers.list.return_value = [mock_container]
+
+        mock_resp = mock.MagicMock()
+        mock_resp.status = 200
+        mock_resp.read.return_value = (
+            b'{"issuer": "https://kc.example.com/realms/demo", '
+            b'"token_endpoint": "https://kc.example.com/realms/demo/protocol/openid-connect/token", '
+            b'"userinfo_endpoint": "https://kc.example.com/realms/demo/protocol/openid-connect/userinfo"}'
+        )
+        mock_resp.__enter__.return_value = mock_resp
+        mock_urlopen.return_value = mock_resp
+
+        response = self.client.post(f"/deploy/test_inst/config/", {
+            "action": "test_oidc",
+            "authority": "https://kc.example.com/realms/demo"
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["details"]["issuer"], "https://kc.example.com/realms/demo")
+        self.assertEqual(data["details"]["token_endpoint"], "https://kc.example.com/realms/demo/protocol/openid-connect/token")
