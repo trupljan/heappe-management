@@ -5225,3 +5225,86 @@ class InstanceConfigOidcActionTests(TestCase):
         self.assertEqual(data["status"], "success")
         self.assertEqual(data["details"]["issuer"], "https://kc.example.com/realms/demo")
         self.assertEqual(data["details"]["token_endpoint"], "https://kc.example.com/realms/demo/protocol/openid-connect/token")
+
+
+class SystemUpdateStatusApiTests(TestCase):
+    def test_status_endpoint_no_logs_and_no_process(self):
+        with mock.patch("os.path.exists", return_value=False), \
+             mock.patch("subprocess.check_output", side_effect=Exception("not running")):
+            response = self.client.get("/api/system-update-status/")
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertFalse(data["is_running"])
+            self.assertFalse(data["is_success"])
+            self.assertFalse(data["is_failed"])
+            self.assertEqual(data["logs"], "")
+
+    def test_status_endpoint_process_running(self):
+        mock_log = "[2026-10-19 15:00:00] === START DEPLOYMENT: main ===\nFetching origin...\n"
+        with mock.patch("os.path.exists", return_value=True), \
+             mock.patch("builtins.open", mock.mock_open(read_data=mock_log)), \
+             mock.patch("subprocess.check_output", return_value=b"1234\n"):
+            response = self.client.get("/api/system-update-status/")
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertTrue(data["is_running"])
+            self.assertFalse(data["is_success"])
+            self.assertFalse(data["is_failed"])
+            self.assertIn("Fetching origin", data["logs"])
+
+    def test_status_endpoint_deployment_succeeded(self):
+        mock_log = (
+            "[2026-10-19 15:00:00] === START DEPLOYMENT: main ===\n"
+            "Migrating...\n"
+            "[2026-10-19 15:00:20] === SUCCESS ===\n"
+        )
+        with mock.patch("os.path.exists", return_value=True), \
+             mock.patch("builtins.open", mock.mock_open(read_data=mock_log)), \
+             mock.patch("subprocess.check_output", side_effect=Exception("not running")):
+            response = self.client.get("/api/system-update-status/")
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertFalse(data["is_running"])
+            self.assertTrue(data["is_success"])
+            self.assertFalse(data["is_failed"])
+            self.assertIn("=== SUCCESS ===", data["logs"])
+
+    def test_status_endpoint_deployment_failed(self):
+        mock_log = (
+            "[2026-10-19 15:00:00] === START DEPLOYMENT: main ===\n"
+            "ERROR: Step failed. Exiting.\n"
+        )
+        with mock.patch("os.path.exists", return_value=True), \
+             mock.patch("builtins.open", mock.mock_open(read_data=mock_log)), \
+             mock.patch("subprocess.check_output", side_effect=Exception("not running")):
+            response = self.client.get("/api/system-update-status/")
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertFalse(data["is_running"])
+            self.assertFalse(data["is_success"])
+            self.assertTrue(data["is_failed"])
+            self.assertIn("ERROR: Step failed", data["logs"])
+
+    def test_status_endpoint_isolates_current_deployment_slice(self):
+        mock_log = (
+            "[2026-10-18 10:00:00] === START DEPLOYMENT: v1 ===\n"
+            "Old output\n"
+            "=== SUCCESS ===\n"
+            "[2026-10-19 15:00:00] === START DEPLOYMENT: v2 ===\n"
+            "New output in progress\n"
+        )
+        with mock.patch("os.path.exists", return_value=True), \
+             mock.patch("builtins.open", mock.mock_open(read_data=mock_log)), \
+             mock.patch("subprocess.check_output", return_value=b"5678\n"):
+            response = self.client.get("/api/system-update-status/")
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertTrue(data["is_running"])
+            self.assertFalse(data["is_success"])
+            self.assertNotIn("Old output", data["logs"])
+            self.assertIn("New output in progress", data["logs"])
+

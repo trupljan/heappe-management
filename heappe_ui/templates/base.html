@@ -690,10 +690,23 @@
                     </div>
                 </div>
 
-                <div id="update-running-view" class="d-none text-center py-4">
-                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
-                    <h5 class="fw-bold">Update in progress...</h5>
-                    <p class="text-muted small">Executing deployment script and restarting server.<br>You will be redirected in <span id="countdown">15</span> seconds.</p>
+                <div id="update-running-view" class="d-none text-center py-3">
+                    <div id="update-spinner" class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <div id="update-status-icon" class="d-none mb-3"></div>
+                    <h5 id="update-status-title" class="fw-bold text-dark">Update in progress...</h5>
+                    <p id="update-status-message" class="text-muted small mb-2">Executing deployment script (fetching changes, updating packages, running migrations)...</p>
+                    
+                    <div class="d-flex justify-content-center align-items-center gap-2 mb-3">
+                        <span class="badge bg-light text-secondary border font-monospace" id="update-elapsed-time">Elapsed: 0s</span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" id="update-phase-badge">Deploying</span>
+                    </div>
+
+                    <div class="text-start mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small fw-bold text-secondary mb-0"><i class="bi bi-terminal me-1"></i>Deployment Output:</label>
+                        </div>
+                        <pre id="admin-update-live-logs" class="bg-dark text-light p-2.5 rounded font-monospace small mb-0" style="max-height: 160px; overflow-y: auto; font-size: 11px; white-space: pre-wrap;">Initializing deployment...</pre>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer bg-light" id="modalFooter">
@@ -989,10 +1002,37 @@
     function confirmAndDeploy() {
         if (!confirm("Are you sure you want to start the update process now?")) return;
 
-        document.getElementById('update-init-view').classList.add('d-none');
-        document.getElementById('modalFooter').classList.add('d-none');
-        document.getElementById('modalCloseX').classList.add('d-none');
-        document.getElementById('update-running-view').classList.remove('d-none');
+        const initView = document.getElementById('update-init-view');
+        const modalFooter = document.getElementById('modalFooter');
+        const modalCloseX = document.getElementById('modalCloseX');
+        const runningView = document.getElementById('update-running-view');
+
+        const spinner = document.getElementById('update-spinner');
+        const statusIcon = document.getElementById('update-status-icon');
+        const statusTitle = document.getElementById('update-status-title');
+        const statusMsg = document.getElementById('update-status-message');
+        const elapsedEl = document.getElementById('update-elapsed-time');
+        const phaseBadge = document.getElementById('update-phase-badge');
+        const logsEl = document.getElementById('admin-update-live-logs');
+
+        if (initView) initView.classList.add('d-none');
+        if (modalFooter) modalFooter.classList.add('d-none');
+        if (modalCloseX) modalCloseX.classList.add('d-none');
+        if (runningView) runningView.classList.remove('d-none');
+
+        if (spinner) spinner.classList.remove('d-none');
+        if (statusIcon) {
+            statusIcon.classList.add('d-none');
+            statusIcon.innerHTML = '';
+        }
+        if (statusTitle) statusTitle.textContent = 'Update in progress...';
+        if (statusMsg) statusMsg.textContent = 'Executing deployment script (fetching changes, updating packages, running migrations)...';
+        if (elapsedEl) elapsedEl.textContent = 'Elapsed: 0s';
+        if (phaseBadge) {
+            phaseBadge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle';
+            phaseBadge.textContent = 'Deploying';
+        }
+        if (logsEl) logsEl.textContent = 'Initializing deployment...';
 
         fetch('{% url "trigger_deployment_direct" %}', {
             method: 'POST',
@@ -1005,24 +1045,190 @@
                 git_tag: currentUpdateBranch
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(errData => {
+                    throw new Error(errData.message || ('Server returned HTTP ' + response.status));
+                }).catch(err => {
+                    throw new Error(err.message || ('Server error ' + response.status));
+                });
+            }
+            return response.json();
+        })
         .then(data => {
-            let seconds = 15;
-            const countdownEl = document.getElementById('countdown');
-            const timer = setInterval(() => {
-                seconds--;
-                countdownEl.innerText = seconds;
-                if (seconds <= 0) {
-                    clearInterval(timer);
-                    window.location.href = "{% url 'dashboard_view' %}";
-                }
-            }, 1000);
+            startDynamicUpdatePolling();
         })
         .catch(error => {
-            alert("Critical error: Deployment failed to launch. " + error);
-            location.reload();
+            showUpdateError('Deployment failed to launch: ' + error.message);
         });
     }
+
+    function showUpdateError(errorMessage, logText = null) {
+        const spinner = document.getElementById('update-spinner');
+        const statusIcon = document.getElementById('update-status-icon');
+        const statusTitle = document.getElementById('update-status-title');
+        const statusMsg = document.getElementById('update-status-message');
+        const phaseBadge = document.getElementById('update-phase-badge');
+        const logsEl = document.getElementById('admin-update-live-logs');
+        const modalFooter = document.getElementById('modalFooter');
+        const modalCloseX = document.getElementById('modalCloseX');
+
+        if (spinner) spinner.classList.add('d-none');
+        if (statusIcon) {
+            statusIcon.classList.remove('d-none');
+            statusIcon.innerHTML = '<i class="bi bi-x-circle-fill text-danger" style="font-size: 3rem;"></i>';
+        }
+        if (statusTitle) statusTitle.textContent = 'Update Failed';
+        if (statusMsg) statusMsg.textContent = errorMessage;
+        if (phaseBadge) {
+            phaseBadge.className = 'badge bg-danger-subtle text-danger border border-danger-subtle';
+            phaseBadge.textContent = 'Failed';
+        }
+        if (logsEl && logText) {
+            logsEl.textContent = logText;
+        }
+
+        if (modalFooter) {
+            modalFooter.innerHTML = '<button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>';
+            modalFooter.classList.remove('d-none');
+        }
+        if (modalCloseX) modalCloseX.classList.remove('d-none');
+    }
+
+    function startDynamicUpdatePolling() {
+        const statusUrl = '{% url "system_update_status_api" %}';
+        const startTime = Date.now();
+        let isPolling = true;
+        let hasRestarted = false;
+        let pollTimer = null;
+        let elapsedTimer = null;
+
+        const spinner = document.getElementById('update-spinner');
+        const statusIcon = document.getElementById('update-status-icon');
+        const statusTitle = document.getElementById('update-status-title');
+        const statusMsg = document.getElementById('update-status-message');
+        const elapsedEl = document.getElementById('update-elapsed-time');
+        const phaseBadge = document.getElementById('update-phase-badge');
+        const logsEl = document.getElementById('admin-update-live-logs');
+
+        elapsedTimer = setInterval(() => {
+            const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+            if (elapsedEl) elapsedEl.textContent = 'Elapsed: ' + elapsedSeconds + 's';
+
+            if (elapsedSeconds > 180) {
+                clearInterval(elapsedTimer);
+                if (pollTimer) clearTimeout(pollTimer);
+                isPolling = false;
+                showUpdateError('Deployment check timed out after 3 minutes. The server might still be restarting in the background. Please refresh or verify via systemctl.', logsEl ? logsEl.textContent : null);
+            }
+        }, 1000);
+
+        function checkStatus() {
+            if (!isPolling) return;
+
+            fetch(statusUrl + '?t=' + Date.now())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('HTTP ' + response.status);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (!isPolling) return;
+
+                    if (data.logs && logsEl) {
+                        logsEl.textContent = data.logs;
+                        logsEl.scrollTop = logsEl.scrollHeight;
+                    }
+
+                    if (data.is_success) {
+                        isPolling = false;
+                        clearInterval(elapsedTimer);
+                        if (spinner) spinner.classList.add('d-none');
+                        if (statusIcon) {
+                            statusIcon.classList.remove('d-none');
+                            statusIcon.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>';
+                        }
+                        if (statusTitle) statusTitle.textContent = 'Update Completed Successfully';
+                        if (statusMsg) statusMsg.textContent = 'The Admin Panel has been updated and restarted. Reloading dashboard...';
+                        if (phaseBadge) {
+                            phaseBadge.className = 'badge bg-success-subtle text-success border border-success-subtle';
+                            phaseBadge.textContent = 'Success';
+                        }
+
+                        setTimeout(() => {
+                            window.location.href = "{% url 'dashboard_view' %}";
+                        }, 1500);
+                        return;
+                    }
+
+                    if (data.is_failed) {
+                        isPolling = false;
+                        clearInterval(elapsedTimer);
+                        showUpdateError('Deployment script reported an error. Please inspect the log output below.', data.logs);
+                        return;
+                    }
+
+                    if (hasRestarted && !data.is_running && !data.is_failed) {
+                        isPolling = false;
+                        clearInterval(elapsedTimer);
+                        if (spinner) spinner.classList.add('d-none');
+                        if (statusIcon) {
+                            statusIcon.classList.remove('d-none');
+                            statusIcon.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>';
+                        }
+                        if (statusTitle) statusTitle.textContent = 'Update Completed';
+                        if (statusMsg) statusMsg.textContent = 'Server is back online with new version. Reloading...';
+                        if (phaseBadge) {
+                            phaseBadge.className = 'badge bg-success-subtle text-success border border-success-subtle';
+                            phaseBadge.textContent = 'Success';
+                        }
+                        setTimeout(() => {
+                            window.location.href = "{% url 'dashboard_view' %}";
+                        }, 1500);
+                        return;
+                    }
+
+                    const currentLogs = data.logs || '';
+                    if (currentLogs.includes('restart adminpanel') || currentLogs.includes('restarting')) {
+                        if (phaseBadge) {
+                            phaseBadge.className = 'badge bg-warning-subtle text-warning border border-warning-subtle';
+                            phaseBadge.textContent = 'Restarting Service';
+                        }
+                        if (statusTitle) statusTitle.textContent = 'Restarting server...';
+                        if (statusMsg) statusMsg.textContent = 'Applying systemctl restart on adminpanel service...';
+                    } else if (currentLogs.includes('migrate')) {
+                        if (phaseBadge) {
+                            phaseBadge.className = 'badge bg-info-subtle text-info border border-info-subtle';
+                            phaseBadge.textContent = 'Migrating DB';
+                        }
+                        if (statusMsg) statusMsg.textContent = 'Applying database migrations...';
+                    } else if (currentLogs.includes('pip install')) {
+                        if (phaseBadge) {
+                            phaseBadge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle';
+                            phaseBadge.textContent = 'Updating Packages';
+                        }
+                        if (statusMsg) statusMsg.textContent = 'Installing required Python dependencies...';
+                    }
+
+                    pollTimer = setTimeout(checkStatus, 2000);
+                })
+                .catch(err => {
+                    hasRestarted = true;
+                    if (phaseBadge) {
+                        phaseBadge.className = 'badge bg-warning-subtle text-warning border border-warning-subtle';
+                        phaseBadge.textContent = 'Server Restarting';
+                    }
+                    if (statusTitle) statusTitle.textContent = 'Restarting server...';
+                    if (statusMsg) statusMsg.textContent = 'Admin panel service is restarting. Reconnecting automatically...';
+
+                    pollTimer = setTimeout(checkStatus, 2000);
+                });
+        }
+
+        pollTimer = setTimeout(checkStatus, 1500);
+    }
+
 
     function copyApiKey(btn) {
         const span = btn.previousElementSibling;

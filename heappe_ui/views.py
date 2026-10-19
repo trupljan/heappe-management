@@ -1427,13 +1427,13 @@ def system_update_status_api(request):
             try:
                 with open(path, "r", encoding="utf-8", errors="ignore") as f:
                     lines = f.readlines()
-                    log_content = "".join(lines[-100:])
+                    log_content = "".join(lines[-300:])
                 break
             except Exception:
                 pass
 
-    is_success = "=== SUCCESS ===" in log_content
-    is_failed = ("FAILED" in log_content) or ("ERROR: Step failed" in log_content)
+    last_start_idx = log_content.rfind("=== START DEPLOYMENT")
+    current_run = log_content[last_start_idx:] if last_start_idx != -1 else log_content
 
     is_process_running = False
     try:
@@ -1442,14 +1442,21 @@ def system_update_status_api(request):
     except Exception:
         is_process_running = False
 
-    is_running = is_process_running or (not is_success and not is_failed and bool(log_content))
+    if is_process_running:
+        is_running = True
+        is_success = False
+        is_failed = False
+    else:
+        is_success = "=== SUCCESS ===" in current_run
+        is_failed = ("FAILED" in current_run) or ("ERROR: Step failed" in current_run)
+        is_running = not is_success and not is_failed and bool(current_run)
 
     return JsonResponse({
         "status": "ok",
         "is_running": is_running,
         "is_success": is_success,
         "is_failed": is_failed,
-        "logs": log_content,
+        "logs": current_run,
         "current_commit": getattr(settings, "GIT_VERSION", ""),
     })
 
