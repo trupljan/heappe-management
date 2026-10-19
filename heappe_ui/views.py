@@ -1476,6 +1476,8 @@ def get_lines_backwards(file_path):
 
 
 def parse_json_log_line(line, service="API"):
+    if not line or line[0] != '{' or line[-1] != '}':
+        return None
     try:
         data = json.loads(line)
         if not isinstance(data, dict):
@@ -1596,10 +1598,13 @@ def parse_log_line(line, service="API"):
 
 
 def matches_filters(parsed, level_filter, search_query, time_from, time_to):
+    if not level_filter and not search_query and not time_from and not time_to:
+        return True
+
     if level_filter and parsed['level'] != level_filter:
         return False
         
-    if parsed['timestamp_str']:
+    if parsed.get('timestamp_str'):
         try:
             time_part = parsed['timestamp_str'].split(' ')[1]
             if time_from and time_part < (time_from + ":00"):
@@ -1610,7 +1615,7 @@ def matches_filters(parsed, level_filter, search_query, time_from, time_to):
             pass
             
     if search_query:
-        if search_query.lower() not in parsed['content'].lower():
+        if search_query not in parsed['content'].lower():
             return False
             
     return True
@@ -1654,6 +1659,8 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
 
     all_entries = []
 
+    buffer_limit = max_entries + 100
+
     for log_path, default_svc in reversed(normalized):
         if not log_path or not os.path.exists(log_path):
             continue
@@ -1671,7 +1678,7 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                     all_entries.append(parsed)
                     file_entries_count += 1
                     entries_count += 1
-                    if entries_count >= max_entries * 2 or file_entries_count >= max_entries:
+                    if entries_count >= buffer_limit or file_entries_count >= max_entries:
                         break
         else:
             current_entry_lines = []
@@ -1689,7 +1696,7 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                         all_entries.append(parsed)
                         file_entries_count += 1
                         entries_count += 1
-                        if entries_count >= max_entries * 2 or file_entries_count >= max_entries:
+                        if entries_count >= buffer_limit or file_entries_count >= max_entries:
                             break
                 else:
                     current_entry_lines.append(line)
@@ -1701,7 +1708,7 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                     all_entries.append(parsed)
                     entries_count += 1
 
-        if entries_count >= max_entries * 2:
+        if entries_count >= buffer_limit:
             break
 
     all_entries.sort(key=lambda x: x.get('timestamp_str') or '', reverse=True)
@@ -1944,7 +1951,7 @@ def fetch_new_logs(request):
         if is_json:
             lines = decoded.splitlines(keepends=True)
             processed_bytes = 0
-            for line in lines:
+            for idx, line in enumerate(lines):
                 line_stripped = line.strip()
                 if not line_stripped:
                     processed_bytes += len(line.encode('utf-8'))
@@ -1958,7 +1965,9 @@ def fetch_new_logs(request):
                         break
                 else:
                     # Incomplete JSON line at boundary, leave for next read
-                    break
+                    if idx == len(lines) - 1 and not chunk.endswith(b'\n'):
+                        break
+                    processed_bytes += len(line.encode('utf-8'))
             updated_offsets[log_path] = cur_file_offset + processed_bytes
         else:
             last_newline = chunk.rfind(b'\n')

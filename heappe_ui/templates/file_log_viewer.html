@@ -149,6 +149,8 @@
         word-break: break-all;
         border-bottom: none;
         transition: background-color 0.1s ease;
+        content-visibility: auto;
+        contain-intrinsic-size: 0 22px;
     }
     .log-entry:hover {
         background-color: #f1f5f9;
@@ -511,8 +513,14 @@
     const headerLiveStatus = document.getElementById('headerLiveStatus');
     const entryCountDisplay = document.getElementById('entryCount');
 
-    function scrollToBottom() { 
-        logWindow.scrollTop = logWindow.scrollHeight; 
+    function isScrolledNearBottom() {
+        return (logWindow.scrollHeight - logWindow.scrollTop - logWindow.clientHeight) < 80;
+    }
+
+    function scrollToBottom(force = true) { 
+        if (force || isScrolledNearBottom()) {
+            logWindow.scrollTop = logWindow.scrollHeight; 
+        }
     }
 
     function escapeHtml(text) {
@@ -525,6 +533,9 @@
     }
 
     function syntaxHighlightJson(json) {
+        if (!json || json.length > 2500) {
+            return escapeHtml(json);
+        }
         json = escapeHtml(json);
         return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
             let cls = 'json-value-number';
@@ -549,6 +560,9 @@
 
     function highlightJsonInText(text) {
         if (!text || text.indexOf('{') === -1) {
+            return escapeHtml(text);
+        }
+        if (text.length > 8000) {
             return escapeHtml(text);
         }
         const trimmed = text.trim();
@@ -726,14 +740,17 @@
                 for (const entry of data.entries) {
                     html += createLogEntryHtml(entry);
                 }
-                consoleContent.insertAdjacentHTML('beforeend', html);
                 logOffset = data.offset;
                 
-                // Fast atomic trim of console DOM to keep memory clean
-                trimConsoleDom(MAX_CONSOLE_LINES);
-                scrollToBottom();
-                
-                entryCountDisplay.textContent = consoleContent.children.length;
+                const shouldAutoScroll = isScrolledNearBottom();
+                window.requestAnimationFrame(() => {
+                    consoleContent.insertAdjacentHTML('beforeend', html);
+                    trimConsoleDom(MAX_CONSOLE_LINES);
+                    if (shouldAutoScroll) {
+                        logWindow.scrollTop = logWindow.scrollHeight;
+                    }
+                    entryCountDisplay.textContent = consoleContent.children.length;
+                });
             } else if (data.offset !== undefined) { 
                 logOffset = data.offset; 
             }
