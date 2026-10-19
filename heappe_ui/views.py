@@ -1413,6 +1413,47 @@ def trigger_deployment_direct(request):
         return JsonResponse({"status": "error", "message": f"Fatal error launching script: {e}"}, status=500)
 
 
+@require_http_methods(["GET"])
+def system_update_status_api(request):
+    """API endpoint to poll the status of the admin panel deployment/update."""
+    log_file_paths = [
+        "/var/log/deploy_adminpanel.log",
+        os.path.join(settings.BASE_DIR, "deploy_adminpanel.log"),
+    ]
+
+    log_content = ""
+    for path in log_file_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()
+                    log_content = "".join(lines[-100:])
+                break
+            except Exception:
+                pass
+
+    is_success = "=== SUCCESS ===" in log_content
+    is_failed = ("FAILED" in log_content) or ("ERROR: Step failed" in log_content)
+
+    is_process_running = False
+    try:
+        ps_out = subprocess.check_output(["pgrep", "-f", "deploy.sh"]).decode().strip()
+        is_process_running = bool(ps_out)
+    except Exception:
+        is_process_running = False
+
+    is_running = is_process_running or (not is_success and not is_failed and bool(log_content))
+
+    return JsonResponse({
+        "status": "ok",
+        "is_running": is_running,
+        "is_success": is_success,
+        "is_failed": is_failed,
+        "logs": log_content,
+        "current_commit": getattr(settings, "GIT_VERSION", ""),
+    })
+
+
 import os
 import re
 from datetime import datetime

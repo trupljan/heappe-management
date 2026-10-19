@@ -3309,13 +3309,14 @@ class LogViewerJsonTests(TestCase):
         self.assertEqual(parsed['conn'], '[7ce0d92b6028f1334700c96bfd41f5eb]')
 
     def test_log_viewer_view_limit_parameter(self):
-        from django.test import RequestFactory
         from django.contrib.auth.models import User
-        from heappe_ui.views import log_viewer_view
         import json as pyjson
 
-        factory = RequestFactory()
         user = User.objects.create_user(username='test_limit_user', password='password')
+        self.client.force_login(user)
+        session = self.client.session
+        session['chosen_instance'] = 'develop'
+        session.save()
 
         with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
             for i in range(1200):
@@ -3326,19 +3327,14 @@ class LogViewerJsonTests(TestCase):
         try:
             with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
                 # Test default limit (1000)
-                req = factory.get('/logs/?date=2026-10-15')
-                req.user = user
-                req.session = {'chosen_instance': 'develop'}
-                resp = log_viewer_view(req)
+                resp = self.client.get('/logs/?date=2026-10-15')
                 self.assertEqual(resp.status_code, 200)
                 self.assertEqual(resp.context['limit'], 1000)
                 self.assertEqual(resp.context['logs_count'], 1000)
 
                 # Test explicit limit (500)
-                req500 = factory.get('/logs/?date=2026-10-15&limit=500')
-                req500.user = user
-                req500.session = {'chosen_instance': 'develop'}
-                resp500 = log_viewer_view(req500)
+                resp500 = self.client.get('/logs/?date=2026-10-15&limit=500')
+                self.assertEqual(resp500.status_code, 200)
                 self.assertEqual(resp500.context['limit'], 500)
                 self.assertEqual(resp500.context['logs_count'], 500)
         finally:
