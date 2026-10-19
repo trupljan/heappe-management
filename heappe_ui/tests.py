@@ -3308,6 +3308,43 @@ class LogViewerJsonTests(TestCase):
         self.assertEqual(parsed['timestamp_str'], '23:56:15')
         self.assertEqual(parsed['conn'], '[7ce0d92b6028f1334700c96bfd41f5eb]')
 
+    def test_log_viewer_view_limit_parameter(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+        from heappe_ui.views import log_viewer_view
+        import json as pyjson
+
+        factory = RequestFactory()
+        user = User.objects.create_user(username='test_limit_user', password='password')
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            for i in range(1200):
+                tmp.write(f'{{"timestamp":"2026-10-15T12:{i//60:02d}:{i%60:02d}.000Z","level":"INFO","logger":"L","message":"Msg_{i}"}}\n')
+            tmp.flush()
+            tmp_path = tmp.name
+
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
+                # Test default limit (1000)
+                req = factory.get('/logs/?date=2026-10-15')
+                req.user = user
+                req.session = {'chosen_instance': 'develop'}
+                resp = log_viewer_view(req)
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(resp.context['limit'], 1000)
+                self.assertEqual(resp.context['logs_count'], 1000)
+
+                # Test explicit limit (500)
+                req500 = factory.get('/logs/?date=2026-10-15&limit=500')
+                req500.user = user
+                req500.session = {'chosen_instance': 'develop'}
+                resp500 = log_viewer_view(req500)
+                self.assertEqual(resp500.context['limit'], 500)
+                self.assertEqual(resp500.context['logs_count'], 500)
+        finally:
+            os.remove(tmp_path)
+            user.delete()
+
 
 class VaultUnsealApiTests(TestCase):
     def setUp(self):
@@ -5145,6 +5182,9 @@ class InstanceConfigOidcActionTests(TestCase):
             log_db_password="sa_password",
             log_db_database="log_db"
         )
+        session = self.client.session
+        session["chosen_instance"] = "test_inst"
+        session.save()
 
     @mock.patch("heappe_ui.view.deploy.docker.from_env")
     def test_oidc_action_empty_authority(self, mock_docker):

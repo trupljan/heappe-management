@@ -417,6 +417,17 @@
                 <label class="filter-label">Search Text</label>
                 <input type="text" name="search" class="form-control form-control-custom w-100" placeholder="Filter..." value="{{ search_query }}">
             </div>
+
+            <div class="flex-grow-1" style="min-width: 105px; flex-basis: 0;">
+                <label class="filter-label">Max Lines</label>
+                <select name="limit" class="form-select form-control-custom w-100">
+                    <option value="300" {% if limit == 300 %}selected{% endif %}>300</option>
+                    <option value="500" {% if limit == 500 %}selected{% endif %}>500</option>
+                    <option value="1000" {% if limit == 1000 or not limit %}selected{% endif %}>1,000</option>
+                    <option value="2500" {% if limit == 2500 %}selected{% endif %}>2,500</option>
+                    <option value="5000" {% if limit == 5000 %}selected{% endif %}>5,000</option>
+                </select>
+            </div>
             
             <div class="d-flex gap-2 ms-auto" style="min-width: 160px; flex-basis: 0;">
                 <button type="submit" id="applyFilterBtn" class="btn btn-primary btn-filter-apply w-100">
@@ -504,7 +515,7 @@
     let isLiveActive = false;
     let isPolling = false;
     let liveTimeoutId = null;
-    const MAX_CONSOLE_LINES = 1000;
+    const MAX_CONSOLE_LINES = Math.max(3000, parseInt("{{ limit|default:1000 }}", 10) * 2);
     const logWindow = document.getElementById('logWindow');
     const consoleContent = document.getElementById('logConsole');
     const liveToggle = document.getElementById('liveStreamToggle');

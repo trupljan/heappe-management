@@ -1872,6 +1872,55 @@ def instance_config_view(request, instance_name):
                 'restart_error': restart_info.get('error')
             })
 
+        elif action == 'test_oidc':
+            authority = (request.POST.get('authority') or '').strip()
+            if not authority:
+                return JsonResponse({'status': 'danger', 'message': 'Authority URL cannot be empty.'}, status=400)
+
+            well_known_url = authority.rstrip('/')
+            if not well_known_url.endswith('.well-known/openid-configuration'):
+                well_known_url += '/.well-known/openid-configuration'
+
+            import urllib.request
+            import urllib.error
+            import json as json_lib
+            import ssl
+
+            try:
+                allow_insecure = request.POST.get('allow_insecure', 'false').lower() == 'true'
+                ctx = ssl.create_default_context()
+                if allow_insecure:
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+
+                req = urllib.request.Request(
+                    well_known_url,
+                    headers={'User-Agent': 'HEAppE-Management-Admin', 'Accept': 'application/json'}
+                )
+                with urllib.request.urlopen(req, timeout=6, context=ctx) as response:
+                    if response.status == 200:
+                        payload = json_lib.loads(response.read().decode('utf-8'))
+                        return JsonResponse({
+                            'status': 'success',
+                            'message': 'Successfully connected to OIDC discovery endpoint.',
+                            'details': {
+                                'issuer': payload.get('issuer', ''),
+                                'authorization_endpoint': payload.get('authorization_endpoint', ''),
+                                'token_endpoint': payload.get('token_endpoint', ''),
+                                'userinfo_endpoint': payload.get('userinfo_endpoint', ''),
+                                'introspection_endpoint': payload.get('introspection_endpoint', ''),
+                                'jwks_uri': payload.get('jwks_uri', ''),
+                            }
+                        })
+                    else:
+                        return JsonResponse({'status': 'danger', 'message': f'Server returned HTTP {response.status}'}, status=400)
+            except urllib.error.HTTPError as e:
+                return JsonResponse({'status': 'danger', 'message': f'HTTP Error {e.code}: {e.reason}'}, status=400)
+            except urllib.error.URLError as e:
+                return JsonResponse({'status': 'danger', 'message': f'Connection failed: {str(e.reason)}'}, status=400)
+            except Exception as e:
+                return JsonResponse({'status': 'danger', 'message': f'Error: {str(e)}'}, status=400)
+
     # GET request - read config content
     try:
         exec_result = target_container.exec_run(f"cat {config_path}")

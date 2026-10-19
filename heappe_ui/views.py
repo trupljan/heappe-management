@@ -1885,6 +1885,14 @@ def log_viewer_view(request):
     level_filter = request.GET.get('level', '').upper()
     service_filter = request.GET.get('service', 'API').upper()
 
+    limit_param = request.GET.get('limit', '1000')
+    try:
+        limit = int(limit_param)
+        if limit not in [100, 300, 500, 1000, 2500, 5000]:
+            limit = 1000
+    except (ValueError, TypeError):
+        limit = 1000
+
     effective_time_to = time_to
     if time_from and not effective_time_to:
         try:
@@ -1903,7 +1911,7 @@ def log_viewer_view(request):
     try:
         entries = list(get_log_entries_backwards(
             log_paths=log_paths,
-            max_entries=300,
+            max_entries=limit,
             level_filter=level_filter,
             search_query=search_query,
             time_from=time_from,
@@ -1929,7 +1937,8 @@ def log_viewer_view(request):
         'search_query': search_query,
         'level_filter': level_filter,
         'service_filter': service_filter,
-        'instance': instance
+        'instance': instance,
+        'limit': limit
     })
 
 
