@@ -1424,7 +1424,10 @@ def find_docker_networks_for_instance(instance_name, log_fn=print):
     with the HEAppE API/core network prioritized first, or an empty list if not running in Docker.
     """
     import subprocess
-    skip_services = {'slurm-simulator'}
+    skip_services = {'slurm-simulator', 'qscheduler', 'qscheduler-db'}
+    # Test services spun up from this UI must not contribute their (private) networks.
+    # Match QScheduler containers by compose service label only: instance names may contain "qscheduler".
+    skip_name_markers = ('slurm-simulator',)
     networks = []
 
     def _is_valid_net(net_name):
@@ -1438,7 +1441,7 @@ def find_docker_networks_for_instance(instance_name, log_fn=print):
         matched_containers = []
         for c in client.containers.list():
             c_name = c.name.lower()
-            if 'slurm-simulator' in c_name:
+            if any(m in c_name for m in skip_name_markers):
                 continue
             c_project = c.labels.get('com.docker.compose.project', '')
             c_service = c.labels.get('com.docker.compose.service', '')
@@ -1485,7 +1488,7 @@ def find_docker_networks_for_instance(instance_name, log_fn=print):
                         c_proj = parts[2] if len(parts) >= 3 else ""
                         c_svc = parts[3] if len(parts) >= 4 else ""
 
-                        if 'slurm-simulator' in c_name.lower() or c_svc in skip_services:
+                        if any(m in c_name.lower() for m in skip_name_markers) or c_svc in skip_services:
                             continue
 
                         is_proj = bool(instance_name and c_proj.lower() == instance_name.lower())
@@ -1522,6 +1525,76 @@ def find_docker_networks_for_instance(instance_name, log_fn=print):
                 pass
 
     return networks
+
+
+def connect_heappe_management_api(instance_name, log=print):
+    """
+    Authenticate against the HEAppE API of the given instance using the credentials stored in
+    InstanceCredentials (same flow as HeappeAuthBackend: X-API-Key first, session code fallback).
+    Returns (ManagementApi controller, session_code or None, api_client).
+    """
+    import json
+    import py4heappe.heappe_v6.core as hp
+    from heappe_ui.auth_backend import patch_api_client
+    from heappe_ui.DeployService import get_instance_settings
+
+    log("Loading instance credentials from database...")
+    instance_settings = get_instance_settings(instance_name)
+    if not instance_settings:
+        raise RuntimeError(f"No InstanceCredentials found for instance '{instance_name}'. Cannot connect to HEAppE API.")
+
+    db_host = instance_settings.heappe_host
+    db_port = instance_settings.heappe_port
+    db_username = instance_settings.heappe_login
+    db_password = instance_settings.heappe_password
+    full_host = f"{db_host}:{db_port}" if db_port and db_port not in ['80', '443', ''] else db_host
+    host_url = 'http://' + full_host if not full_host.startswith('http') else full_host
+
+    log(f"Connecting to HEAppE API at {host_url} as '{db_username}'...")
+    config = hp.Configuration()
+    config.api_key = {}
+    config.api_key_prefix = {}
+    config.host = host_url
+    config.verify_ssl = True
+
+    session_code = None
+    use_api_key = False
+
+    # Try X-API-Key first (same flow as HeappeAuthBackend.authenticate)
+    config.api_key = {'X-API-Key': f"{db_username}:{db_password}"}
+    api_client = hp.ApiClient(config)
+    api_client.set_default_header("X-API-Key", f"{db_username}:{db_password}")
+    patch_api_client(api_client)
+    ulm = hp.UserAndLimitationManagementApi(api_client)
+    try:
+        ulm.heappe_user_and_limitation_management_current_user_info_get()
+        use_api_key = True
+        log("X-API-Key authentication successful.")
+        # Best-effort: also get a session code for old HEAppE versions that require it in body
+        try:
+            r = ulm.heappe_user_and_limitation_management_authenticate_user_password_post(
+                _preload_content=False,
+                body={"Credentials": {"Username": db_username, "Password": db_password}}
+            )
+            session_code = json.loads(r.data)
+            log("Also obtained session code for body compatibility.")
+        except Exception as e_sc:
+            log(f"Note: Could not obtain session code (new API, no fallback needed): {e_sc}")
+    except Exception as e_key:
+        log(f"X-API-Key auth failed, falling back to session code: {e_key}")
+        config.api_key = {}
+        api_client.default_headers.pop("X-API-Key", None)
+        try:
+            r = ulm.heappe_user_and_limitation_management_authenticate_user_password_post(
+                _preload_content=False,
+                body={"Credentials": {"Username": db_username, "Password": db_password}}
+            )
+            session_code = json.loads(r.data)
+            log("Session code authentication successful.")
+        except Exception as e_fallback:
+            raise RuntimeError(f"HEAppE authentication failed entirely: {e_fallback}")
+
+    return hp.ManagementApi(api_client), session_code, api_client
 
 
 def _run_slurm_setup_thread(instance_name, uid, port, container_name):
@@ -1927,64 +2000,7 @@ ENTRYPOINT ["/entrypoint.sh"]
         time.sleep(2)
         
         # Step 5: Configure HEAppE
-        # Load credentials from DB exactly like HeappeAuthBackend / middleware do.
-        log("Loading instance credentials from database...")
-        instance_settings = get_instance_settings(instance_name)
-        if not instance_settings:
-            raise RuntimeError(f"No InstanceCredentials found for instance '{instance_name}'. Cannot connect to HEAppE API.")
-
-        db_host = instance_settings.heappe_host
-        db_port = instance_settings.heappe_port
-        db_username = instance_settings.heappe_login
-        db_password = instance_settings.heappe_password
-        full_host = f"{db_host}:{db_port}" if db_port and db_port not in ['80', '443', ''] else db_host
-        host_url = 'http://' + full_host if not full_host.startswith('http') else full_host
-
-        log(f"Connecting to HEAppE API at {host_url} as '{db_username}'...")
-        config = hp.Configuration()
-        config.api_key = {}
-        config.api_key_prefix = {}
-        config.host = host_url
-        config.verify_ssl = True
-
-        session_code = None
-        use_api_key = False
-
-        # Try X-API-Key first (same flow as HeappeAuthBackend.authenticate)
-        config.api_key = {'X-API-Key': f"{db_username}:{db_password}"}
-        api_client = hp.ApiClient(config)
-        api_client.set_default_header("X-API-Key", f"{db_username}:{db_password}")
-        patch_api_client(api_client)
-        ulm = hp.UserAndLimitationManagementApi(api_client)
-        try:
-            ulm.heappe_user_and_limitation_management_current_user_info_get()
-            use_api_key = True
-            log("X-API-Key authentication successful.")
-            # Best-effort: also get a session code for old HEAppE versions that require it in body
-            try:
-                r = ulm.heappe_user_and_limitation_management_authenticate_user_password_post(
-                    _preload_content=False,
-                    body={"Credentials": {"Username": db_username, "Password": db_password}}
-                )
-                session_code = json.loads(r.data)
-                log("Also obtained session code for body compatibility.")
-            except Exception as e_sc:
-                log(f"Note: Could not obtain session code (new API, no fallback needed): {e_sc}")
-        except Exception as e_key:
-            log(f"X-API-Key auth failed, falling back to session code: {e_key}")
-            config.api_key = {}
-            api_client.default_headers.pop("X-API-Key", None)
-            try:
-                r = ulm.heappe_user_and_limitation_management_authenticate_user_password_post(
-                    _preload_content=False,
-                    body={"Credentials": {"Username": db_username, "Password": db_password}}
-                )
-                session_code = json.loads(r.data)
-                log("Session code authentication successful.")
-            except Exception as e_fallback:
-                raise RuntimeError(f"HEAppE authentication failed entirely: {e_fallback}")
-
-        controller = hp.ManagementApi(api_client)
+        controller, session_code, api_client = connect_heappe_management_api(instance_name, log)
         
         # Determine host and port for HEAppE to reach the cluster
         if target_networks:
@@ -2496,6 +2512,3 @@ def qscheduler_task_result_api(request: HttpRequest, task_id: int) -> JsonRespon
         return JsonResponse({"status": "success", "data": res or {}})
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
-
-
-
