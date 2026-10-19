@@ -607,29 +607,53 @@
         return `<span class="log-service ${badgeClass}">${escapeHtml(label)}</span>`;
     }
 
-    function formatLogEntry(content, level, service) {
-        const prefixRegex = /^(DEBUG|INFO|WARN|ERROR|FATAL)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\s+[A-Z]+)?)\s+(\[[^\]]+\])\s+(.*?)\s+([a-zA-Z0-9._-]+)\s+-\s+([\s\S]*)$/;
-        const match = content.match(prefixRegex);
-        
+    function formatLogEntry(entry) {
+        const service = entry.service || 'API';
+        const level = (entry.level || 'INFO').toUpperCase();
         const serviceTag = getServiceBadge(service);
 
-        if (match) {
-            const matchedLevel = match[1];
-            const timestamp = match[2];
-            const connId = match[3];
-            const userInfo = match[4];
-            const logger = match[5];
-            const message = match[6];
-            
+        // Fast path: backend already provided parsed fields (zero regex backtracking, instant O(1))
+        if (entry.msg !== undefined) {
+            const timestamp = entry.timestamp_str || '';
+            const connId = entry.conn || '[-]';
+            const userInfo = entry.user || '-';
+            const logger = entry.logger || '';
+            const message = entry.msg || '';
+
             const highlightedMessage = highlightJsonInText(message);
-            
-            // Extract only the time part and append UTC if present in original timestamp
             const timeMatch = timestamp.match(/(\d{2}:\d{2}:\d{2})/);
             let timeOnly = timeMatch ? timeMatch[1] : timestamp;
             if (timestamp.includes('UTC')) {
                 timeOnly += ' UTC';
             }
-            
+
+            return serviceTag +
+                   `<span class="log-level log-level-${level.toLowerCase()}">${escapeHtml(level)}</span>` +
+                   `<span class="log-timestamp" title="${escapeHtml(timestamp)}">${escapeHtml(timeOnly)}</span>` +
+                   `<span class="log-conn">${escapeHtml(connId)}</span>` +
+                   `<span class="log-user">${escapeHtml(userInfo)}</span>` +
+                   `<span class="log-logger">${escapeHtml(logger)}</span>` +
+                   `<span class="log-msg-separator"> </span>` +
+                   `<span class="log-msg">${highlightedMessage}</span>`;
+        }
+
+        // Fast fallback for raw text strings without backtracking regex
+        const content = typeof entry === 'string' ? entry : (entry.content || '');
+        const dashIdx = content.indexOf(' - ');
+        if (dashIdx !== -1 && dashIdx < 200) {
+            const header = content.substring(0, dashIdx).trim();
+            const message = content.substring(dashIdx + 3);
+            const tokens = header.split(/\s+/);
+            const matchedLevel = tokens[0] || level;
+            const timestamp = tokens.length >= 3 ? `${tokens[1]} ${tokens[2]}` : (entry.timestamp_str || '');
+            const connId = tokens.find(t => t.startsWith('[') && t.endsWith(']')) || '[-]';
+            const userInfo = tokens.find(t => t.includes('(') && t.endsWith(')')) || '-';
+            const logger = tokens.find(t => t.includes('.') || t.includes('Controller')) || '';
+
+            const highlightedMessage = highlightJsonInText(message);
+            const timeMatch = timestamp.match(/(\d{2}:\d{2}:\d{2})/);
+            let timeOnly = timeMatch ? timeMatch[1] : timestamp;
+
             return serviceTag +
                    `<span class="log-level log-level-${matchedLevel.toLowerCase()}">${escapeHtml(matchedLevel)}</span>` +
                    `<span class="log-timestamp" title="${escapeHtml(timestamp)}">${escapeHtml(timeOnly)}</span>` +
@@ -638,15 +662,15 @@
                    `<span class="log-logger">${escapeHtml(logger)}</span>` +
                    `<span class="log-msg-separator"> </span>` +
                    `<span class="log-msg">${highlightedMessage}</span>`;
-        } else {
-            let highlighted = highlightJsonInText(content);
-            return serviceTag + `<span class="log-msg-fallback">${highlighted}</span>`;
         }
+
+        let highlighted = highlightJsonInText(content);
+        return serviceTag + `<span class="log-msg-fallback">${highlighted}</span>`;
     }
 
     function createLogEntryHtml(entry) {
         const levelLower = (entry.level || 'INFO').toLowerCase();
-        const formatted = formatLogEntry(entry.content, entry.level, entry.service);
+        const formatted = formatLogEntry(entry);
         return `<div class="log-entry log-entry-${levelLower}">${formatted}</div>`;
     }
 
@@ -788,6 +812,20 @@
             }
         }
     }
+
+    // Pause polling when browser tab is inactive / hidden; resume when user returns
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            if (liveTimeoutId) {
+                clearTimeout(liveTimeoutId);
+                liveTimeoutId = null;
+            }
+        } else {
+            if (isLiveActive && !liveTimeoutId && !isPolling) {
+                triggerLivePull();
+            }
+        }
+    });
 
     if (liveToggle) {
         liveToggle.addEventListener('change', function() {

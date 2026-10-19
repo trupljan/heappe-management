@@ -1512,7 +1512,11 @@ def parse_json_log_line(line, service="API"):
             'timestamp_str': timestamp_str,
             'level': level,
             'service': service,
-            'content': formatted_content
+            'content': formatted_content,
+            'conn': conn_str,
+            'user': user_str,
+            'logger': logger,
+            'msg': full_msg
         }
     except Exception:
         return None
@@ -1558,11 +1562,36 @@ def parse_log_line(line, service="API"):
     if "datastaging" in line.lower():
         svc = "DATASTAGING"
 
+    dash_idx = line.find(' - ')
+    if dash_idx != -1 and dash_idx < 150:
+        msg = line[dash_idx + 3:]
+        header = line[:dash_idx]
+        tokens = header.split()
+        conn_str = "[-]"
+        user_str = "-"
+        logger = ""
+        for t in tokens:
+            if t.startswith('[') and t.endswith(']'):
+                conn_str = t
+            elif '(' in t and t.endswith(')'):
+                user_str = t
+            elif '.' in t or 'Controller' in t:
+                logger = t
+    else:
+        msg = line
+        conn_str = "[-]"
+        user_str = "-"
+        logger = ""
+
     return {
         'timestamp_str': timestamp_str,
         'level': level,
         'service': svc,
-        'content': line
+        'content': line,
+        'conn': conn_str,
+        'user': user_str,
+        'logger': logger,
+        'msg': msg
     }
 
 
@@ -1778,7 +1807,7 @@ def log_viewer_view(request):
     try:
         entries = list(get_log_entries_backwards(
             log_paths=log_paths,
-            max_entries=1000,
+            max_entries=300,
             level_filter=level_filter,
             search_query=search_query,
             time_from=time_from,

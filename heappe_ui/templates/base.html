@@ -1171,6 +1171,11 @@
         var originalFetch = window.fetch;
         if (originalFetch) {
             window.fetch = function() {
+                var url = arguments[0];
+                var urlStr = typeof url === 'string' ? url : (url && url.url ? url.url : '');
+                if (urlStr.indexOf('fetch-new-logs') !== -1 || urlStr.indexOf('/logs/') !== -1) {
+                    return originalFetch.apply(this, arguments);
+                }
                 return originalFetch.apply(this, arguments).then(function(response) {
                     try {
                         var contentType = response.headers.get('content-type') || '';
@@ -1185,7 +1190,11 @@
 
         // Override XMLHttpRequest
         var originalOpen = XMLHttpRequest.prototype.open;
-        XMLHttpRequest.prototype.open = function() {
+        XMLHttpRequest.prototype.open = function(method, url) {
+            var urlStr = typeof url === 'string' ? url : '';
+            if (urlStr.indexOf('fetch-new-logs') !== -1 || urlStr.indexOf('/logs/') !== -1) {
+                return originalOpen.apply(this, arguments);
+            }
             this.addEventListener('load', function() {
                 try {
                     var contentType = this.getResponseHeader('content-type') || '';
