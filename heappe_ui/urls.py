@@ -18,6 +18,7 @@ urlpatterns = [
 
     path("deploy/", views.deploy_view, name="deploy_view"),
     path("deploy/<str:instance_name>/", views.deploy_view, name="deploy_view"),
+    path("deploy/<str:instance_name>/delete/", views.deploy_delete_instance, name="deploy_delete_instance"),
     path("deploy/<str:instance_name>/config/", views.instance_config_view, name="instance_config_view"),
     path("deploy/<str:instance_name>/update-status/", views.update_status_view, name="update_status"),
     path("deploy/<str:instance_name>/telemetry/toggle/", views.toggle_telemetry_view, name="toggle_telemetry"),

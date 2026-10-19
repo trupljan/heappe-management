@@ -888,19 +888,35 @@ def instance_credentials_list(request, pk=None):
         action = request.POST.get("action")
         if action == "bulk_delete":
             selected_ids = request.POST.getlist("selected_ids")
+            stop_containers = request.POST.get('stop_containers', 'true') in ['true', '1', 'on', True]
+            delete_files = request.POST.get('delete_files', 'true') in ['true', '1', 'on', True]
             success_count = 0
             for cid in selected_ids:
                 try:
                     instance = InstanceCredentials.objects.get(pk=int(cid))
-                    if request.session.get("chosen_instance") == instance.instance_name:
+                    inst_name = instance.instance_name
+                    if request.session.get("chosen_instance") == inst_name:
                         request.session.pop("chosen_instance", None)
                         request.session.pop("heappe_session_code", None)
+                        request.session.pop("heappe_host", None)
+                        request.session.pop("heappe_host_url", None)
+                        request.session.pop("heappe_use_api_key", None)
+                        request.session.pop("heappe_last_auth", None)
+                        request.session.pop("heappe_last_failed_auth", None)
+                    teardown_instance(
+                        instance_name=inst_name,
+                        stop_containers=stop_containers,
+                        delete_files=delete_files
+                    )
                     instance.delete()
                     success_count += 1
                 except Exception as e:
                     print(f"Error deleting credential {cid}: {e}")
             if success_count > 0:
-                messages.success(request, f"Successfully deleted {success_count} instance credential(s).")
+                msg = f"Successfully deleted {success_count} instance credential(s)."
+                if stop_containers:
+                    msg += " Associated Docker containers were stopped and shut down."
+                messages.success(request, msg)
             if len(selected_ids) > success_count:
                 messages.error(request, f"Failed to delete {len(selected_ids) - success_count} instance credential(s).")
             return redirect("instance_credentials_list")
@@ -968,8 +984,32 @@ def instance_credentials_delete(request, pk):
     instance = get_object_or_404(InstanceCredentials, pk=pk)
     if request.method == 'POST':
         instance_name = instance.instance_name
+        stop_containers = request.POST.get('stop_containers', 'true') in ['true', '1', 'on', True]
+        delete_files = request.POST.get('delete_files', 'true') in ['true', '1', 'on', True]
+
+        teardown_result = teardown_instance(
+            instance_name=instance_name,
+            stop_containers=stop_containers,
+            delete_files=delete_files
+        )
+
+        if request.session.get("chosen_instance") == instance_name:
+            request.session.pop("chosen_instance", None)
+            request.session.pop("heappe_session_code", None)
+            request.session.pop("heappe_host", None)
+            request.session.pop("heappe_host_url", None)
+            request.session.pop("heappe_use_api_key", None)
+            request.session.pop("heappe_last_auth", None)
+            request.session.pop("heappe_last_failed_auth", None)
+
         instance.delete()
-        messages.success(request, f"Instance '{instance_name}' deleted successfully.")
+
+        msg = f"Instance '{instance_name}' deleted successfully."
+        if stop_containers:
+            msg += " Associated Docker containers were stopped and shut down."
+        if delete_files and teardown_result.get("files_removed"):
+            msg += " Deployment files on disk were cleaned up."
+        messages.success(request, msg)
         return redirect('instance_credentials_list')
     return render(request, 'instance_credentials.html', {'object_list': InstanceCredentials.objects.all()})
 

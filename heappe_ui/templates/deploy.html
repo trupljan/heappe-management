@@ -21,28 +21,77 @@
     </div>
 
     <div class="row mb-4 align-items-center">
-        <div class="col-md-8">
+        <div class="col-md-7">
             {% if not instance_name %}
                 <h2 class="mb-0 fw-bold">Deploy New Instance</h2>
             {% else %}
                 <h2 class="mb-0 fw-bold">Management: <span class="text-primary">{{ instance_name }}</span></h2>
-                {% if not is_deployed %}
-                    <span class="badge bg-warning text-dark">Deployment in Progress / Not Active</span>
-                {% endif %}
+                <div class="mt-1 d-flex align-items-center gap-2 flex-wrap">
+                    {% if is_updating %}
+                        <span class="badge bg-primary text-white d-inline-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill shadow-xs">
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="width: 8px; height: 8px;"></span>
+                            Deployment / Action in Progress...
+                        </span>
+                    {% elif deployment_failed %}
+                        <span class="badge bg-danger text-white d-inline-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill shadow-xs">
+                            <i class="bi bi-x-circle-fill"></i> Deployment Failed
+                        </span>
+                    {% elif not is_deployed %}
+                        <span class="badge bg-warning text-dark d-inline-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill shadow-xs">
+                            <i class="bi bi-exclamation-triangle"></i> Not Active / Standby
+                        </span>
+                    {% endif %}
+                </div>
             {% endif %}
         </div>
-        <div class="col-md-4 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end gap-2 flex-wrap">
+        <div class="col-md-5 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end gap-2 flex-wrap">
             {% if not instance_name %}
-            {% elif is_deployed %}
-                <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
-                    <i class="bi bi-git me-1.5"></i>Switch Branch &amp; Build
-                </button>
-                <button type="button" class="btn btn-outline-secondary shadow-sm open-maintenance-tab-btn" data-action="update">
-                    <i class="bi bi-arrow-repeat me-1.5"></i>Update Instance
+            {% else %}
+                {% if is_deployed %}
+                    <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
+                        <i class="bi bi-git me-1.5"></i>Switch Branch &amp; Build
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary shadow-sm open-maintenance-tab-btn" data-action="update">
+                        <i class="bi bi-arrow-repeat me-1.5"></i>Update Instance
+                    </button>
+                {% elif deployment_failed %}
+                    <button type="button" class="btn btn-warning shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#retryDeployModal">
+                        <i class="bi bi-arrow-clockwise me-1.5"></i>Retry Deployment
+                    </button>
+                {% endif %}
+                <button type="button" class="btn btn-outline-danger shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#deleteTeardownModal" title="Delete &amp; Shut Down Instance">
+                    <i class="bi bi-trash3-fill me-1.5"></i>Delete Instance
                 </button>
             {% endif %}
         </div>
     </div>
+
+    {% if instance_name and deployment_failed %}
+    <div class="alert alert-danger border-danger shadow-sm p-3 mb-4 rounded-3 animate-fade-in">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-2.5">
+                <div class="p-2 bg-danger bg-opacity-10 text-danger rounded-3 flex-shrink-0">
+                    <i class="bi bi-exclamation-octagon-fill fs-4 d-block"></i>
+                </div>
+                <div>
+                    <h6 class="alert-heading fw-bold mb-1 text-danger">Deployment Failed</h6>
+                    <div class="small text-danger-emphasis font-monospace">{{ deployment_error|default:"An error occurred during deployment. Review logs for details." }}</div>
+                </div>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-sm btn-outline-danger fw-semibold rounded-3 px-3 py-2" data-bs-toggle="modal" data-bs-target="#deployLogViewerModal">
+                    <i class="bi bi-terminal me-1"></i>View Error Logs
+                </button>
+                <button type="button" class="btn btn-sm btn-warning fw-bold rounded-3 px-3 py-2 shadow-xs" data-bs-toggle="modal" data-bs-target="#retryDeployModal">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Retry Deployment
+                </button>
+                <button type="button" class="btn btn-sm btn-danger fw-bold rounded-3 px-3 py-2 shadow-xs" data-bs-toggle="modal" data-bs-target="#deleteTeardownModal">
+                    <i class="bi bi-trash3-fill me-1"></i>Delete &amp; Shut Down
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {% if instance_name and is_deployed %}
         {% if update_available %}
@@ -95,7 +144,7 @@
     <div class="tab-content" id="deployTabsContent">
         <!-- Containers Tab Pane -->
         <div class="tab-pane fade show active" id="containers-pane" role="tabpanel" aria-labelledby="containers-tab">
-            {% if is_deployed %}
+            {% if is_deployed or containers %}
             <!-- Global actions -->
             <div class="card mb-4 border-0 shadow-sm bg-light">
                 <div class="card-body">
@@ -130,6 +179,9 @@
                         </form>
                         <button type="button" class="btn btn-outline-primary px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
                             <i class="bi bi-git me-1.5"></i> Switch Branch &amp; Build (Build &amp; Up)
+                        </button>
+                        <button type="button" class="btn btn-outline-danger px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#deleteTeardownModal">
+                            <i class="bi bi-trash3-fill me-1.5"></i> Delete &amp; Shut Down
                         </button>
                     </div>
                 </div>
@@ -785,6 +837,23 @@
                             </form>
                         </div>
                     </div>
+                <!-- Delete & Teardown Instance Panel -->
+                <div class="col-xl-4 col-md-6">
+                    <div class="card border-danger border-opacity-25 shadow-sm h-100 bg-danger bg-opacity-10">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <h5 class="fw-bold text-danger mb-2"><i class="bi bi-trash3-fill me-2"></i>Delete &amp; Teardown Instance</h5>
+                            <p class="text-secondary small mb-3">Permanently delete this instance from the system. Stops and removes all running Docker containers (<code>docker compose down -v</code>), frees up mapped ports, disconnects sessions, and cleans up configurations.</p>
+                            
+                            <div class="alert alert-danger bg-white border border-danger-subtle p-2.5 rounded-2 mb-3 mt-auto small">
+                                <i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>
+                                <span>Action is permanent and shuts down all active services.</span>
+                            </div>
+
+                            <button type="button" class="btn btn-danger w-100 py-2 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#deleteTeardownModal">
+                                <i class="bi bi-power me-1.5"></i>Delete &amp; Shut Down Instance
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -831,6 +900,153 @@
     {% endif %}
 
     <!-- Global Progress Modals -->
+
+    <!-- Delete & Teardown Instance Modal -->
+    <div class="modal fade" id="deleteTeardownModal" tabindex="-1" aria-labelledby="deleteTeardownModalLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-3">
+                <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="deleteTeardownModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill text-white"></i>
+                        <span>CONFIRM DELETE &amp; SHUTDOWN INSTANCE</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" action="{% if instance_name %}{% url 'deploy_delete_instance' instance_name %}{% else %}{% url 'instance_credentials_list' %}{% endif %}">
+                    {% csrf_token %}
+                    <div class="modal-body p-4 text-center">
+                        <p class="mb-1 text-secondary small">You are about to permanently delete and shut down HEAppE instance:</p>
+                        <h4 class="fw-bold text-dark my-3 font-monospace">{{ instance_name }}</h4>
+                        
+                        <div class="alert alert-danger border-0 rounded-3 small mb-3 text-start d-flex gap-2">
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5 flex-shrink-0"></i>
+                            <div>
+                                <strong>Warning:</strong> This will terminate running services, release host ports, and disconnect active client sessions.
+                            </div>
+                        </div>
+                        
+                        <div class="form-check text-start mb-2 ps-4">
+                            <input class="form-check-input" type="checkbox" name="stop_containers" id="modalStopContainers" checked>
+                            <label class="form-check-label small fw-semibold text-dark" for="modalStopContainers">
+                                <i class="bi bi-power text-danger me-1"></i>Stop &amp; remove all Docker containers (docker compose down -v)
+                            </label>
+                        </div>
+                        <div class="form-check text-start mb-1 ps-4">
+                            <input class="form-check-input" type="checkbox" name="delete_files" id="modalDeleteFiles" checked>
+                            <label class="form-check-label small fw-semibold text-dark" for="modalDeleteFiles">
+                                <i class="bi bi-folder-x text-danger me-1"></i>Remove deployment files &amp; configurations from disk
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                            <i class="bi bi-trash3-fill me-1"></i>Permanently Delete &amp; Shut Down
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Retry Deployment Modal -->
+    <div class="modal fade" id="retryDeployModal" tabindex="-1" aria-labelledby="retryDeployModalLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-3">
+                <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="retryDeployModalLabel">
+                        <i class="bi bi-arrow-clockwise text-warning"></i>
+                        <span>Retry Deployment for {{ instance_name }}</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="retry-deploy-form" class="instance-action-form" method="post" action="{% url 'deploy_view' instance_name %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="deploy">
+                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    <div class="modal-body p-4">
+                        <div class="alert alert-info border-0 rounded-3 small mb-3 d-flex gap-2 text-start">
+                            <i class="bi bi-info-circle-fill text-info fs-5 flex-shrink-0"></i>
+                            <div>
+                                Retrying deployment will overwrite existing configurations, re-clone the repository branch, rebuild Docker images, and re-initialize the database.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Instance Name</label>
+                            <input type="text" class="form-control bg-light font-monospace fw-bold" value="{{ instance_name }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Repository URL</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags &amp; Branches"><i class="bi bi-arrow-clockwise"></i></button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Target Branch / Release Tag</label>
+                            <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
+                                {% if branch_list %}
+                                <optgroup label="Branches">
+                                    {% for b in branch_list %}
+                                        <option value="{{ b }}" {% if b == repo_branch %}selected{% endif %}>{{ b }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endif %}
+                                {% if tag_list %}
+                                <optgroup label="Release Tags">
+                                    {% for t in tag_list %}
+                                        <option value="{{ t }}" {% if t == repo_branch %}selected{% endif %}>{{ t }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endif %}
+                                {% if not branch_list and not tag_list %}
+                                    {% for r in branches %}
+                                        <option value="{{ r }}" {% if r == repo_branch %}selected{% endif %}>{{ r }}</option>
+                                    {% endfor %}
+                                {% endif %}
+                            </select>
+                            <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                            <i class="bi bi-rocket-takeoff me-1"></i>Start Retry Deployment
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deployment Error Logs Modal -->
+    <div class="modal fade" id="deployLogViewerModal" tabindex="-1" aria-labelledby="deployLogViewerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content border-0 shadow-lg rounded-3" style="background:#0d1117;">
+                <div class="modal-header border-secondary py-2 px-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-terminal text-danger fs-5"></i>
+                        <h6 class="modal-title mb-0 text-light font-monospace" id="deployLogViewerModalLabel">Deployment Logs &mdash; <span class="text-danger">{{ instance_name }}</span></h6>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary text-light py-0 px-2" onclick="navigator.clipboard.writeText(document.getElementById('deploy-error-logs-content').innerText); alert('Logs copied to clipboard!');" title="Copy logs">
+                            <i class="bi bi-clipboard"></i> Copy
+                        </button>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div class="modal-body p-0">
+                    <pre id="deploy-error-logs-content" class="p-3 mb-0 text-light" style="max-height:72vh; overflow-y:auto; white-space:pre-wrap; font-family:'JetBrains Mono','Fira Mono',monospace; font-size:12px; background:#0d1117;">{{ deploy_logs|default:"No deployment logs available." }}</pre>
+                </div>
+                <div class="modal-footer border-secondary py-2 px-3 bg-dark d-flex justify-content-between">
+                    <span class="text-muted small">Log file: <code>/opt/heappe-deployment/{{ instance_name }}/app/logs/deploy.log</code></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-light" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Switch Branch Modal -->
     <div class="modal fade" id="switchBranchModal" tabindex="-1" aria-labelledby="switchBranchModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -1104,7 +1320,19 @@ function startUpdatePolling(actionType = 'update') {
                                 $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during update. See logs above.</span>');
                             } else {
                                 $('#update-status-title').text('Deployment Failed').removeClass('text-dark').addClass('text-danger');
-                                $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during deployment. See logs above.</span>');
+                                $('#update-in-progress-footer').html(`
+                                    <div class="d-flex flex-column gap-2 w-100">
+                                        <span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during deployment. See logs above.</span>
+                                        <div class="d-flex gap-2 justify-content-center mt-2 flex-wrap">
+                                            <button type="button" class="btn btn-sm btn-warning fw-bold shadow-xs" onclick="location.reload();">
+                                                <i class="bi bi-arrow-clockwise me-1"></i>View Failed State &amp; Retry
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-danger fw-bold shadow-xs" onclick="$('#updateProgressModal').modal('hide'); $('#deleteTeardownModal').modal('show');">
+                                                <i class="bi bi-trash3-fill me-1"></i>Delete &amp; Shut Down
+                                            </button>
+                                        </div>
+                                    </div>
+                                `);
                             }
                         }
                         

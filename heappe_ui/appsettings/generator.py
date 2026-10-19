@@ -725,8 +725,8 @@ def generate_appsettings_v6_4_17(
         if 'LexisAuthenticationConfiguration' in ext_auth:
             lexis_auth = ext_auth['LexisAuthenticationConfiguration']
             lexis_auth['ApiVersion'] = "auto"
-            lexis_auth['ExtendedUserInfoV2Endpoint'] = "/api/v2/users/me/extended"
-            lexis_auth['CommandTemplatePermissionsV2Endpoint'] = "/api/v2/heappe/command-template-permissions/"
+            lexis_auth['ExtendedUserInfoV2Endpoint'] = "/api/v2/UserInfo/Extended"
+            lexis_auth['CommandTemplatePermissionsV2Endpoint'] = "/api/Heappe/CommandTemplatePermissions/"
             lexis_auth['HEAppEUserPrefix'] = "LEXIS_"
             lexis_auth['ConnectionTimeoutInSeconds'] = 10
 
@@ -769,3 +769,248 @@ def generate_appsettings_data_staging_v6_5_0(
         port: int = 5001,
         version: str = None):
     return generate_appsettings_data_staging_v6_4_17(instance_name, sa_password, data_staging_token, port, version)
+
+
+SUPPORTED_TOKEN_EXCHANGE_STRATEGIES = (
+    "Expirio",
+    "KeycloakBroker",
+    "Rfc8693",
+    "ClientCredentials",
+    "Introspection",
+)
+
+
+def get_default_token_exchange_targets():
+    """Return default TokenExchangeTargets template (disabled / general deployment)."""
+    return [
+        {
+            "Name": "idp",
+            "IsEnabled": False,
+            "Strategy": "KeycloakBroker",
+            "Authority": "",
+            "ClientId": "heappe",
+            "ClientSecret": "",
+            "BrokerAlias": "target-idp",
+            "IntrospectSubjectToken": False,
+            "IntrospectionAuthority": "",
+            "IntrospectionEndpoint": "",
+            "IntrospectionClientId": "",
+            "IntrospectionClientSecret": "",
+            "SubjectTokenSource": "incoming",
+            "StoreAs": "idp",
+            "AutoExchange": True,
+            "AutoExchangePhase": "PreAuth"
+        },
+        {
+            "Name": "sshca",
+            "IsEnabled": False,
+            "Strategy": "Rfc8693",
+            "ClientId": "",
+            "ClientSecret": "",
+            "Audience": "ssh-ca-service",
+            "SubjectTokenSource": "idp",
+            "AutoExchange": True,
+            "AutoExchangePhase": "PostAuth",
+            "AutoExchangeCondition": "SshCaSettings:UseCertificateAuthorityForAuthentication"
+        },
+        {
+            "Name": "userorg",
+            "IsEnabled": False,
+            "Strategy": "Rfc8693",
+            "ClientId": "",
+            "ClientSecret": "",
+            "Audience": "userorg-service",
+            "SubjectTokenSource": "idp",
+            "AutoExchange": True,
+            "AutoExchangePhase": "PostAuth"
+        }
+    ]
+
+
+def get_efp_token_exchange_targets(
+        lexis_client_id: str = "<LEXIS_KEYCLOAK_CLIENT_ID>",
+        lexis_client_secret: str = "<LEXIS_KEYCLOAK_CLIENT_SECRET>",
+        fip_authority: str = "https://aai.my-eurohpc.eu/proxy",
+        fip_client_id: str = "<FIP_CLIENT_ID>",
+        fip_client_secret: str = "<FIP_CLIENT_SECRET>",
+        fip_audience: str = "<FIP_AUDIENCE>"):
+    """Return EFP TokenExchangeTargets template (LEXIS Introspection -> Expirio -> FIP -> SSH CA)."""
+    return [
+        {
+            "Name": "idp",
+            "IsEnabled": True,
+            "Strategy": "Expirio",
+            "ExpirioProviderName": "efp",
+            "ExpirioClientName": "",
+            "IntrospectSubjectToken": True,
+            "IntrospectionAuthority": "https://lexis/auth/realms/LEXIS_AAI",
+            "IntrospectionEndpoint": "",
+            "IntrospectionClientId": lexis_client_id,
+            "IntrospectionClientSecret": lexis_client_secret,
+            "SubjectTokenSource": "incoming",
+            "StoreAs": "idp",
+            "AutoExchange": True,
+            "AutoExchangePhase": "PreAuth",
+            "ConnectionTimeoutSeconds": 15
+        },
+        {
+            "Name": "sshca",
+            "IsEnabled": True,
+            "Strategy": "Rfc8693",
+            "Authority": fip_authority,
+            "ClientId": fip_client_id,
+            "ClientSecret": fip_client_secret,
+            "GrantType": "urn:ietf:params:oauth:grant-type:token-exchange",
+            "SubjectTokenType": "urn:ietf:params:oauth:token-type:access_token",
+            "Audience": fip_audience,
+            "SubjectTokenSource": "idp",
+            "StoreAs": "sshca",
+            "AutoExchange": True,
+            "AutoExchangePhase": "PostAuth",
+            "AutoExchangeCondition": "SshCaSettings:UseCertificateAuthorityForAuthentication",
+            "ConnectionTimeoutSeconds": 15
+        },
+        {
+            "Name": "userorg",
+            "IsEnabled": False,
+            "Strategy": "Rfc8693",
+            "ClientId": "",
+            "ClientSecret": "",
+            "Audience": "userorg-service",
+            "SubjectTokenSource": "idp",
+            "StoreAs": "userorg",
+            "AutoExchange": True,
+            "AutoExchangePhase": "PostAuth",
+            "ConnectionTimeoutSeconds": 15
+        }
+    ]
+
+
+def generate_appsettings_v6_6_0(
+        instance_name: str,
+        sa_password: str,
+        port: int = 5000,
+        automigrate: bool = True,
+        version: str = None,
+        deployed_ip: str = None,
+        efp: bool = False):
+    ver_str = version or "v6.6.0"
+    appsettings = generate_appsettings_v6_5_0(
+        instance_name, sa_password, port, automigrate, ver_str, deployed_ip
+    )
+
+    # 1. Version Bump in ApplicationAPISettings
+    if 'ApplicationAPISettings' not in appsettings:
+        appsettings['ApplicationAPISettings'] = {}
+    if 'DeploymentSettings' not in appsettings['ApplicationAPISettings']:
+        appsettings['ApplicationAPISettings']['DeploymentSettings'] = {}
+    appsettings['ApplicationAPISettings']['DeploymentSettings']['Version'] = ver_str
+
+    if 'SwaggerDocSettings' not in appsettings['ApplicationAPISettings']:
+        appsettings['ApplicationAPISettings']['SwaggerDocSettings'] = {}
+    appsettings['ApplicationAPISettings']['SwaggerDocSettings']['Description'] = f"HEAppE middleware API {ver_str}"
+
+    # 2. Update UserOrg V2 Endpoints in ExternalAuthenticationSettings.LexisAuthenticationConfiguration
+    if 'ExternalAuthenticationSettings' in appsettings:
+        ext_auth = appsettings['ExternalAuthenticationSettings']
+        if 'LexisAuthenticationConfiguration' in ext_auth:
+            lexis_auth = ext_auth['LexisAuthenticationConfiguration']
+            lexis_auth['ExtendedUserInfoEndpoint'] = "/api/UserInfo/Extended"
+            lexis_auth['ExtendedUserInfoV2Endpoint'] = "/api/v2/UserInfo/Extended"
+            lexis_auth['CommandTemplatePermissions'] = "/api/Heappe/CommandTemplatePermissions/"
+            lexis_auth['CommandTemplatePermissionsV2Endpoint'] = "/api/Heappe/CommandTemplatePermissions/"
+
+    # 3. MigrationSettings root section
+    migration_settings = appsettings.pop('MigrationSettings', None) or {
+        "EncryptionKey": ""
+    }
+
+    # 4. Extend JwtTokenIntrospectionConfiguration.LexisTokenFlowConfiguration
+    if 'JwtTokenIntrospectionConfiguration' not in appsettings:
+        appsettings['JwtTokenIntrospectionConfiguration'] = {}
+    jwt_cfg = appsettings['JwtTokenIntrospectionConfiguration']
+    if efp:
+        jwt_cfg['LexisTokenFlowConfiguration'] = {
+            "IsEnabled": True,
+            "UseExpirioServiceForTokenExchange": True,
+            "IntrospectLexisToken": True,
+            "Authority": "",
+            "IntrospectionEndpoint": "",
+            "BaseUrl": "https://lexis/auth",
+            "Realm": "LEXIS_AAI",
+            "Broker": "EFP",
+            "Scope": "openid profile email audience",
+            "PollIntervalSeconds": 5,
+            "ClientId": "<LEXIS_KEYCLOAK_CLIENT_ID>",
+            "ClientSecret": "<LEXIS_KEYCLOAK_CLIENT_SECRET>",
+            "ConnectionTimeoutInSeconds": 15
+        }
+    else:
+        jwt_cfg['LexisTokenFlowConfiguration'] = {
+            "IsEnabled": False,
+            "UseExpirioServiceForTokenExchange": True,
+            "IntrospectLexisToken": False,
+            "Authority": "",
+            "IntrospectionEndpoint": "",
+            "BaseUrl": "",
+            "Realm": "",
+            "Broker": "",
+            "Scope": "openid profile email",
+            "PollIntervalSeconds": 5,
+            "ClientId": "heappe",
+            "ClientSecret": "",
+            "ConnectionTimeoutInSeconds": 15
+        }
+
+    # 5. Add Root Section TokenExchangeTargets & position MigrationSettings next to DatabaseMigrationSettings
+    token_exchange_targets = (
+        get_efp_token_exchange_targets()
+        if efp
+        else get_default_token_exchange_targets()
+    )
+
+    ordered_appsettings = {}
+    for k, v in appsettings.items():
+        if k == 'TokenExchangeTargets':
+            continue
+        ordered_appsettings[k] = v
+        if k == 'DatabaseMigrationSettings':
+            ordered_appsettings['MigrationSettings'] = migration_settings
+        elif k == 'JwtTokenIntrospectionConfiguration':
+            ordered_appsettings['TokenExchangeTargets'] = token_exchange_targets
+
+    if 'MigrationSettings' not in ordered_appsettings:
+        ordered_appsettings['MigrationSettings'] = migration_settings
+    if 'TokenExchangeTargets' not in ordered_appsettings:
+        ordered_appsettings['TokenExchangeTargets'] = token_exchange_targets
+
+    return ordered_appsettings
+
+
+def generate_appsettings_efp_v6_6_0(
+        instance_name: str,
+        sa_password: str,
+        port: int = 5000,
+        automigrate: bool = True,
+        version: str = None,
+        deployed_ip: str = None):
+    return generate_appsettings_v6_6_0(
+        instance_name=instance_name,
+        sa_password=sa_password,
+        port=port,
+        automigrate=automigrate,
+        version=version or "v6.6.0",
+        deployed_ip=deployed_ip,
+        efp=True
+    )
+
+
+def generate_appsettings_data_staging_v6_6_0(
+        instance_name: str,
+        sa_password: str,
+        data_staging_token: str,
+        port: int = 5001,
+        version: str = None):
+    return generate_appsettings_data_staging_v6_5_0(
+        instance_name, sa_password, data_staging_token, port, version or "v6.6.0"
+    )

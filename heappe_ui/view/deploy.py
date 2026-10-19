@@ -8,10 +8,12 @@ RESTART_STATES_LOCK = threading.Lock()
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required, clean_ver
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.urls import reverse
 import docker
 import subprocess
+import shutil
 import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
@@ -524,6 +526,172 @@ def _set_updating_status(instance_name: str, status: bool):
             instance_service.save()
     except Exception as e:
         print(f"Error setting updating status for {instance_name}: {e}")
+
+
+def teardown_instance(
+    instance_name: str,
+    base_path: str = "/opt/heappe-deployment/",
+    stop_containers: bool = True,
+    delete_files: bool = True
+) -> dict:
+    """
+    Shuts down and removes all Docker containers, networks, volumes,
+    and optionally deletes deployment files on disk for a given instance.
+    """
+    results = {
+        "containers_stopped": 0,
+        "containers_removed": 0,
+        "compose_down_success": False,
+        "files_removed": False,
+        "errors": []
+    }
+
+    if not instance_name:
+        return results
+
+    # 1. Execute docker compose down if compose directory exists
+    if stop_containers:
+        candidate_compose_dirs = []
+        if base_path:
+            candidate_compose_dirs.append(os.path.join(base_path, instance_name, "heappe-core"))
+        for bp in ["/opt/heappe-deployment", "/opt/heappe"]:
+            p = os.path.join(bp, instance_name, "heappe-core")
+            if p not in candidate_compose_dirs:
+                candidate_compose_dirs.append(p)
+
+        for compose_dir in candidate_compose_dirs:
+            if os.path.isdir(compose_dir):
+                try:
+                    down_cmd = [
+                        "docker", "compose",
+                        "--profile", "db",
+                        "--profile", "heappe",
+                        "--profile", "initVault",
+                        "--profile", "vault",
+                        "--profile", "vaultagent",
+                        "--profile", "sshagent",
+                        "--profile", "staging",
+                        "--profile", "telemetry",
+                        "-p", instance_name,
+                        "down", "-v", "--remove-orphans"
+                    ]
+                    res = execute_docker_compose(down_cmd, compose_dir, timeout=120)
+                    if res.returncode == 0:
+                        results["compose_down_success"] = True
+                        break
+                    else:
+                        if res.stderr:
+                            results["errors"].append(f"Docker compose down note: {res.stderr.strip()}")
+                except Exception as e:
+                    results["errors"].append(f"Docker compose down error: {e}")
+
+        # 2. Sweep all containers using Docker SDK as a safeguard to ensure no lingering containers exist
+        try:
+            client = docker.from_env()
+            inst_lower = instance_name.lower()
+            for c in client.containers.list(all=True):
+                labels = getattr(c, 'labels', {}) or {}
+                proj = (labels.get('com.docker.compose.project') or '').lower()
+                c_name = (getattr(c, 'name', '') or '').lower()
+
+                # Match if container belongs to this project or has instance_name in container name
+                is_match = (
+                    proj == inst_lower or
+                    c_name.startswith(f"{inst_lower}_") or
+                    c_name.startswith(f"{inst_lower}-") or
+                    c_name.endswith(f"-{inst_lower}") or
+                    c_name.endswith(f"_{inst_lower}") or
+                    f"_{inst_lower}_" in c_name or
+                    f"-{inst_lower}-" in c_name
+                )
+                if is_match:
+                    try:
+                        if c.status == 'running':
+                            c.stop(timeout=10)
+                            results["containers_stopped"] += 1
+                    except Exception as e:
+                        results["errors"].append(f"Failed to stop container {getattr(c, 'name', 'unknown')}: {e}")
+                    try:
+                        c.remove(force=True, v=True)
+                        results["containers_removed"] += 1
+                    except Exception as e:
+                        results["errors"].append(f"Failed to remove container {getattr(c, 'name', 'unknown')}: {e}")
+        except Exception as e:
+            results["errors"].append(f"Docker SDK sweep note: {e}")
+
+    # 3. Safely delete filesystem directories if requested
+    if delete_files:
+        candidate_paths = []
+        if base_path:
+            candidate_paths.append((base_path, os.path.join(base_path, instance_name)))
+        for bp in ["/opt/heappe-deployment", "/opt/heappe"]:
+            p = (bp, os.path.join(bp, instance_name))
+            if p not in candidate_paths:
+                candidate_paths.append(p)
+
+        for b_root, inst_path in candidate_paths:
+            try:
+                real_root = os.path.realpath(b_root)
+                real_inst = os.path.realpath(inst_path)
+                if os.path.commonpath([real_root, real_inst]) == real_root and real_inst != real_root:
+                    if os.path.exists(real_inst):
+                        shutil.rmtree(real_inst, ignore_errors=True)
+                        results["files_removed"] = True
+            except Exception as e:
+                results["errors"].append(f"Failed to delete directory {inst_path}: {e}")
+
+    # 4. Clear internal memory states
+    try:
+        with RESTART_STATES_LOCK:
+            RESTART_STATES.pop(instance_name, None)
+    except Exception:
+        pass
+
+    return results
+
+
+@login_required
+def deploy_delete_instance(request, instance_name: str) -> HttpResponse:
+    """Delete an instance, stop and remove containers, clean up files and DB."""
+    if request.method == 'POST':
+        stop_containers = request.POST.get('stop_containers', 'true') in ['true', '1', 'on', True]
+        delete_files = request.POST.get('delete_files', 'true') in ['true', '1', 'on', True]
+
+        teardown_result = teardown_instance(
+            instance_name=instance_name,
+            stop_containers=stop_containers,
+            delete_files=delete_files
+        )
+
+        # Delete database record if exists
+        try:
+            from ..models import InstanceCredentials
+            InstanceCredentials.objects.filter(instance_name=instance_name).delete()
+        except Exception as e:
+            print(f"Error deleting instance credentials for {instance_name}: {e}")
+
+        # Clean session
+        if request.session.get("chosen_instance") == instance_name:
+            request.session.pop("chosen_instance", None)
+            request.session.pop("heappe_session_code", None)
+            request.session.pop("heappe_host", None)
+            request.session.pop("heappe_host_url", None)
+            request.session.pop("heappe_use_api_key", None)
+            request.session.pop("heappe_last_auth", None)
+            request.session.pop("heappe_last_failed_auth", None)
+
+        msg = f"Instance '{instance_name}' has been deleted and shut down successfully."
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'status': 'success',
+                'message': msg,
+                'redirect_url': reverse('instance_credentials_list')
+            })
+
+        messages.success(request, msg)
+        return redirect('instance_credentials_list')
+
+    return redirect('deploy_view', instance_name=instance_name)
 
 
 def handle_switch_branch_action(config, instance_name, no_cache=False, update_configs=True):
@@ -1304,6 +1472,35 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
             elif action in ['start_all', 'restart_all', 'stop_all']:
                 action_message, action_status = handle_global_action(compose_dir, instance_name, action)
 
+            elif action in ['delete_instance', 'teardown']:
+                stop_containers = request.POST.get('stop_containers', 'true') in ['true', '1', 'on', True]
+                delete_files = request.POST.get('delete_files', 'true') in ['true', '1', 'on', True]
+                teardown_instance(instance_name, base_path=base_path, stop_containers=stop_containers, delete_files=delete_files)
+                try:
+                    InstanceCredentials.objects.filter(instance_name=instance_name).delete()
+                except Exception as e:
+                    print(f"Error deleting instance credentials: {e}")
+
+                if request.session.get("chosen_instance") == instance_name:
+                    request.session.pop("chosen_instance", None)
+                    request.session.pop("heappe_session_code", None)
+                    request.session.pop("heappe_host", None)
+                    request.session.pop("heappe_host_url", None)
+                    request.session.pop("heappe_use_api_key", None)
+                    request.session.pop("heappe_last_auth", None)
+                    request.session.pop("heappe_last_failed_auth", None)
+
+                messages.success(request, f"Instance '{instance_name}' has been deleted and shut down successfully.")
+                redirect_url = reverse('instance_credentials_list')
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': f"Instance '{instance_name}' deleted and shut down.",
+                        'redirect_url': redirect_url
+                    })
+                from django.http import HttpResponseRedirect
+                return HttpResponseRedirect(redirect_url)
+
             # Generic JSON response for non-deploy actions
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 updated_containers = [
@@ -1377,6 +1574,34 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
     compose_dir = os.path.join(base_path, instance_name, "heappe-core") if instance_name else ""
     current_git_ref = get_current_git_ref(compose_dir) if compose_dir else {"branch": "", "commit": "", "description": "", "is_repo": False}
 
+    is_deployed = instance_service.is_deployed if instance_service else False
+    is_updating = instance_service.is_updating if instance_service else False
+
+    deployment_failed = False
+    deployment_error = ""
+    deploy_logs = ""
+
+    if instance_name and not is_deployed and not is_updating:
+        log_dir = os.path.join(base_path, instance_name, "app", "logs")
+        deploy_log = os.path.join(log_dir, "deploy.log")
+        if os.path.exists(deploy_log):
+            try:
+                with open(deploy_log, "r", encoding="utf-8") as f:
+                    deploy_logs = f.read()
+
+                has_success = ("SUCCESS:" in deploy_logs or "Deployment completed successfully" in deploy_logs)
+                if not has_success and deploy_logs.strip():
+                    deployment_failed = True
+                    for line in reversed(deploy_logs.splitlines()):
+                        line_s = line.strip()
+                        if "EXCEPTION:" in line_s or "Deployment error:" in line_s or "Error" in line_s or "failed" in line_s.lower():
+                            deployment_error = line_s
+                            break
+                    if not deployment_error:
+                        deployment_error = "Deployment process terminated unexpectedly. Review logs for details."
+            except Exception as e:
+                print(f"Error inspecting deploy.log: {e}")
+
     context = {
         "containers": containers,
         "instance_name": instance_name,
@@ -1389,8 +1614,11 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
         "tag_list": tag_list,
         "current_git_ref": current_git_ref,
         "instance_service": instance_service,
-        "is_deployed": instance_service.is_deployed if instance_service else False,
-        "is_updating": instance_service.is_updating if instance_service else False,
+        "is_deployed": is_deployed,
+        "is_updating": is_updating,
+        "deployment_failed": deployment_failed,
+        "deployment_error": deployment_error,
+        "deploy_logs": deploy_logs,
         "deployed_version": deployed_version,
         "latest_version": latest_version,
         "update_available": update_available,

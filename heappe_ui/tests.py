@@ -3481,7 +3481,8 @@ class AppSettingsV650UpgradeTests(TestCase):
         self.assertEqual(appsettings["HPCConnectionFrameworkSettings"]["ClustersConnectionPoolSettings"]["ConnectionPoolMaxUnusedInterval"], 1800)
         self.assertEqual(appsettings["HPCConnectionFrameworkSettings"]["SshClientSettings"]["ConnectionTimeout"], 30000)
         self.assertEqual(appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]["ApiVersion"], "auto")
-        self.assertEqual(appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]["ExtendedUserInfoV2Endpoint"], "/api/v2/users/me/extended")
+        self.assertEqual(appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]["ExtendedUserInfoV2Endpoint"], "/api/v2/UserInfo/Extended")
+        self.assertEqual(appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]["CommandTemplatePermissionsV2Endpoint"], "/api/Heappe/CommandTemplatePermissions/")
         self.assertEqual(appsettings["SshCaSettings"]["BaseUri"], "https://ssh.ca.api.heappe.eu")
 
         # Test DeployService version matching for 6.4.17
@@ -3604,6 +3605,189 @@ class AppSettingsV650UpgradeTests(TestCase):
                 merged_ds = json.load(f)
             self.assertEqual(merged_ds["ApplicationAPIConfiguration"]["DeploymentConfiguration"]["Version"], "v6.5.0")
             self.assertEqual(merged_ds["ApplicationAPIConfiguration"]["AuthenticationToken"], "super_secret_ds_token")
+
+    def test_generate_appsettings_v6_6_0_structure_and_efp_template(self):
+        from heappe_ui.appsettings.generator import (
+            generate_appsettings_v6_6_0,
+            generate_appsettings_efp_v6_6_0,
+            generate_appsettings_data_staging_v6_6_0,
+            get_default_token_exchange_targets,
+            get_efp_token_exchange_targets,
+            SUPPORTED_TOKEN_EXCHANGE_STRATEGIES,
+        )
+        from heappe_ui.DeployService import HEAppEDeployService, HEAppEConfig
+
+        # 1. Default v6.6.0 deployment
+        appsettings = generate_appsettings_v6_6_0(
+            instance_name="v660_inst",
+            sa_password="Password123!",
+            port=5000,
+            automigrate=True,
+            version="v6.6.0",
+            deployed_ip="127.0.0.1"
+        )
+
+        # Version & Swagger description
+        self.assertEqual(appsettings["ApplicationAPISettings"]["DeploymentSettings"]["Version"], "v6.6.0")
+        self.assertEqual(appsettings["ApplicationAPISettings"]["SwaggerDocSettings"]["Description"], "HEAppE middleware API v6.6.0")
+
+        # UserOrg V1 & V2 Endpoints in LexisAuthenticationConfiguration
+        lexis_auth = appsettings["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]
+        self.assertEqual(lexis_auth["ExtendedUserInfoEndpoint"], "/api/UserInfo/Extended")
+        self.assertEqual(lexis_auth["ExtendedUserInfoV2Endpoint"], "/api/v2/UserInfo/Extended")
+        self.assertEqual(lexis_auth["CommandTemplatePermissions"], "/api/Heappe/CommandTemplatePermissions/")
+        self.assertEqual(lexis_auth["CommandTemplatePermissionsV2Endpoint"], "/api/Heappe/CommandTemplatePermissions/")
+
+        # MigrationSettings root section next to DatabaseMigrationSettings
+        root_keys = list(appsettings.keys())
+        self.assertIn("MigrationSettings", appsettings)
+        self.assertEqual(appsettings["MigrationSettings"], {"EncryptionKey": ""})
+        self.assertEqual(
+            root_keys.index("MigrationSettings"),
+            root_keys.index("DatabaseMigrationSettings") + 1
+        )
+
+        # LexisTokenFlowConfiguration pre-exchange introspection defaults
+        lexis_flow = appsettings["JwtTokenIntrospectionConfiguration"]["LexisTokenFlowConfiguration"]
+        self.assertFalse(lexis_flow["IsEnabled"])
+        self.assertTrue(lexis_flow["UseExpirioServiceForTokenExchange"])
+        self.assertFalse(lexis_flow["IntrospectLexisToken"])
+        self.assertEqual(lexis_flow["Authority"], "")
+        self.assertEqual(lexis_flow["IntrospectionEndpoint"], "")
+        self.assertEqual(lexis_flow["ConnectionTimeoutInSeconds"], 15)
+
+        # Default TokenExchangeTargets root section next to JwtTokenIntrospectionConfiguration
+        self.assertIn("TokenExchangeTargets", appsettings)
+        self.assertEqual(
+            root_keys.index("TokenExchangeTargets"),
+            root_keys.index("JwtTokenIntrospectionConfiguration") + 1
+        )
+        self.assertEqual(appsettings["TokenExchangeTargets"], get_default_token_exchange_targets())
+        self.assertEqual(len(appsettings["TokenExchangeTargets"]), 3)
+        self.assertEqual([t["Name"] for t in appsettings["TokenExchangeTargets"]], ["idp", "sshca", "userorg"])
+        for target in appsettings["TokenExchangeTargets"]:
+            self.assertFalse(target["IsEnabled"])
+            self.assertIn(target["Strategy"], SUPPORTED_TOKEN_EXCHANGE_STRATEGIES)
+
+        # 2. EFP v6.6.0 template
+        efp_settings = generate_appsettings_efp_v6_6_0(
+            instance_name="discoverer",
+            sa_password="Password123!",
+            port=5000,
+            automigrate=True,
+            version="v6.6.0",
+            deployed_ip="localhost"
+        )
+        efp_flow = efp_settings["JwtTokenIntrospectionConfiguration"]["LexisTokenFlowConfiguration"]
+        self.assertTrue(efp_flow["IsEnabled"])
+        self.assertTrue(efp_flow["UseExpirioServiceForTokenExchange"])
+        self.assertTrue(efp_flow["IntrospectLexisToken"])
+        self.assertEqual(efp_flow["BaseUrl"], "https://lexis/auth")
+        self.assertEqual(efp_flow["Realm"], "LEXIS_AAI")
+        self.assertEqual(efp_flow["Broker"], "EFP")
+        self.assertEqual(efp_flow["Scope"], "openid profile email audience")
+        self.assertEqual(efp_flow["ClientId"], "<LEXIS_KEYCLOAK_CLIENT_ID>")
+        self.assertEqual(efp_flow["ClientSecret"], "<LEXIS_KEYCLOAK_CLIENT_SECRET>")
+        self.assertEqual(efp_flow["ConnectionTimeoutInSeconds"], 15)
+
+        self.assertEqual(efp_settings["TokenExchangeTargets"], get_efp_token_exchange_targets())
+        self.assertTrue(efp_settings["TokenExchangeTargets"][0]["IsEnabled"])
+        self.assertEqual(efp_settings["TokenExchangeTargets"][0]["Strategy"], "Expirio")
+        self.assertTrue(efp_settings["TokenExchangeTargets"][0]["IntrospectSubjectToken"])
+        self.assertTrue(efp_settings["TokenExchangeTargets"][1]["IsEnabled"])
+        self.assertEqual(efp_settings["TokenExchangeTargets"][1]["Strategy"], "Rfc8693")
+        self.assertFalse(efp_settings["TokenExchangeTargets"][2]["IsEnabled"])
+
+        # 3. DataStaging v6.6.0
+        ds_settings = generate_appsettings_data_staging_v6_6_0(
+            instance_name="v660_inst",
+            sa_password="Password123!",
+            data_staging_token="token",
+            port=5001,
+            version="v6.6.0"
+        )
+        self.assertEqual(ds_settings["ApplicationAPIConfiguration"]["DeploymentConfiguration"]["Version"], "v6.6.0")
+
+        # 4. DeployService version dispatch
+        service = HEAppEDeployService(HEAppEConfig(base_path="/tmp", repo_branch="v6.6.0"))
+        gen_66, ds_gen_66 = service._get_generators_for_version("v6.6.0")
+        self.assertEqual(gen_66, generate_appsettings_v6_6_0)
+        self.assertEqual(ds_gen_66, generate_appsettings_data_staging_v6_6_0)
+
+        gen_master, ds_gen_master = service._get_generators_for_version("master")
+        self.assertEqual(gen_master, generate_appsettings_v6_6_0)
+        self.assertEqual(ds_gen_master, generate_appsettings_data_staging_v6_6_0)
+
+    def test_update_init_v6_6_0_merge_adds_token_exchange_targets_and_fixes_v2_endpoints(self):
+        import tempfile
+        import json
+        import os
+        from heappe_ui.DeployService import HEAppEDeployService, HEAppEConfig
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            instance_name = "test_upgrade_v660"
+            config = HEAppEConfig(base_path=temp_dir, repo_branch="v6.6.0")
+            service = HEAppEDeployService(config)
+
+            confs_dir = os.path.join(temp_dir, instance_name, "app", "confs")
+            core_dir = os.path.join(temp_dir, instance_name, "heappe-core")
+            os.makedirs(confs_dir, exist_ok=True)
+            os.makedirs(core_dir, exist_ok=True)
+
+            old_appsettings = {
+                "ApplicationAPISettings": {
+                    "DeploymentSettings": {"Version": "v6.5.0"},
+                    "SwaggerDocSettings": {"Description": "HEAppE middleware API v6.5.0"}
+                },
+                "ExternalAuthenticationSettings": {
+                    "LexisAuthenticationConfiguration": {
+                        "BaseAddress": "https://api.workflows.my-eurohpc.eu",
+                        "ExtendedUserInfoV2Endpoint": "/api/v2/users/me/extended",
+                        "CommandTemplatePermissionsV2Endpoint": "/api/v2/heappe/command-template-permissions/"
+                    }
+                },
+                "JwtTokenIntrospectionConfiguration": {
+                    "LexisTokenFlowConfiguration": {
+                        "IsEnabled": True,
+                        "BaseUrl": "https://lexis/auth",
+                        "Realm": "LEXIS_AAI",
+                        "Broker": "EFP",
+                        "ClientId": "existing_client",
+                        "ClientSecret": "existing_secret"
+                    }
+                }
+            }
+            with open(os.path.join(confs_dir, "appsettings.json"), "w", encoding="utf-8") as f:
+                json.dump(old_appsettings, f)
+
+            res = service.update_init(instance_name, "v6.6.0")
+            self.assertEqual(res["status"], "success")
+
+            with open(os.path.join(confs_dir, "appsettings.json"), "r", encoding="utf-8") as f:
+                merged = json.load(f)
+
+            self.assertEqual(merged["ApplicationAPISettings"]["DeploymentSettings"]["Version"], "v6.6.0")
+            self.assertEqual(merged["ApplicationAPISettings"]["SwaggerDocSettings"]["Description"], "HEAppE middleware API v6.6.0")
+
+            # Deprecated V2 routes replaced with actual UserOrg V2 routes
+            lexis_auth = merged["ExternalAuthenticationSettings"]["LexisAuthenticationConfiguration"]
+            self.assertEqual(lexis_auth["BaseAddress"], "https://api.workflows.my-eurohpc.eu")
+            self.assertEqual(lexis_auth["ExtendedUserInfoV2Endpoint"], "/api/v2/UserInfo/Extended")
+            self.assertEqual(lexis_auth["CommandTemplatePermissionsV2Endpoint"], "/api/Heappe/CommandTemplatePermissions/")
+
+            # LexisTokenFlowConfiguration preserves existing secrets and adds new introspection fields
+            lexis_flow = merged["JwtTokenIntrospectionConfiguration"]["LexisTokenFlowConfiguration"]
+            self.assertTrue(lexis_flow["IsEnabled"])
+            self.assertEqual(lexis_flow["ClientId"], "existing_client")
+            self.assertEqual(lexis_flow["ClientSecret"], "existing_secret")
+            self.assertIn("IntrospectLexisToken", lexis_flow)
+            self.assertIn("Authority", lexis_flow)
+            self.assertIn("IntrospectionEndpoint", lexis_flow)
+
+            # TokenExchangeTargets and MigrationSettings added
+            self.assertIn("MigrationSettings", merged)
+            self.assertIn("TokenExchangeTargets", merged)
+            self.assertEqual(len(merged["TokenExchangeTargets"]), 3)
 
 
 class TelemetryDashboardV650Tests(TestCase):
@@ -4414,6 +4598,217 @@ class ProjectSubProjectTests(TestCase):
         response = project_detail(req, project_id=1)
         self.assertEqual(response.status_code, 302)
         mock_controller.heappe_management_sub_project_post.assert_called_once()
+
+
+class InstanceTeardownAndDeploymentFailureTests(TestCase):
+    """Tests for teardown_instance, instance deletion with shutdown, and deployment failure handling."""
+
+    def setUp(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="testadmin", password="password")
+
+    @mock.patch("heappe_ui.view.deploy.docker.from_env")
+    @mock.patch("heappe_ui.view.deploy.execute_docker_compose")
+    def test_teardown_instance_docker_and_files(self, mock_exec_compose, mock_docker_env):
+        import tempfile
+        from heappe_ui.view.deploy import teardown_instance
+        import subprocess
+
+        mock_exec_compose.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        mock_container = mock.MagicMock()
+        mock_container.name = "heappe-test_inst"
+        mock_container.status = "running"
+        mock_container.labels = {"com.docker.compose.project": "test_inst"}
+
+        mock_client = mock.MagicMock()
+        mock_client.containers.list.return_value = [mock_container]
+        mock_docker_env.return_value = mock_client
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            inst_dir = os.path.join(temp_dir, "test_inst")
+            core_dir = os.path.join(inst_dir, "heappe-core")
+            os.makedirs(core_dir, exist_ok=True)
+
+            res = teardown_instance("test_inst", base_path=temp_dir, stop_containers=True, delete_files=True)
+            self.assertTrue(res["compose_down_success"])
+            self.assertEqual(res["containers_stopped"], 1)
+            self.assertEqual(res["containers_removed"], 1)
+            self.assertTrue(res["files_removed"])
+            self.assertFalse(os.path.exists(inst_dir))
+            mock_container.stop.assert_called_once()
+            mock_container.remove.assert_called_once()
+
+    @mock.patch("heappe_ui.view.deploy.docker.from_env")
+    @mock.patch("heappe_ui.view.deploy.execute_docker_compose")
+    def test_teardown_instance_keep_files(self, mock_exec_compose, mock_docker_env):
+        import tempfile
+        from heappe_ui.view.deploy import teardown_instance
+        import subprocess
+
+        mock_exec_compose.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        mock_container = mock.MagicMock()
+        mock_container.name = "heappe-test_inst"
+        mock_container.status = "running"
+        mock_container.labels = {"com.docker.compose.project": "test_inst"}
+        mock_client = mock.MagicMock()
+        mock_client.containers.list.return_value = [mock_container]
+        mock_docker_env.return_value = mock_client
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            inst_dir = os.path.join(temp_dir, "test_inst")
+            os.makedirs(inst_dir, exist_ok=True)
+
+            res = teardown_instance("test_inst", base_path=temp_dir, stop_containers=True, delete_files=False)
+            self.assertFalse(res["files_removed"])
+            self.assertTrue(os.path.exists(inst_dir))
+
+    @mock.patch("heappe_ui.views.teardown_instance")
+    def test_instance_credentials_delete_calls_teardown(self, mock_teardown):
+        from heappe_ui.models import InstanceCredentials
+        from heappe_ui.views import instance_credentials_delete
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        inst = InstanceCredentials.objects.create(
+            instance_name="inst_to_del",
+            heappe_host="localhost",
+            heappe_login="admin",
+            heappe_password="pwd",
+            heappe_port="5000",
+            log_db_host="localhost",
+            log_db_port="6000",
+            log_db_user="SA",
+            log_db_password="pwd",
+            log_db_database="db"
+        )
+        mock_teardown.return_value = {"files_removed": True}
+
+        req = self.factory.post(f"/instances/{inst.pk}/delete/", {
+            "stop_containers": "true",
+            "delete_files": "true"
+        })
+        req.user = self.user
+        req.session = {"chosen_instance": "inst_to_del", "heappe_session_code": "code123"}
+        setattr(req, '_messages', FallbackStorage(req))
+
+        resp = instance_credentials_delete(req, pk=inst.pk)
+        self.assertEqual(resp.status_code, 302)
+        mock_teardown.assert_called_once_with(instance_name="inst_to_del", stop_containers=True, delete_files=True)
+        self.assertFalse(InstanceCredentials.objects.filter(pk=inst.pk).exists())
+        self.assertNotIn("chosen_instance", req.session)
+
+    @mock.patch("heappe_ui.views.teardown_instance")
+    def test_instance_credentials_bulk_delete_calls_teardown(self, mock_teardown):
+        from heappe_ui.models import InstanceCredentials
+        from heappe_ui.views import instance_credentials_list
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        inst1 = InstanceCredentials.objects.create(instance_name="inst_b1", heappe_host="h1", heappe_login="u", heappe_password="p", heappe_port="5000")
+        inst2 = InstanceCredentials.objects.create(instance_name="inst_b2", heappe_host="h2", heappe_login="u", heappe_password="p", heappe_port="5001")
+
+        req = self.factory.post("/instances/", {
+            "action": "bulk_delete",
+            "selected_ids": [inst1.pk, inst2.pk],
+            "stop_containers": "true",
+            "delete_files": "true"
+        })
+        req.user = self.user
+        req.session = {}
+        setattr(req, '_messages', FallbackStorage(req))
+
+        resp = instance_credentials_list(req)
+        self.assertEqual(resp.status_code, 302)
+        self.assertEqual(mock_teardown.call_count, 2)
+        self.assertFalse(InstanceCredentials.objects.filter(instance_name__in=["inst_b1", "inst_b2"]).exists())
+
+    @mock.patch("heappe_ui.view.deploy.teardown_instance")
+    def test_deploy_delete_instance_endpoint(self, mock_teardown):
+        from heappe_ui.models import InstanceCredentials
+        from heappe_ui.view.deploy import deploy_delete_instance
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        InstanceCredentials.objects.create(instance_name="deploy_del_test", heappe_host="h", heappe_login="u", heappe_password="p", heappe_port="5000")
+
+        req = self.factory.post("/deploy/deploy_del_test/delete/", {
+            "stop_containers": "true",
+            "delete_files": "true"
+        })
+        req.user = self.user
+        req.session = {"chosen_instance": "deploy_del_test"}
+        setattr(req, '_messages', FallbackStorage(req))
+
+        resp = deploy_delete_instance(req, instance_name="deploy_del_test")
+        self.assertEqual(resp.status_code, 302)
+        mock_teardown.assert_called_once_with(instance_name="deploy_del_test", stop_containers=True, delete_files=True)
+        self.assertFalse(InstanceCredentials.objects.filter(instance_name="deploy_del_test").exists())
+        self.assertNotIn("chosen_instance", req.session)
+
+    @mock.patch("heappe_ui.view.deploy.teardown_instance")
+    def test_deploy_delete_instance_ajax(self, mock_teardown):
+        from heappe_ui.models import InstanceCredentials
+        from heappe_ui.view.deploy import deploy_delete_instance
+        import json
+
+        InstanceCredentials.objects.create(instance_name="ajax_del_test", heappe_host="h", heappe_login="u", heappe_password="p", heappe_port="5000")
+
+        req = self.factory.post("/deploy/ajax_del_test/delete/", {
+            "stop_containers": "true",
+            "delete_files": "true"
+        }, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        req.user = self.user
+        req.session = {}
+
+        resp = deploy_delete_instance(req, instance_name="ajax_del_test")
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.content)
+        self.assertEqual(data["status"], "success")
+
+    @mock.patch("heappe_ui.view.deploy.render")
+    @mock.patch("heappe_ui.view.deploy.docker.from_env")
+    def test_deploy_view_detects_deployment_failed(self, mock_docker_env, mock_render):
+        from heappe_ui.models import InstanceCredentials
+        from heappe_ui.view.deploy import deploy_view
+        from django.http import HttpResponse
+
+        mock_render.return_value = HttpResponse("OK")
+        mock_client = mock.MagicMock()
+        mock_client.containers.list.return_value = []
+        mock_docker_env.return_value = mock_client
+
+        inst = InstanceCredentials.objects.create(
+            instance_name="failed_inst",
+            heappe_host="localhost",
+            heappe_login="admin",
+            heappe_password="pwd",
+            heappe_port="5000",
+            is_deployed=False,
+            is_updating=False
+        )
+
+        log_content = "[2026-10-19] Starting deploy...\nEXCEPTION: Docker compose build failed: Error in Dockerfile\n"
+
+        orig_exists = os.path.exists
+        def mock_exists(p):
+            if "deploy.log" in str(p):
+                return True
+            return orig_exists(p)
+
+        from unittest.mock import mock_open
+        m_open = mock_open(read_data=log_content)
+
+        with mock.patch("os.path.exists", side_effect=mock_exists):
+            with mock.patch("builtins.open", m_open):
+                req = self.factory.get("/deploy/failed_inst/")
+                req.user = self.user
+                req.session = {}
+
+                deploy_view(req, instance_name="failed_inst")
+                mock_render.assert_called_once()
+                ctx = mock_render.call_args[0][2]
+                self.assertTrue(ctx["deployment_failed"])
+                self.assertIn("Docker compose build failed", ctx["deployment_error"])
+                self.assertIn("EXCEPTION:", ctx["deploy_logs"])
 
 
 
