@@ -3123,6 +3123,142 @@ class LogViewerJsonTests(TestCase):
         finally:
             import os
             os.remove(tmp_path)
+    def test_is_rotated_log_file(self):
+        from heappe_ui.views import is_rotated_log_file
+        self.assertTrue(is_rotated_log_file("/path/to/2026_10_19.json.1"))
+        self.assertTrue(is_rotated_log_file("/path/to/heappe_2026_10_19.log.2"))
+        self.assertTrue(is_rotated_log_file("/path/to/heappe_2026_10_19.log.3.gz"))
+        self.assertFalse(is_rotated_log_file("/path/to/2026_10_19.json"))
+        self.assertFalse(is_rotated_log_file("/path/to/heappe_2026_10_19.log"))
+        self.assertFalse(is_rotated_log_file("/path/to/heappe_2026_10_19_001.log"))
+
+    def test_fetch_new_logs_caps_max_entries(self):
+        import os
+        import json as pyjson
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+        from heappe_ui.views import fetch_new_logs, MAX_LOG_ENTRIES_PER_PULL
+
+        factory = RequestFactory()
+        user = User.objects.create_user(username='testuser_logs_cap', password='password')
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            for i in range(400):
+                tmp.write(f'{{"timestamp":"2026-10-05T09:{i//60:02d}:{i%60:02d}.000Z","level":"INFO","logger":"L","message":"Line_{i}"}}\n')
+            tmp.flush()
+            tmp_path = tmp.name
+
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
+                # First pull: should cap at MAX_LOG_ENTRIES_PER_PULL (300)
+                req = factory.get('/fetch-new-logs/?offset=0')
+                req.user = user
+                req.session = {'chosen_instance': 'test'}
+                resp = fetch_new_logs(req)
+                self.assertEqual(resp.status_code, 200)
+                data = pyjson.loads(resp.content.decode('utf-8'))
+                self.assertEqual(len(data['entries']), MAX_LOG_ENTRIES_PER_PULL)
+                self.assertEqual(data['entries'][0]['content'], 'INFO  2026-10-05 09:00:00  [-]  -  L - Line_0')
+                next_offset = data['offset']
+
+                # Second pull: should get the remaining 100 entries
+                req2 = factory.get(f'/fetch-new-logs/?offset={next_offset}')
+                req2.user = user
+                req2.session = {'chosen_instance': 'test'}
+                resp2 = fetch_new_logs(req2)
+                self.assertEqual(resp2.status_code, 200)
+                data2 = pyjson.loads(resp2.content.decode('utf-8'))
+                self.assertEqual(len(data2['entries']), 100)
+                self.assertEqual(data2['entries'][-1]['content'], 'INFO  2026-10-05 09:06:39  [-]  -  L - Line_399')
+        finally:
+            os.remove(tmp_path)
+            user.delete()
+
+    def test_fetch_new_logs_chronological_sort_across_files(self):
+        import os
+        import json as pyjson
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+        from heappe_ui.views import fetch_new_logs
+
+        factory = RequestFactory()
+        user = User.objects.create_user(username='testuser_logs_sort', password='password')
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp_api, \
+             tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp_ds:
+            tmp_api.write('{"timestamp":"2026-10-05T09:00:02.000Z","level":"INFO","logger":"L","message":"API_02"}\n')
+            tmp_api.write('{"timestamp":"2026-10-05T09:00:04.000Z","level":"INFO","logger":"L","message":"API_04"}\n')
+            tmp_api.flush()
+
+            tmp_ds.write('{"timestamp":"2026-10-05T09:00:01.000Z","level":"INFO","logger":"L","message":"DS_01"}\n')
+            tmp_ds.write('{"timestamp":"2026-10-05T09:00:03.000Z","level":"INFO","logger":"L","message":"DS_03"}\n')
+            tmp_ds.flush()
+
+            api_path = tmp_api.name
+            ds_path = tmp_ds.name
+
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(api_path, 'API'), (ds_path, 'DATASTAGING')]):
+                req = factory.get('/fetch-new-logs/?offset={}')
+                req.user = user
+                req.session = {'chosen_instance': 'test'}
+                resp = fetch_new_logs(req)
+                self.assertEqual(resp.status_code, 200)
+                data = pyjson.loads(resp.content.decode('utf-8'))
+
+                self.assertEqual(len(data['entries']), 4)
+                timestamps = [e['timestamp_str'] for e in data['entries']]
+                self.assertEqual(timestamps, [
+                    '2026-10-05 09:00:01',
+                    '2026-10-05 09:00:02',
+                    '2026-10-05 09:00:03',
+                    '2026-10-05 09:00:04',
+                ])
+        finally:
+            os.remove(api_path)
+            os.remove(ds_path)
+            user.delete()
+
+    def test_fetch_new_logs_rotated_file_not_read_from_zero(self):
+        import os
+        import json as pyjson
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+        from heappe_ui.views import fetch_new_logs
+
+        factory = RequestFactory()
+        user = User.objects.create_user(username='testuser_logs_rot', password='password')
+
+        with tempfile.NamedTemporaryFile(suffix='.json.1', mode='w+', delete=False) as tmp_rot, \
+             tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp_act:
+            tmp_rot.write('{"timestamp":"2026-10-05T08:00:00.000Z","level":"WARN","logger":"L","message":"OldRotatedMsg"}\n')
+            tmp_rot.flush()
+            rot_path = tmp_rot.name
+
+            tmp_act.write('{"timestamp":"2026-10-05T09:00:00.000Z","level":"INFO","logger":"L","message":"NewActiveMsg"}\n')
+            tmp_act.flush()
+            act_path = tmp_act.name
+
+        try:
+            # Client only tracked active_path previously, but now rot_path exists too (rotation occurred)
+            dict_offset = pyjson.dumps({act_path: 0})
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(rot_path, 'API'), (act_path, 'API')]):
+                req = factory.get(f'/fetch-new-logs/?offset={dict_offset}')
+                req.user = user
+                req.session = {'chosen_instance': 'test'}
+                resp = fetch_new_logs(req)
+                self.assertEqual(resp.status_code, 200)
+                data = pyjson.loads(resp.content.decode('utf-8'))
+
+                # Should only return the new active message, NOT the old rotated message!
+                self.assertEqual(len(data['entries']), 1)
+                self.assertIn('NewActiveMsg', data['entries'][0]['content'])
+                self.assertNotIn('OldRotatedMsg', [e['content'] for e in data['entries']])
+                # The rotated file offset should be recorded as its full size
+                self.assertEqual(data['offset'][rot_path], os.path.getsize(rot_path))
+        finally:
+            os.remove(rot_path)
+            os.remove(act_path)
             user.delete()
 
 

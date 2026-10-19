@@ -499,7 +499,10 @@
 
 <script>
     let logOffset = 0;
-    let liveInterval = null;
+    let isLiveActive = false;
+    let isPolling = false;
+    let liveTimeoutId = null;
+    const MAX_CONSOLE_LINES = 1000;
     const logWindow = document.getElementById('logWindow');
     const consoleContent = document.getElementById('logConsole');
     const liveToggle = document.getElementById('liveStreamToggle');
@@ -545,49 +548,32 @@
     }
 
     function highlightJsonInText(text) {
-        let result = '';
-        let i = 0;
-        while (i < text.length) {
-            if (text[i] === '{') {
-                let braceCount = 1;
-                let j = i + 1;
-                let inString = false;
-                let escape = false;
-                while (j < text.length && braceCount > 0) {
-                    let char = text[j];
-                    if (escape) {
-                        escape = false;
-                    } else if (char === '\\') {
-                        escape = true;
-                    } else if (char === '"') {
-                        inString = !inString;
-                    } else if (!inString) {
-                        if (char === '{') braceCount++;
-                        else if (char === '}') braceCount--;
-                    }
-                    j++;
-                }
-                if (braceCount === 0) {
-                    let rawJson = text.substring(i, j);
-                    try {
-                        let parsed = JSON.parse(rawJson);
-                        let pretty = JSON.stringify(parsed);
-                        let highlighted = syntaxHighlightJson(pretty);
-                        result += `<span class="json-block">${highlighted}</span>`;
-                    } catch (e) {
-                        result += `<span class="json-raw">${escapeHtml(rawJson)}</span>`;
-                    }
-                    i = j;
-                } else {
-                    result += escapeHtml(text[i]);
-                    i++;
-                }
-            } else {
-                result += escapeHtml(text[i]);
-                i++;
+        if (!text || text.indexOf('{') === -1) {
+            return escapeHtml(text);
+        }
+        const trimmed = text.trim();
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                return `<span class="json-block">${syntaxHighlightJson(JSON.stringify(parsed, null, 2))}</span>`;
+            } catch (e) {
+                return escapeHtml(text);
             }
         }
-        return result;
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+            const potentialJson = text.substring(firstBrace, lastBrace + 1);
+            try {
+                const parsed = JSON.parse(potentialJson);
+                const before = escapeHtml(text.substring(0, firstBrace));
+                const after = escapeHtml(text.substring(lastBrace + 1));
+                return before + `<span class="json-block">${syntaxHighlightJson(JSON.stringify(parsed))}</span>` + after;
+            } catch (e) {
+                return escapeHtml(text);
+            }
+        }
+        return escapeHtml(text);
     }
 
     function getServiceBadge(service) {
@@ -664,19 +650,32 @@
         return `<div class="log-entry log-entry-${levelLower}">${formatted}</div>`;
     }
 
+    function trimConsoleDom(maxCount = MAX_CONSOLE_LINES) {
+        const children = consoleContent.children;
+        const toRemove = children.length - maxCount;
+        if (toRemove > 0) {
+            const range = document.createRange();
+            range.setStartBefore(children[0]);
+            range.setEndAfter(children[toRemove - 1]);
+            range.deleteContents();
+        }
+    }
+
     function renderLogs(entries) {
         consoleContent.innerHTML = '';
+        if (!entries || entries.length === 0) {
+            consoleContent.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No matching logs found.</div>';
+            entryCountDisplay.textContent = '0';
+            return;
+        }
         let html = '';
-        for (const entry of entries) {
+        const toRender = entries.length > MAX_CONSOLE_LINES ? entries.slice(entries.length - MAX_CONSOLE_LINES) : entries;
+        for (const entry of toRender) {
             html += createLogEntryHtml(entry);
         }
-        if (html) {
-            consoleContent.insertAdjacentHTML('beforeend', html);
-        } else {
-            consoleContent.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No matching logs found.</div>';
-        }
+        consoleContent.insertAdjacentHTML('beforeend', html);
         scrollToBottom();
-        entryCountDisplay.textContent = consoleContent.querySelectorAll('.log-entry').length;
+        entryCountDisplay.textContent = consoleContent.children.length;
     }
 
     async function pullLogs() {
@@ -694,7 +693,6 @@
             const data = await response.json();
             
             if (data.entries && data.entries.length > 0) {
-                // Remove placeholder if present
                 const placeholder = consoleContent.querySelector('.text-muted');
                 if (placeholder) {
                     consoleContent.innerHTML = '';
@@ -706,18 +704,12 @@
                 }
                 consoleContent.insertAdjacentHTML('beforeend', html);
                 logOffset = data.offset;
+                
+                // Fast atomic trim of console DOM to keep memory clean
+                trimConsoleDom(MAX_CONSOLE_LINES);
                 scrollToBottom();
                 
-                // Keep console memory clean (cap at 2000 lines)
-                const logEntries = consoleContent.querySelectorAll('.log-entry');
-                if (logEntries.length > 2000) {
-                    const toRemove = logEntries.length - 2000;
-                    for (let k = 0; k < toRemove; k++) {
-                        consoleContent.removeChild(logEntries[k]);
-                    }
-                }
-                
-                entryCountDisplay.textContent = consoleContent.querySelectorAll('.log-entry').length;
+                entryCountDisplay.textContent = consoleContent.children.length;
             } else if (data.offset !== undefined) { 
                 logOffset = data.offset; 
             }
@@ -726,11 +718,27 @@
         }
     }
 
+    async function triggerLivePull() {
+        if (!isLiveActive) return;
+        if (!isPolling) {
+            isPolling = true;
+            try {
+                await pullLogs();
+            } finally {
+                isPolling = false;
+            }
+        }
+        if (isLiveActive) {
+            liveTimeoutId = setTimeout(triggerLivePull, 2000);
+        }
+    }
+
     function updateLiveState(checked) {
         if (liveToggle) liveToggle.checked = checked;
         if (headerLiveToggle) headerLiveToggle.checked = checked;
 
         if (checked) {
+            isLiveActive = true;
             const baseUrl = "{% url 'fetch_new_logs' %}";
             const levelVal = document.querySelector('select[name="level"]').value;
             const serviceVal = document.querySelector('select[name="service"]').value;
@@ -754,8 +762,8 @@
                         headerLiveStatus.className = "font-monospace small live-status-active text-success d-inline-flex align-items-center";
                     }
                     
-                    if (!liveInterval) {
-                        liveInterval = setInterval(pullLogs, 2000);
+                    if (!liveTimeoutId) {
+                        liveTimeoutId = setTimeout(triggerLivePull, 1000);
                     }
                 })
                 .catch(err => {
@@ -765,9 +773,10 @@
                     }
                 });
         } else {
-            if (liveInterval) {
-                clearInterval(liveInterval);
-                liveInterval = null;
+            isLiveActive = false;
+            if (liveTimeoutId) {
+                clearTimeout(liveTimeoutId);
+                liveTimeoutId = null;
             }
             if (liveStatus) {
                 liveStatus.innerHTML = 'Off';

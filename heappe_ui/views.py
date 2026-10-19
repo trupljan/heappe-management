@@ -1587,6 +1587,30 @@ def matches_filters(parsed, level_filter, search_query, time_from, time_to):
     return True
 
 
+def is_rotated_log_file(filepath):
+    """Determine if a file is an archived/rotated log file (e.g. ends with .1, .2, etc.)."""
+    return bool(re.search(r'\.(?:log|json)\.\d+(?:\.gz)?$', os.path.basename(filepath), re.IGNORECASE))
+
+
+def log_file_sort_key(file_entry):
+    """Sort log files chronologically: older rotated files first, active file last."""
+    filepath = file_entry[0] if isinstance(file_entry, tuple) else file_entry
+    fname = os.path.basename(filepath)
+    mtime = 0
+    try:
+        mtime = os.path.getmtime(filepath)
+    except OSError:
+        pass
+
+    rot_match = re.search(r'\.(?:log|json)\.(\d+)$', fname, re.IGNORECASE)
+    seq_match = re.search(r'[_\-](\d+)\.(?:log|json)', fname, re.IGNORECASE)
+
+    rot_num = int(rot_match.group(1)) if rot_match else 0
+    seq_num = int(seq_match.group(1)) if seq_match else 0
+
+    return (mtime, -rot_num, seq_num, filepath)
+
+
 def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, search_query=None, time_from=None, time_to=None):
     timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
     entries_count = 0
@@ -1648,6 +1672,9 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                     all_entries.append(parsed)
                     entries_count += 1
 
+        if entries_count >= max_entries * 2:
+            break
+
     all_entries.sort(key=lambda x: x.get('timestamp_str') or '', reverse=True)
     for entry in all_entries[:max_entries]:
         yield entry
@@ -1655,7 +1682,8 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
 
 def get_log_file_paths(instance, date_str, service="API"):
     base_logs_dir = f"/opt/heappe-deployment/{instance}/app/logs"
-    date_formatted = date_str.replace("-", "_")
+    date_formatted_us = date_str.replace("-", "_")
+    date_formatted_hy = date_str.replace("_", "-")
 
     if not os.path.exists(base_logs_dir):
         return []
@@ -1663,7 +1691,10 @@ def get_log_file_paths(instance, date_str, service="API"):
     service_upper = (service or "API").upper()
     matching_files = []
 
-    date_pattern = re.compile(rf"^(?:[a-zA-Z0-9_\-]*?_)?{re.escape(date_formatted)}\.(?:log|json)(?:\.\d+)?$", re.IGNORECASE)
+    date_pattern = re.compile(
+        rf"^(?:[a-zA-Z0-9_\-]*?_)?(?:{re.escape(date_formatted_us)}|{re.escape(date_formatted_hy)})(?:[_\-]\d+)?\.(?:log|json)(?:\.\d+)?$",
+        re.IGNORECASE
+    )
 
     def scan_dir(dir_path, svc_tag):
         if os.path.exists(dir_path):
@@ -1720,7 +1751,7 @@ def get_log_file_paths(instance, date_str, service="API"):
                 tag_name = entry.upper()
                 scan_dir(full_path, tag_name)
 
-    matching_files.sort(key=lambda x: os.path.getmtime(x[0]))
+    matching_files.sort(key=log_file_sort_key)
     return matching_files
 
 
@@ -1775,6 +1806,10 @@ def log_viewer_view(request):
         'service_filter': service_filter,
         'instance': instance
     })
+
+
+MAX_LOG_ENTRIES_PER_PULL = 300
+MAX_CHUNK_READ_BYTES = 512 * 1024  # 512 KB per file read chunk
 
 
 @login_required
@@ -1833,6 +1868,9 @@ def fetch_new_logs(request):
     updated_offsets = dict(offset_dict)
 
     for item in log_paths:
+        if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL:
+            break
+
         log_path = item[0] if isinstance(item, tuple) else item
         svc_tag = item[1] if isinstance(item, tuple) else 'API'
 
@@ -1840,7 +1878,18 @@ def fetch_new_logs(request):
             continue
 
         file_size = os.path.getsize(log_path)
-        cur_file_offset = offset_dict.get(log_path, num_offset if not is_dict_offset else 0)
+
+        if log_path in offset_dict:
+            cur_file_offset = offset_dict[log_path]
+        else:
+            if is_dict_offset:
+                # If offset_dict is active and a rotated file appears, do NOT read from 0!
+                if is_rotated_log_file(log_path):
+                    cur_file_offset = file_size
+                else:
+                    cur_file_offset = 0
+            else:
+                cur_file_offset = num_offset
 
         # File was truncated or rolled
         if cur_file_offset > file_size:
@@ -1850,9 +1899,11 @@ def fetch_new_logs(request):
             updated_offsets[log_path] = file_size
             continue
 
+        bytes_to_read = min(file_size - cur_file_offset, MAX_CHUNK_READ_BYTES)
+
         with open(log_path, 'rb') as f:
             f.seek(cur_file_offset)
-            chunk = f.read()
+            chunk = f.read(bytes_to_read)
 
         if not chunk:
             updated_offsets[log_path] = cur_file_offset
@@ -1874,6 +1925,8 @@ def fetch_new_logs(request):
                     processed_bytes += len(line.encode('utf-8'))
                     if matches_filters(parsed, level_filter, search_query, None, None):
                         new_entries.append(parsed)
+                    if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL:
+                        break
                 else:
                     # Incomplete JSON line at boundary, leave for next read
                     break
@@ -1891,7 +1944,9 @@ def fetch_new_logs(request):
             current_entry_lines = []
             timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
 
+            lines_consumed_bytes = 0
             for line in decoded_lines:
+                line_len = len(line.encode('utf-8'))
                 if timestamp_re.search(line[:30]):
                     if current_entry_lines:
                         entry_text = "".join(current_entry_lines)
@@ -1901,14 +1956,17 @@ def fetch_new_logs(request):
                     current_entry_lines = [line]
                 else:
                     current_entry_lines.append(line)
+                lines_consumed_bytes += line_len
+                if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL:
+                    break
 
-            if current_entry_lines:
+            if current_entry_lines and len(new_entries) < MAX_LOG_ENTRIES_PER_PULL:
                 entry_text = "".join(current_entry_lines)
                 parsed = parse_log_line(entry_text, service=svc_tag)
                 if matches_filters(parsed, level_filter, search_query, None, None):
                     new_entries.append(parsed)
 
-            updated_offsets[log_path] = cur_file_offset + consumed_bytes
+            updated_offsets[log_path] = cur_file_offset + (lines_consumed_bytes if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL else consumed_bytes)
 
     new_entries.sort(key=lambda x: x.get('timestamp_str') or '')
 
