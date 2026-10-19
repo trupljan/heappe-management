@@ -1100,6 +1100,7 @@
         const startTime = Date.now();
         let isPolling = true;
         let hasRestarted = false;
+        let reconnectAttempts = 0;
         let pollTimer = null;
         let elapsedTimer = null;
 
@@ -1123,107 +1124,144 @@
             }
         }, 1000);
 
+        function verifyReadyAndRedirect(attempts = 0) {
+            if (spinner) spinner.classList.add('d-none');
+            if (statusIcon) {
+                statusIcon.classList.remove('d-none');
+                statusIcon.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>';
+            }
+            if (statusTitle) statusTitle.textContent = 'Update Completed Successfully';
+            if (statusMsg) statusMsg.textContent = 'Verifying application response before redirecting...';
+            if (phaseBadge) {
+                phaseBadge.className = 'badge bg-success-subtle text-success border border-success-subtle';
+                phaseBadge.textContent = 'Ready';
+            }
+
+            const dashboardUrl = '{% url "dashboard_view" %}';
+            const controller = new AbortController();
+            const verifyTimeout = setTimeout(() => controller.abort(), 4000);
+
+            fetch(dashboardUrl + '?check_ready=' + Date.now(), {
+                method: 'GET',
+                cache: 'no-store',
+                signal: controller.signal
+            })
+            .then(res => {
+                clearTimeout(verifyTimeout);
+                if (res.ok || (res.status >= 300 && res.status < 400)) {
+                    if (statusMsg) statusMsg.textContent = 'Application verified. Reloading dashboard...';
+                    setTimeout(() => {
+                        window.location.href = dashboardUrl;
+                    }, 800);
+                } else {
+                    if (attempts < 25) {
+                        if (statusMsg) statusMsg.textContent = 'Waiting for web server upstream readiness (HTTP ' + res.status + ')...';
+                        setTimeout(() => verifyReadyAndRedirect(attempts + 1), 1200);
+                    } else {
+                        window.location.href = dashboardUrl;
+                    }
+                }
+            })
+            .catch(err => {
+                clearTimeout(verifyTimeout);
+                if (attempts < 25) {
+                    if (statusMsg) statusMsg.textContent = 'Service warming up after restart. Reconnecting...';
+                    setTimeout(() => verifyReadyAndRedirect(attempts + 1), 1200);
+                } else {
+                    window.location.href = dashboardUrl;
+                }
+            });
+        }
+
         function checkStatus() {
             if (!isPolling) return;
 
-            fetch(statusUrl + '?t=' + Date.now())
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('HTTP ' + response.status);
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (!isPolling) return;
+            const controller = new AbortController();
+            const fetchTimeout = setTimeout(() => controller.abort(), 4500);
 
-                    if (data.logs && logsEl) {
-                        logsEl.textContent = data.logs;
-                        logsEl.scrollTop = logsEl.scrollHeight;
-                    }
+            fetch(statusUrl + '?t=' + Date.now(), {
+                method: 'GET',
+                cache: 'no-store',
+                signal: controller.signal
+            })
+            .then(response => {
+                clearTimeout(fetchTimeout);
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!isPolling) return;
 
-                    if (data.is_success) {
-                        isPolling = false;
-                        clearInterval(elapsedTimer);
-                        if (spinner) spinner.classList.add('d-none');
-                        if (statusIcon) {
-                            statusIcon.classList.remove('d-none');
-                            statusIcon.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>';
-                        }
-                        if (statusTitle) statusTitle.textContent = 'Update Completed Successfully';
-                        if (statusMsg) statusMsg.textContent = 'The Admin Panel has been updated and restarted. Reloading dashboard...';
-                        if (phaseBadge) {
-                            phaseBadge.className = 'badge bg-success-subtle text-success border border-success-subtle';
-                            phaseBadge.textContent = 'Success';
-                        }
+                reconnectAttempts = 0;
 
-                        setTimeout(() => {
-                            window.location.href = "{% url 'dashboard_view' %}";
-                        }, 1500);
-                        return;
-                    }
+                if (data.logs && logsEl) {
+                    logsEl.textContent = data.logs;
+                    logsEl.scrollTop = logsEl.scrollHeight;
+                }
 
-                    if (data.is_failed) {
-                        isPolling = false;
-                        clearInterval(elapsedTimer);
-                        showUpdateError('Deployment script reported an error. Please inspect the log output below.', data.logs);
-                        return;
-                    }
+                if (data.is_success) {
+                    isPolling = false;
+                    clearInterval(elapsedTimer);
+                    verifyReadyAndRedirect();
+                    return;
+                }
 
-                    if (hasRestarted && !data.is_running && !data.is_failed) {
-                        isPolling = false;
-                        clearInterval(elapsedTimer);
-                        if (spinner) spinner.classList.add('d-none');
-                        if (statusIcon) {
-                            statusIcon.classList.remove('d-none');
-                            statusIcon.innerHTML = '<i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>';
-                        }
-                        if (statusTitle) statusTitle.textContent = 'Update Completed';
-                        if (statusMsg) statusMsg.textContent = 'Server is back online with new version. Reloading...';
-                        if (phaseBadge) {
-                            phaseBadge.className = 'badge bg-success-subtle text-success border border-success-subtle';
-                            phaseBadge.textContent = 'Success';
-                        }
-                        setTimeout(() => {
-                            window.location.href = "{% url 'dashboard_view' %}";
-                        }, 1500);
-                        return;
-                    }
+                if (data.is_failed) {
+                    isPolling = false;
+                    clearInterval(elapsedTimer);
+                    showUpdateError('Deployment script reported an error. Please inspect the log output below.', data.logs);
+                    return;
+                }
 
-                    const currentLogs = data.logs || '';
-                    if (currentLogs.includes('restart adminpanel') || currentLogs.includes('restarting')) {
-                        if (phaseBadge) {
-                            phaseBadge.className = 'badge bg-warning-subtle text-warning border border-warning-subtle';
-                            phaseBadge.textContent = 'Restarting Service';
-                        }
-                        if (statusTitle) statusTitle.textContent = 'Restarting server...';
-                        if (statusMsg) statusMsg.textContent = 'Applying systemctl restart on adminpanel service...';
-                    } else if (currentLogs.includes('migrate')) {
-                        if (phaseBadge) {
-                            phaseBadge.className = 'badge bg-info-subtle text-info border border-info-subtle';
-                            phaseBadge.textContent = 'Migrating DB';
-                        }
-                        if (statusMsg) statusMsg.textContent = 'Applying database migrations...';
-                    } else if (currentLogs.includes('pip install')) {
-                        if (phaseBadge) {
-                            phaseBadge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle';
-                            phaseBadge.textContent = 'Updating Packages';
-                        }
-                        if (statusMsg) statusMsg.textContent = 'Installing required Python dependencies...';
-                    }
+                if (hasRestarted && !data.is_running && !data.is_failed) {
+                    isPolling = false;
+                    clearInterval(elapsedTimer);
+                    verifyReadyAndRedirect();
+                    return;
+                }
 
-                    pollTimer = setTimeout(checkStatus, 2000);
-                })
-                .catch(err => {
-                    hasRestarted = true;
+                const currentLogs = data.logs || '';
+                if (currentLogs.includes('restart adminpanel') || currentLogs.includes('restarting')) {
                     if (phaseBadge) {
                         phaseBadge.className = 'badge bg-warning-subtle text-warning border border-warning-subtle';
-                        phaseBadge.textContent = 'Server Restarting';
+                        phaseBadge.textContent = 'Restarting Service';
                     }
                     if (statusTitle) statusTitle.textContent = 'Restarting server...';
-                    if (statusMsg) statusMsg.textContent = 'Admin panel service is restarting. Reconnecting automatically...';
+                    if (statusMsg) statusMsg.textContent = 'Applying systemctl restart on adminpanel service...';
+                } else if (currentLogs.includes('migrate')) {
+                    if (phaseBadge) {
+                        phaseBadge.className = 'badge bg-info-subtle text-info border border-info-subtle';
+                        phaseBadge.textContent = 'Migrating DB';
+                    }
+                    if (statusMsg) statusMsg.textContent = 'Applying database migrations...';
+                } else if (currentLogs.includes('pip install')) {
+                    if (phaseBadge) {
+                        phaseBadge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle';
+                        phaseBadge.textContent = 'Updating Packages';
+                    }
+                    if (statusMsg) statusMsg.textContent = 'Installing required Python dependencies...';
+                }
 
-                    pollTimer = setTimeout(checkStatus, 2000);
-                });
+                pollTimer = setTimeout(checkStatus, 2000);
+            })
+            .catch(err => {
+                clearTimeout(fetchTimeout);
+                hasRestarted = true;
+                reconnectAttempts++;
+
+                if (phaseBadge) {
+                    phaseBadge.className = 'badge bg-warning-subtle text-warning border border-warning-subtle';
+                    phaseBadge.textContent = 'Server Restarting';
+                }
+                if (statusTitle) statusTitle.textContent = 'Restarting server...';
+                if (statusMsg) {
+                    statusMsg.textContent = 'Service is restarting (reconnecting, attempt ' + reconnectAttempts + '). Temporary connection drops or Nginx 502/503 are normal while service reloads...';
+                }
+
+                pollTimer = setTimeout(checkStatus, 2000);
+            });
         }
 
         pollTimer = setTimeout(checkStatus, 1500);

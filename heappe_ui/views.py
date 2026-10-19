@@ -1451,7 +1451,7 @@ def system_update_status_api(request):
         is_failed = ("FAILED" in current_run) or ("ERROR: Step failed" in current_run)
         is_running = not is_success and not is_failed and bool(current_run)
 
-    return JsonResponse({
+    response = JsonResponse({
         "status": "ok",
         "is_running": is_running,
         "is_success": is_success,
@@ -1459,6 +1459,10 @@ def system_update_status_api(request):
         "logs": current_run,
         "current_commit": getattr(settings, "GIT_VERSION", ""),
     })
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
 
 
 import os
