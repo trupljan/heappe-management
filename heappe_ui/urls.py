@@ -91,6 +91,7 @@ urlpatterns = [
     path('instances/choose/', views.chose_instance_view, name='chose_instance_view'),
 
     path('api/deploy-direct/', views.trigger_deployment_direct, name='trigger_deployment_direct'),
+    path('api/system-update-status/', views.system_update_status_api, name='system_update_status_api'),
     path('fetch-branches/', views.fetch_repo_branches, name='fetch_branches'),
 
     path("logs/", views.log_viewer_view, name="logs"),
