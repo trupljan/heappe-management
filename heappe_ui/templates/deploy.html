@@ -685,7 +685,7 @@
         <div class="tab-pane fade" id="maintenance-pane" role="tabpanel" aria-labelledby="maintenance-tab">
             <div class="row g-4 mb-5">
                 <!-- Switch Branch & Build Panel -->
-                <div class="col-xl-4 col-md-6">
+                <div class="col-lg-6">
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 d-flex flex-column">
                             <h5 class="fw-bold text-dark mb-2"><i class="bi bi-git me-2 text-primary"></i>Switch Branch &amp; Build</h5>
@@ -698,7 +698,7 @@
                             </div>
                             {% endif %}
 
-                            <form id="update-form" class="instance-action-form mt-auto">
+                            <form id="update-form" class="instance-action-form d-flex flex-column flex-grow-1">
                                 {% csrf_token %}
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Instance Name</label>
@@ -771,13 +771,13 @@
                 </div>
 
                 <!-- Regenerate Configurations Panel -->
-                <div class="col-xl-4 col-md-6">
+                <div class="col-lg-6">
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 d-flex flex-column">
                             <h5 class="fw-bold text-dark mb-3"><i class="bi bi-gear-wide-connected me-2 text-danger"></i>Regenerate Configs</h5>
                             <p class="text-muted small mb-4">Regenerate and merge <code>.env</code> and <code>appsettings.json</code> with templates (e.g. to inject new configuration variables) and restart containers without pulling new code.</p>
                             
-                            <form id="regenerate-configs-form" class="instance-action-form mt-auto">
+                            <form id="regenerate-configs-form" class="instance-action-form d-flex flex-column flex-grow-1">
                                 {% csrf_token %}
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Instance Name</label>
@@ -803,13 +803,13 @@
                 </div>
 
                 <!-- Deploy New Instance Panel -->
-                <div class="col-xl-4 col-md-6">
+                <div class="col-lg-6">
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 d-flex flex-column">
                             <h5 class="fw-bold text-dark mb-3"><i class="bi bi-rocket-takeoff me-2 text-primary"></i>Deploy New Instance</h5>
                             <p class="text-muted small mb-4">Deploy a separate, new HEAppE Middleware server instance. This will register a new configuration and provision fresh database schema.</p>
                             
-                            <form id="deploy-form" class="instance-action-form mt-auto">
+                            <form id="deploy-form" class="instance-action-form d-flex flex-column flex-grow-1">
                                 {% csrf_token %}
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">New Instance Name</label>
@@ -826,9 +826,25 @@
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Deployment Tag/Branch</label>
                                     <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
-                                        {% for branch in branches %}
-                                            <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
-                                        {% endfor %}
+                                        {% if branch_list %}
+                                        <optgroup label="Branches">
+                                            {% for b in branch_list %}
+                                                <option value="{{ b }}" {% if b == repo_branch %}selected{% endif %}>{{ b }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        {% if tag_list %}
+                                        <optgroup label="Release Tags">
+                                            {% for t in tag_list %}
+                                                <option value="{{ t }}" {% if t == repo_branch %}selected{% endif %}>{{ t }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        {% if not branch_list and not tag_list %}
+                                            {% for branch in branches %}
+                                                <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
+                                            {% endfor %}
+                                        {% endif %}
                                     </select>
                                     <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
                                 </div>
@@ -837,8 +853,10 @@
                             </form>
                         </div>
                     </div>
+                </div>
+
                 <!-- Delete & Teardown Instance Panel -->
-                <div class="col-xl-4 col-md-6">
+                <div class="col-lg-6">
                     <div class="card border-danger border-opacity-25 shadow-sm h-100 bg-danger bg-opacity-10">
                         <div class="card-body p-4 d-flex flex-column">
                             <h5 class="fw-bold text-danger mb-2"><i class="bi bi-trash3-fill me-2"></i>Delete &amp; Teardown Instance</h5>

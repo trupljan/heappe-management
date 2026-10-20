@@ -5026,6 +5026,56 @@ class InstanceTeardownAndDeploymentFailureTests(TestCase):
                 self.assertIn("Docker compose build failed", ctx["deployment_error"])
                 self.assertIn("EXCEPTION:", ctx["deploy_logs"])
 
+    def test_maintenance_pane_template_rendering(self):
+        from django.template.loader import render_to_string
+        from django.test import RequestFactory
+        factory = RequestFactory()
+        req = factory.get("/deploy/develop/")
+        req.user = self.user
+        req.session = {"chosen_instance": "develop"}
+
+        context = {
+            "request": req,
+            "instance_name": "develop",
+            "is_deployed": True,
+            "containers": [{"name": "heappe", "status": "running"}],
+            "repo_url": "https://github.com/IT4Innovations/HEAppE.git",
+            "repo_branch": "develop",
+            "branches": ["develop", "main", "release/v6.6.0"],
+            "branch_list": ["develop", "main"],
+            "tag_list": ["v6.6.0", "v6.5.0"],
+            "current_git_ref": {"branch": "develop", "commit": "48767517", "description": "develop (48767517)"},
+            "deployed_version": "6.6.0",
+            "latest_version": "6.6.0",
+            "update_available": False,
+        }
+
+        rendered = render_to_string("deploy.html", context, request=req)
+
+        # Check tab header exists
+        self.assertIn('id="maintenance-tab"', rendered)
+        self.assertIn('Maintenance &amp; Setup', rendered)
+
+        # Check tab pane exists
+        self.assertIn('id="maintenance-pane"', rendered)
+
+        # Check all 4 panels exist
+        self.assertIn('Switch Branch &amp; Build', rendered)
+        self.assertIn('Regenerate Configs', rendered)
+        self.assertIn('Deploy New Instance', rendered)
+        self.assertIn('Delete &amp; Teardown Instance', rendered)
+
+        # Check forms exist without mt-auto pushing them down
+        self.assertIn('id="update-form"', rendered)
+        self.assertIn('id="regenerate-configs-form"', rendered)
+        self.assertIn('id="deploy-form"', rendered)
+        self.assertNotIn('class="instance-action-form mt-auto"', rendered)
+
+        # Check modal triggers exist
+        self.assertIn('id="deleteTeardownModal"', rendered)
+        self.assertIn('id="switchBranchModal"', rendered)
+
+
 
 
 
