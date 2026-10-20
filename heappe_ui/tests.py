@@ -5358,6 +5358,25 @@ class SystemUpdateStatusApiTests(TestCase):
             self.assertNotIn("Old output", data["logs"])
             self.assertIn("New output in progress", data["logs"])
 
+    def test_status_endpoint_deployment_succeeded_without_explicit_success_marker(self):
+        mock_log = (
+            "[2026-10-20 13:00:00] === START DEPLOYMENT: main ===\n"
+            "Migrating...\n"
+            "129 static files copied to '/opt/heappe/heappe-admin-app/branches/main/static'.\n"
+        )
+        with mock.patch("os.path.exists", return_value=True), \
+             mock.patch("builtins.open", mock.mock_open(read_data=mock_log)), \
+             mock.patch("subprocess.check_output", side_effect=Exception("not running")):
+            response = self.client.get("/api/system-update-status/")
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["status"], "ok")
+            self.assertFalse(data["is_running"])
+            self.assertTrue(data["is_success"])
+            self.assertFalse(data["is_failed"])
+            self.assertIn("static files copied", data["logs"])
+
+
 
 class TestHeappeIdentifierFormulaAndPropagation(TestCase):
     def setUp(self):

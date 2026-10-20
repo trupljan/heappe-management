@@ -1469,9 +1469,13 @@ def system_update_status_api(request):
         is_success = False
         is_failed = False
     else:
-        is_success = "=== SUCCESS ===" in current_run
         is_failed = ("FAILED" in current_run) or ("ERROR: Step failed" in current_run)
-        is_running = not is_success and not is_failed and bool(current_run)
+        is_success = not is_failed and (
+            ("=== SUCCESS ===" in current_run)
+            or ("static files copied" in current_run)
+            or ("collectstatic" in current_run)
+        )
+        is_running = False
 
     response = JsonResponse({
         "status": "ok",

@@ -1201,7 +1201,12 @@
                     logsEl.scrollTop = logsEl.scrollHeight;
                 }
 
-                if (data.is_success) {
+                const currentLogs = data.logs || '';
+                const hasFinishedLogs = currentLogs.includes('=== SUCCESS ===') || 
+                                       currentLogs.includes('static files copied') || 
+                                       currentLogs.includes('collectstatic');
+
+                if (data.is_success || (hasRestarted && !data.is_failed && (hasFinishedLogs || !data.is_running)) || (hasFinishedLogs && !data.is_running && !data.is_failed)) {
                     isPolling = false;
                     clearInterval(elapsedTimer);
                     verifyReadyAndRedirect();
@@ -1212,13 +1217,6 @@
                     isPolling = false;
                     clearInterval(elapsedTimer);
                     showUpdateError('Deployment script reported an error. Please inspect the log output below.', data.logs);
-                    return;
-                }
-
-                if (hasRestarted && !data.is_running && !data.is_failed) {
-                    isPolling = false;
-                    clearInterval(elapsedTimer);
-                    verifyReadyAndRedirect();
                     return;
                 }
 
