@@ -1059,7 +1059,18 @@ def instance_health_check_api(request, pk):
         instance_identifier = "unknown"
         if health_info and hasattr(health_info, 'instance_identifier') and health_info.instance_identifier:
             instance_identifier = health_info.instance_identifier
-            
+
+        if instance_identifier in ("unknown", "", None):
+            try:
+                base_path = "/opt/heappe-deployment/"
+                appsettings_path = os.path.join(base_path, instance.instance_name, "app", "confs", "appsettings.json")
+                if os.path.exists(appsettings_path):
+                    with open(appsettings_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    instance_identifier = cfg.get("HPCConnectionFrameworkSettings", {}).get("ScriptsSettings", {}).get("InstanceIdentifierPath") or instance.instance_name
+            except Exception:
+                pass
+
         return JsonResponse({
             "status": "online",
             "version": version,
@@ -1070,10 +1081,21 @@ def instance_health_check_api(request, pk):
             "message": "Healthy"
         })
     except Exception as e:
+        instance_identifier = None
+        try:
+            base_path = "/opt/heappe-deployment/"
+            appsettings_path = os.path.join(base_path, instance.instance_name, "app", "confs", "appsettings.json")
+            if os.path.exists(appsettings_path):
+                with open(appsettings_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                instance_identifier = cfg.get("HPCConnectionFrameworkSettings", {}).get("ScriptsSettings", {}).get("InstanceIdentifierPath") or instance.instance_name
+        except Exception:
+            pass
+
         return JsonResponse({
             "status": "offline",
             "version": None,
-            "instance_identifier": None,
+            "instance_identifier": instance_identifier,
             "database_healthy": False,
             "vault_healthy": False,
             "latency_ms": None,

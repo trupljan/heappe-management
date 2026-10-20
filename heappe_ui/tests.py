@@ -5358,3 +5358,132 @@ class SystemUpdateStatusApiTests(TestCase):
             self.assertNotIn("Old output", data["logs"])
             self.assertIn("New output in progress", data["logs"])
 
+
+class TestHeappeIdentifierFormulaAndPropagation(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="admin_ident",
+            password="adminpassword123",
+            email="admin_ident@example.com"
+        )
+        self.client.force_login(self.user)
+
+    def test_build_heappe_identifier_standard(self):
+        from heappe_ui.appsettings.generator import build_heappe_identifier
+        ident = build_heappe_identifier("core", "dev", "it4i", "develop")
+        self.assertEqual(ident, "core_dev_it4i_develop")
+
+        ident2 = build_heappe_identifier("efp", "prod", "it4i", "inference")
+        self.assertEqual(ident2, "efp_prod_it4i_inference")
+
+    def test_build_heappe_identifier_stripping_and_fallback(self):
+        from heappe_ui.appsettings.generator import build_heappe_identifier
+        ident = build_heappe_identifier(" core ", " DEV ", " it4i ", " My Instance ")
+        self.assertEqual(ident, "core_dev_it4i_my_instance")
+
+        # Fallback when parts are missing
+        self.assertEqual(build_heappe_identifier("", "", "", "custom_name"), "custom_name")
+
+    def test_parse_heappe_identifier(self):
+        from heappe_ui.appsettings.generator import parse_heappe_identifier
+        d = parse_heappe_identifier("core_dev_it4i_develop")
+        self.assertEqual(d["scope"], "core")
+        self.assertEqual(d["environment"], "dev")
+        self.assertEqual(d["provider"], "it4i")
+        self.assertEqual(d["instance_name"], "develop")
+
+        # Multi-underscore instance name
+        d = parse_heappe_identifier("core_dev_it4i_deep_learning_v2")
+        self.assertEqual(d["scope"], "core")
+        self.assertEqual(d["environment"], "dev")
+        self.assertEqual(d["provider"], "it4i")
+        self.assertEqual(d["instance_name"], "deep_learning_v2")
+
+        # Non-formula identifier
+        d = parse_heappe_identifier("legacy-instance")
+        self.assertEqual(d["scope"], "")
+        self.assertEqual(d["instance_name"], "legacy-instance")
+
+        # None input
+        d = parse_heappe_identifier(None)
+        self.assertEqual(d["scope"], "")
+        self.assertEqual(d["instance_name"], "")
+
+    def test_generate_appsettings_v6_6_0_with_identifier(self):
+        from heappe_ui.appsettings.generator import generate_appsettings_v6_6_0
+        cfg = generate_appsettings_v6_6_0(
+            instance_name="my_inst",
+            sa_password="MySecretPassword123!",
+            instance_identifier="core_dev_it4i_develop"
+        )
+        self.assertEqual(
+            cfg["HPCConnectionFrameworkSettings"]["ScriptsSettings"]["InstanceIdentifierPath"],
+            "core_dev_it4i_develop"
+        )
+        self.assertEqual(
+            cfg["ApplicationAPISettings"]["DeploymentSettings"]["Name"],
+            "core_dev_it4i_develop instance"
+        )
+
+    def test_generate_appsettings_v6_6_0_fallback_without_identifier(self):
+        from heappe_ui.appsettings.generator import generate_appsettings_v6_6_0
+        cfg = generate_appsettings_v6_6_0(
+            instance_name="fallback_inst",
+            sa_password="MySecretPassword123!"
+        )
+        self.assertEqual(
+            cfg["HPCConnectionFrameworkSettings"]["ScriptsSettings"]["InstanceIdentifierPath"],
+            "fallback_inst"
+        )
+        self.assertEqual(
+            cfg["ApplicationAPISettings"]["DeploymentSettings"]["Name"],
+            "fallback_inst instance"
+        )
+
+    def test_generate_appsettings_efp_v6_6_0_with_identifier(self):
+        from heappe_ui.appsettings.generator import generate_appsettings_efp_v6_6_0
+        cfg = generate_appsettings_efp_v6_6_0(
+            instance_name="efp_inst",
+            sa_password="MySecretPassword123!",
+            instance_identifier="efp_prod_it4i_cluster"
+        )
+        self.assertEqual(
+            cfg["HPCConnectionFrameworkSettings"]["ScriptsSettings"]["InstanceIdentifierPath"],
+            "efp_prod_it4i_cluster"
+        )
+
+    def test_deploy_view_renders_identifier_builder_card(self):
+        response = self.client.get("/deploy/")
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("heappe-identifier-builder-card", content)
+        self.assertIn("InstanceIdentifier", content)
+        self.assertIn("ident-f-scope", content)
+        self.assertIn("core_dev_it4i_develop", content)
+        self.assertIn("NEXUS &amp; AAI Registration Workflow", content)
+
+    def test_instance_health_check_api_fallback_reads_identifier(self):
+        from heappe_ui.models import InstanceCredentials
+        from django.urls import reverse
+        cred = InstanceCredentials.objects.create(
+            instance_name="test_ident_inst",
+            heappe_host="http://invalid.local",
+            heappe_port="8080",
+            heappe_login="user",
+            heappe_password="password"
+        )
+        mock_json_content = json.dumps({
+            "HPCConnectionFrameworkSettings": {
+                "ScriptsSettings": {
+                    "InstanceIdentifierPath": "core_stage_it4i_inference"
+                }
+            }
+        })
+        with mock.patch("os.path.exists", return_value=True), \
+             mock.patch("builtins.open", mock.mock_open(read_data=mock_json_content)):
+            url = reverse("instance_health_check_api", args=[cred.pk])
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertEqual(data["instance_identifier"], "core_stage_it4i_inference")
+

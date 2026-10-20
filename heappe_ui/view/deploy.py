@@ -244,7 +244,7 @@ import secrets
 import string
 
 
-def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s6):
+def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s6, instance_identifier=None):
     """Handle the deployment process and return the result."""
     from datetime import datetime
     service = HEAppEDeployService(config)
@@ -274,6 +274,8 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
         log_message("Starting HEAppE deployment process...")
         log_message(f"Repository URL: {config.repo_url}")
         log_message(f"Repository branch/tag: {config.repo_branch}")
+        if instance_identifier:
+            log_message(f"HEAppE Identifier: {instance_identifier}")
 
         for s in [s1, s2, s3, s4, s5, s6]:
             if 's' in locals() and s:
@@ -299,7 +301,8 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
             ports=ports,
             overwrite_existing=True,
             deployed_ip='localhost',
-            version=clean_ver_str
+            version=clean_ver_str,
+            instance_identifier=instance_identifier
         )
         if init_result.get("status") == "error":
             raise RuntimeError(f"deploy_init failed: {init_result.get('message')}")
@@ -1205,10 +1208,11 @@ def get_current_git_ref(compose_dir: str) -> dict:
 
 import threading
 
-def deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6):
+def deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6, instance_identifier=None):
     thread = threading.Thread(
         target=handle_deployment_action,
         args=(config, instance_name, ports, s1, s2, s3, s4, s5, s6),
+        kwargs={'instance_identifier': instance_identifier},
         daemon=True
     )
     thread.start()
@@ -1318,7 +1322,8 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
 
             # If deploying new, get name from form, otherwise use URL param
             if action == 'deploy':
-                instance_name = request.POST.get('InstanceName', 'heappe-instance')
+                instance_name = request.POST.get('InstanceName', 'heappe-instance').strip()
+                instance_identifier = request.POST.get('InstanceIdentifier', '').strip() or instance_name
 
             # Form params
             input_repo = request.POST.get('Repository', repo_url)
@@ -1380,7 +1385,7 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 request.session.pop("heappe_use_api_key", None)
                 request.session.pop("heappe_last_auth", None)
 
-                deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6)
+                deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6, instance_identifier=instance_identifier)
 
                 action_message = "Deployment started in the background."
                 action_status = 'info'

@@ -567,7 +567,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             automigrate: bool = True,
             version: str = None,
             deployed_ip: str = None,
-            overwrite_existing: bool = False
+            overwrite_existing: bool = False,
+            instance_identifier: str = None
     ) -> Dict[str, Any]:
         """Generate appsettings.json and appsettings-data.json files for HEAppE instance."""
         clean_version = self.resolve_clean_version(version or self.config.default_version, instance_name=instance_name)
@@ -577,14 +578,18 @@ PWD={self.config.base_path}{instance_name}/heappe-core
 
         app_fn, data_fn = self._get_generators_for_version(clean_version)
 
-        appsettings = app_fn(
-            instance_name=instance_name,
-            sa_password=sa_password,
-            port=port_app,
-            automigrate=automigrate,
-            version=clean_version,
-            deployed_ip=deployed_ip
-        )
+        app_kwargs = {
+            "instance_name": instance_name,
+            "sa_password": sa_password,
+            "port": port_app,
+            "automigrate": automigrate,
+            "version": clean_version,
+            "deployed_ip": deployed_ip
+        }
+        if instance_identifier:
+            app_kwargs["instance_identifier"] = instance_identifier
+
+        appsettings = app_fn(**app_kwargs)
 
         appsettings_data_staging = data_fn(
             instance_name=instance_name,
@@ -675,7 +680,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             overwrite_existing: bool = False,
             ports: Optional[Dict[str, int]] = None,
             version: Optional[str] = None,
-            deployed_ip: Optional[str] = None
+            deployed_ip: Optional[str] = None,
+            instance_identifier: Optional[str] = None
     ) -> Dict[str, Any]:
         """Initialize HEAppE deployment with option to overwrite existing resources."""
         try:
@@ -701,7 +707,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 sa_password=sa_password,
                 data_staging_token=data_staging_token,
                 automigrate=True,
-                overwrite_existing=overwrite_existing
+                overwrite_existing=overwrite_existing,
+                instance_identifier=instance_identifier
             )
 
             self.logger.info("HEAppE deployment initialization completed successfully")

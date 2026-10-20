@@ -811,10 +811,109 @@
                             
                             <form id="deploy-form" class="instance-action-form d-flex flex-column flex-grow-1">
                                 {% csrf_token %}
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold text-secondary small">New Instance Name</label>
-                                    <input type="text" name="InstanceName" class="form-control" placeholder="e.g. my_test_env" pattern="^[a-z0-9_]+$" required>
-                                    <div class="form-text small">Only lowercase letters, numbers, and underscores are allowed.</div>
+                                <!-- Interactive HEAppE Identifier Builder (Panel) -->
+                                <div class="heappe-identifier-builder-card card border border-primary border-opacity-25 bg-light bg-opacity-50 p-3 rounded-3 mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label class="form-label fw-bold text-dark mb-0 small d-flex align-items-center gap-1.5">
+                                            <i class="bi bi-magic text-primary"></i>
+                                            <span>HEAppE Identifier Builder</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size: 0.65rem;">Formula</span>
+                                        </label>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <input type="radio" class="btn-check ident-mode-toggle" name="ident_mode_panel" id="mode_formula_panel" value="formula" checked autocomplete="off">
+                                            <label class="btn btn-outline-primary btn-sm py-0.5 px-2" for="mode_formula_panel" style="font-size: 0.72rem;"><i class="bi bi-diagram-3 me-1"></i>Formula</label>
+
+                                            <input type="radio" class="btn-check ident-mode-toggle" name="ident_mode_panel" id="mode_manual_panel" value="manual" autocomplete="off">
+                                            <label class="btn btn-outline-secondary btn-sm py-0.5 px-2" for="mode_manual_panel" style="font-size: 0.72rem;"><i class="bi bi-pencil me-1"></i>Manual</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="small text-muted mb-2 font-monospace" style="font-size: 0.72rem;">
+                                        <code>&lt;core/efp/..&gt;_&lt;environment&gt;_&lt;provider&gt;_&lt;instance_name&gt;</code>
+                                    </div>
+
+                                    <!-- Formula Fields Container -->
+                                    <div class="ident-formula-container">
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Scope / Type</label>
+                                                <select class="form-select form-select-sm ident-f-scope font-monospace" style="font-size: 0.78rem;">
+                                                    <option value="core" selected>core</option>
+                                                    <option value="efp">efp</option>
+                                                    <option value="lexis">lexis</option>
+                                                    <option value="__custom__">custom...</option>
+                                                </select>
+                                                <input type="text" class="form-control form-control-sm ident-f-scope-custom mt-1 font-monospace d-none" placeholder="e.g. core" style="font-size: 0.78rem;">
+                                            </div>
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Environment</label>
+                                                <select class="form-select form-select-sm ident-f-env font-monospace" style="font-size: 0.78rem;">
+                                                    <option value="dev" selected>dev</option>
+                                                    <option value="test">test</option>
+                                                    <option value="stage">stage</option>
+                                                    <option value="prod">prod</option>
+                                                    <option value="inference">inference</option>
+                                                    <option value="__custom__">custom...</option>
+                                                </select>
+                                                <input type="text" class="form-control form-control-sm ident-f-env-custom mt-1 font-monospace d-none" placeholder="e.g. dev" style="font-size: 0.78rem;">
+                                            </div>
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Provider / HE</label>
+                                                <select class="form-select form-select-sm ident-f-provider font-monospace" style="font-size: 0.78rem;">
+                                                    <option value="it4i" selected>it4i</option>
+                                                    <option value="bsc">bsc</option>
+                                                    <option value="cineca">cineca</option>
+                                                    <option value="lumi">lumi</option>
+                                                    <option value="__custom__">custom...</option>
+                                                </select>
+                                                <input type="text" class="form-control form-control-sm ident-f-provider-custom mt-1 font-monospace d-none" placeholder="e.g. it4i" style="font-size: 0.78rem;">
+                                            </div>
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Instance Name</label>
+                                                <input type="text" class="form-control form-control-sm ident-f-instance font-monospace" value="develop" placeholder="develop" style="font-size: 0.78rem;">
+                                            </div>
+                                        </div>
+
+                                        <!-- Quick Examples -->
+                                        <div class="d-flex align-items-center gap-1.5 flex-wrap mb-2">
+                                            <span class="text-secondary small" style="font-size: 0.7rem;"><i class="bi bi-lightning-charge me-0.5 text-warning"></i>Examples:</span>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">core_dev_it4i_develop</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="inference" style="font-size: 0.68rem;">core_dev_it4i_inference</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">efp_dev_it4i_develop</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="prod" data-provider="it4i" data-instance="prod" style="font-size: 0.68rem;">efp_prod_it4i_prod</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Final Synchronized Instance Name & Identifier Input -->
+                                    <div class="mt-2">
+                                        <label class="form-label fw-semibold text-secondary small mb-1" style="font-size: 0.75rem;">
+                                            HEAppE Instance Name &amp; Identifier
+                                        </label>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white text-primary border-end-0"><i class="bi bi-tag-fill"></i></span>
+                                            <input type="text" name="InstanceName" class="form-control font-monospace fw-bold ident-final-input" value="core_dev_it4i_develop" placeholder="core_dev_it4i_develop" pattern="^[a-z0-9_]+$" required style="font-size: 0.85rem;">
+                                            <button type="button" class="btn btn-outline-secondary ident-copy-btn" title="Copy to clipboard"><i class="bi bi-clipboard"></i></button>
+                                        </div>
+                                        <input type="hidden" name="InstanceIdentifier" class="ident-hidden-identifier" value="core_dev_it4i_develop">
+                                        <div class="form-text text-muted" style="font-size: 0.7rem;">Only lowercase letters, numbers, and underscores are allowed.</div>
+                                    </div>
+
+                                    <!-- Accordion/Collapse: NEXUS & AAI Registration Process -->
+                                    <div class="mt-2.5 pt-2 border-top border-primary border-opacity-10">
+                                        <a class="small text-decoration-none d-flex align-items-center justify-content-between text-secondary" data-bs-toggle="collapse" href="#nexusProcessCollapse_panel" role="button" aria-expanded="false" style="font-size: 0.72rem;">
+                                            <span><i class="bi bi-info-circle me-1 text-primary"></i>NEXUS &amp; AAI Registration Workflow (5 steps)</span>
+                                            <i class="bi bi-chevron-down"></i>
+                                        </a>
+                                        <div class="collapse mt-2" id="nexusProcessCollapse_panel">
+                                            <ol class="small text-secondary mb-1 ps-3" style="font-size: 0.72rem; line-height: 1.55;">
+                                                <li><strong>[HEAppE]</strong> Vytvoření identifikátoru dle formule výše</li>
+                                                <li><strong>[HEAppE &rarr; AAI]</strong> Předat identifikátor AAI týmu</li>
+                                                <li><strong>[HEAppE &rarr; UserOrg]</strong> Předat identifikátor a Base URL UserOrg týmu</li>
+                                                <li><strong>[Keycloak]</strong> Vytvoření <code>Client_id</code> pro identifikátor a doplnění do NEXUS mapy</li>
+                                                <li><strong>[NEXUS API]</strong> Přidání mapování identifikátoru / URL do NEXUS API Proxy</li>
+                                            </ol>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Repository URL</label>
@@ -887,10 +986,109 @@
                     
                     <form id="deploy-form" class="instance-action-form">
                         {% csrf_token %}
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-secondary small">Instance Name</label>
-                            <input type="text" name="InstanceName" class="form-control" placeholder="e.g. dev" pattern="^[a-z0-9_]+$" required>
-                            <div class="form-text small">Only lowercase letters, numbers, and underscores are allowed.</div>
+                        <!-- Interactive HEAppE Identifier Builder (Standalone) -->
+                        <div class="heappe-identifier-builder-card card border border-primary border-opacity-25 bg-light bg-opacity-50 p-3 rounded-3 mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold text-dark mb-0 small d-flex align-items-center gap-1.5">
+                                    <i class="bi bi-magic text-primary"></i>
+                                    <span>HEAppE Identifier Builder</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size: 0.65rem;">Formula</span>
+                                </label>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <input type="radio" class="btn-check ident-mode-toggle" name="ident_mode_standalone" id="mode_formula_standalone" value="formula" checked autocomplete="off">
+                                    <label class="btn btn-outline-primary btn-sm py-0.5 px-2" for="mode_formula_standalone" style="font-size: 0.72rem;"><i class="bi bi-diagram-3 me-1"></i>Formula</label>
+
+                                    <input type="radio" class="btn-check ident-mode-toggle" name="ident_mode_standalone" id="mode_manual_standalone" value="manual" autocomplete="off">
+                                    <label class="btn btn-outline-secondary btn-sm py-0.5 px-2" for="mode_manual_standalone" style="font-size: 0.72rem;"><i class="bi bi-pencil me-1"></i>Manual</label>
+                                </div>
+                            </div>
+
+                            <div class="small text-muted mb-2 font-monospace" style="font-size: 0.72rem;">
+                                <code>&lt;core/efp/..&gt;_&lt;environment&gt;_&lt;provider&gt;_&lt;instance_name&gt;</code>
+                            </div>
+
+                            <!-- Formula Fields Container -->
+                            <div class="ident-formula-container">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-6 col-sm-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Scope / Type</label>
+                                        <select class="form-select form-select-sm ident-f-scope font-monospace" style="font-size: 0.78rem;">
+                                            <option value="core" selected>core</option>
+                                            <option value="efp">efp</option>
+                                            <option value="lexis">lexis</option>
+                                            <option value="__custom__">custom...</option>
+                                        </select>
+                                        <input type="text" class="form-control form-control-sm ident-f-scope-custom mt-1 font-monospace d-none" placeholder="e.g. core" style="font-size: 0.78rem;">
+                                    </div>
+                                    <div class="col-6 col-sm-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Environment</label>
+                                        <select class="form-select form-select-sm ident-f-env font-monospace" style="font-size: 0.78rem;">
+                                            <option value="dev" selected>dev</option>
+                                            <option value="test">test</option>
+                                            <option value="stage">stage</option>
+                                            <option value="prod">prod</option>
+                                            <option value="inference">inference</option>
+                                            <option value="__custom__">custom...</option>
+                                        </select>
+                                        <input type="text" class="form-control form-control-sm ident-f-env-custom mt-1 font-monospace d-none" placeholder="e.g. dev" style="font-size: 0.78rem;">
+                                    </div>
+                                    <div class="col-6 col-sm-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Provider / HE</label>
+                                        <select class="form-select form-select-sm ident-f-provider font-monospace" style="font-size: 0.78rem;">
+                                            <option value="it4i" selected>it4i</option>
+                                            <option value="bsc">bsc</option>
+                                            <option value="cineca">cineca</option>
+                                            <option value="lumi">lumi</option>
+                                            <option value="__custom__">custom...</option>
+                                        </select>
+                                        <input type="text" class="form-control form-control-sm ident-f-provider-custom mt-1 font-monospace d-none" placeholder="e.g. it4i" style="font-size: 0.78rem;">
+                                    </div>
+                                    <div class="col-6 col-sm-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Instance Name</label>
+                                        <input type="text" class="form-control form-control-sm ident-f-instance font-monospace" value="develop" placeholder="develop" style="font-size: 0.78rem;">
+                                    </div>
+                                </div>
+
+                                <!-- Quick Examples -->
+                                <div class="d-flex align-items-center gap-1.5 flex-wrap mb-2">
+                                    <span class="text-secondary small" style="font-size: 0.7rem;"><i class="bi bi-lightning-charge me-0.5 text-warning"></i>Examples:</span>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">core_dev_it4i_develop</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="inference" style="font-size: 0.68rem;">core_dev_it4i_inference</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">efp_dev_it4i_develop</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="prod" data-provider="it4i" data-instance="prod" style="font-size: 0.68rem;">efp_prod_it4i_prod</button>
+                                </div>
+                            </div>
+
+                            <!-- Final Synchronized Instance Name & Identifier Input -->
+                            <div class="mt-2">
+                                <label class="form-label fw-semibold text-secondary small mb-1" style="font-size: 0.75rem;">
+                                    HEAppE Instance Name &amp; Identifier
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white text-primary border-end-0"><i class="bi bi-tag-fill"></i></span>
+                                    <input type="text" name="InstanceName" class="form-control font-monospace fw-bold ident-final-input" value="core_dev_it4i_develop" placeholder="core_dev_it4i_develop" pattern="^[a-z0-9_]+$" required style="font-size: 0.85rem;">
+                                    <button type="button" class="btn btn-outline-secondary ident-copy-btn" title="Copy to clipboard"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <input type="hidden" name="InstanceIdentifier" class="ident-hidden-identifier" value="core_dev_it4i_develop">
+                                <div class="form-text text-muted" style="font-size: 0.7rem;">Only lowercase letters, numbers, and underscores are allowed.</div>
+                            </div>
+
+                            <!-- Accordion/Collapse: NEXUS & AAI Registration Process -->
+                            <div class="mt-2.5 pt-2 border-top border-primary border-opacity-10">
+                                <a class="small text-decoration-none d-flex align-items-center justify-content-between text-secondary" data-bs-toggle="collapse" href="#nexusProcessCollapse_standalone" role="button" aria-expanded="false" style="font-size: 0.72rem;">
+                                    <span><i class="bi bi-info-circle me-1 text-primary"></i>NEXUS &amp; AAI Registration Workflow (5 steps)</span>
+                                    <i class="bi bi-chevron-down"></i>
+                                </a>
+                                <div class="collapse mt-2" id="nexusProcessCollapse_standalone">
+                                    <ol class="small text-secondary mb-1 ps-3" style="font-size: 0.72rem; line-height: 1.55;">
+                                        <li><strong>[HEAppE]</strong> Vytvoření identifikátoru dle formule výše</li>
+                                        <li><strong>[HEAppE &rarr; AAI]</strong> Předat identifikátor AAI týmu</li>
+                                        <li><strong>[HEAppE &rarr; UserOrg]</strong> Předat identifikátor a Base URL UserOrg týmu</li>
+                                        <li><strong>[Keycloak]</strong> Vytvoření <code>Client_id</code> pro identifikátor a doplnění do NEXUS mapy</li>
+                                        <li><strong>[NEXUS API]</strong> Přidání mapování identifikátoru / URL do NEXUS API Proxy</li>
+                                    </ol>
+                                </div>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-secondary small">Repository URL</label>
@@ -978,7 +1176,7 @@
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <form id="retry-deploy-form" class="instance-action-form" method="post" action="{% url 'deploy_view' instance_name %}">
+                <form id="retry-deploy-form" class="instance-action-form" method="post" action="{% if instance_name %}{% url 'deploy_view' instance_name %}{% else %}{% url 'deploy_view' %}{% endif %}">
                     {% csrf_token %}
                     <input type="hidden" name="action" value="deploy">
                     <input type="hidden" name="InstanceName" value="{{ instance_name }}">
@@ -1800,6 +1998,134 @@ $(document).ready(function() {
             $customInput.hide().val('');
             $select.prop('disabled', false);
         }
+    });
+
+    // --- HEAppE IDENTIFIER BUILDER LOGIC ---
+    function initIdentifierBuilder($card) {
+        const $modeFormula = $card.find('.ident-mode-toggle[value="formula"]');
+        const $modeManual = $card.find('.ident-mode-toggle[value="manual"]');
+        const $formulaContainer = $card.find('.ident-formula-container');
+        const $fScope = $card.find('.ident-f-scope');
+        const $fScopeCustom = $card.find('.ident-f-scope-custom');
+        const $fEnv = $card.find('.ident-f-env');
+        const $fEnvCustom = $card.find('.ident-f-env-custom');
+        const $fProvider = $card.find('.ident-f-provider');
+        const $fProviderCustom = $card.find('.ident-f-provider-custom');
+        const $fInstance = $card.find('.ident-f-instance');
+        const $finalInput = $card.find('.ident-final-input');
+        const $hiddenIdent = $card.find('.ident-hidden-identifier');
+        const $copyBtn = $card.find('.ident-copy-btn');
+
+        function cleanPart(val) {
+            return (val || '').toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+        }
+
+        function computeIdentifier() {
+            if ($modeManual.is(':checked')) {
+                const cleaned = cleanPart($finalInput.val());
+                $hiddenIdent.val(cleaned);
+                return;
+            }
+
+            const scopeVal = $fScope.val() === '__custom__' ? $fScopeCustom.val() : $fScope.val();
+            const envVal = $fEnv.val() === '__custom__' ? $fEnvCustom.val() : $fEnv.val();
+            const providerVal = $fProvider.val() === '__custom__' ? $fProviderCustom.val() : $fProvider.val();
+            const instanceVal = $fInstance.val();
+
+            const parts = [
+                cleanPart(scopeVal) || 'core',
+                cleanPart(envVal) || 'dev',
+                cleanPart(providerVal) || 'it4i',
+                cleanPart(instanceVal) || 'develop'
+            ];
+            const assembled = parts.join('_');
+            $finalInput.val(assembled);
+            $hiddenIdent.val(assembled);
+        }
+
+        function checkCustom($select, $custom) {
+            if ($select.val() === '__custom__') {
+                $custom.removeClass('d-none').focus();
+            } else {
+                $custom.addClass('d-none');
+            }
+        }
+
+        $card.find('.ident-mode-toggle').on('change', function() {
+            if ($modeManual.is(':checked')) {
+                $formulaContainer.slideUp(150);
+                $finalInput.focus();
+            } else {
+                $formulaContainer.slideDown(150);
+                computeIdentifier();
+            }
+        });
+
+        $fScope.on('change', function() { checkCustom($fScope, $fScopeCustom); computeIdentifier(); });
+        $fEnv.on('change', function() { checkCustom($fEnv, $fEnvCustom); computeIdentifier(); });
+        $fProvider.on('change', function() { checkCustom($fProvider, $fProviderCustom); computeIdentifier(); });
+
+        $card.find('.ident-f-scope-custom, .ident-f-env-custom, .ident-f-provider-custom, .ident-f-instance').on('input', computeIdentifier);
+
+        $finalInput.on('input', function() {
+            const cleaned = cleanPart($(this).val());
+            $hiddenIdent.val(cleaned);
+        });
+
+        $card.find('.ident-preset-btn').on('click', function(e) {
+            e.preventDefault();
+            const sc = $(this).data('scope');
+            const en = $(this).data('env');
+            const pr = $(this).data('provider');
+            const inst = $(this).data('instance');
+
+            $modeFormula.prop('checked', true).trigger('change');
+
+            if ($fScope.find(`option[value="${sc}"]`).length) {
+                $fScope.val(sc);
+                $fScopeCustom.addClass('d-none').val('');
+            } else {
+                $fScope.val('__custom__');
+                $fScopeCustom.removeClass('d-none').val(sc);
+            }
+
+            if ($fEnv.find(`option[value="${en}"]`).length) {
+                $fEnv.val(en);
+                $fEnvCustom.addClass('d-none').val('');
+            } else {
+                $fEnv.val('__custom__');
+                $fEnvCustom.removeClass('d-none').val(en);
+            }
+
+            if ($fProvider.find(`option[value="${pr}"]`).length) {
+                $fProvider.val(pr);
+                $fProviderCustom.addClass('d-none').val('');
+            } else {
+                $fProvider.val('__custom__');
+                $fProviderCustom.removeClass('d-none').val(pr);
+            }
+
+            $fInstance.val(inst);
+            computeIdentifier();
+        });
+
+        $copyBtn.on('click', function() {
+            const val = $finalInput.val();
+            if (!val) return;
+            navigator.clipboard.writeText(val).then(() => {
+                const $icon = $(this).find('i');
+                $icon.removeClass('bi-clipboard').addClass('bi-check-lg text-success');
+                setTimeout(() => {
+                    $icon.removeClass('bi-check-lg text-success').addClass('bi-clipboard');
+                }, 1500);
+            });
+        });
+
+        computeIdentifier();
+    }
+
+    $('.heappe-identifier-builder-card').each(function() {
+        initIdentifierBuilder($(this));
     });
 
     // --- MAINTENANCE TAB ORCHESTRATION ---

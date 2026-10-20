@@ -8,13 +8,62 @@ def build_connection_strings_from_container(container_name: str, password: str):
         "Logging": Logging
     }
 
+def build_heappe_identifier(scope: str = "core", environment: str = "dev", provider: str = "it4i", instance_name: str = "develop") -> str:
+    """
+    Constructs a standard HEAppE identifier according to the formula:
+    <core/efp/..>_<environment>_<he_name/provider_name>_<HEAppE_instance_name>
+    e.g. core_dev_it4i_develop
+    """
+    parts = [str(p).strip().lower().replace(" ", "_") for p in (scope, environment, provider, instance_name) if p and str(p).strip()]
+    return "_".join(parts)
+
+
+def parse_heappe_identifier(identifier: str) -> dict:
+    """
+    Parses a HEAppE identifier formatted as <scope>_<environment>_<provider>_<instance_name>.
+    Returns a dict with 'scope', 'environment', 'provider', 'instance_name' keys.
+    """
+    if not identifier:
+        return {"scope": "", "environment": "", "provider": "", "instance_name": ""}
+    parts = str(identifier).strip().split("_")
+    if len(parts) >= 4:
+        return {
+            "scope": parts[0],
+            "environment": parts[1],
+            "provider": parts[2],
+            "instance_name": "_".join(parts[3:])
+        }
+    elif len(parts) == 3:
+        return {
+            "scope": parts[0],
+            "environment": parts[1],
+            "provider": parts[2],
+            "instance_name": ""
+        }
+    elif len(parts) == 2:
+        return {
+            "scope": parts[0],
+            "environment": parts[1],
+            "provider": "",
+            "instance_name": ""
+        }
+    return {
+        "scope": "",
+        "environment": "",
+        "provider": "",
+        "instance_name": str(identifier).strip()
+    }
+
+
 def generate_appsettings_v6_0_0(
         instance_name: str,
-            sa_password: str,
-            port: int = 5000,
-            automigrate: bool = True,
-            version: str = None,
-            deployed_ip: str = None):
+        sa_password: str,
+        port: int = 5000,
+        automigrate: bool = True,
+        version: str = None,
+        deployed_ip: str = None,
+        instance_identifier: str = None):
+    ident = instance_identifier if instance_identifier else instance_name
     appsettings = {
             "Logging": {
                 "LogLevel": {
@@ -32,8 +81,8 @@ def generate_appsettings_v6_0_0(
                     f"http://localhost:{port}"
                 ],
                 "DeploymentSettings": {
-                    "Name": f"{instance_name} instance",
-                    "Description": f"Deployment for instance {instance_name}",
+                    "Name": f"{ident} instance",
+                    "Description": f"Deployment for instance {ident}",
                     "Version": version,
                     "DeployedIPAddress": deployed_ip,
                     "Port": str(port),
@@ -100,7 +149,7 @@ def generate_appsettings_v6_0_0(
                 "ScriptsSettings": {
                     "ClusterScriptsRepository": "https://github.com/It4innovations/HEAppE-scripts.git",
                     "KeyScriptsDirectoryInRepository": "HEAppE-scripts/HPC/.key_scripts/",
-                    "InstanceIdentifierPath": f"{instance_name}",
+                    "InstanceIdentifierPath": f"{ident}",
                     "SubExecutionsPath": "HEAppE/Executions",
                     "JobLogArchiveSubPath": "HEAppE/Jobs",
                     "SubScriptsPath": "HEAppE/Scripts",
@@ -196,11 +245,13 @@ def generate_appsettings_v6_0_0(
 
 def generate_appsettings_v6_1_0(
         instance_name: str,
-            sa_password: str,
-            port: int = 5000,
-            automigrate: bool = True,
-            version: str = None,
-            deployed_ip: str = None):
+        sa_password: str,
+        port: int = 5000,
+        automigrate: bool = True,
+        version: str = None,
+        deployed_ip: str = None,
+        instance_identifier: str = None):
+    ident = instance_identifier if instance_identifier else instance_name
     appsettings = {
             "Logging": {
                 "LogLevel": {
@@ -218,8 +269,8 @@ def generate_appsettings_v6_1_0(
                     f"http://localhost:{port}"
                 ],
                 "DeploymentSettings": {
-                    "Name": f"{instance_name} instance",
-                    "Description": f"Deployment for instance {instance_name}",
+                    "Name": f"{ident} instance",
+                    "Description": f"Deployment for instance {ident}",
                     "Version": version,
                     "DeployedIPAddress": deployed_ip,
                     "Port": str(port),
@@ -287,7 +338,7 @@ def generate_appsettings_v6_1_0(
                     "ClusterScriptsRepository": "https://github.com/It4innovations/HEAppE-scripts.git",
                     "ClusterScriptsRepositoryBranch": "master",
                     "KeyScriptsDirectoryInRepository": "HEAppE-scripts/HPC/.key_scripts/",
-                    "InstanceIdentifierPath": f"{instance_name}",
+                    "InstanceIdentifierPath": f"{ident}",
                     "SubExecutionsPath": "HEAppE/Executions",
                     "JobLogArchiveSubPath": "HEAppE/Jobs",
                     "SubScriptsPath": "HEAppE/Scripts",
@@ -444,12 +495,13 @@ def generate_appsettings_v6_1_0(
 
 def generate_appsettings_v6_2_0(
         instance_name: str,
-            sa_password: str,
-            port: int = 5000,
-            automigrate: bool = True,
-            version: str = None,
-            deployed_ip: str = None):
-    appsettings = generate_appsettings_v6_1_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
+        sa_password: str,
+        port: int = 5000,
+        automigrate: bool = True,
+        version: str = None,
+        deployed_ip: str = None,
+        instance_identifier: str = None):
+    appsettings = generate_appsettings_v6_1_0(instance_name, sa_password, port, automigrate, version, deployed_ip, instance_identifier=instance_identifier)
     lexis_auth = appsettings.get('ExternalAuthenticationSettings').get('LexisAuthenticationConfiguration')
     lexis_auth['CommandTemplatePermissions'] = "/api/Heappe/CommandTemplatePermissions/"
     lexis_auth['CheckCommandTemplatePermissions'] = True
@@ -472,8 +524,9 @@ def generate_appsettings_v6_2_1(
         port: int = 5000,
         automigrate: bool = True,
         version: str = None,
-        deployed_ip: str = None):
-    appsettings = generate_appsettings_v6_2_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
+        deployed_ip: str = None,
+        instance_identifier: str = None):
+    appsettings = generate_appsettings_v6_2_0(instance_name, sa_password, port, automigrate, version, deployed_ip, instance_identifier=instance_identifier)
     #bgworker RoleAssignmentSyncCheck = 3600
     appsettings['BackGroundThreadSettings']['RoleAssignmentSyncCheck'] = 3600
     appsettings['RoleAssignments'] = {
@@ -595,8 +648,9 @@ def generate_appsettings_v6_4_0(
         port: int = 5000,
         automigrate: bool = True,
         version: str = None,
-        deployed_ip: str = None):
-    appsettings = generate_appsettings_v6_2_1(instance_name, sa_password, port, automigrate, version, deployed_ip)
+        deployed_ip: str = None,
+        instance_identifier: str = None):
+    appsettings = generate_appsettings_v6_2_1(instance_name, sa_password, port, automigrate, version, deployed_ip, instance_identifier=instance_identifier)
     
     if 'HPCConnectionFrameworkSettings' not in appsettings:
         appsettings['HPCConnectionFrameworkSettings'] = {}
@@ -620,8 +674,9 @@ def generate_appsettings_v6_4_17(
         port: int = 5000,
         automigrate: bool = True,
         version: str = None,
-        deployed_ip: str = None):
-    appsettings = generate_appsettings_v6_4_0(instance_name, sa_password, port, automigrate, version, deployed_ip)
+        deployed_ip: str = None,
+        instance_identifier: str = None):
+    appsettings = generate_appsettings_v6_4_0(instance_name, sa_password, port, automigrate, version, deployed_ip, instance_identifier=instance_identifier)
 
     # 1.A. Version and Metadata (ApplicationAPISettings)
     ver_str = version or "v6.4.17"
@@ -757,9 +812,10 @@ def generate_appsettings_v6_5_0(
         port: int = 5000,
         automigrate: bool = True,
         version: str = None,
-        deployed_ip: str = None):
+        deployed_ip: str = None,
+        instance_identifier: str = None):
     return generate_appsettings_v6_4_17(
-        instance_name, sa_password, port, automigrate, version or "v6.5.0", deployed_ip
+        instance_name, sa_password, port, automigrate, version or "v6.5.0", deployed_ip, instance_identifier=instance_identifier
     )
 
 def generate_appsettings_data_staging_v6_5_0(
@@ -893,10 +949,11 @@ def generate_appsettings_v6_6_0(
         automigrate: bool = True,
         version: str = None,
         deployed_ip: str = None,
-        efp: bool = False):
+        efp: bool = False,
+        instance_identifier: str = None):
     ver_str = version or "v6.6.0"
     appsettings = generate_appsettings_v6_5_0(
-        instance_name, sa_password, port, automigrate, ver_str, deployed_ip
+        instance_name, sa_password, port, automigrate, ver_str, deployed_ip, instance_identifier=instance_identifier
     )
 
     # 1. Version Bump in ApplicationAPISettings
@@ -993,7 +1050,8 @@ def generate_appsettings_efp_v6_6_0(
         port: int = 5000,
         automigrate: bool = True,
         version: str = None,
-        deployed_ip: str = None):
+        deployed_ip: str = None,
+        instance_identifier: str = None):
     return generate_appsettings_v6_6_0(
         instance_name=instance_name,
         sa_password=sa_password,
@@ -1001,7 +1059,8 @@ def generate_appsettings_efp_v6_6_0(
         automigrate=automigrate,
         version=version or "v6.6.0",
         deployed_ip=deployed_ip,
-        efp=True
+        efp=True,
+        instance_identifier=instance_identifier
     )
 
 
