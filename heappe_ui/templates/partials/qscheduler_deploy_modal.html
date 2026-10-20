@@ -73,7 +73,7 @@
                                 <div>
                                     <h6 class="fw-bold text-dark mb-1" style="font-size: 0.9rem;">4. Register in HEAppE</h6>
                                     <p class="text-muted small mb-0" style="font-size: 0.8rem; line-height: 1.4;">
-                                        Creates the Cluster (HTTP), File Transfer Method, QPU Queue Group with accounting formula, a Queue for the machine and a QPUSeconds Project with optional allocation. A callback token is generated and set in both QScheduler and HEAppE.
+                                        Creates the Cluster (HTTP), File Transfer Method, QPU Queue Group with accounting formula, a Queue for the machine and an optional QPUSeconds Project with allocation. A callback token is generated and set in both QScheduler and HEAppE.
                                     </p>
                                 </div>
                             </div>
@@ -122,7 +122,7 @@
             <div class="modal-body p-4">
                 <p class="text-secondary small mb-3 qs-cluster-only">
                     Each HEAppE cluster maps to one QScheduler quantum machine; one QScheduler instance can serve many of them.
-                    This registers the machine, creates the HEAppE cluster, queue, project and QPU allocation, and, for a new
+                    This registers the machine, creates the HEAppE cluster, queue, optionally a project with QPU allocation, and, for a new
                     instance, deploys the QScheduler service with its own PostgreSQL in Docker.
                 </p>
                 <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle qs-instance-only d-none">
@@ -190,14 +190,23 @@
                 <!-- HEAppE -->
                 <div class="fw-bold small text-primary mb-2"><i class="bi bi-diagram-3 me-1"></i> HEAppE integration</div>
                 <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="qs-create_project" name="create_project">
+                            <label class="form-check-label small" for="qs-create_project">Create HEAppE project</label>
+                        </div>
+                    </div>
                     <div class="col-md-6">
-                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-project_name">QScheduler project name</label>
-                        <input type="text" class="form-control form-control-sm" id="qs-project_name" name="project_name" placeholder="auto (qs-&lt;id&gt;)">
+                        <div class="form-check form-switch mb-1">
+                            <input class="form-check-input" type="checkbox" id="qs-custom_name" name="custom_name" disabled>
+                            <label class="form-check-label small" for="qs-custom_name">Custom project name</label>
+                        </div>
+                        <input type="text" class="form-control form-control-sm" id="qs-project_name" name="project_name" placeholder="auto (qs-&lt;id&gt;)" aria-label="QScheduler project name" disabled>
                         <div class="form-text" style="font-size: 0.72rem;">Stored as the HEAppE project accounting string.</div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-qpu_allocation_seconds">QPU allocation (seconds)</label>
-                        <input type="number" class="form-control form-control-sm" id="qs-qpu_allocation_seconds" name="qpu_allocation_seconds" placeholder="optional, e.g. 36000" min="1">
+                        <input type="number" class="form-control form-control-sm" id="qs-qpu_allocation_seconds" name="qpu_allocation_seconds" placeholder="optional, e.g. 36000" min="1" disabled>
                         <div class="form-text" style="font-size: 0.72rem;">Leave empty to skip; jobs are rejected until an allocation is added to the project.</div>
                     </div>
                     <div class="col-12 d-flex flex-wrap gap-4 mt-2">
@@ -266,6 +275,7 @@
                                 <label class="form-check-label small" for="qs-db-existing">Use existing database</label>
                             </div>
                         </div>
+
                         <div class="col-md-8 qs-db-existing-only d-none">
                             <label class="form-label small text-muted fw-semibold mb-1" for="qs-database_url">DATABASE_URL <span class="text-danger">*</span></label>
                             <input type="password" class="form-control form-control-sm font-monospace" id="qs-database_url" name="database_url" placeholder="postgres://user:pass@host:5432/db" autocomplete="off">
@@ -484,6 +494,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const titles = { new: 'Deploy QScheduler Instance', existing: 'Add Machine to QScheduler Instance',
                          update: 'Update QScheduler Instance', undeploy: 'Undeploy QScheduler Instance' };
         document.querySelector('#qsConfigLabel span').textContent = titles[target];
+        const createProj = form.create_project.checked;
+        form.custom_name.disabled = !createProj;
+        if (!createProj) form.custom_name.checked = false;
+        form.project_name.disabled = !(createProj && form.custom_name.checked);
+        form.qpu_allocation_seconds.disabled = !createProj;
         const cb = form.enable_callback.checked;
         form.querySelectorAll('.qs-callback-only').forEach(el => el.classList.toggle('d-none', !cb));
     }
@@ -500,6 +515,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     form.backend.addEventListener('change', toggleSections);
     form.enable_callback.addEventListener('change', toggleSections);
+    form.create_project.addEventListener('change', toggleSections);
+    form.custom_name.addEventListener('change', toggleSections);
     form.querySelectorAll('input[name="db_mode"], input[name="target"]').forEach(r => r.addEventListener('change', toggleSections));
 
     let defaultsPromise = null;
@@ -622,7 +639,9 @@ document.addEventListener('DOMContentLoaded', function () {
     function collect() {
         const data = {};
         new FormData(form).forEach((v, k) => { data[k] = v; });
-        ['use_sessions', 'enable_callback', 'store_token_in_vault', 'rebuild_image'].forEach(k => { data[k] = form[k].checked; });
+        ['use_sessions', 'enable_callback', 'store_token_in_vault', 'rebuild_image', 'create_project', 'custom_name'].forEach(k => { data[k] = form[k].checked; });
+        if (!data.create_project || !data.custom_name) delete data.project_name;
+        if (!data.create_project) delete data.qpu_allocation_seconds;
         if (data.backend !== 'iqm') { delete data.iqm_url; delete data.iqm_token; delete data.iqm_device; delete data.iqm_check_interval; }
         if (data.db_mode !== 'existing') { delete data.database_url; delete data.db_network; }
         if (data.target === 'existing') {

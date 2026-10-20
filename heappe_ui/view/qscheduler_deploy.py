@@ -128,6 +128,8 @@ def parse_qscheduler_options(data: dict, uid: str) -> tuple:
         'iqm_token': s('iqm_token'),
         'iqm_device': s('iqm_device'),
         'iqm_check_interval': s('iqm_check_interval', default="500ms"),
+        'create_project': b('create_project', default=True),
+        'custom_name': b('custom_name', default=False),
         'project_name': s('project_name', default=f"qs-{uid}"),
         'qpu_allocation_seconds': i('qpu_allocation_seconds', default=None, lo=1, hi=10 ** 9, label="QPU allocation"),
         'accounting_formula': s('accounting_formula', default=DEFAULT_ACCOUNTING_FORMULA),
@@ -157,8 +159,16 @@ def parse_qscheduler_options(data: dict, uid: str) -> tuple:
         opts['host_port'] = None
     if not _MACHINE_RE.match(opts['machine_name']):
         errors.append("Machine name may contain only letters, digits, '_', '.', '-' (max 30 chars).")
-    if not _NAME_RE.match(opts['project_name']):
-        errors.append("QScheduler project name may contain only letters, digits, '_', '.', '-'.")
+    if not opts['create_project']:
+        # No project: nothing to name and nothing to allocate QPU time to.
+        opts['custom_name'] = False
+        opts['project_name'] = None
+        opts['qpu_allocation_seconds'] = None
+    else:
+        if not opts['custom_name']:
+            opts['project_name'] = f"qs-{uid}"
+        if not _NAME_RE.match(opts['project_name']):
+            errors.append("QScheduler project name may contain only letters, digits, '_', '.', '-'.")
     if not _DURATION_RE.match(opts['max_session_time']):
         errors.append("Max session time must be a duration like 30m, 2h.")
     if opts['db_mode'] not in ('new', 'existing'):
@@ -1091,36 +1101,42 @@ def _run_qscheduler_setup_thread(instance_name, uid, opts, version):
             "SessionCode": session_code}))
         log(f"Queue '{opts['machine_name']}' created (ID: {queue_id}).")
 
-        project_id = _id_of(controller.heappe_management_project_post(body={
-            "Name": f"QScheduler Project {uid}", "Description": f"Quantum project on {opts['machine_name']}",
-            "AccountingString": opts['project_name'], "StartDate": now.strftime(fmt),
-            "EndDate": valid_to.strftime(fmt), "UsageType": USAGE_TYPE_QPU_SECONDS,
-            "UseAccountingStringForScheduler": True, "IsOneToOneMapping": False, "PIEmail": "",
-            "SessionCode": session_code}))
-        log(f"Project created (ID: {project_id}, QScheduler project name '{opts['project_name']}').")
+        project_id = None
+        if opts['create_project']:
+            project_id = _id_of(controller.heappe_management_project_post(body={
+                "Name": opts['project_name'], "Description": f"Quantum project on {opts['machine_name']}",
+                "AccountingString": opts['project_name'], "StartDate": now.strftime(fmt),
+                "EndDate": valid_to.strftime(fmt), "UsageType": USAGE_TYPE_QPU_SECONDS,
+                "UseAccountingStringForScheduler": True, "IsOneToOneMapping": False, "PIEmail": "",
+                "SessionCode": session_code}))
+            log(f"Project created (ID: {project_id}, QScheduler project name '{opts['project_name']}').")
 
-        controller.heappe_management_project_assignment_to_cluster_post(body={
-            "ProjectId": project_id, "ClusterId": cluster_id, "ScratchStoragePath": "/tmp",
-            "PermanentStoragePath": "/tmp", "ProjectStoragePath": "/tmp", "SessionCode": session_code})
+            controller.heappe_management_project_assignment_to_cluster_post(body={
+                "ProjectId": project_id, "ClusterId": cluster_id, "ScratchStoragePath": "/tmp",
+                "PermanentStoragePath": "/tmp", "ProjectStoragePath": "/tmp", "SessionCode": session_code})
         
-        # Optional: QPU allocation
-        if opts.get('qpu_allocation_seconds') is not None:
-            controller.heappe_management_project_cluster_node_type_aggregation_post(body={
-                "ProjectId": project_id, "ClusterNodeTypeAggregationId": group_id,
-                "AllocationAmount": opts['qpu_allocation_seconds'], "SessionCode": session_code})
-            log(f"Project assigned to cluster with {opts['qpu_allocation_seconds']} QPU seconds.")
-        else:
-            log("No QPU allocation given: project is not assigned to the QPU queue group. HEAppE rejects QScheduler "
-                "jobs for this project until an allocation is added (Projects > Queue Groups).")
+            # Optional: QPU allocation
+            if opts.get('qpu_allocation_seconds') is not None:
+                controller.heappe_management_project_cluster_node_type_aggregation_post(body={
+                    "ProjectId": project_id, "ClusterNodeTypeAggregationId": group_id,
+                    "AllocationAmount": opts['qpu_allocation_seconds'], "SessionCode": session_code})
+                log(f"Project assigned to cluster with {opts['qpu_allocation_seconds']} QPU seconds.")
+            else:
+                log("No QPU allocation given: project is not assigned to the QPU queue group. HEAppE rejects QScheduler "
+                    "jobs for this project until an allocation is added (Projects > Queue Groups).")
 
-        # HTTP clusters ignore the credential content, but HEAppE needs one per project/cluster to submit.
-        try:
-            controller.heappe_management_generate_secure_shell_key_post(body={
-                "Credentials": [{"Username": "qscheduler", "Password": secrets.token_urlsafe(16)}],
-                "ProjectId": project_id, "SessionCode": session_code})
-            log("Service credential for the project created.")
-        except Exception as e_cred:
-            log(f"WARNING: could not create project credential ({e_cred}). Add one in Projects > Credentials before submitting jobs.")
+            # HTTP clusters ignore the credential content, but HEAppE needs one per project/cluster to submit.
+            try:
+                controller.heappe_management_generate_secure_shell_key_post(body={
+                    "Credentials": [{"Username": "qscheduler", "Password": secrets.token_urlsafe(16)}],
+                    "ProjectId": project_id, "SessionCode": session_code})
+                log("Service credential for the project created.")
+            except Exception as e_cred:
+                log(f"WARNING: could not create project credential ({e_cred}). Add one in Projects > Credentials before submitting jobs.")
+
+        else:
+            log("Project creation skipped (not requested). The cluster and queue exist without a project, QPU allocation "
+                "or credential; add them in HEAppE (Projects) before submitting QScheduler jobs.")
 
         result.update({'cluster_id': cluster_id, 'project_id': project_id, 'queue_id': queue_id})
         log("SUCCESS: QScheduler deployed and registered in HEAppE.")
