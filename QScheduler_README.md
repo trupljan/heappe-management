@@ -397,7 +397,30 @@ the notifier is removed again.
 
 ### Cluster detail of a QScheduler cluster
 
-The cluster detail page shows a **QScheduler cluster** badge next to *Cluster Configuration*. Its *Webhook & Callback
+The cluster detail page shows a **QScheduler cluster** badge next to *Cluster Configuration*, and a **QScheduler**
+panel at the top of it (checked when the page opens; the arrow checks again):
+
+- **Attached to**: the QScheduler instance the cluster points to (`QSchedulerHost` / `MasterNodeName` + port), with a
+  link to the QScheduler page, and the cluster's machine. Endpoints that are not a registered instance, archived
+  instances and instances this HEAppE is not assigned to are reported and nothing else is checked.
+- **Notifications**: with notifications on for this HEAppE, the cluster must have callbacks enabled,
+  `QSchedulerNotifier` = `<HEAppE identifier>.<machine>`, a `QSchedulerNotifyToken` (Vault), and that notifier must be
+  registered in QScheduler with the assignment's callback URL. QScheduler does not expose notifier tokens, so the token
+  value itself cannot be compared. With notifications off, callbacks must be disabled. Otherwise the problems are
+  listed with **Recreate notifier** (notifications on: a new notifier with a new token, the cluster's old notifier is
+  removed if no other cluster uses it, one QScheduler restart, the token stored in Vault) or **Disable callbacks**
+  (notifications off).
+- **Machine**: whether the cluster's machine (the queue of its node type) exists in QScheduler. When it does not, jobs
+  on the cluster fail and **Recover machine...** offers:
+  - *Register a new machine with this name* (backend `test` or `iqm`, queue size, IQM URL, device, token, poll
+    interval), or
+  - *Use an existing machine*: the cluster's queue is switched to it (refused when another cluster of this HEAppE on
+    the same QScheduler uses it).
+
+  Either way the cluster gets the notifier `<identifier>.<machine>` with a new token (notifications on) and
+  QScheduler restarts once.
+
+The panel needs HEAppE 6.6.0+ for its actions. Its *Webhook & Callback
 Notifications* section contains the cluster's notifier settings instead of the generic webhook fields:
 
 | Field | Key | Description |
@@ -556,3 +579,5 @@ arriving during the restart fail, and HEAppE retries status queries later.
 | Clusters → QScheduler | Add quantum machine | assigned instances | New or shared machine + HEAppE cluster, queue, queue group, optional project; with notifications on, the cluster's own notifier and token (Vault). |
 | Clusters → QScheduler | Remove quantum machine | QScheduler clusters of the current HEAppE | Deletes the cluster and its notifier, optionally removes the machine from QScheduler (`--force` optional). |
 | Clusters → QScheduler | Manage QScheduler instances | – | Opens the QScheduler page. |
+| Cluster detail → QScheduler | Recreate notifier / Disable callbacks | QScheduler clusters with wrong notification settings | New notifier and token for the cluster (or callbacks off), one restart. |
+| Cluster detail → QScheduler | Recover machine... | QScheduler clusters whose machine is missing | Registers the machine again or switches the cluster to an existing machine; new notifier and token. |

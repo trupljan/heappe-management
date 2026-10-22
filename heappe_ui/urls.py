@@ -40,6 +40,9 @@ urlpatterns = [
     path('clusters/qscheduler/<int:inst_id>/machines/', views.qscheduler_machine_list_api, name='qscheduler_machine_list'),
     path('clusters/qscheduler/machine-add/', views.qscheduler_machine_add_api, name='qscheduler_machine_add'),
     path('clusters/qscheduler/machine-remove/', views.qscheduler_machine_remove_api, name='qscheduler_machine_remove'),
+    path('clusters/qscheduler/cluster/<int:cluster_id>/status/', views.qscheduler_cluster_status_api, name='qscheduler_cluster_status'),
+    path('clusters/qscheduler/cluster/<int:cluster_id>/recreate-notifier/', views.qscheduler_cluster_recreate_notifier_api, name='qscheduler_cluster_recreate_notifier'),
+    path('clusters/qscheduler/cluster/<int:cluster_id>/recover-machine/', views.qscheduler_cluster_recover_machine_api, name='qscheduler_cluster_recover_machine'),
 
     # QScheduler instances and HEAppE assignments
     path('qscheduler/', views.qscheduler_page, name='qscheduler_page'),

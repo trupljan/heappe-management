@@ -11,6 +11,8 @@ from heappe_ui.view.qscheduler_deploy import (qscheduler_page, qscheduler_local_
 from heappe_ui.view.qscheduler_recovery import (qscheduler_archive_api, qscheduler_unarchive_api,
                                                 qscheduler_cascade_preview_api, qscheduler_cascade_delete_api,
                                                 qscheduler_restore_info_api, qscheduler_restore_api)
+from heappe_ui.view.qscheduler_cluster_health import (qscheduler_cluster_status_api, qscheduler_cluster_recreate_notifier_api,
+                                                      qscheduler_cluster_recover_machine_api)
 from heappe_ui.view.qscheduler_machines import (qscheduler_machine_defaults_api, qscheduler_machine_list_api,
                                                 qscheduler_machine_add_api, qscheduler_machine_remove_api)
 from heappe_ui.view.queue import *

@@ -65,6 +65,19 @@
                         </div>
                     </div>
                     <div class="card-body p-4">
+                        {% if cluster.id and cluster.scheduler_type == 32 %}
+                        <div class="border border-primary-subtle rounded-3 p-3 mb-4 bg-primary-subtle bg-opacity-25" id="qs-cluster-status"
+                             data-status-url="{% url 'qscheduler_cluster_status' cluster.id %}"
+                             data-recreate-url="{% url 'qscheduler_cluster_recreate_notifier' cluster.id %}"
+                             data-recover-url="{% url 'qscheduler_cluster_recover_machine' cluster.id %}"
+                             data-qs-page-url="{% url 'qscheduler_page' %}">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-bold small text-primary"><i class="bi bi-cpu me-1"></i>QScheduler</div>
+                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="qs-cs-refresh" title="Check again"><i class="bi bi-arrow-clockwise"></i></button>
+                            </div>
+                            <div class="small" id="qs-cs-body"><span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Checking the QScheduler instance...</div>
+                        </div>
+                        {% endif %}
                         <form method="post">
                             {% csrf_token %}
                             <div class="row g-3">
@@ -1521,4 +1534,185 @@
         </script>
     {% endif %}
 </div>
+{% if cluster.id and cluster.scheduler_type == 32 %}
+<!-- Recover the QScheduler machine of this cluster -->
+<div class="modal fade" id="qsRecoverModal" tabindex="-1" aria-labelledby="qsRecoverLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsRecoverForm" novalidate data-no-loading autocomplete="off">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsRecoverLabel"><i class="bi bi-motherboard"></i>Recover machine <code class="text-white" id="qs-rec-machine"></code></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="small text-secondary mb-3">The cluster's queue uses a machine that does not exist in <strong id="qs-rec-instance"></strong>. Register it again, or move the cluster to an existing machine.
+                    Either way the cluster gets a notifier <code>&lt;identifier&gt;.&lt;machine&gt;</code> with a new token (if notifications are on) and QScheduler is restarted once.</p>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="mode" id="qs-rec-mode-new" value="new" checked>
+                    <label class="form-check-label small fw-semibold" for="qs-rec-mode-new">Register a new machine with this name</label>
+                </div>
+                <div class="row g-2 ms-3 mb-3 qs-rec-new-only">
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-backend">Backend</label>
+                        <select class="form-select form-select-sm" id="qs-rec-backend" name="backend"><option value="test">test</option><option value="iqm">iqm</option></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-queue_size">Queue size</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-rec-queue_size" name="queue_size" value="4" min="1">
+                    </div>
+                    <div class="col-md-6 qs-rec-iqm-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-iqm_url">IQM server URL</label>
+                        <input type="url" class="form-control form-control-sm" id="qs-rec-iqm_url" name="iqm_url" placeholder="https://...">
+                    </div>
+                    <div class="col-md-4 qs-rec-iqm-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-iqm_device">IQM device</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-rec-iqm_device" name="iqm_device" placeholder="e.g. star24">
+                    </div>
+                    <div class="col-md-5 qs-rec-iqm-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-iqm_token">IQM token</label>
+                        <input type="password" class="form-control form-control-sm" id="qs-rec-iqm_token" name="iqm_token" autocomplete="new-password">
+                    </div>
+                    <div class="col-md-3 qs-rec-iqm-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-iqm_poll_interval">Poll interval</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-rec-iqm_poll_interval" name="iqm_poll_interval" value="500ms">
+                    </div>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="mode" id="qs-rec-mode-existing" value="existing">
+                    <label class="form-check-label small fw-semibold" for="qs-rec-mode-existing">Use an existing machine (the cluster's queue is switched to it)</label>
+                </div>
+                <div class="row g-2 ms-3 qs-rec-existing-only d-none">
+                    <div class="col-md-6">
+                        <select class="form-select form-select-sm" id="qs-rec-machine_name" name="machine_name"></select>
+                        <div class="form-text" style="font-size: 0.72rem;">Machines used by another cluster of this HEAppE on the same QScheduler are refused.</div>
+                    </div>
+                </div>
+                <div id="qs-rec-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsRecoverBtn"><i class="bi bi-wrench-adjustable me-1"></i>Recover</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% include 'partials/qscheduler_progress_modal.html' %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const box = document.getElementById('qs-cluster-status');
+    if (!box) return;
+    const U = window.qsUtil;
+    const body = document.getElementById('qs-cs-body');
+    const esc = U.esc;
+    let status = null;
+    const line = (icon, cls, html) => '<div class="d-flex gap-2 mb-1"><i class="bi bi-' + icon + ' ' + cls + '"></i><div>' + html + '</div></div>';
+    const qsLink = name => '<a href="' + box.dataset.qsPageUrl + '" class="fw-semibold">' + esc(name) + '</a>';
+
+    function render(d) {
+        status = d;
+        if (d.status !== 'success') { body.innerHTML = line('exclamation-triangle', 'text-danger', esc(d.message || 'Status unavailable.')); return; }
+        let html = '';
+        if (!d.instance) {
+            body.innerHTML = line('question-circle', 'text-warning', 'Endpoint <code>' + esc(d.endpoint) + '</code> is not a QScheduler instance registered in HEAppE Management (' + qsLink('QScheduler page') + ').');
+            return;
+        }
+        html += line('hdd-network', 'text-primary', 'Attached to ' + qsLink(d.instance.name) + ' <span class="text-muted">(' + esc(d.instance.kind) + ', <code>' + esc(d.endpoint) + '</code>)</span>' +
+            (d.instance.archived ? ' <span class="badge bg-dark-subtle text-dark-emphasis border">archived</span>' : '') + ' &middot; machine <code>' + esc(d.machine) + '</code>');
+        if (d.instance.archived) {
+            html += line('archive', 'text-secondary', 'The instance is archived: restore it on the ' + qsLink('QScheduler page') + ' (this reassigns the cluster with a new notifier token).');
+            body.innerHTML = html; return;
+        }
+        if (!d.assigned) {
+            html += line('exclamation-triangle', 'text-warning', 'This HEAppE instance is not assigned to ' + esc(d.instance.name) + '. Assign it on the ' + qsLink('QScheduler page') + ' first.');
+            body.innerHTML = html; return;
+        }
+        if (d.error) html += line('exclamation-triangle', 'text-warning', esc(d.error));
+
+        const n = d.notifications;
+        if (n.enabled) {
+            const facts = 'notifier <code>' + esc(n.configured || 'none') + '</code>, token ' + (n.token_set ? 'set (Vault)' : '<strong>missing</strong>') +
+                ', callbacks ' + (n.callbacks ? 'on' : '<strong>off</strong>') +
+                (n.registered === null ? ', registration in QScheduler not verified' : (n.registered ? ', registered in QScheduler' : ''));
+            if (n.ok) html += line('bell-fill', 'text-success', 'Notifications: ' + facts + '.');
+            else html += line('bell-slash', 'text-danger', 'Notifications are not set up properly: ' + facts + '.' +
+                (n.problems.length ? '<ul class="mb-1 ps-3">' + n.problems.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul>' : ''));
+            html += '<div class="text-muted mb-1" style="font-size: 0.72rem;">QScheduler does not expose notifier tokens, so the token itself cannot be compared; recreating generates a new one.</div>';
+        } else {
+            html += line(n.ok ? 'bell' : 'bell-slash', n.ok ? 'text-secondary' : 'text-danger',
+                'Notifications are off for this HEAppE on ' + esc(d.instance.name) + ' (HEAppE polls task state).' + (n.problems.length ? ' ' + esc(n.problems.join('; ')) + '.' : ''));
+        }
+        if (!n.ok) {
+            html += '<button type="button" class="btn btn-sm btn-outline-primary fw-semibold mb-2" id="qs-cs-recreate"><i class="bi bi-arrow-repeat me-1"></i>' +
+                (n.enabled ? 'Recreate notifier' : 'Disable callbacks') + '</button>';
+        }
+
+        const m = d.machine_status;
+        if (m.registered === true) html += line('motherboard', 'text-success', 'Machine <code>' + esc(d.machine) + '</code> is registered in QScheduler.');
+        else if (m.registered === false) {
+            html += line('motherboard', 'text-danger', 'Machine <code>' + esc(d.machine) + '</code> does <strong>not exist</strong> in ' + esc(d.instance.name) + ': jobs on this cluster fail.');
+            html += '<button type="button" class="btn btn-sm btn-outline-danger fw-semibold" id="qs-cs-recover"><i class="bi bi-wrench-adjustable me-1"></i>Recover machine...</button>';
+        } else html += line('question-circle', 'text-warning', 'The machines of ' + esc(d.instance.name) + ' cannot be listed; machine <code>' + esc(d.machine) + '</code> is not verified.');
+        body.innerHTML = html;
+
+        const rc = document.getElementById('qs-cs-recreate');
+        if (rc) rc.addEventListener('click', () => {
+            const text = n.enabled
+                ? 'Create notifier "' + n.expected + '" with a new token for this cluster (the old notifier of this cluster is removed if no other cluster uses it), store the token in Vault and restart QScheduler once?'
+                : 'Notifications are off for this HEAppE: disable callbacks on this cluster, remove its notifier from QScheduler and restart it if needed?';
+            if (!confirm(text)) return;
+            start(rc, box.dataset.recreateUrl, {}, n.enabled ? 'Recreating notifier' : 'Disabling callbacks');
+        });
+        const rv = document.getElementById('qs-cs-recover');
+        if (rv) rv.addEventListener('click', openRecover);
+    }
+
+    function start(btn, postUrl, data, title, errId) {
+        const restore = U.setButtonLoading(btn, 'Starting...');
+        return U.postJson(postUrl, data).then(r => {
+            restore();
+            if (r.status !== 'success') {
+                if (errId) { const e = document.getElementById(errId); e.textContent = r.message || 'Failed.'; e.classList.remove('d-none'); }
+                else alert(r.message || 'Failed.');
+                return;
+            }
+            if (errId) bootstrap.Modal.getOrCreateInstance(document.getElementById('qsRecoverModal')).hide();
+            U.track({ title: title + ' for ' + status.machine, successTitle: 'Done',
+                      details: (res, e) => 'Cluster: ' + e(res.cluster) + (res.machine ? '<br>Machine: ' + e(res.machine) : '') + '<br>Notifier: ' + e(res.notifier || 'none (callbacks off)') });
+        }).catch(err => { restore(); alert(err.message || 'Network error.'); });
+    }
+
+    const recForm = document.getElementById('qsRecoverForm');
+    function recToggle() {
+        const existing = recForm.querySelector('input[name="mode"]:checked').value === 'existing';
+        recForm.querySelectorAll('.qs-rec-new-only').forEach(el => el.classList.toggle('d-none', existing));
+        recForm.querySelectorAll('.qs-rec-existing-only').forEach(el => el.classList.toggle('d-none', !existing));
+        recForm.querySelectorAll('.qs-rec-iqm-only').forEach(el => el.classList.toggle('d-none', recForm.backend.value !== 'iqm'));
+    }
+    recForm.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', recToggle));
+    recForm.backend.addEventListener('change', recToggle);
+    function openRecover() {
+        document.getElementById('qs-rec-error').classList.add('d-none');
+        document.getElementById('qs-rec-machine').textContent = status.machine;
+        document.getElementById('qs-rec-instance').textContent = status.instance.name;
+        const sel = recForm.machine_name;
+        sel.innerHTML = status.machine_status.machines.map(m => '<option value="' + esc(m) + '">' + esc(m) + '</option>').join('');
+        document.getElementById('qs-rec-mode-existing').disabled = !status.machine_status.machines.length;
+        recToggle();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('qsRecoverModal')).show();
+    }
+    recForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const data = { current_machine: status.machine };
+        new FormData(recForm).forEach((v, k) => { data[k] = v; });
+        start(document.getElementById('qsRecoverBtn'), box.dataset.recoverUrl, data, 'Recovering machine', 'qs-rec-error');
+    });
+
+    function load() {
+        body.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Checking the QScheduler instance...';
+        U.getJson(box.dataset.statusUrl).then(render).catch(() => { body.textContent = 'Status unavailable.'; });
+    }
+    document.getElementById('qs-cs-refresh').addEventListener('click', load);
+    load();
+});
+</script>
+{% endif %}
 {% endblock %}

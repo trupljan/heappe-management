@@ -6562,3 +6562,209 @@ class QSchedulerUnmanagedNotifierTests(TestCase):
             start.assert_not_called()
             self.assertEqual(post({"name": "heappe-dev", "acknowledged": True}).status_code, 200)
             start.assert_called_once()
+
+
+class QSchedulerClusterHealthTests(TestCase):
+    """QScheduler panel of a cluster: attached instance, notifier checks, recreate notifier, recover machine."""
+
+    def setUp(self):
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance, QSchedulerAssignment
+        self.cred = InstanceCredentials.objects.create(instance_name="dev", heappe_host="h", heappe_login="u",
+                                                       heappe_password="p", heappe_port="5000")
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300)
+        self.asg = QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred,
+                                                       heappe_identifier="heappe-dev", notifications_enabled=True,
+                                                       callback_url="http://h/cb")
+        self.log = lambda *_: None
+
+    @staticmethod
+    def _cluster(machine="Sim", notifier="heappe-dev.Sim", token="********", callbacks="true", cid=5):
+        cfg = {"QSchedulerHost": "qs-1", "QSchedulerPort": "4300", "EnableCallback": callbacks}
+        if notifier:
+            cfg["QSchedulerNotifier"] = notifier
+        if token:
+            cfg["QSchedulerNotifyToken"] = token
+        return {"id": cid, "name": f"cl-{machine}", "scheduler_type": 32, "master_node_name": "qs-1", "port": 4300,
+                "custom_configuration": cfg, "custom_configuration_vault_toggles": {"QSchedulerNotifyToken": True},
+                "node_types": [{"id": 50 + cid, "name": machine, "queue": machine, "file_transfer_method_id": 9,
+                                "cluster_node_type_aggregation": {"id": 7}, "number_of_nodes": 1, "cores_per_node": 1,
+                                "max_walltime": 86400}]}
+
+    def _target(self, notifiers=(("heappe-dev.Sim", "http://h/cb"),), machines=("Sim",)):
+        from heappe_ui.view.qscheduler_core import CommandResult
+        t = mock.Mock()
+        t.list_notifiers.return_value = [{"name": n, "url": u} for n, u in notifiers]
+        t.list_machines.return_value = None if machines is None else [{"name": m, "backend": "test"} for m in machines]
+        t.cli.return_value = CommandResult(0, "ok", "")
+        return t
+
+    def _status(self, cluster, target):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_cluster_health import cluster_status
+        with mock.patch.object(core, "target_for", return_value=target):
+            return cluster_status("dev", cluster)
+
+    def test_status_ok(self):
+        s = self._status(self._cluster(), self._target())
+        self.assertEqual((s['instance']['name'], s['assigned'], s['machine']), ("qs-1", True, "Sim"))
+        self.assertTrue(s['notifications']['ok'])
+        self.assertEqual(s['notifications']['problems'], [])
+        self.assertTrue(s['machine_status']['registered'])
+
+    def test_status_reports_notifier_problems_and_missing_machine(self):
+        s = self._status(self._cluster(notifier="heappe-dev", token=""),
+                         self._target(notifiers=(("heappe-dev.Sim", "http://old/cb"),), machines=("Other",)))
+        problems = " | ".join(s['notifications']['problems'])
+        self.assertIn("expected 'heappe-dev.Sim'", problems)
+        self.assertIn("no QSchedulerNotifyToken", problems)
+        self.assertIn("http://old/cb", problems)
+        self.assertFalse(s['notifications']['ok'])
+        self.assertEqual(s['machine_status'], {'registered': False, 'machines': ["Other"]})
+        s = self._status(self._cluster(), self._target(notifiers=()))
+        self.assertIn("not registered in QScheduler", " ".join(s['notifications']['problems']))
+
+    def test_status_notifications_off_and_unknown_instance(self):
+        self.asg.notifications_enabled = False
+        self.asg.save()
+        s = self._status(self._cluster(), self._target())
+        self.assertIn("notifications are off", s['notifications']['problems'][0])
+        self.assertTrue(self._status(self._cluster(callbacks="false", notifier=None, token=""), self._target())['notifications']['ok'])
+        other = dict(self._cluster(), master_node_name="elsewhere", custom_configuration={"QSchedulerPort": "4300"})
+        self.assertIsNone(self._status(other, self._target())['instance'])
+        self.asg.delete()
+        self.assertFalse(self._status(self._cluster(), self._target())['assigned'])
+
+    def _worker(self, fn, cluster, target, *args, clusters=None):
+        from heappe_ui.view import qscheduler_core as core
+        controller = mock.Mock()
+        controller.heappe_management_cluster_get.return_value = cluster
+        result = {}
+        with mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(controller, "sc", None)), \
+             mock.patch.object(core, "target_for", return_value=target), \
+             mock.patch.object(core, "qscheduler_clusters", return_value=clusters if clusters is not None else [cluster]), \
+             mock.patch.object(core, "update_cluster_notifications") as upd:
+            fn(self.log, result, "dev", cluster['id'], *args)
+        return controller, upd, result
+
+    def test_recreate_notifier_new_token_and_old_removed(self):
+        from heappe_ui.view.qscheduler_cluster_health import recreate_notifier_worker
+        target = self._target(notifiers=(("heappe-dev.Old", "http://h/cb"), ("heappe-dev.Sim", "http://h/cb")))
+        cluster = self._cluster(notifier="heappe-dev.Old")
+        _, upd, result = self._worker(recreate_notifier_worker, cluster, target)
+        cmds = [c.args[0] for c in target.cli.call_args_list]
+        self.assertIn(["notifier", "remove", "heappe-dev.Old"], cmds)
+        self.assertIn(["notifier", "remove", "heappe-dev.Sim"], cmds)      # recreated: cannot be updated in place
+        added = [c for c in cmds if c[:2] == ["notifier", "add"]]
+        self.assertEqual(added[0][2:5], ["heappe-dev.Sim", "--url", "http://h/cb"])
+        target.restart.assert_called_once()
+        name, token = upd.call_args.args[3]
+        self.assertEqual((name, token), ("heappe-dev.Sim", added[0][-1]))
+        self.assertEqual(result['removed'], ["heappe-dev.Old"])
+
+    def test_recreate_keeps_notifier_used_by_another_cluster(self):
+        from heappe_ui.view.qscheduler_cluster_health import recreate_notifier_worker
+        target = self._target(notifiers=(("heappe-dev.Old", "http://h/cb"),))
+        cluster = self._cluster(notifier="heappe-dev.Old")
+        other = self._cluster(machine="Old", notifier="heappe-dev.Old", cid=6)
+        self._worker(recreate_notifier_worker, cluster, target, clusters=[cluster, other])
+        self.assertNotIn(["notifier", "remove", "heappe-dev.Old"], [c.args[0] for c in target.cli.call_args_list])
+
+    def test_recreate_with_notifications_off_disables_callbacks(self):
+        from heappe_ui.view.qscheduler_cluster_health import recreate_notifier_worker
+        self.asg.notifications_enabled = False
+        self.asg.save()
+        target = self._target()
+        _, upd, _ = self._worker(recreate_notifier_worker, self._cluster(), target)
+        self.assertEqual([c.args[0] for c in target.cli.call_args_list], [["notifier", "remove", "heappe-dev.Sim"]])
+        self.assertIsNone(upd.call_args.args[3])
+
+    def test_recover_registers_new_machine(self):
+        from heappe_ui.models import QSchedulerMachine
+        from heappe_ui.view.qscheduler_cluster_health import recover_machine_worker, parse_recover_options
+        opts, errors = parse_recover_options({"mode": "new", "backend": "test", "queue_size": "6"}, "Sim")
+        self.assertEqual(errors, [])
+        target = self._target(notifiers=(), machines=())
+        controller, upd, result = self._worker(recover_machine_worker, self._cluster(), target, opts)
+        cmds = [c.args[0] for c in target.cli.call_args_list]
+        self.assertEqual(cmds[0][:3], ["machine", "add", "Sim"])
+        self.assertEqual([c[:3] for c in cmds[1:]], [["notifier", "add", "heappe-dev.Sim"]])
+        target.restart.assert_called_once()
+        controller.heappe_management_cluster_node_type_put.assert_not_called()
+        self.assertEqual(QSchedulerMachine.objects.get(qscheduler=self.inst, name="Sim").options["queue_size"], 6)
+        self.assertEqual(upd.call_args.args[3][0], "heappe-dev.Sim")
+
+    def test_recover_switches_to_existing_machine(self):
+        from heappe_ui.view.qscheduler_cluster_health import recover_machine_worker, parse_recover_options
+        opts, _ = parse_recover_options({"mode": "existing", "machine_name": "VLQ"}, "Sim")
+        target = self._target(notifiers=(("heappe-dev.Sim", "http://h/cb"),), machines=("VLQ",))
+        controller, upd, result = self._worker(recover_machine_worker, self._cluster(), target, opts)
+        cmds = [c.args[0] for c in target.cli.call_args_list]
+        self.assertFalse(any(c[0] == "machine" for c in cmds))
+        self.assertIn(["notifier", "remove", "heappe-dev.Sim"], cmds)
+        self.assertEqual([c[2] for c in cmds if c[:2] == ["notifier", "add"]], ["heappe-dev.VLQ"])
+        body = controller.heappe_management_cluster_node_type_put.call_args.kwargs['body']
+        self.assertEqual((body['Queue'], body['Name'], body['ClusterNodeTypeAggregationId']), ("VLQ", "VLQ", 7))
+        self.assertEqual(upd.call_args.args[3][0], "heappe-dev.VLQ")
+        self.assertEqual(result['machine'], "VLQ")
+
+    def test_recover_refusals(self):
+        from heappe_ui.view.qscheduler_cluster_health import recover_machine_worker, parse_recover_options
+        opts, _ = parse_recover_options({"mode": "existing", "machine_name": "VLQ"}, "Sim")
+        with self.assertRaisesRegex(RuntimeError, "already uses machine 'VLQ'"):
+            self._worker(recover_machine_worker, self._cluster(), self._target(machines=("VLQ",)), opts,
+                         clusters=[self._cluster(), self._cluster(machine="VLQ", cid=6)])
+        with self.assertRaisesRegex(RuntimeError, "does not exist"):
+            self._worker(recover_machine_worker, self._cluster(), self._target(machines=()), opts)
+        new, _ = parse_recover_options({"mode": "new", "backend": "test"}, "Sim")
+        with self.assertRaisesRegex(RuntimeError, "already exists"):
+            self._worker(recover_machine_worker, self._cluster(), self._target(machines=("Sim",)), new)
+        _, errors = parse_recover_options({"mode": "new", "backend": "iqm"}, "Sim")
+        self.assertTrue(any("token" in e for e in errors))
+        from datetime import datetime, timezone
+        self.inst.archived_at = datetime.now(timezone.utc)
+        self.inst.save()
+        with self.assertRaisesRegex(RuntimeError, "archived"):
+            self._worker(recover_machine_worker, self._cluster(), self._target(), new)
+
+    def test_views(self):
+        from heappe_ui.view import qscheduler_core as core
+        self.client.force_login(User.objects.create_user(username="ch_admin", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session["middleware_deployed_version"] = "6.5.0"
+        session.save()
+        with mock.patch.object(core, "start_operation", return_value=(True, "started")) as start:
+            r = self.client.post("/clusters/qscheduler/cluster/5/recreate-notifier/", data="{}", content_type="application/json")
+            self.assertEqual(r.status_code, 400)                                   # HEAppE < 6.6.0
+            session["middleware_deployed_version"] = "6.6.0"
+            session.save()
+            r = self.client.post("/clusters/qscheduler/cluster/5/recover-machine/", data=json.dumps({"mode": "existing"}),
+                                 content_type="application/json")
+            self.assertEqual(r.status_code, 400)                                   # no machine selected
+            start.assert_not_called()
+            r = self.client.post("/clusters/qscheduler/cluster/5/recreate-notifier/", data="{}", content_type="application/json")
+            self.assertEqual(r.status_code, 200)
+            r = self.client.post("/clusters/qscheduler/cluster/5/recover-machine/",
+                                 data=json.dumps({"mode": "new", "backend": "test", "current_machine": "Sim"}),
+                                 content_type="application/json")
+            self.assertEqual(r.status_code, 200)
+        controller = mock.Mock()
+        controller.heappe_management_cluster_get.return_value = self._cluster()
+        with mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(controller, "sc", None)), \
+             mock.patch.object(core, "target_for", return_value=self._target()):
+            d = self.client.get("/clusters/qscheduler/cluster/5/status/").json()
+        self.assertEqual((d['status'], d['instance']['name'], d['notifications']['ok']), ("success", "qs-1", True))
+
+    def test_cluster_detail_template_shows_panel_only_for_qscheduler_clusters(self):
+        from django.template.loader import render_to_string
+        ctx = {'active_tab': 'detail', 'proxy_connections': [], 'is_v6_4_0_plus': True, 'is_v6_5_0_plus': True,
+               'custom_configuration_json': '{}', 'custom_configuration_vault_toggles_json': '{}',
+               'custom_config_metadata_json': '[]', 'filetransfer_methods': []}
+        html = render_to_string("cluster_detail.html", dict(ctx, cluster={'id': 5, 'name': 'cl', 'scheduler_type': 32}))
+        self.assertIn('id="qs-cluster-status"', html)
+        self.assertIn('id="qsRecoverModal"', html)
+        html = render_to_string("cluster_detail.html", dict(ctx, cluster={'id': 5, 'name': 'cl', 'scheduler_type': 4}))
+        self.assertNotIn('id="qs-cluster-status"', html)
+        html = render_to_string("cluster_detail.html", dict(ctx, cluster={'scheduler_type': 32}))   # create form
+        self.assertNotIn('id="qs-cluster-status"', html)

@@ -7,10 +7,10 @@ QScheduler cluster settings) by the automated tests in `heappe_ui/tests.py`.
 | | |
 |---|---|
 | Date | 2026-10-22 |
-| Tests | 75, all passing (`QSchedulerConfigTests`, `QSchedulerVaultToggleSerializationTests`, `QSchedulerHelperTests`, `QSchedulerOptionParsingTests`, `QSchedulerWorkflowTests`, `QSchedulerClusterDetailTemplateTests`, `QSchedulerViewTests`, `QSchedulerGitRefsTests`, `QSchedulerRecoveryTests`, `QSchedulerUnmanagedNotifierTests`) |
-| Measured code | `qscheduler_core.py`, `qscheduler_deploy.py`, `qscheduler_machines.py`, `qscheduler_recovery.py` |
+| Tests | 86, all passing (`QSchedulerConfigTests`, `QSchedulerVaultToggleSerializationTests`, `QSchedulerHelperTests`, `QSchedulerOptionParsingTests`, `QSchedulerWorkflowTests`, `QSchedulerClusterDetailTemplateTests`, `QSchedulerViewTests`, `QSchedulerGitRefsTests`, `QSchedulerRecoveryTests`, `QSchedulerUnmanagedNotifierTests`, `QSchedulerClusterHealthTests`) |
+| Measured code | `qscheduler_core.py`, `qscheduler_deploy.py`, `qscheduler_machines.py`, `qscheduler_recovery.py`, `qscheduler_cluster_health.py` |
 | Tool | coverage.py 7.6.1, line + branch coverage, Python 3.12 |
-| Source fingerprint | `83ab52416071` (measured files + feature data) |
+| Source fingerprint | `82dd4419ad1e` (measured files + feature data) |
 
 ## Summary
 
@@ -22,9 +22,10 @@ Share of executable lines (statements) run by the tests.
 |---|---:|---:|---:|---:|
 | `qscheduler_core.py` (Docker/SSH runners, targets, HEAppE and git helpers) | 754 | 384 | 370 | **50.9%** |
 | `qscheduler_deploy.py` (QScheduler page, instances, assignments) | 726 | 416 | 310 | **57.3%** |
-| `qscheduler_machines.py` (Clusters page: add/remove machine) | 316 | 213 | 103 | **67.4%** |
+| `qscheduler_machines.py` (Clusters page: add/remove machine) | 316 | 214 | 102 | **67.7%** |
 | `qscheduler_recovery.py` (missing instances: archive, cascade deletion, restore) | 459 | 361 | 98 | **78.6%** |
-| **Total** | **2255** | **1374** | **881** | **60.9%** |
+| `qscheduler_cluster_health.py` (cluster detail: QScheduler panel) | 212 | 192 | 20 | **90.6%** |
+| **Total** | **2467** | **1567** | **900** | **63.5%** |
 
 ### Branch coverage
 
@@ -35,9 +36,10 @@ direction was taken.
 |---|---:|---:|---:|---:|
 | `qscheduler_core.py` | 250 | 93 | 18 | **37.2%** |
 | `qscheduler_deploy.py` | 361 | 207 | 50 | **57.3%** |
-| `qscheduler_machines.py` | 152 | 84 | 34 | **55.3%** |
+| `qscheduler_machines.py` | 152 | 85 | 33 | **55.9%** |
 | `qscheduler_recovery.py` | 249 | 176 | 47 | **70.7%** |
-| **Total** | **1012** | **560** | **149** | **55.3%** |
+| `qscheduler_cluster_health.py` | 96 | 77 | 19 | **80.2%** |
+| **Total** | **1108** | **638** | **167** | **57.6%** |
 
 ### Combined coverage
 
@@ -48,12 +50,13 @@ pure line nor pure branch coverage.
 |---|---:|
 | `qscheduler_core.py` | **47.5%** |
 | `qscheduler_deploy.py` | **57.3%** |
-| `qscheduler_machines.py` | **63.5%** |
+| `qscheduler_machines.py` | **63.9%** |
 | `qscheduler_recovery.py` | **75.8%** |
-| **Total** | **59.2%** |
+| `qscheduler_cluster_health.py` | **87.3%** |
+| **Total** | **61.7%** |
 
-Compared with the previous report: line coverage 60.1% → 60.9%, branch coverage
-54.2% → 55.3%, combined 58.3% → 59.2%.
+Compared with the previous report: line coverage 60.9% → 63.5%, branch coverage
+55.3% → 57.6%, combined 59.2% → 61.7%.
 
 All tests run without Docker, SSH, git, GitHub/GitLab, a QScheduler or a HEAppE server: those are replaced by mocks.
 The tests therefore cover **decision logic** (validation, what is sent to QScheduler and HEAppE, blocking rules,
@@ -114,13 +117,16 @@ Each cluster has its own notifier `<HEAppE identifier>.<machine>` with its own t
 | Add machine – validation | ✅ | 81.5% / 78.9% | Defaults; QScheduler instance required; IQM URL, device, token and poll interval with unit required; existing-machine mode skips backend validation; no project → no project name. | Integer range errors (queue size, allocation). | `machines:parse_machine_options` |
 | QScheduler CLI arguments | ✅ | 81.8% / 66.7% | `machine add` option order (options before backend), `--limit-check-interval`, IQM `--poll-interval`; `notifier add <name> --url --token`; `notifier list` parsing (table and "No notifiers registered."). | `machine remove [--force]` arguments. | `core:machine_args`, `core:machine_remove_args`, `core:notifier_add_args`, `core:parse_notifier_list` |
 | Add machine | 🟡 | 66.4% / 52.1% | New machine: refused when it already exists (points to *Use existing machine*), otherwise `machine add` + `notifier add`, one restart, cluster with the notifier and its token in Vault. Existing (shared) machine: only `notifier add`, cluster with `MasterNodeName` = QScheduler host and `EnableCallback=true`, no project when not requested. Without notifications: no command, no restart, `EnableCallback=false`. | CLI failure, REST verification of the machine, project/allocation/credential creation, machine missing from the instance list. | `machines:add_machine_worker`, `machines:_create_cluster`, `machines:_register_cluster_resources`, `machines:_assignment_for`, `core:machine_definition` |
-| Remove machine | 🟡 | 54.9% / 37.5% | Cluster deleted, its notifier removed, one restart, machine kept in QScheduler. | *Also remove the machine* (`machine remove`, `--force`), refused removal keeping the cluster, the remove API. | `machines:remove_machine_worker`, `machines:_instance_of_cluster`, `machines:qscheduler_machine_remove_api` |
+| Remove machine | 🟡 | 56.3% / 40.0% | Cluster deleted, its notifier removed, one restart, machine kept in QScheduler. | *Also remove the machine* (`machine remove`, `--force`), refused removal keeping the cluster, the remove API. | `machines:remove_machine_worker`, `machines:_instance_of_cluster`, `machines:qscheduler_machine_remove_api` |
 | Machine dialog data | 🟡 | 37.9% / 9.1% | Lists the instances assigned to the current HEAppE; reports a HEAppE API error. | Cluster list for removal, `qscheduler_machine_list_api`. | `machines:qscheduler_machine_defaults_api`, `machines:qscheduler_machine_list_api` |
 
 ### Cluster detail of a QScheduler cluster
 
 | Feature | Status | Coverage | What the tests verify | Not tested | Code |
 |---|---|---:|---|---|---|
+| QScheduler panel: status | ✅ | 88.2% / 80.0% | Attached instance, assignment and machine; healthy notifier; wrong notifier name, missing token, notifier not registered or with another callback URL; notifications off with callbacks on (and correctly off); endpoint of no registered instance; HEAppE not assigned; missing machine with the list of existing ones; the status API. The panel is rendered only for existing QScheduler clusters. | JavaScript of the panel and the recover dialog. | `health:cluster_status`, `health:_identifier`, `health:_qs_cluster`, `health:_connect`, `health:qscheduler_cluster_status_api` |
+| QScheduler panel: recreate notifier | ✅ | 88.5% / 72.7% | New notifier with a new token, the cluster's old notifier removed (kept when another cluster uses it), one restart, cluster updated with the token; notifications off: notifier removed and callbacks disabled; API refused before HEAppE 6.6.0. | Assignment without callback URL. | `health:recreate_notifier_worker`, `health:_notifier_change`, `health:_other_users`, `health:_context`, `health:qscheduler_cluster_recreate_notifier_api`, `health:_version_error` |
+| QScheduler panel: recover machine | ✅ | 91.2% / 81.6% | New machine registered under the cluster's machine name with its definition stored and a notifier, one restart; switch to an existing machine updates the queue (name, queue group kept) and moves the notifier; refused when another cluster uses the machine, the machine does not exist, a new machine already exists, the IQM token is missing, or the instance is archived; API validation. | Machines that cannot be listed. | `health:recover_machine_worker`, `health:parse_recover_options`, `health:_set_queue`, `health:qscheduler_cluster_recover_machine_api` |
 | Badge and notifier fields | ✅ | by hand: template (`cluster_detail.html`) | QScheduler clusters show the *QScheduler cluster* badge and the `QSchedulerNotifier` / `QSchedulerNotifyToken` fields in *Webhook & Callback Notifications*; other clusters hide the badge. | JavaScript serialization of the fields, the notifier URL hint. | – |
 
 ### Instances removed without HEAppE Management
@@ -202,4 +208,4 @@ python manage.py qscheduler_coverage --check    # fail if this report is out of 
 The command finds all `QScheduler*` test classes in `heappe_ui/tests.py`, runs them under coverage.py and fails when
 a test fails or a feature refers to code that no longer exists.
 
-<!-- qscheduler-coverage-state {"previous": {"branch": 54.2, "combined": 58.3, "line": 60.1}, "totals": {"branch": 55.3, "combined": 59.2, "line": 60.9}} -->
+<!-- qscheduler-coverage-state {"previous": {"branch": 55.3, "combined": 59.2, "line": 60.9}, "totals": {"branch": 57.6, "combined": 61.7, "line": 63.5}} -->

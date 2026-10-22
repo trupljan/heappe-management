@@ -29,12 +29,14 @@ core = "heappe_ui/view/qscheduler_core.py"
 deploy = "heappe_ui/view/qscheduler_deploy.py"
 machines = "heappe_ui/view/qscheduler_machines.py"
 recovery = "heappe_ui/view/qscheduler_recovery.py"
+health = "heappe_ui/view/qscheduler_cluster_health.py"
 
 [file_descriptions]
 core = "Docker/SSH runners, targets, HEAppE and git helpers"
 deploy = "QScheduler page, instances, assignments"
 machines = "Clusters page: add/remove machine"
 recovery = "missing instances: archive, cascade deletion, restore"
+health = "cluster detail: QScheduler panel"
 
 [tests]
 module = "heappe_ui.tests"
@@ -254,6 +256,27 @@ not_tested = "Cluster list for removal, `qscheduler_machine_list_api`."
 
 [[sections]]
 title = "Cluster detail of a QScheduler cluster"
+
+[[sections.features]]
+name = "QScheduler panel: status"
+code = ["health:cluster_status", "health:_identifier", "health:_qs_cluster", "health:_connect",
+        "health:qscheduler_cluster_status_api"]
+verified = "Attached instance, assignment and machine; healthy notifier; wrong notifier name, missing token, notifier not registered or with another callback URL; notifications off with callbacks on (and correctly off); endpoint of no registered instance; HEAppE not assigned; missing machine with the list of existing ones; the status API. The panel is rendered only for existing QScheduler clusters."
+not_tested = "JavaScript of the panel and the recover dialog."
+
+[[sections.features]]
+name = "QScheduler panel: recreate notifier"
+code = ["health:recreate_notifier_worker", "health:_notifier_change", "health:_other_users", "health:_context",
+        "health:qscheduler_cluster_recreate_notifier_api", "health:_version_error"]
+verified = "New notifier with a new token, the cluster's old notifier removed (kept when another cluster uses it), one restart, cluster updated with the token; notifications off: notifier removed and callbacks disabled; API refused before HEAppE 6.6.0."
+not_tested = "Assignment without callback URL."
+
+[[sections.features]]
+name = "QScheduler panel: recover machine"
+code = ["health:recover_machine_worker", "health:parse_recover_options", "health:_set_queue",
+        "health:qscheduler_cluster_recover_machine_api"]
+verified = "New machine registered under the cluster's machine name with its definition stored and a notifier, one restart; switch to an existing machine updates the queue (name, queue group kept) and moves the notifier; refused when another cluster uses the machine, the machine does not exist, a new machine already exists, the IQM token is missing, or the instance is archived; API validation."
+not_tested = "Machines that cannot be listed."
 
 [[sections.features]]
 name = "Badge and notifier fields"
