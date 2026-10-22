@@ -269,7 +269,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const sel = addForm.qscheduler_id;
         sel.innerHTML = '';
         instancesById = {};
-        (d.instances || []).forEach(i => {
+        (d.instances || []).filter(i => !i.archived).forEach(i => {
             instancesById[i.id] = i;
             const o = document.createElement('option');
             o.value = i.id;
@@ -297,8 +297,9 @@ document.addEventListener('DOMContentLoaded', function () {
         (d.clusters || []).forEach(c => {
             const o = document.createElement('option');
             o.value = c.id;
-            o.textContent = c.name + ' (machine ' + c.machine + ' @ ' + c.qscheduler + ')';
-            o.dataset.registered = c.qscheduler_id ? '1' : '';
+            o.textContent = c.name + ' (machine ' + c.machine + ' @ ' + c.qscheduler + (c.qscheduler_archived ? ', archived' : '') + ')';
+            o.dataset.registered = c.qscheduler_id && !c.qscheduler_archived ? '1' : '';
+            o.dataset.archived = c.qscheduler_archived ? '1' : '';
             o.dataset.kind = c.qscheduler_kind || '';
             sel.appendChild(o);
         });
@@ -319,8 +320,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!registered) rmForm.remove_from_qscheduler.checked = false;
         rmForm.force.disabled = !rmForm.remove_from_qscheduler.checked;
         if (rmForm.force.disabled) rmForm.force.checked = false;
-        document.getElementById('qs-rm-cluster-info').textContent = opt && !registered
-            ? 'Its QScheduler instance is not registered in HEAppE Management: only the HEAppE cluster can be deleted.' : '';
+        document.getElementById('qs-rm-cluster-info').textContent = opt && opt.dataset.archived
+            ? 'Its QScheduler instance is archived (the service is gone): only the HEAppE cluster is deleted, QScheduler is not contacted.'
+            : (opt && !registered ? 'Its QScheduler instance is not registered in HEAppE Management: only the HEAppE cluster can be deleted.' : '');
     }
     rmForm.cluster_id.addEventListener('change', toggleRemove);
     rmForm.remove_from_qscheduler.addEventListener('change', toggleRemove);

@@ -35,6 +35,7 @@ from .qscheduler_core import (DockerCli, DockerTarget, ContainerShellTarget, Ssh
                               NAME_RE, HOST_RE, GIT_REF_RE, IMAGE_RE)
 
 DOCKER_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL, Q.KIND_SSH_HOST)
+ARCHIVED_MESSAGE = "QScheduler instance '{name}' is archived: restore it or delete it with its clusters."
 LOCAL_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL)
 
 
@@ -304,14 +305,15 @@ def _build_or_check_image(docker, source, repo, ref, image, rebuild, log):
         raise RuntimeError(f"Image '{image}' is not available on the Docker host{docker.where}.")
 
 
-def deploy_worker(log, result, opts):
-    docker = DockerCli()
+def deploy_service(docker, opts, log):
+    """
+    Build/check the image, create the database (db_mode 'new') or use an existing one (db_mode 'existing':
+    database_url + optional db_network) and start the QScheduler service container. On failure the created
+    resources are listed for cleanup. Returns {'database_url', 'version'}.
+    """
     name = opts['name']
     pg_name, db_net, volume = f"{name}-pgsql", f"{name}_db_net", f"{name}-pgdata"
     created = []
-    result.update({'name': name, 'port': opts['port']})
-    log(f"=== QSCHEDULER: DEPLOY INSTANCE '{name}' ({opts['source']}: "
-        f"{opts['repo'] + '#' + opts['ref'] if opts['source'] == 'git' else opts['image']}) ===")
     try:
         _build_or_check_image(docker, opts['source'], opts['repo'], opts['ref'], opts['image'], opts['rebuild_image'], log)
 
@@ -322,14 +324,7 @@ def deploy_worker(log, result, opts):
             created.append(("network", db_net))
             docker.run(["volume", "create", "--label", f"{LABEL_INSTANCE}={name}", volume], log)
             created.append(("volume", volume))
-            docker.run(["run", "-d", "--name", pg_name, "--restart", "unless-stopped",
-                        "--network", db_net, "--network-alias", pg_name, "--shm-size", "128m",
-                        "--label", f"com.docker.compose.project={name}",
-                        "--label", "com.docker.compose.service=qscheduler-db",
-                        "--label", f"{LABEL_INSTANCE}={name}",
-                        "-e", "POSTGRES_USER=qscheduler", "-e", f"POSTGRES_PASSWORD={db_password}",
-                        "-e", "POSTGRES_DB=qscheduler", "-v", f"{volume}:/var/lib/postgresql/data",
-                        DEFAULT_POSTGRES_IMAGE], log)
+            docker.run(postgres_run_args(name, db_password), log)
             created.append(("container", pg_name))
             _wait_for_postgres(docker, pg_name, log)
             database_url = f"postgres://qscheduler:{db_password}@{pg_name}:5432/qscheduler"
@@ -358,7 +353,7 @@ def deploy_worker(log, result, opts):
         docker.run(["start", name], log)
         target = DockerTarget(docker, name, opts['port'])
         target.wait_healthy(log)
-        result['version'] = target.version()
+        return {'database_url': database_url, 'version': target.version()}
     except Exception:
         if created:
             order = {'container': 0, 'volume': 1, 'network': 2}
@@ -367,9 +362,34 @@ def deploy_worker(log, result, opts):
             log("Resources created before the failure (left in place for inspection). To remove them:\n" + cmds)
         raise
 
+
+def postgres_run_args(name, db_password):
+    """docker run arguments of the PostgreSQL container of a managed instance (volume <name>-pgdata)."""
+    pg_name, db_net, volume = f"{name}-pgsql", f"{name}_db_net", f"{name}-pgdata"
+    return ["run", "-d", "--name", pg_name, "--restart", "unless-stopped",
+            "--network", db_net, "--network-alias", pg_name, "--shm-size", "128m",
+            "--label", f"com.docker.compose.project={name}",
+            "--label", "com.docker.compose.service=qscheduler-db",
+            "--label", f"{LABEL_INSTANCE}={name}",
+            "-e", "POSTGRES_USER=qscheduler", "-e", f"POSTGRES_PASSWORD={db_password}",
+            "-e", "POSTGRES_DB=qscheduler", "-v", f"{volume}:/var/lib/postgresql/data",
+            DEFAULT_POSTGRES_IMAGE]
+
+
+def deploy_worker(log, result, opts):
+    docker = DockerCli()
+    name = opts['name']
+    result.update({'name': name, 'port': opts['port']})
+    log(f"=== QSCHEDULER: DEPLOY INSTANCE '{name}' ({opts['source']}: "
+        f"{opts['repo'] + '#' + opts['ref'] if opts['source'] == 'git' else opts['image']}) ===")
+    info = deploy_service(docker, opts, log)
+    result['version'] = info['version']
+
+    # database_url is kept so that a restore can reuse the database after the container was removed manually
     inst = Q.objects.create(name=name, kind=Q.KIND_MANAGED, container_name=name, service_host=name, port=opts['port'],
                             source=opts['source'], repo=opts['repo'] if opts['source'] == 'git' else "",
-                            ref=opts['ref'] if opts['source'] == 'git' else "", image=opts['image'])
+                            ref=opts['ref'] if opts['source'] == 'git' else "", image=opts['image'],
+                            database_url=info['database_url'])
     result['id'] = inst.id
     log(f"SUCCESS: QScheduler instance '{name}' is running ({result.get('version') or 'version unknown'}).")
     if opts['assign_heappe_id']:
@@ -696,6 +716,51 @@ def unassign_worker(log, result, asg_id, force):
     log(f"SUCCESS: HEAppE '{cred.instance_name}' unassigned from '{inst.name}'.")
 
 
+def managed_notifier(inst, name):
+    """True when a notifier belongs to an assignment of `inst` (named "<HEAppE identifier>.<machine>")."""
+    return any(name.startswith(a.heappe_identifier + ".") for a in inst.assignments.exclude(heappe_identifier=""))
+
+
+def remove_notifier_worker(log, result, inst_id, name):
+    """
+    Remove an unmanaged notifier (e.g. a leftover of the old one-notifier-per-HEAppE scheme). Refused when it is
+    managed, when a cluster of an assigned HEAppE still uses it, or when an assigned HEAppE cannot be checked.
+    """
+    from .clusters import connect_heappe_management_api
+
+    inst = Q.objects.get(pk=inst_id)
+    result.update({'name': inst.name, 'notifier': name})
+    log(f"=== QSCHEDULER: REMOVE UNMANAGED NOTIFIER '{name}' from '{inst.name}' ===")
+    if managed_notifier(inst, name):
+        raise RuntimeError(f"Notifier '{name}' belongs to a cluster of an assigned HEAppE instance; it is removed with "
+                           f"the cluster (Clusters > QScheduler > Remove quantum machine) or by editing the assignment.")
+    # Clusters of all assigned HEAppE instances must not use it (callbacks would stop; HEAppE does not poll them)
+    users = []
+    for asg in inst.assignments.select_related("heappe_instance"):
+        cname = asg.heappe_instance.instance_name
+        try:
+            controller, session_code, _ = connect_heappe_management_api(cname, log)
+            clusters = core.qscheduler_clusters(controller, session_code, inst)
+        except Exception as e:
+            raise RuntimeError(f"Cannot check the clusters of HEAppE '{cname}' ({str(e).splitlines()[0][:200]}); the "
+                               f"notifier is not removed.")
+        users += [f"{cname}: {c.get('name')} (ID {c.get('id')})" for c in clusters if core.cluster_notifier(c) == name]
+    if users:
+        raise RuntimeError(f"Notifier '{name}' is still used by HEAppE cluster(s) {', '.join(users)}; not removed. "
+                           f"Edit the assignment and tick 'Generate new tokens' to move them to their own notifiers.")
+    log(f"No cluster of the {inst.assignments.count()} assigned HEAppE instance(s) uses '{name}'.")
+    target = core.target_for(inst)
+    try:
+        current = {n['name']: n for n in target.list_notifiers(log)}
+        if name not in current:
+            raise RuntimeError(f"Notifier '{name}' is not registered in '{inst.name}' (already removed?).")
+        core.replace_notifiers(target, {}, {name}, current, log)
+        result['restarted'] = core.apply_cli_change(inst, target, log)
+    finally:
+        target.close()
+    log(f"SUCCESS: notifier '{name}' removed from '{inst.name}'.")
+
+
 # ---------------------------------------------------------------------------
 # Views
 # ---------------------------------------------------------------------------
@@ -733,6 +798,9 @@ def instance_summary(inst):
         'source': inst.source, 'repo': inst.repo, 'ref': inst.ref, 'image': inst.image,
         'restart_pending': inst.restart_pending, 'can_update': inst.kind in DOCKER_KINDS,
         'manual_restart': inst.kind == Q.KIND_SSH_CONTAINER and not inst.restart_command,
+        'archived': inst.is_archived,
+        'archived_at': inst.archived_at.strftime("%Y-%m-%d %H:%M UTC") if inst.archived_at else "",
+        'archived_reason': inst.archived_reason,
         'assignments': [{
             'id': a.id, 'heappe_instance_id': a.heappe_instance_id, 'heappe_instance': a.heappe_instance.instance_name,
             'notifications_enabled': a.notifications_enabled, 'heappe_identifier': a.heappe_identifier,
@@ -782,13 +850,19 @@ def qscheduler_git_refs_api(request: HttpRequest) -> HttpResponse:
 
 @login_required
 def qscheduler_live_api(request: HttpRequest, inst_id: int) -> HttpResponse:
-    """Health, version, notifiers and machines of one instance (slow for SSH instances: loaded lazily)."""
+    """
+    Health, version, notifiers and machines of one instance (slow for SSH instances: loaded lazily), and its
+    presence: 'missing' / 'unreachable' when the service is gone (e.g. removed without HEAppE Management).
+    """
     try:
         inst = Q.objects.get(pk=inst_id)
     except Q.DoesNotExist:
         return _error("QScheduler instance not found.", 404)
     out = {'status': 'success', 'id': inst.id, 'health': None, 'version': None, 'notifiers': None, 'machines': None,
-           'error': None}
+           'error': None, 'archived': inst.is_archived, 'presence': None, 'presence_detail': ""}
+    if inst.is_archived:
+        out['presence'], out['presence_detail'] = core.presence(inst)
+        return JsonResponse(out)
     target = None
     try:
         target = core.target_for(inst)
@@ -798,7 +872,7 @@ def qscheduler_live_api(request: HttpRequest, inst_id: int) -> HttpResponse:
         try:
             notifiers = target.list_notifiers()
             prefixes = {a.heappe_identifier + "." for a in inst.assignments.exclude(heappe_identifier="")}
-            out['notifiers'] = [dict(n, managed=any(n['name'].startswith(p) for p in prefixes)) for n in notifiers]
+            out['notifiers'] = [dict(n, managed=any(n['name'].startswith(p) for p in prefixes)) for n in notifiers]   # see managed_notifier()
         except Exception as e:
             out['error'] = str(e).splitlines()[0]
         out['machines'] = target.list_machines()
@@ -807,6 +881,13 @@ def qscheduler_live_api(request: HttpRequest, inst_id: int) -> HttpResponse:
     finally:
         if target:
             target.close()
+    if out['health'] == 200:
+        out['presence'] = core.PRESENT
+    else:
+        out['presence'], out['presence_detail'] = core.presence(inst)
+    # The container exists but QScheduler does not answer (stopped, crashed, hanging): a restart may fix it
+    # ("docker restart" also starts a stopped container; SSH into container: restart command or manual restart).
+    out['restartable'] = out['health'] != 200 and out['presence'] == core.PRESENT
     return JsonResponse(out)
 
 
@@ -882,6 +963,8 @@ def qscheduler_update_api(request: HttpRequest, inst_id: int) -> HttpResponse:
     inst = _instance_or_404(inst_id)
     if not inst:
         return _error("QScheduler instance not found.", 404)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
     if inst.kind not in DOCKER_KINDS:
         return _error("Update is not available for instances reached over SSH into the container.")
     opts, errors = parse_update_options(_json_body(request))
@@ -896,6 +979,8 @@ def qscheduler_restart_api(request: HttpRequest, inst_id: int) -> HttpResponse:
     inst = _instance_or_404(inst_id)
     if not inst:
         return _error("QScheduler instance not found.", 404)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
     return _started(*core.start_operation("restart", restart_worker, inst.id))
 
 
@@ -905,6 +990,8 @@ def qscheduler_undeploy_api(request: HttpRequest, inst_id: int) -> HttpResponse:
     inst = _instance_or_404(inst_id)
     if not inst:
         return _error("QScheduler instance not found.", 404)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
     assigned = list(inst.assignments.values_list("heappe_instance__instance_name", flat=True))
     if assigned:
         return _error(f"Unassign the HEAppE instances first: {', '.join(assigned)}.")
@@ -920,6 +1007,8 @@ def qscheduler_assign_api(request: HttpRequest, inst_id: int) -> HttpResponse:
     inst = _instance_or_404(inst_id)
     if not inst:
         return _error("QScheduler instance not found.", 404)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
     opts, errors = parse_assignment_options(_json_body(request))
     if errors:
         return _error(" ".join(errors))
@@ -934,10 +1023,32 @@ def qscheduler_assign_api(request: HttpRequest, inst_id: int) -> HttpResponse:
 @login_required
 @_post_only
 def qscheduler_unassign_api(request: HttpRequest, asg_id: int) -> HttpResponse:
-    if not QSchedulerAssignment.objects.filter(pk=asg_id).exists():
+    asg = QSchedulerAssignment.objects.select_related("qscheduler").filter(pk=asg_id).first()
+    if not asg:
         return _error("Assignment not found.", 404)
+    if asg.qscheduler.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=asg.qscheduler.name))
     force = _Reader(_json_body(request)).b('force')
     return _started(*core.start_operation("unassign", unassign_worker, asg_id, force))
+
+
+@login_required
+@_post_only
+def qscheduler_notifier_remove_api(request: HttpRequest, inst_id: int) -> HttpResponse:
+    inst = _instance_or_404(inst_id)
+    if not inst:
+        return _error("QScheduler instance not found.", 404)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
+    r = _Reader(_json_body(request))
+    name = r.s('name')
+    if not name or len(name) > 255 or any(ch.isspace() for ch in name):
+        return _error("Invalid notifier name.")
+    if not r.b('acknowledged'):
+        return _error("Confirm that you know what this notifier is used for.")
+    if managed_notifier(inst, name):
+        return _error(f"Notifier '{name}' is managed by an assignment and cannot be removed here.")
+    return _started(*core.start_operation("remove_notifier", remove_notifier_worker, inst.id, name))
 
 
 @login_required

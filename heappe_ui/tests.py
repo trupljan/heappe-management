@@ -6096,3 +6096,469 @@ class CoverageReportDataTests(TestCase):
         cfg = {"unmapped": {"ignore": ["core:g"]}}
         rows = qc.Command().unmapped(cfg, indexes, {("core", "f"), ("core", "D.a")})
         self.assertEqual([r["ref"] for r in rows], ["core:C", "core:D.b"])
+
+
+class QSchedulerRecoveryTests(TestCase):
+    """QScheduler service removed without HEAppE Management: presence, archive, cascade deletion, restore."""
+
+    def setUp(self):
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance, QSchedulerAssignment
+        self.cred = InstanceCredentials.objects.create(instance_name="dev", heappe_host="h", heappe_login="u",
+                                                       heappe_password="p", heappe_port="5000")
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300, source="git",
+                                                      repo="https://github.com/It4innovations/qscheduler.git", ref="main",
+                                                      image="qscheduler:latest")
+        self.asg = QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred,
+                                                       heappe_identifier="heappe-dev", notifications_enabled=True,
+                                                       callback_url="http://h/cb")
+        self.log = lambda *_: None
+
+    @staticmethod
+    def _cluster(cid, machine, project=None, group=None, token=True):
+        cfg = {"QSchedulerHost": "qs-1", "QSchedulerPort": "4300", "EnableCallback": "true",
+               "QSchedulerNotifier": f"heappe-dev.{machine}"}
+        if token:
+            cfg["QSchedulerNotifyToken"] = "********"
+        nt = {"queue": machine, "projects": [project] if project else [],
+              "cluster_node_type_aggregation": group}
+        return {"id": cid, "name": machine, "scheduler_type": 32, "master_node_name": "qs-1", "port": 4300,
+                "node_types": [nt], "custom_configuration": cfg,
+                "custom_configuration_vault_toggles": {"QSchedulerNotifyToken": True}, "file_transfer_method_ids": [cid * 10]}
+
+    def _heappe(self, clusters, all_clusters=None):
+        controller = mock.Mock()
+        controller.heappe_management_clusters_get.return_value = all_clusters if all_clusters is not None else clusters
+        controller.heappe_management_project_cluster_node_type_aggregations_get.return_value = []
+        controller.heappe_management_cluster_node_type_aggregation_accountings_get.return_value = []
+        return controller
+
+    # ---- presence ----
+
+    def test_presence(self):
+        from heappe_ui.view import qscheduler_core as core
+        with mock.patch.object(core.DockerCli, "inspect", return_value=None):
+            self.assertEqual(core.presence(self.inst)[0], core.MISSING)
+        with mock.patch.object(core.DockerCli, "inspect", return_value={"State": {"Status": "exited"}}):
+            self.assertEqual(core.presence(self.inst), (core.PRESENT, "container 'qs-1' is exited"))
+        with mock.patch.object(core.DockerCli, "inspect", side_effect=RuntimeError("Docker CLI not found")):
+            self.assertEqual(core.presence(self.inst), (core.UNREACHABLE, "Docker CLI not found"))
+        self.inst.kind, self.inst.ssh_host = "ssh_container", "vm"
+        session = mock.Mock()
+        with mock.patch.object(core, "ssh_session_for", return_value=session):
+            self.assertEqual(core.presence(self.inst)[0], core.PRESENT)          # SSH login into the container works
+            session.connect.side_effect = RuntimeError("SSH connection to vm:22 failed")
+            self.assertEqual(core.presence(self.inst)[0], core.UNREACHABLE)      # down and removed look the same
+        session.close.assert_called()
+
+    def test_live_marks_existing_but_not_responding_as_restartable(self):
+        from heappe_ui.view import qscheduler_core as core
+        self.client.force_login(User.objects.create_user(username="rec_admin5", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        target = mock.Mock()
+        target.health.return_value = None
+        target.list_notifiers.side_effect = RuntimeError("container is not running")
+        target.list_machines.return_value = None
+        target.version.return_value = "0.3.0"
+        with mock.patch.object(core, "target_for", return_value=target):
+            with mock.patch.object(core, "presence", return_value=(core.PRESENT, "container 'qs-1' is exited")):
+                d = self.client.get(f"/qscheduler/{self.inst.id}/live/").json()
+            self.assertEqual((d["presence"], d["restartable"]), ("present", True))
+            with mock.patch.object(core, "presence", return_value=(core.MISSING, "gone")):
+                self.assertFalse(self.client.get(f"/qscheduler/{self.inst.id}/live/").json()["restartable"])
+            target.health.return_value = 200
+            self.assertFalse(self.client.get(f"/qscheduler/{self.inst.id}/live/").json()["restartable"])
+        with mock.patch("heappe_ui.view.qscheduler_deploy.import_legacy_instances"):
+            html = self.client.get("/qscheduler/").content.decode()
+        self.assertIn("qs-try-restart-btn", html)
+        self.assertIn("Try restart", html)
+
+    # ---- archive ----
+
+    def test_archive_refuses_running_and_archives_missing(self):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_recovery import archive_instance, unarchive_instance
+        with mock.patch.object(core, "presence", return_value=(core.PRESENT, "")):
+            with self.assertRaisesRegex(RuntimeError, "running"):
+                archive_instance(self.inst, "x")
+        with mock.patch.object(core, "presence", return_value=(core.MISSING, "container 'qs-1' not found")):
+            archive_instance(self.inst, "")
+            with self.assertRaisesRegex(RuntimeError, "still not available"):
+                unarchive_instance(self.inst)
+        self.inst.refresh_from_db()
+        self.assertTrue(self.inst.is_archived)
+        self.assertEqual(self.inst.archived_reason, "container 'qs-1' not found")
+        self.assertTrue(self.inst.assignments.exists())                      # assignments kept
+        with mock.patch.object(core, "presence", return_value=(core.PRESENT, "")):
+            unarchive_instance(self.inst)
+        self.inst.refresh_from_db()
+        self.assertFalse(self.inst.is_archived)
+
+    def test_archive_and_unarchive_api(self):
+        from heappe_ui.view import qscheduler_core as core
+        self.client.force_login(User.objects.create_user(username="rec_admin4", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        post = lambda path, data=None: self.client.post(path, data=json.dumps(data or {}), content_type="application/json")
+        with mock.patch.object(core, "presence", return_value=(core.MISSING, "gone")):
+            self.assertEqual(post(f"/qscheduler/{self.inst.id}/archive/", {"reason": "removed by hand"}).status_code, 200)
+            self.assertEqual(post(f"/qscheduler/{self.inst.id}/archive/").status_code, 400)     # already archived
+            self.assertEqual(post(f"/qscheduler/{self.inst.id}/unarchive/").status_code, 400)   # still gone
+        self.inst.refresh_from_db()
+        self.assertEqual(self.inst.archived_reason, "removed by hand")
+        with mock.patch.object(core, "presence", return_value=(core.PRESENT, "")):
+            self.assertEqual(post(f"/qscheduler/{self.inst.id}/unarchive/").status_code, 200)
+        self.inst.refresh_from_db()
+        self.assertFalse(self.inst.is_archived)
+
+    def test_archived_instance_is_not_managed(self):
+        from datetime import datetime, timezone
+        from heappe_ui.view.qscheduler_machines import add_machine_worker, remove_machine_worker, parse_machine_options
+        from heappe_ui.view import qscheduler_core as core
+        self.inst.archived_at = datetime.now(timezone.utc)
+        self.inst.save()
+        opts, _ = parse_machine_options({"qscheduler_id": str(self.inst.id), "create_project": False}, "x")
+        with self.assertRaisesRegex(RuntimeError, "archived"):
+            add_machine_worker(self.log, {}, "dev", opts, "x")
+        controller = self._heappe([])
+        controller.heappe_management_cluster_get.return_value = dict(self._cluster(5, "Sim"), scheduler_type=32,
+                                                                     master_node_name="qs-1", port=4300)
+        with mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(controller, "sc", None)), \
+             mock.patch.object(core, "target_for") as target_for:
+            remove_machine_worker(self.log, {}, "dev", {'cluster_id': 5, 'remove_from_qscheduler': False, 'force': False})
+            with self.assertRaisesRegex(RuntimeError, "archived"):
+                remove_machine_worker(self.log, {}, "dev", {'cluster_id': 5, 'remove_from_qscheduler': True, 'force': False})
+        target_for.assert_not_called()                                        # QScheduler is never contacted
+        controller.heappe_management_cluster_delete.assert_called_once()
+
+    def test_views_refuse_archived_and_live_reports_presence(self):
+        from datetime import datetime, timezone
+        from heappe_ui.view import qscheduler_core as core
+        self.client.force_login(User.objects.create_user(username="rec_admin", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        self.inst.archived_at = datetime.now(timezone.utc)
+        self.inst.save()
+        for path in (f"/qscheduler/{self.inst.id}/restart/", f"/qscheduler/{self.inst.id}/undeploy/",
+                     f"/qscheduler/{self.inst.id}/assign/", f"/qscheduler/assignment/{self.asg.id}/unassign/"):
+            response = self.client.post(path, data="{}", content_type="application/json")
+            self.assertEqual(response.status_code, 400, path)
+            self.assertIn("archived", response.json()["message"])
+        with mock.patch.object(core, "presence", return_value=(core.PRESENT, "")):
+            d = self.client.get(f"/qscheduler/{self.inst.id}/live/").json()
+        self.assertEqual((d["archived"], d["presence"]), (True, "present"))
+
+    # ---- cascade deletion ----
+
+    def test_cluster_dependents_only_exclusive(self):
+        from heappe_ui.view.qscheduler_recovery import cluster_dependents
+        p1, p2 = {"id": 1, "name": "own"}, {"id": 2, "name": "shared"}
+        g1, g2 = {"id": 7, "name": "QPU own"}, {"id": 8, "name": "QPU shared"}
+        mine = [self._cluster(5, "Sim", p1, g1), self._cluster(6, "VLQ", p2, g2)]
+        other = {"id": 9, "name": "slurm", "node_types": [{"projects": [p2], "cluster_node_type_aggregation": g2}]}
+        projects, groups = cluster_dependents(mine, mine + [other])
+        self.assertEqual((projects, groups), ({1: "own"}, {7: "QPU own"}))
+
+    def _cascade(self, controller, opts=None, connect_error=None):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_recovery import cascade_delete_worker, parse_cascade_options
+        options, _ = parse_cascade_options(dict({"confirm_name": "qs-1"}, **(opts or {})))
+        docker = mock.Mock()
+        docker.exists.return_value = True
+        docker.json.return_value = [{}]
+        connect = (mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", side_effect=connect_error)
+                   if connect_error else
+                   mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(controller, "sc", None)))
+        result = {}
+        with connect, mock.patch.object(core, "presence", return_value=(core.MISSING, "gone")), \
+             mock.patch("heappe_ui.view.qscheduler_recovery.DockerCli", return_value=docker), \
+             mock.patch.object(core, "update_cluster_notifications") as upd:
+            cascade_delete_worker(self.log, result, self.inst.id, options)
+        return result, docker, upd
+
+    def test_cascade_deletes_clusters_and_selected_entities(self):
+        from heappe_ui.models import QSchedulerInstance
+        p1, g1 = {"id": 1, "name": "qs-abc"}, {"id": 7, "name": "QPU Group abc"}
+        clusters = [self._cluster(5, "Sim", p1, g1)]
+        controller = self._heappe(clusters)
+        controller.heappe_management_cluster_node_type_aggregation_accountings_get.return_value = [
+            {"cluster_node_type_aggregation_id": 7, "accounting_id": 70}]
+        controller.heappe_management_project_cluster_node_type_aggregations_get.return_value = [
+            {"cluster_node_type_aggregation_id": 7, "project_id": 1}]
+        result, docker, upd = self._cascade(controller, {"delete_projects": True, "delete_queue_groups": True,
+                                                          "remove_db_volume": True})
+        self.assertEqual(upd.call_args.args[3], None)                         # token removed from Vault first
+        controller.heappe_management_cluster_delete.assert_called_once_with(body={"Id": 5, "SessionCode": "sc"})
+        controller.heappe_management_project_delete.assert_called_once_with(body={"Id": 1, "SessionCode": "sc"})
+        controller.heappe_management_accounting_delete.assert_called_once_with(body={"Id": 70, "SessionCode": "sc"})
+        controller.heappe_management_cluster_node_type_aggregation_delete.assert_called_once_with(body={"Id": 7, "SessionCode": "sc"})
+        commands = [c.args[0] for c in docker.run.call_args_list]
+        self.assertIn(["rm", "-f", "qs-1-pgsql"], commands)
+        self.assertIn(["volume", "rm", "qs-1-pgdata"], commands)
+        self.assertFalse(QSchedulerInstance.objects.filter(pk=self.inst.pk).exists())
+        self.assertEqual(result['deleted_projects'], ["dev: qs-abc"])
+
+    def test_cascade_keeps_projects_and_volume_by_default(self):
+        controller = self._heappe([self._cluster(5, "Sim", {"id": 1, "name": "p"}, {"id": 7, "name": "g"})])
+        _, docker, _ = self._cascade(controller)
+        controller.heappe_management_project_delete.assert_not_called()
+        controller.heappe_management_cluster_node_type_aggregation_delete.assert_not_called()
+        self.assertNotIn(["volume", "rm", "qs-1-pgdata"], [c.args[0] for c in docker.run.call_args_list])
+
+    def test_cascade_without_clusters_does_not_contact_heappe(self):
+        from heappe_ui.models import QSchedulerInstance
+        self._cascade(None, {"delete_clusters": False, "delete_projects": True},
+                      connect_error=AssertionError("HEAppE must not be contacted"))
+        self.assertFalse(QSchedulerInstance.objects.filter(pk=self.inst.pk).exists())
+
+    def test_cascade_unreachable_heappe_aborts_or_is_skipped(self):
+        from heappe_ui.models import QSchedulerInstance
+        with self.assertRaisesRegex(RuntimeError, "Nothing was changed"):
+            self._cascade(None, connect_error=OSError("down"))
+        self.assertTrue(QSchedulerInstance.objects.filter(pk=self.inst.pk).exists())
+        result, _, _ = self._cascade(None, {"skip_unreachable": True}, connect_error=OSError("down"))
+        self.assertEqual(result['skipped_heappe'], ["dev"])
+        self.assertFalse(QSchedulerInstance.objects.filter(pk=self.inst.pk).exists())
+
+    def test_cascade_failure_keeps_instance(self):
+        from heappe_ui.models import QSchedulerInstance
+        controller = self._heappe([self._cluster(5, "Sim")])
+        controller.heappe_management_cluster_delete.side_effect = RuntimeError("cluster has jobs")
+        with self.assertRaisesRegex(RuntimeError, "cluster has jobs"):
+            self._cascade(controller)
+        self.assertTrue(QSchedulerInstance.objects.filter(pk=self.inst.pk).exists())
+
+    def test_cascade_api_needs_confirmation(self):
+        from heappe_ui.view import qscheduler_core as core
+        self.client.force_login(User.objects.create_user(username="rec_admin2", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        with mock.patch.object(core, "start_operation") as start:
+            response = self.client.post(f"/qscheduler/{self.inst.id}/cascade-delete/",
+                                        data=json.dumps({"confirm_name": "wrong"}), content_type="application/json")
+            self.assertEqual(response.status_code, 400)
+            start.assert_not_called()
+
+    # ---- restore ----
+
+    def test_restore_options(self):
+        from heappe_ui.view.qscheduler_recovery import parse_restore_options
+        opts, errors = parse_restore_options({}, self.inst)
+        self.assertEqual(errors, [])
+        self.assertEqual((opts['name'], opts['port'], opts['source'], opts['ref'], opts['db_mode']),
+                         ("qs-1", 4300, "git", "main", "new"))
+        _, errors = parse_restore_options({"name": "qs-2", "db_mode": "reuse"}, self.inst)
+        self.assertTrue(any("reused only" in e for e in errors))
+        opts, errors = parse_restore_options({"machines": [
+            {"name": "Sim", "backend": "test"}, {"name": "Q5", "backend": "iqm", "iqm_url": "https://iqm"},
+            {"name": "Old", "mode": "skip"}]}, self.inst)
+        self.assertTrue(any("Machine 'Q5'" in e and "token" in e for e in errors))
+        self.assertEqual(sorted(opts['machines']), ["Q5", "Sim"])
+
+    def _restore(self, opts, clusters, machines_in_db=None, cli=None):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_core import CommandResult
+        from heappe_ui.view.qscheduler_recovery import parse_restore_options, restore_worker
+        options, errors = parse_restore_options(opts, self.inst)
+        self.assertEqual(errors, [])
+        controller = self._heappe(clusters)
+        docker = mock.Mock()
+        docker.exists.return_value = False
+        docker.networks_of.return_value = []
+        target = mock.Mock()
+        target.list_machines.return_value = [{"name": m, "backend": "test"} for m in machines_in_db or []]
+        target.list_notifiers.return_value = []
+        target.cli.return_value = CommandResult(0, "ok", "")
+        if cli:
+            target.cli.side_effect = cli
+        result = {}
+        with mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(controller, "sc", None)), \
+             mock.patch.object(core, "presence", return_value=(core.MISSING, "gone")), \
+             mock.patch.object(core, "heappe_identity", return_value=("6.6.0", "heappe-dev")), \
+             mock.patch.object(core, "resolve_heappe_service_network", return_value=("dev_heappe", "dev_external")), \
+             mock.patch.object(core, "restart_heappe"), mock.patch.object(core, "check_from_heappe"), \
+             mock.patch.object(core, "find_heappe_api_container", return_value="dev_heappe"), \
+             mock.patch.object(core, "update_cluster_notifications") as upd, \
+             mock.patch.object(core, "repoint_file_transfer_methods") as ftm, \
+             mock.patch("heappe_ui.view.qscheduler_recovery.DockerCli", return_value=docker), \
+             mock.patch("heappe_ui.view.qscheduler_recovery.DockerTarget", return_value=target), \
+             mock.patch("heappe_ui.view.qscheduler_recovery.deploy_service",
+                        return_value={'database_url': "postgres://qscheduler:pw@qs-2-pgsql:5432/qscheduler",
+                                      'version': "0.3.0"}) as deploy:
+            try:
+                restore_worker(self.log, result, self.inst.id, options)
+            finally:
+                self.calls = {'upd': upd, 'ftm': ftm, 'deploy': deploy, 'target': target, 'docker': docker}
+        return result
+
+    def test_restore_new_endpoint_reassigns_clusters_with_new_tokens(self):
+        from heappe_ui.models import QSchedulerInstance, QSchedulerMachine
+        self.inst.archived_at = datetime.now()
+        self.inst.save()
+        clusters = [self._cluster(5, "Sim"), self._cluster(6, "VLQ")]
+        result = self._restore({"name": "qs-2", "port": "4400", "ref": "v0.3.0", "machines": [
+            {"name": "Sim", "backend": "test"}, {"name": "VLQ", "backend": "test", "queue_size": "8"}]}, clusters)
+        c = self.calls
+        self.assertEqual(c['deploy'].call_args.args[1]['ref'], "v0.3.0")
+        added = [x.args[0] for x in c['target'].cli.call_args_list]
+        self.assertEqual([a[:3] for a in added if a[0] == "machine"], [["machine", "add", "Sim"], ["machine", "add", "VLQ"]])
+        notifiers = {a[2]: a[a.index("--token") + 1] for a in added if a[:2] == ["notifier", "add"]}
+        self.assertEqual(sorted(notifiers), ["heappe-dev.Sim", "heappe-dev.VLQ"])
+        self.assertNotEqual(notifiers["heappe-dev.Sim"], notifiers["heappe-dev.VLQ"])
+        c['target'].restart.assert_called_once()                              # one restart for all
+        for call in c['upd'].call_args_list:
+            self.assertEqual(call.kwargs['location'], ("qs-2", 4400))
+            name, token = call.args[3]
+            self.assertEqual(notifiers[name], token)                          # cluster gets the new token
+        self.assertEqual(c['ftm'].call_count, 2)
+        inst = QSchedulerInstance.objects.get(pk=self.inst.pk)
+        self.assertEqual((inst.name, inst.service_host, inst.port, inst.ref, inst.is_archived), ("qs-2", "qs-2", 4400, "v0.3.0", False))
+        self.assertEqual(QSchedulerMachine.objects.get(qscheduler=inst, name="VLQ").options["queue_size"], 8)
+        self.assertEqual(len(result['updated_clusters']), 2)
+
+    def test_restore_same_endpoint_and_reused_machines(self):
+        clusters = [self._cluster(5, "Sim")]
+        with mock.patch("heappe_ui.view.qscheduler_recovery._prepare_reused_database",
+                        return_value=("postgres://qscheduler:pw@qs-1-pgsql:5432/qscheduler", "qs-1_db_net")):
+            self._restore({"db_mode": "reuse", "machines": [{"name": "Sim", "mode": "skip"}]}, clusters,
+                          machines_in_db=["Sim"])
+        c = self.calls
+        self.assertEqual(c['deploy'].call_args.args[1]['db_mode'], "existing")
+        self.assertFalse(any(x.args[0][0] == "machine" for x in c['target'].cli.call_args_list))
+        self.assertIsNone(c['upd'].call_args.kwargs['location'])            # same host and port
+        c['ftm'].assert_not_called()
+
+    def test_restore_without_machine_definition_changes_nothing(self):
+        from heappe_ui.models import QSchedulerInstance
+        with self.assertRaisesRegex(RuntimeError, "Define the backend of machine.*Sim"):
+            self._restore({}, [self._cluster(5, "Sim")])
+        self.calls['deploy'].assert_not_called()
+        self.assertEqual(QSchedulerInstance.objects.get(pk=self.inst.pk).name, "qs-1")
+
+    def test_restore_reports_failed_machine(self):
+        from heappe_ui.view.qscheduler_core import CommandResult
+        clusters = [self._cluster(5, "Sim"), self._cluster(6, "VLQ")]
+        cli = lambda args, log, check=True, timeout=None: (CommandResult(1, "", "boom") if args[:3] == ["machine", "add", "VLQ"]
+                                                           else CommandResult(0, "ok", ""))
+        with self.assertRaisesRegex(RuntimeError, "running again, but"):
+            self._restore({"machines": [{"name": "Sim", "backend": "test"}, {"name": "VLQ", "backend": "test"}]},
+                          clusters, cli=cli)
+        self.assertEqual([c.args[2]['name'] for c in self.calls['upd'].call_args_list], ["Sim"])   # VLQ not reassigned
+        self.assertFalse(_qs_is_archived(self.inst.pk))                                           # restored anyway
+
+    def test_reuse_old_database(self):
+        from heappe_ui.view.qscheduler_recovery import reusable_database, _prepare_reused_database
+        docker = mock.Mock()
+        docker.exists.side_effect = lambda kind, name: name == "qs-1-pgsql"
+        docker.json.return_value = [{}]
+        docker.inspect.return_value = {"Config": {"Env": ["POSTGRES_PASSWORD=secret", "PATH=/bin"]}, "State": {"Running": False}}
+        docker.run.return_value = mock.Mock(returncode=0)
+        self.assertIn("qs-1-pgsql", reusable_database(docker, self.inst))
+        url, net = _prepare_reused_database(docker, self.inst, self.log)
+        self.assertEqual((url, net), ("postgres://qscheduler:secret@qs-1-pgsql:5432/qscheduler", "qs-1_db_net"))
+        self.assertIn(["start", "qs-1-pgsql"], [c.args[0] for c in docker.run.call_args_list])
+        # Only the volume is left: recreated with the stored password
+        docker.reset_mock()
+        docker.inspect.return_value = None
+        docker.exists.side_effect = lambda kind, name: False
+        self.inst.database_url = "postgres://qscheduler:stored@qs-1-pgsql:5432/qscheduler"
+        self.assertIn("volume", reusable_database(docker, self.inst))
+        url, _ = _prepare_reused_database(docker, self.inst, self.log)
+        self.assertIn("stored", url)
+        self.assertTrue(any("POSTGRES_PASSWORD=stored" in c.args[0] for c in docker.run.call_args_list))
+        self.inst.kind = "ssh_host"
+        self.assertIsNone(reusable_database(docker, self.inst))
+
+    def test_page_shows_archived_and_recovery_actions(self):
+        from datetime import datetime, timezone
+        self.client.force_login(User.objects.create_user(username="rec_admin3", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        with mock.patch("heappe_ui.view.qscheduler_deploy.import_legacy_instances"):
+            html = self.client.get("/qscheduler/").content.decode()
+            self.assertIn('data-action="resolve"', html)          # hidden until the live check reports it missing
+            self.assertNotIn("Delete with entities...", html)
+            self.inst.archived_at = datetime.now(timezone.utc)
+            self.inst.archived_reason = "Container removed outside HEAppE Management"
+            self.inst.save()
+            html = self.client.get("/qscheduler/").content.decode()
+        self.assertIn("Archived ", html)
+        self.assertIn("Container removed outside HEAppE Management", html)
+        self.assertIn('data-action="restore"', html)
+        self.assertIn("Delete with entities...", html)
+        self.assertNotIn('data-action="assign"', html)
+
+
+def _qs_is_archived(pk):
+    from heappe_ui.models import QSchedulerInstance
+    return QSchedulerInstance.objects.get(pk=pk).is_archived
+
+
+class QSchedulerUnmanagedNotifierTests(TestCase):
+    """Optional removal of a notifier no assignment manages (e.g. old one-notifier-per-HEAppE leftovers)."""
+
+    def setUp(self):
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance, QSchedulerAssignment
+        self.cred = InstanceCredentials.objects.create(instance_name="dev", heappe_host="h", heappe_login="u",
+                                                       heappe_password="p", heappe_port="5000")
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300)
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred,
+                                            heappe_identifier="heappe-dev", notifications_enabled=True)
+
+    def _run(self, name, clusters=None, connect_error=None, notifiers=("heappe-dev", "heappe-dev.Sim")):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_core import CommandResult
+        from heappe_ui.view.qscheduler_deploy import remove_notifier_worker
+        target = mock.Mock()
+        target.list_notifiers.return_value = [{"name": n, "url": "http://h/cb"} for n in notifiers]
+        target.cli.return_value = CommandResult(0, "ok", "")
+        connect = mock.patch("heappe_ui.view.clusters.connect_heappe_management_api",
+                             **({"side_effect": connect_error} if connect_error else {"return_value": (mock.Mock(), "sc", None)}))
+        result = {}
+        with connect, mock.patch.object(core, "target_for", return_value=target), \
+             mock.patch.object(core, "qscheduler_clusters", return_value=clusters or []):
+            remove_notifier_worker(lambda *_: None, result, self.inst.id, name)
+        return target, result
+
+    @staticmethod
+    def _cluster(notifier):
+        return {"id": 5, "name": "Sim", "custom_configuration": {"EnableCallback": "true", "QSchedulerNotifier": notifier}}
+
+    def test_removes_unused_unmanaged_notifier_with_one_restart(self):
+        target, result = self._run("heappe-dev", clusters=[self._cluster("heappe-dev.Sim")])
+        self.assertEqual([c.args[0] for c in target.cli.call_args_list], [["notifier", "remove", "heappe-dev"]])
+        target.restart.assert_called_once()
+        self.assertEqual(result['notifier'], "heappe-dev")
+
+    def test_refuses_managed_used_or_unverifiable(self):
+        with self.assertRaisesRegex(RuntimeError, "belongs to a cluster"):
+            self._run("heappe-dev.Sim")
+        with self.assertRaisesRegex(RuntimeError, "still used by HEAppE cluster"):
+            self._run("heappe-dev", clusters=[self._cluster("heappe-dev")])
+        with self.assertRaisesRegex(RuntimeError, "Cannot check the clusters"):
+            self._run("heappe-dev", connect_error=OSError("down"))
+        with self.assertRaisesRegex(RuntimeError, "not registered"):
+            self._run("other", notifiers=("heappe-dev.Sim",))
+
+    def test_api_requires_acknowledgement(self):
+        from heappe_ui.view import qscheduler_core as core
+        self.client.force_login(User.objects.create_user(username="nt_admin", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        post = lambda data: self.client.post(f"/qscheduler/{self.inst.id}/notifier-remove/", data=json.dumps(data),
+                                             content_type="application/json")
+        with mock.patch.object(core, "start_operation", return_value=(True, "started")) as start:
+            self.assertEqual(post({"name": "heappe-dev"}).status_code, 400)                          # not acknowledged
+            self.assertEqual(post({"name": "heappe-dev.Sim", "acknowledged": True}).status_code, 400)  # managed
+            self.assertEqual(post({"name": "a b", "acknowledged": True}).status_code, 400)
+            start.assert_not_called()
+            self.assertEqual(post({"name": "heappe-dev", "acknowledged": True}).status_code, 200)
+            start.assert_called_once()

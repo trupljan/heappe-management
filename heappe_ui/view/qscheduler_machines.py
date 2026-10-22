@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
 
-from heappe_ui.models import InstanceCredentials, QSchedulerAssignment, QSchedulerInstance as Q
+from heappe_ui.models import InstanceCredentials, QSchedulerAssignment, QSchedulerInstance as Q, QSchedulerMachine
 
 from . import qscheduler_core as core
 from .qscheduler_core import (CONNECTION_PROTOCOL_HTTP, DEFAULT_ACCOUNTING_FORMULA, DURATION_RE,
@@ -133,6 +133,8 @@ def add_machine_worker(log, result, instance_name, opts, uid):
     if not asg:
         raise RuntimeError(f"HEAppE '{instance_name}' is not assigned to this QScheduler instance (QScheduler page).")
     inst = asg.qscheduler
+    if inst.is_archived:
+        raise RuntimeError(f"QScheduler instance '{inst.name}' is archived. Restore it on the QScheduler page first.")
     machine = opts['machine_name']
     result.update({'qscheduler': inst.name, 'machine_name': machine, 'backend': opts['backend'],
                    'project_name': opts['project_name'], 'machine_mode': opts['machine_mode'], 'notifier': None})
@@ -179,6 +181,9 @@ def add_machine_worker(log, result, instance_name, opts, uid):
                     raise RuntimeError(f"Machine '{machine}' already exists in '{inst.name}'. Choose 'Use existing machine'.")
                 raise RuntimeError(f"Machine registration failed:\n{res.output[-3000:]}")
             log("Machine registered.")
+            backend, options = core.machine_definition(opts)
+            QSchedulerMachine.objects.update_or_create(qscheduler=inst, name=machine,
+                                                       defaults={'backend': backend, 'options': options})
             cli_changed = True
         else:
             if names is not None and machine not in names:
@@ -333,7 +338,13 @@ def remove_machine_worker(log, result, instance_name, opts):
     if opts['remove_from_qscheduler'] and not inst:
         raise RuntimeError("The cluster's QScheduler instance is not registered in HEAppE Management; "
                            "cannot remove the machine from QScheduler (untick the option to delete only the cluster).")
-    if inst and (opts['remove_from_qscheduler'] or notifier):
+    if inst and inst.is_archived:
+        if opts['remove_from_qscheduler']:
+            raise RuntimeError(f"QScheduler instance '{inst.name}' is archived (its service is gone); untick "
+                               f"'Also remove the machine from QScheduler' to delete only the HEAppE cluster.")
+        log(f"QScheduler instance '{inst.name}' is archived: QScheduler is not contacted"
+            f"{f' (notifier {notifier!r} is gone with it)' if notifier else ''}.")
+    elif inst and (opts['remove_from_qscheduler'] or notifier):
         target = core.target_for(inst)
         try:
             changed = False
@@ -350,6 +361,7 @@ def remove_machine_worker(log, result, instance_name, opts):
                     log(res.stdout.strip() or "Machine removed.")
                     result['removed_from_qscheduler'] = True
                     changed = True
+                QSchedulerMachine.objects.filter(qscheduler=inst, name=machine).delete()
             if notifier:
                 current = {n['name']: n for n in target.list_notifiers(log)}
                 if notifier in current:
@@ -418,7 +430,8 @@ def qscheduler_machine_defaults_api(request: HttpRequest) -> HttpResponse:
                   'kind_code': a.qscheduler.kind,
                   'endpoint': f"{a.qscheduler.service_host}:{a.qscheduler.port}",
                   'notifications_enabled': a.notifications_enabled, 'callback_url': a.callback_url,
-                  'restart_pending': a.qscheduler.restart_pending} for a in assignments]
+                  'restart_pending': a.qscheduler.restart_pending,
+                  'archived': a.qscheduler.is_archived} for a in assignments]
     clusters, clusters_error = [], None
     try:
         controller, session_code, _ = connect_heappe_management_api(instance_name, lambda *_: None)
@@ -431,6 +444,7 @@ def qscheduler_machine_defaults_api(request: HttpRequest) -> HttpResponse:
             clusters.append({'id': d.get('id'), 'name': d.get('name'), 'machine': core.cluster_machine(d),
                              'qscheduler_id': inst.id if inst else None,
                              'qscheduler_kind': inst.kind if inst else None,
+                             'qscheduler_archived': bool(inst and inst.is_archived),
                              'qscheduler': inst.name if inst else f"{d.get('master_node_name')} (not registered)",
                              'assigned': bool(inst and inst.id in by_id)})
     except Exception as e:

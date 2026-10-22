@@ -28,11 +28,13 @@ background threads). That layer accounts for most of the uncovered code."""
 core = "heappe_ui/view/qscheduler_core.py"
 deploy = "heappe_ui/view/qscheduler_deploy.py"
 machines = "heappe_ui/view/qscheduler_machines.py"
+recovery = "heappe_ui/view/qscheduler_recovery.py"
 
 [file_descriptions]
 core = "Docker/SSH runners, targets, HEAppE and git helpers"
 deploy = "QScheduler page, instances, assignments"
 machines = "Clusters page: add/remove machine"
+recovery = "missing instances: archive, cascade deletion, restore"
 
 [tests]
 module = "heappe_ui.tests"
@@ -66,7 +68,8 @@ not_tested = "Invalid ports, existing-DB URL and DB network validation, refusal 
 
 [[sections.features]]
 name = "Deploy – execution"
-code = ["deploy:deploy_worker", "deploy:_build_or_check_image", "deploy:_wait_for_postgres"]
+code = ["deploy:deploy_worker", "deploy:deploy_service", "deploy:postgres_run_args", "deploy:_build_or_check_image",
+        "deploy:_wait_for_postgres"]
 verified = "–"
 not_tested = "Image build/reuse, PostgreSQL container, service container, healthcheck wait, cleanup hints, assignment after deploy."
 
@@ -175,6 +178,12 @@ title = "HEAppE assignments and notifications"
 note = "Each cluster has its own notifier `<HEAppE identifier>.<machine>` with its own token, stored in HEAppE Vault."
 
 [[sections.features]]
+name = "Remove an unmanaged notifier"
+code = ["deploy:remove_notifier_worker", "deploy:managed_notifier", "deploy:qscheduler_notifier_remove_api"]
+verified = "Unused unmanaged notifier removed with one restart; refused for managed notifiers, notifiers used by a cluster of an assigned HEAppE, an assigned HEAppE that cannot be checked, and unknown notifiers; the API requires the acknowledgment and a valid name."
+not_tested = "The warning dialog (JavaScript)."
+
+[[sections.features]]
 name = "Assignment form validation"
 code = ["deploy:parse_assignment_options"]
 verified = "Valid input; missing HEAppE instance and non-HTTP callback URL rejected."
@@ -225,7 +234,7 @@ not_tested = "`machine remove [--force]` arguments."
 [[sections.features]]
 name = "Add machine"
 code = ["machines:add_machine_worker", "machines:_create_cluster", "machines:_register_cluster_resources",
-        "machines:_assignment_for"]
+        "machines:_assignment_for", "core:machine_definition"]
 verified = "New machine: refused when it already exists (points to *Use existing machine*), otherwise `machine add` + `notifier add`, one restart, cluster with the notifier and its token in Vault. Existing (shared) machine: only `notifier add`, cluster with `MasterNodeName` = QScheduler host and `EnableCallback=true`, no project when not requested. Without notifications: no command, no restart, `EnableCallback=false`."
 not_tested = "CLI failure, REST verification of the machine, project/allocation/credential creation, machine missing from the instance list."
 
@@ -252,6 +261,41 @@ status = "covered"
 status_reason = "template (`cluster_detail.html`)"
 verified = "QScheduler clusters show the *QScheduler cluster* badge and the `QSchedulerNotifier` / `QSchedulerNotifyToken` fields in *Webhook & Callback Notifications*; other clusters hide the badge."
 not_tested = "JavaScript serialization of the fields, the notifier URL hint."
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+[[sections]]
+title = "Instances removed without HEAppE Management"
+note = "Detected as *missing* (container gone) or *unreachable*; resolved by archiving, deleting with entities or restoring."
+
+[[sections.features]]
+name = "Presence detection"
+code = ["core:presence", "deploy:qscheduler_live_api"]
+verified = "Missing / present (with the container state) from Docker; Docker unavailable → unreachable; SSH into container: login works → present, otherwise unreachable; live status of an archived instance reports presence only; an existing container that does not answer is marked restartable (*Try restart* button), a missing or healthy one is not."
+not_tested = "SSH to VM presence."
+
+[[sections.features]]
+name = "Archive / unarchive"
+code = ["recovery:archive_instance", "recovery:unarchive_instance", "recovery:_ensure_not_running",
+        "recovery:qscheduler_archive_api", "recovery:qscheduler_unarchive_api"]
+verified = "A running instance is refused; a missing one is archived (also through the API, unarchive only when the service answers) with the detected reason, assignments kept; unarchive only when the service answers again. Archived instances: restart, undeploy, assign and unassign refused; no machine can be added; removing a cluster deletes only the HEAppE cluster without contacting QScheduler."
+not_tested = "–"
+
+[[sections.features]]
+name = "Delete with entities"
+code = ["recovery:cascade_delete_worker", "recovery:parse_cascade_options", "recovery:cluster_dependents",
+        "recovery:_heappe_plan", "recovery:_delete_queue_group", "recovery:_leftovers", "recovery:_connect",
+        "recovery:qscheduler_cascade_delete_api", "recovery:qscheduler_cascade_preview_api"]
+verified = "Clusters deleted after their Vault token is removed; projects and queue groups (with accounting) deleted only when selected and used by no other cluster; leftover PostgreSQL container removed, volume only when selected; without clusters HEAppE is not contacted; an unreachable HEAppE aborts before deleting anything unless skipped; a failed deletion keeps the instance; the API needs the typed name."
+not_tested = "The preview API, allocations of shared accounting formulas."
+
+[[sections.features]]
+name = "Restore"
+code = ["recovery:restore_worker", "recovery:parse_restore_options", "recovery:reusable_database",
+        "recovery:_prepare_reused_database", "recovery:_remove_leftovers", "recovery:qscheduler_restore_api",
+        "recovery:qscheduler_restore_info_api", "core:repoint_file_transfer_methods"]
+verified = "Options default to the old name, port and source; reuse only for managed instances under the original name; machine definitions validated (IQM token required). New endpoint: machines registered, one notifier per cluster with a new token, one restart, clusters and file transfer methods repointed, record updated and unarchived, machine definitions stored. Same endpoint with reused database: existing machines kept, clusters not repointed. Missing machine definition: nothing changed. Failed machine: other clusters restored, error reported. Reused database from the old container (password from its environment) or from the kept volume (stored password)."
+not_tested = "The restore info API, removing leftovers for a new database, HEAppE restart after joining networks."
 
 # ---------------------------------------------------------------------------------------------------------------------
 

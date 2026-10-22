@@ -776,9 +776,17 @@ def build_cluster_custom_configuration(inst, notifier=None, use_sessions=True):
     return config, toggles
 
 
-def update_cluster_notifications(controller, session_code, cluster: dict, notifier, log):
-    """PUT the cluster back with callbacks via `notifier` ((name, token)) or disabled (None); other settings unchanged."""
+def update_cluster_notifications(controller, session_code, cluster: dict, notifier, log, location=None):
+    """
+    PUT the cluster back with callbacks via `notifier` ((name, token)) or disabled (None); other settings unchanged.
+    location: (host, port) to point the cluster to another QScheduler endpoint (restore), or None to keep it.
+    """
     cfg = dict(cluster.get('custom_configuration') or {})
+    master, port = cluster.get('master_node_name'), cluster.get('port')
+    if location:
+        master, port = location[0], int(location[1])
+        cfg["QSchedulerHost"] = master
+        cfg["QSchedulerPort"] = str(port)
     toggles = {k: bool(v) for k, v in (cluster.get('custom_configuration_vault_toggles') or {}).items()}
     updates, remove, toggle_updates = notification_config(notifier)
     cfg.update(updates)
@@ -791,11 +799,11 @@ def update_cluster_notifications(controller, session_code, cluster: dict, notifi
         "Id": cluster.get('id'),
         "Name": cluster.get('name'),
         "Description": cluster.get('description'),
-        "MasterNodeName": cluster.get('master_node_name'),
+        "MasterNodeName": master,
         "SchedulerType": cluster.get('scheduler_type'),
         "ConnectionProtocol": cluster.get('connection_protocol'),
         "TimeZone": cluster.get('time_zone'),
-        "Port": cluster.get('port'),
+        "Port": port,
         "UpdateJobStateByServiceAccount": bool(cluster.get('update_job_state_by_service_account')),
         "DomainName": cluster.get('domain_name') or "",
         "ProxyConnectionId": proxy.get('id') if isinstance(proxy, dict) else None,
@@ -805,7 +813,23 @@ def update_cluster_notifications(controller, session_code, cluster: dict, notifi
     }
     controller.heappe_management_cluster_put(body=body)
     log(f"Cluster '{cluster.get('name')}' (ID {cluster.get('id')}): callbacks "
-        f"{'enabled via notifier ' + repr(notifier[0]) + ' (token in Vault)' if notifier else 'disabled'}.")
+        f"{'enabled via notifier ' + repr(notifier[0]) + ' (token in Vault)' if notifier else 'disabled'}"
+        f"{f', now on {master}:{port}' if location else ''}.")
+
+
+def repoint_file_transfer_methods(controller, session_code, cluster: dict, host, port, log):
+    """Point the cluster's file transfer methods (HTTP to QScheduler) to a new host / port."""
+    ids = set(cluster.get('file_transfer_method_ids') or [])
+    if not ids:
+        return
+    for ftm in controller.heappe_management_file_transfer_methods_get(SessionCode=session_code) or []:
+        d = as_dict(ftm)
+        if d.get('id') not in ids:
+            continue
+        controller.heappe_management_file_transfer_method_put(body={
+            "Id": d.get('id'), "ServerHostname": host, "Protocol": d.get('protocol'),
+            "ClusterId": cluster.get('id'), "Port": int(port), "SessionCode": session_code})
+        log(f"File transfer method {d.get('id')} of cluster '{cluster.get('name')}' -> {host}:{port}.")
 
 
 def cluster_notifier(cluster: dict):
@@ -832,6 +856,58 @@ def replace_notifiers(target, add: dict, remove, current: dict, log):
         log(f"Notifier '{name}' -> {url}")
         changed = True
     return changed
+
+
+# ---------------------------------------------------------------------------
+# Presence of an instance (manually removed QScheduler) and machine definitions (restore)
+# ---------------------------------------------------------------------------
+
+PRESENT, MISSING, UNREACHABLE = "present", "missing", "unreachable"
+
+
+def presence(inst):
+    """
+    (state, detail) of the QScheduler container (not of the service: PRESENT does not mean healthy):
+      PRESENT     - the container exists (detail: its state, e.g. "exited"), or for "SSH into container" the SSH
+                    login into it works
+      MISSING     - the container is gone
+      UNREACHABLE - cannot tell: Docker or SSH unavailable (an "SSH into container" instance that cannot be
+                    logged into looks the same as a removed one)
+    """
+    from heappe_ui.models import QSchedulerInstance as Q
+    try:
+        if inst.kind in (Q.KIND_MANAGED, Q.KIND_LOCAL, Q.KIND_SSH_HOST):
+            ssh = ssh_session_for(inst) if inst.kind == Q.KIND_SSH_HOST else None
+            try:
+                docker = DockerCli(ssh, inst.docker_command if ssh else "docker")
+                info = docker.inspect(inst.container_name)
+                if info:
+                    status = (info.get("State") or {}).get("Status") or "unknown"
+                    return PRESENT, f"container '{inst.container_name}' is {status}{docker.where}"
+                return MISSING, f"container '{inst.container_name}' not found{docker.where}"
+            finally:
+                if ssh:
+                    ssh.close()
+        session = ssh_session_for(inst)
+        try:
+            session.connect()
+        finally:
+            session.close()
+        return PRESENT, f"SSH login into the container on {inst.ssh_host} works"
+    except Exception as e:
+        return UNREACHABLE, str(e).splitlines()[0][:300]
+
+
+MACHINE_OPTION_KEYS = ("queue_size", "limit_check_interval", "max_session_time", "default_task_time_limit",
+                       "max_clock_skew", "iqm_url", "iqm_device", "iqm_poll_interval")
+MACHINE_DEFAULTS = {"queue_size": 4, "limit_check_interval": "2s", "max_session_time": "2h",
+                    "default_task_time_limit": "1h", "max_clock_skew": "4s", "iqm_url": "", "iqm_device": "",
+                    "iqm_poll_interval": "500ms"}
+
+
+def machine_definition(opts):
+    """(backend, options) of a machine to store in QSchedulerMachine: everything but the IQM token."""
+    return opts['backend'], {k: opts.get(k, MACHINE_DEFAULTS[k]) for k in MACHINE_OPTION_KEYS}
 
 
 # ---------------------------------------------------------------------------

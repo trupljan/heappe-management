@@ -165,9 +165,23 @@ Each instance is shown as a card with:
 - **Machines** registered in the instance, with their backend. Listing needs the `postgres:16` image on the Docker
   host of the instance (it is never downloaded only for this) or `psql` inside the container. Otherwise the list
   shows *cannot be listed*,
-- **Notifiers**, one per HEAppE cluster. A notifier whose name does not start with the identifier of an assigned
-  HEAppE instance is marked *unmanaged*,
+- **Notifiers**, one per HEAppE cluster. A notifier whose name is not `<identifier>.<machine>` of an assigned
+  HEAppE instance is marked *unmanaged*: HEAppE Management does not create, update or remove it. Typically a leftover
+  of the old one-notifier-per-HEAppE scheme or one created by hand. It can be removed, see below,
 - **Assigned HEAppE instances**, with notification state, notifier name pattern, callback URL and network.
+
+#### Remove an unmanaged notifier
+
+Optional, next to an *unmanaged* notifier: **remove**. Only remove a notifier when you know what it was created for:
+QScheduler calls it for every task and session that names it (`notify=<name>`), and HEAppE clusters with callbacks
+enabled do not poll task state, so anything still using it **stops receiving job updates**.
+
+The dialog requires ticking *I know what this notifier is used for...*. HEAppE Management then refuses the removal
+when a QScheduler cluster of an assigned HEAppE instance uses the notifier, or when an assigned HEAppE instance cannot
+be checked. It **cannot check** HEAppE instances that are not assigned here (or not registered in HEAppE Management),
+other clients calling QScheduler directly, or tasks and sessions already submitted with the notifier. On success it
+runs `qscheduler notifier remove <name>` and restarts QScheduler once. Managed notifiers are removed with their
+cluster or by editing the assignment.
 
 Instances deployed with an earlier version of HEAppE Management (from the Clusters page) are imported automatically
 when the page is opened. The HEAppE instance they were deployed for stays assigned, with notifications off.
@@ -205,6 +219,76 @@ Refused while any HEAppE instance is assigned. [Unassign](#unassign) them first.
   image is kept.
 - **Unregister** (registered instances): removes the instance from HEAppE Management only. The QScheduler service
   keeps running.
+
+### Instance removed without HEAppE Management
+
+When the container **still exists** but QScheduler does not answer (stopped, crashed or hanging), the card shows
+*not responding* and a **Try restart** button. It runs the normal restart: `docker restart` (which also starts a
+stopped container) or the restart command of an "SSH into container" instance (*Confirm manual restart* when it has
+none), then waits for `/health`. If the service does not come back, the operation log shows the container's last log
+lines.
+
+When the QScheduler service disappears behind HEAppE Management's back (container removed by hand, VM reinstalled),
+the instance card shows:
+
+- **Missing**: the container no longer exists (deployed, local and "SSH to VM" instances).
+- **Unreachable**: it cannot be told whether the container exists (Docker or SSH unavailable; for an "SSH into
+  container" instance the SSH login fails, which looks the same as a removed container). Check the host before
+  deleting anything.
+
+HEAppE Management never resolves this on its own. **Resolve...** (on the card or in *Actions*) offers three choices:
+
+| Choice | What happens | Undo |
+|---|---|---|
+| **Archive** | The record, its assignments and all HEAppE clusters are kept **unchanged** (jobs on them fail until QScheduler is back). The card shows *Archived* with the reason; restart, update, assign, unassign and undeploy are disabled, no machine can be added, and *Remove quantum machine* deletes only the HEAppE cluster without contacting QScheduler. | *Restore*, or *Unarchive* when the service answers again (e.g. it was only down). |
+| **Restore** | Deploys QScheduler again and reassigns everything (see below). | – |
+| **Delete with entities** | Deletes what belonged to the instance, as selected (see below), and forgets it. | No. |
+
+An archived instance offers **Restore...**, **Delete with entities...** and, once its service answers again,
+**Unarchive**.
+
+#### Delete with entities
+
+A preview lists, per assigned HEAppE instance, its clusters on the instance and the projects and queue groups used
+**only** by those clusters. Select what to delete and type the instance name to confirm:
+
+| Option | Default | Deletes |
+|---|---|---|
+| HEAppE clusters | on | The clusters on this instance (with their queues and file transfer methods). Their `QSchedulerNotifyToken` is removed from Vault first. Off: the clusters are kept and only the instance is forgotten. |
+| Projects used only by these clusters | off | Those projects (needs *HEAppE clusters*). |
+| Queue groups used only by these clusters | off | Those queue groups with their accounting formulas (if not shared) and project allocations (needs *HEAppE clusters*). |
+| Leftover PostgreSQL container and network | on | Deployed instances only. |
+| Database volume | off | Deployed instances only (needs the previous option). |
+| Skip unreachable HEAppE instances | off | Shown when an assigned HEAppE cannot be reached. Without it nothing is deleted; with it, its clusters stay and point to the deleted instance. |
+
+All HEAppE instances are read before anything is deleted. When a deletion fails, the instance is kept so that it
+can be retried; projects, allocations and credentials not selected are kept.
+
+#### Restore
+
+Restore deploys QScheduler on the HEAppE Management Docker host the same way as *Deploy New* (instances that were
+registered, local or remote, become deployed instances):
+
+- **Image**: the previous branch / tag / image is preselected; any other branch, tag or local image can be chosen.
+- **Service**: container name and port (default: the previous ones). When they differ from the old endpoint, the
+  clusters and their file transfer methods are pointed to the new one.
+- **Database**:
+  - *Deploy new PostgreSQL*: a fresh database; old leftovers of the same name (PostgreSQL container, network,
+    volume) are removed.
+  - *Reuse the old database* (deployed instances under their original name): the old PostgreSQL container if it
+    still exists, or the kept volume with the stored password. Machines that still exist in it are kept.
+  - *Use existing database*: a `DATABASE_URL`.
+- **Machines used by the clusters**: one row per machine, prefilled from the definition stored when it was added
+  (backend, queue size, limits, IQM URL and device). The **IQM token is never stored** and must be entered again.
+  With a reused database, *exists in reused DB* skips a machine.
+- **HEAppE clusters to reassign**: the clusters of every assigned HEAppE instance on the old endpoint.
+
+After the service is healthy, Restore registers the missing machines, creates **one notifier per cluster with a new
+token** (for HEAppE instances with notifications on), restarts QScheduler once, and updates every cluster with its
+new notifier and token (stored in Vault) and, if changed, the new endpoint. The record is then no longer archived.
+If a machine cannot be registered, its clusters are reported and the others are restored. An unreachable HEAppE
+instance stops the restore before anything changes, unless *Skip unreachable HEAppE instances* is ticked; its
+clusters can be reassigned later with *Edit assignment → Generate new tokens*.
 
 ---
 
@@ -461,7 +545,12 @@ arriving during the restart fail, and HEAppE retries status queries later.
 | Instance → Actions | Restart | all | Graceful restart. SSH into container without a restart command: *Confirm manual restart* (health check only). |
 | Instance → Actions | Undeploy | deployed | Removes containers and network, optionally the database volume. Requires no assignments. |
 | Instance → Actions | Unregister | local, SSH to VM, SSH into container | Removes the instance from HEAppE Management only. Requires no assignments. |
+| Instance card / Actions | Resolve... | missing or unreachable instances | Archive, Restore or Delete with entities. |
+| Instance → Actions | Restore... | archived (or missing) instances | Deploys QScheduler again, registers the machines, new notifier and token per cluster, clusters repointed. |
+| Instance → Actions | Delete with entities... | archived (or missing) instances | Deletes the clusters and, as selected, their projects, queue groups and Docker leftovers; forgets the instance. |
+| Instance → Actions | Unarchive | archived instances whose service answers again | Manages the instance as before; nothing is changed. |
 | Instance card | Assign | all | Network access, notifications on/off, callback URL. |
+| Instance card → Notifiers | remove (unmanaged) | unmanaged notifiers, not archived | Removes the notifier after a warning and acknowledgment; refused when a cluster of an assigned HEAppE uses it. |
 | Assignments table | Edit | all | Change notifications or callback URL, or generate new tokens; recreates the notifiers of existing clusters. |
 | Assignments table | Unassign | all | Removes network access and leftover notifiers. Requires no clusters of that HEAppE on the instance. |
 | Clusters → QScheduler | Add quantum machine | assigned instances | New or shared machine + HEAppE cluster, queue, queue group, optional project; with notifications on, the cluster's own notifier and token (Vault). |

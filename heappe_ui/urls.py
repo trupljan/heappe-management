@@ -55,6 +55,13 @@ urlpatterns = [
     path('qscheduler/<int:inst_id>/undeploy/', views.qscheduler_undeploy_api, name='qscheduler_undeploy'),
     path('qscheduler/<int:inst_id>/assign/', views.qscheduler_assign_api, name='qscheduler_assign'),
     path('qscheduler/assignment/<int:asg_id>/unassign/', views.qscheduler_unassign_api, name='qscheduler_unassign'),
+    path('qscheduler/<int:inst_id>/notifier-remove/', views.qscheduler_notifier_remove_api, name='qscheduler_notifier_remove'),
+    path('qscheduler/<int:inst_id>/archive/', views.qscheduler_archive_api, name='qscheduler_archive'),
+    path('qscheduler/<int:inst_id>/unarchive/', views.qscheduler_unarchive_api, name='qscheduler_unarchive'),
+    path('qscheduler/<int:inst_id>/cascade-preview/', views.qscheduler_cascade_preview_api, name='qscheduler_cascade_preview'),
+    path('qscheduler/<int:inst_id>/cascade-delete/', views.qscheduler_cascade_delete_api, name='qscheduler_cascade_delete'),
+    path('qscheduler/<int:inst_id>/restore-info/', views.qscheduler_restore_info_api, name='qscheduler_restore_info'),
+    path('qscheduler/<int:inst_id>/restore/', views.qscheduler_restore_api, name='qscheduler_restore'),
 
     # Queues
     path('queues/', views.queues_view, name='queues_view'),

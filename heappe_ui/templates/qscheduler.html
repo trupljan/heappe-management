@@ -51,7 +51,11 @@
                             <span class="fw-bold text-dark font-monospace">{{ inst.name }}</span>
                             <span class="badge bg-secondary-subtle text-secondary-emphasis border">{{ inst.kind_label }}</span>
                             {% if inst.kind == 'ssh_container' %}<span class="badge bg-warning text-dark" role="note"><i class="bi bi-exclamation-triangle-fill me-1"></i>Limited management: no Docker control, restarts via restart command</span>{% endif %}
+                            {% if inst.archived %}<span class="badge bg-dark-subtle text-dark-emphasis border border-dark-subtle"><i class="bi bi-archive me-1"></i>Archived {{ inst.archived_at }}</span>{% endif %}
                             <span class="badge bg-light text-muted border qs-live-health"><span class="spinner-border spinner-border-sm" style="width: .7rem; height: .7rem;"></span> checking</span>
+                            <span class="badge d-none qs-live-presence"></span>
+                            {% if not inst.archived %}<button type="button" class="btn btn-sm btn-primary fw-semibold py-0 px-2 d-none qs-action qs-try-restart-btn" data-action="restart" data-id="{{ inst.id }}"><i class="bi bi-bootstrap-reboot me-1"></i>{% if inst.manual_restart %}Confirm manual restart{% else %}Try restart{% endif %}</button>{% endif %}
+                            <button type="button" class="btn btn-sm btn-warning fw-semibold py-0 px-2 d-none qs-recovery-action qs-resolve-btn" data-action="resolve" data-id="{{ inst.id }}"><i class="bi bi-life-preserver me-1"></i>Resolve...</button>
                             {% if inst.restart_pending %}<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"><i class="bi bi-exclamation-triangle me-1"></i>restart pending</span>{% endif %}
                         </div>
                         <div class="small text-muted mt-1">
@@ -61,6 +65,10 @@
                             &middot; <span class="qs-live-version">version ?</span>
                             {% if inst.source == 'git' %} &middot; source <code>{{ inst.repo }}#{{ inst.ref }}</code>{% elif inst.image %} &middot; image <code>{{ inst.image }}</code>{% endif %}
                         </div>
+                        {% if inst.archived %}
+                        <div class="small text-dark-emphasis mt-1"><i class="bi bi-info-circle me-1"></i>{{ inst.archived_reason }}. Not managed: HEAppE clusters are kept unchanged.
+                            <strong>Restore</strong> deploys it again and reassigns the clusters; <strong>Delete with entities</strong> removes them.</div>
+                        {% endif %}
                         <div class="small text-danger mt-1 d-none qs-live-error"></div>
                     </div>
                     <div class="btn-group">
@@ -68,11 +76,19 @@
                             <i class="bi bi-gear me-1"></i>Actions
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            {% if inst.archived %}
+                            <li><button type="button" class="dropdown-item small qs-recovery-action" data-action="restore" data-id="{{ inst.id }}"><i class="bi bi-arrow-counterclockwise me-2 text-success"></i>Restore...</button></li>
+                            <li class="d-none qs-unarchive-item"><button type="button" class="dropdown-item small qs-recovery-action" data-action="unarchive" data-id="{{ inst.id }}"><i class="bi bi-box-arrow-up me-2 text-primary"></i>Unarchive (service is running again)</button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><button type="button" class="dropdown-item small text-danger qs-recovery-action" data-action="cascade" data-id="{{ inst.id }}"><i class="bi bi-trash me-2"></i>Delete with entities...</button></li>
+                            {% else %}
                             {% if inst.can_update %}<li><button type="button" class="dropdown-item small qs-action" data-action="update" data-id="{{ inst.id }}"><i class="bi bi-arrow-repeat me-2 text-info"></i>Update</button></li>{% endif %}
                             <li><button type="button" class="dropdown-item small qs-action" data-action="restart" data-id="{{ inst.id }}"><i class="bi bi-bootstrap-reboot me-2 text-primary"></i>{% if inst.manual_restart %}Confirm manual restart{% else %}Restart{% endif %}</button></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><button type="button" class="dropdown-item small text-danger qs-action" data-action="undeploy" data-id="{{ inst.id }}">
                                 <i class="bi bi-trash me-2"></i>{% if inst.kind == 'managed' %}Undeploy{% else %}Unregister{% endif %}</button></li>
+                            <li class="d-none qs-resolve-item"><button type="button" class="dropdown-item small text-warning-emphasis qs-recovery-action" data-action="resolve" data-id="{{ inst.id }}"><i class="bi bi-life-preserver me-2"></i>Resolve missing service...</button></li>
+                            {% endif %}
                         </ul>
                     </div>
                 </div>
@@ -81,9 +97,11 @@
                         <div class="col-lg-7">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div class="fw-bold small text-primary"><i class="bi bi-diagram-3 me-1"></i>Assigned HEAppE instances</div>
+                                {% if not inst.archived %}
                                 <button type="button" class="btn btn-sm btn-outline-success py-0 qs-action" data-action="assign" data-id="{{ inst.id }}">
                                     <i class="bi bi-plus-lg me-1"></i>Assign
                                 </button>
+                                {% endif %}
                             </div>
                             {% if inst.assignments %}
                             <div class="table-responsive">
@@ -104,8 +122,10 @@
                                             </td>
                                             <td class="text-muted">{{ a.network|default:"-" }}</td>
                                             <td class="text-end text-nowrap">
+                                                {% if not inst.archived %}
                                                 <button type="button" class="btn btn-sm btn-link py-0 qs-action" data-action="edit_assignment" data-id="{{ inst.id }}" data-asg="{{ a.id }}" title="Edit"><i class="bi bi-pencil"></i></button>
                                                 <button type="button" class="btn btn-sm btn-link text-danger py-0 qs-action" data-action="unassign" data-id="{{ inst.id }}" data-asg="{{ a.id }}" title="Unassign"><i class="bi bi-x-circle"></i></button>
+                                                {% endif %}
                                             </td>
                                         </tr>
                                     {% endfor %}
@@ -471,6 +491,7 @@
 </div>
 
 {% include 'partials/qscheduler_progress_modal.html' %}
+{% include 'partials/qscheduler_recovery_modals.html' %}
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -485,6 +506,7 @@ document.addEventListener('DOMContentLoaded', function () {
         live: "{% url 'qscheduler_live' 0 %}", update: "{% url 'qscheduler_update' 0 %}", restart: "{% url 'qscheduler_restart' 0 %}",
         undeploy: "{% url 'qscheduler_undeploy' 0 %}", assign: "{% url 'qscheduler_assign' 0 %}",
         unassign: "{% url 'qscheduler_unassign' 0 %}", heappeInfo: "{% url 'qscheduler_heappe_info' 0 %}",
+        notifierRemove: "{% url 'qscheduler_notifier_remove' 0 %}",
     };
     const url = (key, id) => urls[key].replace('/0/', '/' + id + '/');
     const modal = id => bootstrap.Modal.getOrCreateInstance(document.getElementById(id));
@@ -496,6 +518,34 @@ document.addEventListener('DOMContentLoaded', function () {
         const card = document.querySelector('[data-instance-id="' + inst.id + '"]');
         U.getJson(url('live', inst.id)).then(d => {
             const health = card.querySelector('.qs-live-health');
+            const presence = card.querySelector('.qs-live-presence');
+            if (d.archived) {
+                health.className = 'badge bg-light text-muted border';
+                health.textContent = 'not managed';
+                card.querySelector('.qs-live-machines').textContent = 'not loaded (archived)';
+                card.querySelector('.qs-live-notifiers').textContent = 'not loaded (archived)';
+                if (d.presence === 'present') {
+                    presence.className = 'badge bg-success-subtle text-success-emphasis border border-success-subtle qs-live-presence';
+                    presence.textContent = 'service is running again';
+                    card.querySelectorAll('.qs-unarchive-item').forEach(el => el.classList.remove('d-none'));
+                }
+                return;
+            }
+            if (d.restartable) {
+                presence.className = 'badge border bg-warning-subtle text-warning-emphasis border-warning-subtle qs-live-presence';
+                presence.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>not responding';
+                presence.title = (d.presence_detail || 'the container exists') + '; QScheduler does not answer /health';
+                card.querySelectorAll('.qs-try-restart-btn').forEach(el => el.classList.remove('d-none'));
+            }
+            if (d.presence === 'missing' || d.presence === 'unreachable') {
+                const missing = d.presence === 'missing';
+                presence.className = 'badge border qs-live-presence ' + (missing ? 'bg-danger text-white' : 'bg-warning text-dark');
+                presence.innerHTML = '<i class="bi bi-' + (missing ? 'x-octagon' : 'question-octagon') + ' me-1"></i>' + (missing ? 'Missing' : 'Unreachable');
+                presence.title = d.presence_detail || '';
+                card.querySelectorAll('.qs-resolve-btn, .qs-resolve-item').forEach(el => el.classList.remove('d-none'));
+                byId[inst.id].presence = d.presence;
+                byId[inst.id].presence_detail = d.presence_detail;
+            }
             const ok = d.health === 200;
             health.className = 'badge border ' + (ok ? 'bg-success-subtle text-success-emphasis border-success-subtle' : 'bg-danger-subtle text-danger-emphasis border-danger-subtle');
             health.textContent = ok ? 'healthy' : (d.health ? 'HTTP ' + d.health : 'unreachable');
@@ -507,7 +557,8 @@ document.addEventListener('DOMContentLoaded', function () {
             const n = card.querySelector('.qs-live-notifiers');
             n.innerHTML = d.notifiers === null || d.notifiers === undefined ? 'cannot be listed'
                 : (d.notifiers.length ? d.notifiers.map(x => '<div><code>' + U.esc(x.name) + '</code> &rarr; ' + U.esc(x.url) +
-                    (x.managed ? '' : ' <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Not managed by an assignment on this page">unmanaged</span>') + '</div>').join('') : 'none');
+                    (x.managed ? '' : ' <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Not named &lt;HEAppE identifier&gt;.&lt;machine&gt; of an assigned HEAppE instance: HEAppE Management does not create, update or remove it">unmanaged</span>' +
+                        ' <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1 align-baseline qs-notifier-remove" data-name="' + U.esc(x.name) + '" title="Remove this notifier (asks for confirmation)"><i class="bi bi-trash"></i> remove</button>') + '</div>').join('') : 'none');
         }).catch(() => { card.querySelector('.qs-live-health').textContent = 'status unknown'; });
     });
 
@@ -759,6 +810,35 @@ document.addEventListener('DOMContentLoaded', function () {
         if (confirmAction) confirmAction(this, document.getElementById('qs-confirm-option').checked);
     });
 
+    // ---- remove an unmanaged notifier (optional, with a warning) ----
+    document.querySelectorAll('.qs-live-notifiers').forEach(el => el.addEventListener('click', e => {
+        const btn = e.target.closest('.qs-notifier-remove');
+        if (!btn) return;
+        const inst = byId[el.closest('[data-instance-id]').dataset.instanceId];
+        const name = btn.dataset.name;
+        document.querySelectorAll('#qsConfirmModal .qs-sshc-warning').forEach(w => w.classList.toggle('d-none', inst.kind !== 'ssh_container'));
+        askConfirm('Remove notifier ' + name,
+            '<p class="mb-2"><strong>Only remove a notifier when you know what it was created for.</strong></p>' +
+            '<p class="mb-2">A notifier is the callback target QScheduler calls for every task and session that names it (<code>notify=' + U.esc(name) + '</code>). ' +
+            'If anything still uses it, QScheduler stops sending its events, and HEAppE clusters with callbacks enabled do not poll task state, so <strong>their jobs stop updating</strong>.</p>' +
+            '<p class="mb-1"><em>Unmanaged</em> means it is not named <code>&lt;HEAppE identifier&gt;.&lt;machine&gt;</code> of a HEAppE instance assigned here, typically a leftover of the old one-notifier-per-HEAppE scheme or one created by hand.</p>' +
+            '<p class="mb-1">HEAppE Management refuses the removal when a cluster of an assigned HEAppE instance uses it, or when an assigned HEAppE instance cannot be checked. It <strong>cannot check</strong>:</p>' +
+            '<ul class="mb-2"><li>HEAppE instances not assigned to <strong>' + U.esc(inst.name) + '</strong> or not registered in HEAppE Management,</li>' +
+            '<li>other clients or scripts that call QScheduler directly,</li>' +
+            '<li>tasks and sessions already submitted with this notifier (their remaining events are lost).</li></ul>' +
+            '<p class="mb-0">QScheduler is restarted to apply the change.</p>',
+            'Remove notifier', 'I know what this notifier is used for and that nothing listed above still uses it',
+            (b, acknowledged) => {
+                if (!acknowledged) { showErr('qs-confirm-error', 'Tick the confirmation first.'); return; }
+                submitOperation(b, 'qs-confirm-error', 'qsConfirmModal', url('notifierRemove', inst.id), { name: name, acknowledged: true }, {
+                    title: 'Removing notifier ' + name, hint: 'Checking the clusters of the assigned HEAppE instances, removing the notifier and restarting QScheduler...',
+                    successTitle: 'Notifier removed', details: (r, esc) => esc(r.notifier) + ' removed from ' + esc(r.name) });
+            });
+    }));
+
+    // Helpers for the recovery dialogs (partials/qscheduler_recovery_modals.html)
+    window.qsPage = { byId, url, modal, showErr, hideErr, formData, submitOperation, sourceToggle, refPicker, loadLocalDocker, askConfirm };
+
     // ---- per-instance actions ----
     document.querySelectorAll('.qs-action').forEach(b => b.addEventListener('click', () => {
         current = byId[b.dataset.id];
@@ -781,7 +861,9 @@ document.addEventListener('DOMContentLoaded', function () {
             const manual = current.manual_restart;
             askConfirm((manual ? 'Confirm manual restart of ' : 'Restart ') + current.name,
                 manual ? 'This instance has no restart command. Restart the QScheduler container yourself first; this only checks that the service answers <code>/health</code> and clears <em>restart pending</em>.'
-                       : 'QScheduler stops gracefully (pending state is written to the database) and starts again; running backend jobs are re-attached.',
+                       : (b.classList.contains('qs-try-restart-btn')
+                          ? 'The container exists but QScheduler does not answer. It is restarted (a stopped container is started) and the panel waits until <code>/health</code> answers; the log shows why if it does not come back.'
+                          : 'QScheduler stops gracefully (pending state is written to the database) and starts again; running backend jobs are re-attached.'),
                 manual ? 'Check service' : 'Restart', null, (btn) => submitOperation(btn, 'qs-confirm-error', 'qsConfirmModal', url('restart', current.id), {}, {
                     title: 'Restarting ' + current.name, successTitle: 'QScheduler restarted', details: (r, esc) => 'Instance: ' + esc(r.name) }), false);
         } else if (action === 'undeploy') {

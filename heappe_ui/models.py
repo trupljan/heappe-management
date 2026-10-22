@@ -67,7 +67,7 @@ class QSchedulerInstance(models.Model):
     ssh_key_passphrase = models.CharField(max_length=255, blank=True, default="")
     ssh_host_key = models.TextField(blank=True, default="")      # pinned on registration: "<type> <base64>"
     docker_command = models.CharField(max_length=255, blank=True, default="docker")   # ssh_host, e.g. "sudo docker"
-    database_url = models.CharField(max_length=1024, blank=True, default="")          # ssh_container (optional)
+    database_url = models.CharField(max_length=1024, blank=True, default="")          # ssh_container (optional); managed: for restore
     restart_command = models.CharField(max_length=1024, blank=True, default="")       # ssh_container
 
     # Image source (managed / update)
@@ -77,6 +77,10 @@ class QSchedulerInstance(models.Model):
     image = models.CharField(max_length=255, blank=True, default="")
 
     restart_pending = models.BooleanField(default=False)
+    # Archived: the QScheduler service disappeared (e.g. removed manually); the record, its assignments and the
+    # HEAppE clusters are kept until the instance is restored or deleted with its clusters.
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_reason = models.CharField(max_length=255, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -89,6 +93,10 @@ class QSchedulerInstance(models.Model):
     @property
     def is_remote(self):
         return self.kind in (self.KIND_SSH_HOST, self.KIND_SSH_CONTAINER)
+
+    @property
+    def is_archived(self):
+        return self.archived_at is not None
 
 
 class QSchedulerAssignment(models.Model):
@@ -113,3 +121,25 @@ class QSchedulerAssignment(models.Model):
 
     def __str__(self):
         return f"{self.heappe_instance.instance_name} -> {self.qscheduler.name}"
+
+
+class QSchedulerMachine(models.Model):
+    """
+    Definition of a machine registered in a QScheduler instance by HEAppE Management, used to register it again
+    when the instance is restored. Secrets (the IQM token) are not stored; they are asked for on restore.
+    """
+    qscheduler = models.ForeignKey(QSchedulerInstance, on_delete=models.CASCADE, related_name="machines")
+    name = models.CharField(max_length=64)
+    backend = models.CharField(max_length=16, default="test")   # test | iqm
+    options = models.JSONField(default=dict, blank=True)       # queue_size, limits, iqm_url, iqm_device, ...
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(fields=["qscheduler", "name"], name="unique_qscheduler_machine"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.backend}) on {self.qscheduler.name}"
