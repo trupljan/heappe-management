@@ -9,7 +9,7 @@ QScheduler cluster settings) by the automated tests in `heappe_ui/tests.py`.
 | Date | 2026-10-22 |
 | Tests | 52, all passing (`QSchedulerConfigTests`, `QSchedulerVaultToggleSerializationTests`, `QSchedulerHelperTests`, `QSchedulerOptionParsingTests`, `QSchedulerWorkflowTests`, `QSchedulerClusterDetailTemplateTests`, `QSchedulerViewTests`, `QSchedulerGitRefsTests`) |
 | Measured code | `qscheduler_core.py`, `qscheduler_deploy.py`, `qscheduler_machines.py` |
-| Tool | coverage.py 7.16.2, line + branch coverage, Python 3.12 |
+| Tool | coverage.py 7.6.1, line + branch coverage, Python 3.12 |
 | Source fingerprint | `069dade4bc30` (measured files + feature data) |
 
 ## Summary
@@ -32,10 +32,10 @@ direction was taken.
 
 | File | Branches | Covered | Partial | Branch coverage |
 |---|---:|---:|---:|---:|
-| `qscheduler_core.py` | 198 | 80 | 14 | **40.4%** |
-| `qscheduler_deploy.py` | 244 | 102 | 40 | **41.8%** |
-| `qscheduler_machines.py` | 128 | 65 | 31 | **50.8%** |
-| **Total** | **570** | **247** | **85** | **43.3%** |
+| `qscheduler_core.py` | 236 | 87 | 16 | **36.9%** |
+| `qscheduler_deploy.py` | 318 | 163 | 41 | **51.3%** |
+| `qscheduler_machines.py` | 146 | 76 | 34 | **52.1%** |
+| **Total** | **700** | **326** | **91** | **46.6%** |
 
 ### Combined coverage
 
@@ -44,13 +44,13 @@ pure line nor pure branch coverage.
 
 | File | Combined coverage |
 |---|---:|
-| `qscheduler_core.py` | **47.4%** |
-| `qscheduler_deploy.py` | **47.3%** |
+| `qscheduler_core.py` | **46.3%** |
+| `qscheduler_deploy.py` | **49.9%** |
 | `qscheduler_machines.py` | **61.1%** |
-| **Total** | **50.0%** |
+| **Total** | **50.6%** |
 
 Compared with the previous report: line coverage 52.3% → 52.3%, branch coverage
-46.6% → 43.3%, combined 50.6% → 50.0%.
+43.3% → 46.6%, combined 50.0% → 50.6%.
 
 All tests run without Docker, SSH, git, GitHub/GitLab, a QScheduler or a HEAppE server: those are replaced by mocks.
 The tests therefore cover **decision logic** (validation, what is sent to QScheduler and HEAppE, blocking rules,
@@ -70,11 +70,11 @@ status set by hand.
 |---|---|---:|---|---|---|
 | Deploy – form validation | 🟡 | 56.4% / 50.0% | Defaults (name `qscheduler-<id>`, git source, no host port); invalid git URL and branch/tag rejected; image source accepted. | Invalid ports, existing-DB URL and DB network validation, refusal of a HEAppE < 6.6.0 to assign, the deploy API. | `deploy:parse_deploy_options`, `deploy:_validate_source`, `deploy:_Reader`, `deploy:qscheduler_deploy_api` |
 | Deploy – execution | ❌ | 0.0% / 0.0% | – | Image build/reuse, PostgreSQL container, service container, healthcheck wait, cleanup hints, assignment after deploy. | `deploy:deploy_worker`, `deploy:_build_or_check_image`, `deploy:_wait_for_postgres` |
-| Branch / tag list | ✅ | 97.0% / 83.3% | GitHub API (default branch first, newest tag first, 5-minute cache); GitLab API for other https hosts (URL-encoded project path); fallback to `git ls-remote` (default branch from `HEAD`, peeled tags skipped, no prompts); SSH URLs go to `git ls-remote` only; invalid URLs rejected; unreachable repository → error; endpoint success / error / 400. | Paging over 100 entries, the 200-entry limit, JavaScript picker (fallback to the text field). | `core:list_git_refs`, `core:_github_refs`, `core:_gitlab_refs`, `core:_ls_remote_refs`, `core:_http_json_pages`, `core:_sorted_refs`, `core:_version_key`, `deploy:qscheduler_git_refs_api` |
+| Branch / tag list | ✅ | 97.0% / 81.8% | GitHub API (default branch first, newest tag first, 5-minute cache); GitLab API for other https hosts (URL-encoded project path); fallback to `git ls-remote` (default branch from `HEAD`, peeled tags skipped, no prompts); SSH URLs go to `git ls-remote` only; invalid URLs rejected; unreachable repository → error; endpoint success / error / 400. | Paging over 100 entries, the 200-entry limit, JavaScript picker (fallback to the text field). | `core:list_git_refs`, `core:_github_refs`, `core:_gitlab_refs`, `core:_ls_remote_refs`, `core:_http_json_pages`, `core:_sorted_refs`, `core:_version_key`, `deploy:qscheduler_git_refs_api` |
 | Register existing – validation | 🟡 | 59.5% / 55.9% | Local mode defaults (name and service host = container); SSH modes require user and private key; SSH port, service host default, default restart command `kill -TERM 1`; unsafe docker command rejected. | Name derived from SSH host, invalid `DATABASE_URL`, invalid service host, the register API. | `deploy:parse_register_options`, `deploy:qscheduler_register_api` |
 | Register existing – execution | ❌ | 0.0% / 0.0% | – | SSH connect and host-key pinning, container inspection, health/version/notifier checks, saving the record. | `deploy:register_worker` |
 | Update – validation | ❌ | 0.0% / 0.0% | – | All. | `deploy:parse_update_options`, `deploy:qscheduler_update_api` |
-| Update – recreate container | 🟡 | 43.6% / 60.7% | `recreate_args_from_inspect`: env (without `PATH`), labels, restart policy, published port, aliases, egress network first, healthcheck, image + command. | `update_worker`: build, stop/rename, rollback on failure, record update. | `deploy:recreate_args_from_inspect`, `deploy:_network_is_internal`, `deploy:update_worker` |
+| Update – recreate container | 🟡 | 43.6% / 59.4% | `recreate_args_from_inspect`: env (without `PATH`), labels, restart policy, published port, aliases, egress network first, healthcheck, image + command. | `update_worker`: build, stop/rename, rollback on failure, record update. | `deploy:recreate_args_from_inspect`, `deploy:_network_is_internal`, `deploy:update_worker` |
 | Restart | 🟡 | 64.7% / 25.0% | *Confirm manual restart* (SSH into container without restart command) only checks health and clears *restart pending*. | Normal restart path, the restart API. | `deploy:restart_worker`, `deploy:qscheduler_restart_api` |
 | Undeploy / Unregister | 🟡 | 13.5% / 11.1% | View refuses undeploy while HEAppE instances are assigned and does not start the operation. | `undeploy_worker`: container/network/volume removal, unregister path. | `deploy:undeploy_worker`, `deploy:qscheduler_undeploy_api` |
 | Live status (health, version, machines, notifiers) | ❌ | 0.0% / 0.0% | – | `qscheduler_live_api`, notifier *unmanaged* flag. | `deploy:qscheduler_live_api` |
@@ -98,10 +98,10 @@ Each cluster has its own notifier `<HEAppE identifier>.<machine>` with its own t
 | Feature | Status | Coverage | What the tests verify | Not tested | Code |
 |---|---|---:|---|---|---|
 | Assignment form validation | ✅ | 100.0% / 100.0% | Valid input; missing HEAppE instance and non-HTTP callback URL rejected. | – | `deploy:parse_assignment_options` |
-| Assign / edit assignment | ✅ | 84.0% / 71.7% | No clusters yet: identifier, network and auto-detected callback URL saved, no notifier, no restart, container joins the HEAppE network. Enabling notifications: one notifier per cluster with its own token, one restart for all, clusters updated. Disabling: this HEAppE's notifiers removed, other HEAppEs' untouched. Unchanged settings: no command, no restart. Duplicate HEAppE identifier on one QScheduler refused. | Token rotation (*Generate new tokens*), callback URL change, remote instance without callback URL, `qscheduler_heappe_info_api`. | `deploy:assign_worker`, `deploy:qscheduler_assign_api`, `deploy:qscheduler_heappe_info_api` |
-| Cluster notification settings | ✅ | 100.0% / 92.9% | Own notifier: `EnableCallback`, `QSchedulerNotifier`, `QSchedulerNotifyToken` with the Vault toggle; updating existing clusters keeps other settings, masked values and unrelated vault toggles. | – | `core:notification_config`, `core:build_cluster_custom_configuration`, `core:update_cluster_notifications`, `core:cluster_notifier`, `core:cluster_notifier_name`, `core:new_notify_token`, `core:replace_notifiers` |
+| Assign / edit assignment | ✅ | 84.0% / 68.0% | No clusters yet: identifier, network and auto-detected callback URL saved, no notifier, no restart, container joins the HEAppE network. Enabling notifications: one notifier per cluster with its own token, one restart for all, clusters updated. Disabling: this HEAppE's notifiers removed, other HEAppEs' untouched. Unchanged settings: no command, no restart. Duplicate HEAppE identifier on one QScheduler refused. | Token rotation (*Generate new tokens*), callback URL change, remote instance without callback URL, `qscheduler_heappe_info_api`. | `deploy:assign_worker`, `deploy:qscheduler_assign_api`, `deploy:qscheduler_heappe_info_api` |
+| Cluster notification settings | ✅ | 100.0% / 93.3% | Own notifier: `EnableCallback`, `QSchedulerNotifier`, `QSchedulerNotifyToken` with the Vault toggle; updating existing clusters keeps other settings, masked values and unrelated vault toggles. | – | `core:notification_config`, `core:build_cluster_custom_configuration`, `core:update_cluster_notifications`, `core:cluster_notifier`, `core:cluster_notifier_name`, `core:new_notify_token`, `core:replace_notifiers` |
 | Matching clusters to an instance | ✅ | 95.0% / 83.3% | By `QSchedulerHost`/`MasterNodeName` + port; other schedulers and ports ignored; machine taken from the queue. | – | `core:qscheduler_clusters`, `core:cluster_machine`, `core:id_of`, `core:as_dict` |
-| Unassign | 🟡 | 64.7% / 35.7% | Refused while the HEAppE has clusters on the instance (assignment kept); otherwise leftover notifiers removed and assignment deleted. | *Force* when the HEAppE API is unreachable, network disconnect, the unassign API. | `deploy:unassign_worker`, `deploy:qscheduler_unassign_api` |
+| Unassign | 🟡 | 64.7% / 47.1% | Refused while the HEAppE has clusters on the instance (assignment kept); otherwise leftover notifiers removed and assignment deleted. | *Force* when the HEAppE API is unreachable, network disconnect, the unassign API. | `deploy:unassign_worker`, `deploy:qscheduler_unassign_api` |
 
 ### Quantum machines (Clusters page)
 
@@ -109,9 +109,9 @@ Each cluster has its own notifier `<HEAppE identifier>.<machine>` with its own t
 |---|---|---:|---|---|---|
 | Add machine – validation | 🟡 | 74.1% / 73.7% | Defaults; QScheduler instance required; IQM URL, device, token and poll interval with unit required; existing-machine mode skips backend validation; no project → no project name. | Integer range errors (queue size, allocation). | `machines:parse_machine_options` |
 | QScheduler CLI arguments | ✅ | 81.8% / 66.7% | `machine add` option order (options before backend), `--limit-check-interval`, IQM `--poll-interval`; `notifier add <name> --url --token`; `notifier list` parsing (table and "No notifiers registered."). | `machine remove [--force]` arguments. | `core:machine_args`, `core:machine_remove_args`, `core:notifier_add_args`, `core:parse_notifier_list` |
-| Add machine | 🟡 | 64.9% / 47.7% | New machine: refused when it already exists (points to *Use existing machine*), otherwise `machine add` + `notifier add`, one restart, cluster with the notifier and its token in Vault. Existing (shared) machine: only `notifier add`, cluster with `MasterNodeName` = QScheduler host and `EnableCallback=true`, no project when not requested. Without notifications: no command, no restart, `EnableCallback=false`. | CLI failure, REST verification of the machine, project/allocation/credential creation, machine missing from the instance list. | `machines:add_machine_worker`, `machines:_create_cluster`, `machines:_register_cluster_resources`, `machines:_assignment_for` |
-| Remove machine | 🟡 | 53.0% / 31.2% | Cluster deleted, its notifier removed, one restart, machine kept in QScheduler. | *Also remove the machine* (`machine remove`, `--force`), refused removal keeping the cluster, the remove API. | `machines:remove_machine_worker`, `machines:_instance_of_cluster`, `machines:qscheduler_machine_remove_api` |
-| Machine dialog data | 🟡 | 37.9% / 0.0% | Lists the instances assigned to the current HEAppE; reports a HEAppE API error. | Cluster list for removal, `qscheduler_machine_list_api`. | `machines:qscheduler_machine_defaults_api`, `machines:qscheduler_machine_list_api` |
+| Add machine | 🟡 | 64.9% / 50.0% | New machine: refused when it already exists (points to *Use existing machine*), otherwise `machine add` + `notifier add`, one restart, cluster with the notifier and its token in Vault. Existing (shared) machine: only `notifier add`, cluster with `MasterNodeName` = QScheduler host and `EnableCallback=true`, no project when not requested. Without notifications: no command, no restart, `EnableCallback=false`. | CLI failure, REST verification of the machine, project/allocation/credential creation, machine missing from the instance list. | `machines:add_machine_worker`, `machines:_create_cluster`, `machines:_register_cluster_resources`, `machines:_assignment_for` |
+| Remove machine | 🟡 | 53.0% / 30.6% | Cluster deleted, its notifier removed, one restart, machine kept in QScheduler. | *Also remove the machine* (`machine remove`, `--force`), refused removal keeping the cluster, the remove API. | `machines:remove_machine_worker`, `machines:_instance_of_cluster`, `machines:qscheduler_machine_remove_api` |
+| Machine dialog data | 🟡 | 37.9% / 9.1% | Lists the instances assigned to the current HEAppE; reports a HEAppE API error. | Cluster list for removal, `qscheduler_machine_list_api`. | `machines:qscheduler_machine_defaults_api`, `machines:qscheduler_machine_list_api` |
 
 ### Cluster detail of a QScheduler cluster
 
@@ -124,7 +124,7 @@ Each cluster has its own notifier `<HEAppE identifier>.<machine>` with its own t
 | Feature | Status | Coverage | What the tests verify | Not tested | Code |
 |---|---|---:|---|---|---|
 | SSH into container | 🟡 | 19.2% / 21.4% | `DATABASE_URL` is exported before the command (given value, or read from `/proc/1/environ`). | Health check, restart + reconnect, machine listing via `psql`. | `core:ContainerShellTarget`, `core:_psql_machines_sql` |
-| SSH to VM / local Docker | 🟡 | 3.0% / 1.9% | – | All (exec, restart, health wait, machine listing). | `core:DockerTarget`, `core:DockerCli`, `core:QsTarget`, `core:target_for`, `core:apply_cli_change` |
+| SSH to VM / local Docker | 🟡 | 3.0% / 1.7% | – | All (exec, restart, health wait, machine listing). | `core:DockerTarget`, `core:DockerCli`, `core:QsTarget`, `core:target_for`, `core:apply_cli_change` |
 | SSH session | ❌ | 0.0% / 0.0% | – (checked manually with generated RSA keys, encrypted and broken keys, not in the test suite). | Key loading, host-key pinning and mismatch, timeouts. | `core:SshSession`, `core:load_private_key`, `core:ssh_session_for` |
 | Command helpers and secret redaction | ✅ | 82.8% / 93.8% | `DATABASE_URL` password, `--token` values and `POSTGRES_PASSWORD` are masked in logs; `serve --port` parsing. | Health-check command builders. | `core:redact_args`, `core:parse_serve_port`, `core:status_of`, `core:bash_http_get`, `core:qscheduler_healthcheck_args`, `core:CommandResult` |
 | HEAppE API container, network, restart, reachability | ❌ | 0.0% / 0.0% | – (checked manually on the local Docker host, not in the test suite). | All. | `core:find_heappe_api_container`, `core:resolve_heappe_service_network`, `core:restart_heappe`, `core:check_from_heappe` |
@@ -187,4 +187,4 @@ python manage.py qscheduler_coverage --check    # fail if this report is out of 
 The command finds all `QScheduler*` test classes in `heappe_ui/tests.py`, runs them under coverage.py and fails when
 a test fails or a feature refers to code that no longer exists.
 
-<!-- qscheduler-coverage-state {"previous": {"branch": 46.6, "combined": 50.6, "line": 52.3}, "totals": {"branch": 43.3, "combined": 50.0, "line": 52.3}} -->
+<!-- qscheduler-coverage-state {"previous": {"branch": 43.3, "combined": 50.0, "line": 52.3}, "totals": {"branch": 46.6, "combined": 50.6, "line": 52.3}} -->
