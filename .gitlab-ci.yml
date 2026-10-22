@@ -1,0 +1,45 @@
+# CI for HEAppE Management.
+#
+# qscheduler-coverage: runs the QScheduler tests under coverage.py and fails when QScheduler_COVERAGE.md no longer
+# matches the code, the tests or heappe_ui/reports/qscheduler_coverage.toml. Fix it locally with
+#   pip install -r requirements-dev.txt && python manage.py qscheduler_coverage
+# and commit the regenerated report.
+#
+# Coverage numbers depend on the Python minor version and the coverage.py version; keep the image on the same Python
+# minor version as the one used to generate the report (shown in its header) and coverage pinned in
+# requirements-dev.txt.
+
+stages:
+  - test
+
+.qscheduler_changes: &qscheduler_changes
+  changes:
+    - heappe_ui/view/qscheduler_*.py
+    - heappe_ui/tests.py
+    - heappe_ui/reports/qscheduler_coverage.toml
+    - heappe_ui/templates/reports/qscheduler_coverage.md
+    - heappe_ui/management/commands/qscheduler_coverage.py
+    - QScheduler_COVERAGE.md
+    - requirements.txt
+    - requirements-dev.txt
+    - .gitlab-ci.yml
+
+qscheduler-coverage:
+  stage: test
+  image: python:3.12
+  variables:
+    PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  cache:
+    key: pip-$CI_COMMIT_REF_SLUG
+    paths:
+      - .cache/pip
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      <<: *qscheduler_changes
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS == null
+      <<: *qscheduler_changes
+  script:
+    - pip install -r requirements-dev.txt
+    # Django settings generate the py4heappe client from heappe_swagger.json on startup (needs network access
+    # to the online Swagger generator when no local swagger-codegen JAR is present).
+    - python manage.py qscheduler_coverage --check

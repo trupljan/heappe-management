@@ -1,0 +1,14 @@
+<!-- Non-interactive reminder shown whenever a QScheduler reached over "SSH into the container" is involved.
+     Hidden by default; page scripts toggle .d-none on .qs-sshc-warning. -->
+<div class="qs-sshc-warning d-none" role="note">
+    <div class="alert alert-warning border-0 rounded-3 small py-2 px-3 mb-3 d-flex gap-2 align-items-start">
+        <i class="bi bi-exclamation-triangle-fill text-warning-emphasis flex-shrink-0 mt-1"></i>
+        <div>
+            <span class="badge bg-warning text-dark me-1">SSH into container</span>
+            <strong>Limited management.</strong>
+            No Docker control: no update, no Docker health status or logs, no network setup (HEAppE must reach the service and
+            the callback URL must be entered manually). Restarts rely on the restart command and the container's restart policy;
+            machine and notifier changes take effect only after a successful restart. See <code>QScheduler_README.md</code>.
+        </div>
+    </div>
+</div>

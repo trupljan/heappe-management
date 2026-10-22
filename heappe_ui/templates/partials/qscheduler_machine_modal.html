@@ -1,0 +1,394 @@
+{% include 'partials/qscheduler_progress_modal.html' %}
+
+<!-- Add quantum machine -->
+<div class="modal fade" id="qsAddModal" tabindex="-1" aria-labelledby="qsAddLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <!-- The form IS the .modal-content: .modal-dialog-scrollable needs .modal-body as a direct child. -->
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsAddForm" novalidate data-no-loading>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%) !important;">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsAddLabel">
+                    <i class="bi bi-cpu-fill"></i><span>Add Quantum Machine</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-secondary small mb-3">
+                    Creates a HEAppE cluster for a quantum machine of a QScheduler instance assigned to this HEAppE instance:
+                    cluster, queue, QPU queue group with accounting formula and optionally a project with QPU allocation.
+                    A machine can be shared by several HEAppE instances. When the assignment has notifications on
+                    (<a href="{% url 'qscheduler_page' %}">QScheduler page</a>), the cluster gets its own QScheduler notifier
+                    and a new token, stored in HEAppE Vault.
+                </p>
+                <div id="qs-add-version-warning" class="alert alert-warning border-0 rounded-3 small d-none"></div>
+                {% include 'partials/qscheduler_sshc_warning.html' %}
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-hdd-network me-1"></i> QScheduler instance</div>
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-12">
+                        <select class="form-select form-select-sm" id="qs-add-qscheduler_id" name="qscheduler_id" aria-label="QScheduler instance"></select>
+                        <div class="form-text" id="qs-add-instance-info" style="font-size: 0.72rem;"></div>
+                    </div>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-motherboard me-1"></i> Quantum machine</div>
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-12">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="machine_mode" id="qs-add-mode-new" value="new" checked>
+                            <label class="form-check-label small fw-semibold" for="qs-add-mode-new">Register new machine</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="machine_mode" id="qs-add-mode-existing" value="existing">
+                            <label class="form-check-label small fw-semibold" for="qs-add-mode-existing">Use existing machine (shared)</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-machine_name">Machine name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="qs-add-machine_name" name="machine_name" value="SimulatorMachine" maxlength="30" list="qs-add-machines" autocomplete="off" required>
+                        <datalist id="qs-add-machines"></datalist>
+                        <div class="form-text" id="qs-add-machines-info" style="font-size: 0.72rem;">Used as the HEAppE queue identifier.</div>
+                    </div>
+                    <div class="col-md-6 qs-add-new-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-backend">Backend</label>
+                        <select class="form-select form-select-sm" id="qs-add-backend" name="backend">
+                            <option value="test" selected>test (in-process simulator)</option>
+                            <option value="iqm">iqm (IQM quantum computer)</option>
+                        </select>
+                    </div>
+                    <div class="qs-add-iqm-only col-md-8 d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-iqm_url">IQM server URL <span class="text-danger">*</span></label>
+                        <input type="url" class="form-control form-control-sm" id="qs-add-iqm_url" name="iqm_url" placeholder="https://vlq.it4i.cz">
+                    </div>
+                    <div class="qs-add-iqm-only col-md-4 d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-iqm_device">IQM device <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="qs-add-iqm_device" name="iqm_device" placeholder="star24">
+                    </div>
+                    <div class="qs-add-iqm-only col-md-8 d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-iqm_token">IQM token <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control form-control-sm" id="qs-add-iqm_token" name="iqm_token" autocomplete="off">
+                    </div>
+                    <div class="qs-add-iqm-only col-md-4 d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-iqm_poll_interval">Poll interval</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-add-iqm_poll_interval" name="iqm_poll_interval" value="500ms">
+                    </div>
+                    <div class="col-12 qs-add-new-only">
+                        <a class="small fw-semibold text-decoration-none" data-bs-toggle="collapse" href="#qsAddMachineAdvanced" role="button" aria-expanded="false">
+                            <i class="bi bi-sliders me-1"></i>Machine limits
+                        </a>
+                        <div class="collapse mt-2" id="qsAddMachineAdvanced">
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-queue_size">Queue size</label>
+                                    <input type="number" class="form-control form-control-sm" id="qs-add-queue_size" name="queue_size" value="4" min="1">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-max_session_time">Max session time</label>
+                                    <input type="text" class="form-control form-control-sm" id="qs-add-max_session_time" name="max_session_time" value="2h">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-default_task_time_limit">Default task time limit</label>
+                                    <input type="text" class="form-control form-control-sm" id="qs-add-default_task_time_limit" name="default_task_time_limit" value="1h">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-limit_check_interval">Limit check interval</label>
+                                    <input type="text" class="form-control form-control-sm" id="qs-add-limit_check_interval" name="limit_check_interval" value="2s">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-max_clock_skew">Max clock skew</label>
+                                    <input type="text" class="form-control form-control-sm" id="qs-add-max_clock_skew" name="max_clock_skew" value="4s">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-text" style="font-size: 0.72rem;">The QScheduler instance is restarted to load a new machine; running work is persisted and re-attached.</div>
+                    </div>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-diagram-3 me-1"></i> HEAppE cluster</div>
+                <div class="row g-2 mb-1 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-cluster_name">Cluster name</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-add-cluster_name" name="cluster_name" placeholder="machine name" maxlength="50">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-accounting_formula">Accounting formula</label>
+                        <input type="text" class="form-control form-control-sm font-monospace" id="qs-add-accounting_formula" name="accounting_formula" value="exectime_ms/1000">
+                    </div>
+                    <div class="col-12 d-flex flex-wrap gap-4 mt-2">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="qs-add-use_sessions" name="use_sessions" checked>
+                            <label class="form-check-label small" for="qs-add-use_sessions">Use sessions by default</label>
+                        </div>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="qs-add-create_project" name="create_project">
+                            <label class="form-check-label small" for="qs-add-create_project">Create HEAppE project</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch mb-1">
+                            <input class="form-check-input" type="checkbox" id="qs-add-custom_name" name="custom_name" disabled>
+                            <label class="form-check-label small" for="qs-add-custom_name">Custom project name</label>
+                        </div>
+                        <input type="text" class="form-control form-control-sm" id="qs-add-project_name" name="project_name" placeholder="auto (qs-&lt;id&gt;)" aria-label="QScheduler project name" disabled>
+                        <div class="form-text" style="font-size: 0.72rem;">Stored as the accounting string. QScheduler project names are shared by all HEAppE instances on the QScheduler.</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-qpu_allocation_seconds">QPU allocation (seconds)</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-add-qpu_allocation_seconds" name="qpu_allocation_seconds" placeholder="optional, e.g. 36000" min="1" disabled>
+                        <div class="form-text" style="font-size: 0.72rem;">Leave empty to skip; jobs are rejected until an allocation is added to the project.</div>
+                    </div>
+                </div>
+
+                <div id="qs-add-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsAddBtn">
+                    <i class="bi bi-plus-circle-fill me-1"></i>Add Machine
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Remove quantum machine -->
+<div class="modal fade" id="qsRemoveModal" tabindex="-1" aria-labelledby="qsRemoveLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsRemoveForm" novalidate data-no-loading>
+            <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsRemoveLabel">
+                    <i class="bi bi-dash-circle-fill"></i><span>Remove Quantum Machine</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                {% include 'partials/qscheduler_sshc_warning.html' %}
+                <label class="form-label small text-muted fw-semibold mb-1" for="qs-rm-cluster_id">QScheduler cluster of this HEAppE instance</label>
+                <select class="form-select form-select-sm" id="qs-rm-cluster_id" name="cluster_id"></select>
+                <div class="form-text mb-3" id="qs-rm-cluster-info" style="font-size: 0.72rem;"></div>
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="qs-rm-remove_from_qscheduler" name="remove_from_qscheduler">
+                    <label class="form-check-label small" for="qs-rm-remove_from_qscheduler">Also remove the machine from QScheduler (<code>machine remove</code>)</label>
+                </div>
+                <div class="form-text ms-4 mb-2" style="font-size: 0.72rem;">The machine may be shared: clusters of other HEAppE instances using it stop working. The QScheduler instance is restarted.</div>
+                <div class="form-check form-switch ms-4">
+                    <input class="form-check-input" type="checkbox" id="qs-rm-force" name="force" disabled>
+                    <label class="form-check-label small text-danger" for="qs-rm-force">Force (<code>--force</code>): also delete its tasks and sessions</label>
+                </div>
+                <div class="alert alert-danger border-0 rounded-3 small mt-3 mb-0">
+                    <i class="bi bi-exclamation-triangle-fill me-1"></i>The HEAppE cluster is deleted. Projects, allocations and credentials are kept.
+                </div>
+                <div id="qs-rm-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsRemoveBtn">
+                    <i class="bi bi-trash me-1"></i>Remove
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const U = window.qsUtil;
+    const addModalEl = document.getElementById('qsAddModal');
+    const removeModalEl = document.getElementById('qsRemoveModal');
+    if (!addModalEl || !removeModalEl) return;
+    const addModal = new bootstrap.Modal(addModalEl);
+    const removeModal = new bootstrap.Modal(removeModalEl);
+    const addForm = document.getElementById('qsAddForm');
+    const rmForm = document.getElementById('qsRemoveForm');
+    const addError = document.getElementById('qs-add-error');
+    const rmError = document.getElementById('qs-rm-error');
+    const qsPageUrl = "{% url 'qscheduler_page' %}";
+    const clusterDetailUrl = "{% url 'cluster_detail' 0 %}";
+    const machineListUrl = "{% url 'qscheduler_machine_list' 0 %}";
+    let defaults = null;
+    let instancesById = {};
+
+    function showError(el, msg, html) {
+        if (html) el.innerHTML = msg; else el.textContent = msg;
+        el.classList.remove('d-none');
+    }
+
+    function toggleAdd() {
+        const mode = addForm.querySelector('input[name="machine_mode"]:checked').value;
+        const isNew = mode === 'new';
+        const isIqm = isNew && addForm.backend.value === 'iqm';
+        addForm.querySelectorAll('.qs-add-new-only').forEach(el => el.classList.toggle('d-none', !isNew));
+        addForm.querySelectorAll('.qs-add-iqm-only').forEach(el => el.classList.toggle('d-none', !isIqm));
+        const m = addForm.machine_name;
+        if (isNew && isIqm && m.value === 'SimulatorMachine') m.value = '';
+        if (isNew && !isIqm && !m.value) m.value = 'SimulatorMachine';
+        const createProj = addForm.create_project.checked;
+        addForm.custom_name.disabled = !createProj;
+        if (!createProj) addForm.custom_name.checked = false;
+        addForm.project_name.disabled = !(createProj && addForm.custom_name.checked);
+        addForm.qpu_allocation_seconds.disabled = !createProj;
+    }
+    addForm.querySelectorAll('input[name="machine_mode"]').forEach(r => r.addEventListener('change', toggleAdd));
+    ['backend', 'create_project', 'custom_name'].forEach(k => addForm[k].addEventListener('change', toggleAdd));
+
+    function loadMachines() {
+        const id = addForm.qscheduler_id.value;
+        const inst = instancesById[id];
+        const info = document.getElementById('qs-add-instance-info');
+        info.innerHTML = inst ? (U.esc(inst.kind) + ' &middot; ' + U.esc(inst.endpoint) + ' &middot; notifications ' +
+            (inst.notifications_enabled ? 'on (this cluster gets its own notifier and token, stored in Vault)' : 'off (HEAppE polls task state)') +
+            (inst.restart_pending ? ' &middot; <span class="text-warning-emphasis">restart pending</span>' : '')) : '';
+        addModalEl.querySelector('.qs-sshc-warning').classList.toggle('d-none', !(inst && inst.kind_code === 'ssh_container'));
+        const dl = document.getElementById('qs-add-machines');
+        const mInfo = document.getElementById('qs-add-machines-info');
+        dl.innerHTML = '';
+        if (!id) return;
+        mInfo.textContent = 'Loading machines...';
+        U.getJson(machineListUrl.replace('/0/', '/' + id + '/')).then(d => {
+            if (d.machines === null || d.machines === undefined) {
+                mInfo.textContent = 'Machines of this instance cannot be listed; type the name.';
+                return;
+            }
+            d.machines.forEach(m => { const o = document.createElement('option'); o.value = m.name; o.label = m.backend; dl.appendChild(o); });
+            mInfo.textContent = d.machines.length ? 'Registered machines: ' + d.machines.map(m => m.name + ' (' + m.backend + ')').join(', ')
+                                                  : 'No machine registered in this instance yet.';
+        }).catch(() => { mInfo.textContent = 'Could not load machines.'; });
+    }
+    addForm.qscheduler_id.addEventListener('change', loadMachines);
+
+    function loadDefaults(trigger) {
+        const toggle = (trigger && trigger.closest('.btn-group') || document).querySelector('.qs-menu-toggle');
+        if (toggle) bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+        const restore = toggle ? U.setButtonLoading(toggle, 'Loading...') : () => {};
+        return U.getJson("{% url 'qscheduler_machine_defaults' %}").then(d => { restore(); defaults = d; return d; })
+            .catch(err => { restore(); throw err; });
+    }
+
+    function openAdd(d) {
+        addError.classList.add('d-none');
+        document.getElementById('qsAddBtn').disabled = false;
+        const sel = addForm.qscheduler_id;
+        sel.innerHTML = '';
+        instancesById = {};
+        (d.instances || []).forEach(i => {
+            instancesById[i.id] = i;
+            const o = document.createElement('option');
+            o.value = i.id;
+            o.textContent = i.name + ' (' + i.endpoint + ')';
+            sel.appendChild(o);
+        });
+        const warn = document.getElementById('qs-add-version-warning');
+        warn.classList.toggle('d-none', d.version_supported !== false);
+        if (d.version_supported === false) warn.textContent = 'This instance runs HEAppE ' + (d.version || '(unknown version)') + '. QScheduler requires HEAppE ' + (d.min_version || '6.6.0') + ' or newer.';
+        if (!sel.options.length) {
+            showError(addError, 'No QScheduler instance is assigned to HEAppE instance <strong>' + U.esc(d.instance_name) +
+                '</strong>. Deploy or register one and assign this HEAppE instance on the <a href="' + qsPageUrl + '">QScheduler page</a>.', true);
+            document.getElementById('qsAddBtn').disabled = true;
+        }
+        toggleAdd();
+        loadMachines();
+        addModal.show();
+    }
+
+    function openRemove(d) {
+        rmError.classList.add('d-none');
+        document.getElementById('qsRemoveBtn').disabled = false;
+        const sel = rmForm.cluster_id;
+        sel.innerHTML = '';
+        (d.clusters || []).forEach(c => {
+            const o = document.createElement('option');
+            o.value = c.id;
+            o.textContent = c.name + ' (machine ' + c.machine + ' @ ' + c.qscheduler + ')';
+            o.dataset.registered = c.qscheduler_id ? '1' : '';
+            o.dataset.kind = c.qscheduler_kind || '';
+            sel.appendChild(o);
+        });
+        if (d.clusters_error) showError(rmError, 'Could not load clusters: ' + d.clusters_error);
+        else if (!sel.options.length) showError(rmError, 'This HEAppE instance has no QScheduler clusters.');
+        document.getElementById('qsRemoveBtn').disabled = !sel.options.length;
+        rmForm.remove_from_qscheduler.checked = false;
+        rmForm.force.checked = false;
+        toggleRemove();
+        removeModal.show();
+    }
+
+    function toggleRemove() {
+        const opt = rmForm.cluster_id.selectedOptions[0];
+        const registered = !!(opt && opt.dataset.registered);
+        removeModalEl.querySelector('.qs-sshc-warning').classList.toggle('d-none', !(opt && opt.dataset.kind === 'ssh_container'));
+        rmForm.remove_from_qscheduler.disabled = !registered;
+        if (!registered) rmForm.remove_from_qscheduler.checked = false;
+        rmForm.force.disabled = !rmForm.remove_from_qscheduler.checked;
+        if (rmForm.force.disabled) rmForm.force.checked = false;
+        document.getElementById('qs-rm-cluster-info').textContent = opt && !registered
+            ? 'Its QScheduler instance is not registered in HEAppE Management: only the HEAppE cluster can be deleted.' : '';
+    }
+    rmForm.cluster_id.addEventListener('change', toggleRemove);
+    rmForm.remove_from_qscheduler.addEventListener('change', toggleRemove);
+
+    document.querySelectorAll('.qs-open-btn').forEach(b => b.addEventListener('click', function () {
+        loadDefaults(b).then(d => (b.dataset.qsAction === 'remove' ? openRemove : openAdd)(d))
+            .catch(err => alert('Could not load QScheduler data: ' + (err.message || err)));
+    }));
+
+    function collectAdd() {
+        const data = {};
+        new FormData(addForm).forEach((v, k) => { data[k] = v; });
+        ['use_sessions', 'create_project', 'custom_name'].forEach(k => { data[k] = addForm[k].checked; });
+        if (!data.create_project || !data.custom_name) delete data.project_name;
+        if (!data.create_project) delete data.qpu_allocation_seconds;
+        if (data.backend !== 'iqm' || data.machine_mode !== 'new') ['iqm_url', 'iqm_token', 'iqm_device', 'iqm_poll_interval'].forEach(k => delete data[k]);
+        return data;
+    }
+
+    addForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        addError.classList.add('d-none');
+        const btn = document.getElementById('qsAddBtn');
+        const restore = U.setButtonLoading(btn, 'Submitting...');
+        U.postJson("{% url 'qscheduler_machine_add' %}", collectAdd()).then(d => {
+            restore();
+            if (d.status !== 'success') { showError(addError, d.message || 'Failed to start.'); return; }
+            addModal.hide();
+            U.track({
+                title: 'Adding quantum machine',
+                hint: 'Registering the machine (the QScheduler instance restarts) and creating the HEAppE cluster...',
+                successTitle: 'Quantum machine available',
+                details: (r, esc) => 'Machine: ' + esc(r.machine_name) + ' (' + esc(r.machine_mode === 'new' ? r.backend : 'shared') + ') @ ' + esc(r.qscheduler) +
+                    '<br>Cluster ID: ' + esc(r.cluster_id) + ' &middot; Project ID: ' + esc(r.project_id) +
+                    '<br>QScheduler project: ' + esc(r.project_name) +
+                    '<br>Notifier: ' + (r.notifier ? esc(r.notifier) + ' (token stored in Vault)' : 'none (HEAppE polls)'),
+                link: r => r.cluster_id ? { href: clusterDetailUrl.replace('/0/', '/' + r.cluster_id + '/'), text: 'Open Cluster →' } : null,
+            });
+        }).catch(err => { restore(); showError(addError, err.message || 'Network error.'); });
+    });
+
+    rmForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        rmError.classList.add('d-none');
+        const opt = rmForm.cluster_id.selectedOptions[0];
+        if (!opt) return;
+        const what = rmForm.remove_from_qscheduler.checked
+            ? 'Delete cluster "' + opt.textContent + '" AND remove its machine from QScheduler' + (rmForm.force.checked ? ' with --force' : '') + '?'
+            : 'Delete cluster "' + opt.textContent + '"? The machine stays in QScheduler.';
+        if (!confirm(what)) return;
+        const btn = document.getElementById('qsRemoveBtn');
+        const restore = U.setButtonLoading(btn, 'Starting...');
+        U.postJson("{% url 'qscheduler_machine_remove' %}", {
+            cluster_id: rmForm.cluster_id.value,
+            remove_from_qscheduler: rmForm.remove_from_qscheduler.checked,
+            force: rmForm.force.checked,
+        }).then(d => {
+            restore();
+            if (d.status !== 'success') { showError(rmError, d.message || 'Failed to start.'); return; }
+            removeModal.hide();
+            U.track({
+                title: 'Removing quantum machine',
+                successTitle: 'Quantum machine removed',
+                details: (r, esc) => 'Cluster: ' + esc(r.cluster_name) + ' (ID ' + esc(r.cluster_id) + ')<br>Machine: ' + esc(r.machine_name) +
+                    (r.removed_from_qscheduler ? ' &mdash; removed from ' + esc(r.qscheduler) : ' &mdash; kept in QScheduler') +
+                    (r.removed_notifier ? '<br>Notifier removed: ' + esc(r.removed_notifier) : ''),
+            });
+        }).catch(err => { restore(); showError(rmError, err.message || 'Network error.'); });
+    });
+});
+</script>

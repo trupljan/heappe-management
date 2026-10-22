@@ -3,7 +3,12 @@ from heappe_ui.view.imports import *
 from heappe_ui.view.utils import *
 from heappe_ui.view.utils import _create_payload, _handle_api_call
 from heappe_ui.view.clusters import *
-from heappe_ui.view.qscheduler_deploy import setup_qscheduler_view, setup_qscheduler_status_view, setup_qscheduler_defaults_view, qscheduler_manage_view
+from heappe_ui.view.qscheduler_deploy import (qscheduler_page, qscheduler_local_docker_api, qscheduler_git_refs_api, qscheduler_operation_status_api,
+                                              qscheduler_deploy_api, qscheduler_register_api, qscheduler_heappe_info_api,
+                                              qscheduler_live_api, qscheduler_update_api, qscheduler_restart_api,
+                                              qscheduler_undeploy_api, qscheduler_assign_api, qscheduler_unassign_api)
+from heappe_ui.view.qscheduler_machines import (qscheduler_machine_defaults_api, qscheduler_machine_list_api,
+                                                qscheduler_machine_add_api, qscheduler_machine_remove_api)
 from heappe_ui.view.queue import *
 from heappe_ui.view.file_transfer_method import *
 from heappe_ui.view.project import *

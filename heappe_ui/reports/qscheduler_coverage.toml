@@ -1,0 +1,338 @@
+# Input of `python manage.py qscheduler_coverage`, which generates QScheduler_COVERAGE.md.
+#
+# Measured numbers and feature statuses are computed; everything else (feature descriptions, next tests) is written
+# here by hand. After changing QScheduler code or tests:
+#   1. map new functions to a feature below (the report lists unmapped code),
+#   2. update "verified" / "not_tested" of the features you touched,
+#   3. run `python manage.py qscheduler_coverage` and commit the report.
+#
+# Feature fields:
+#   name        feature name
+#   code        functions / classes / methods measured for the feature, as "<file key>:<name>", e.g.
+#               "deploy:deploy_worker", "core:DockerTarget" (all methods) or "core:DockerTarget.restart"
+#   status      only for features without measurable Python code (templates, code outside the measured files):
+#               "covered", "partial" or "none"; explain it in status_reason
+#   verified    what the tests verify
+#   not_tested  what they don't
+
+title = "QScheduler test coverage report"
+output = "QScheduler_COVERAGE.md"
+intro = """Coverage of the QScheduler features (QScheduler page, HEAppE assignments, quantum machines on the Clusters page,
+QScheduler cluster settings) by the automated tests in `heappe_ui/tests.py`."""
+scope_note = """All tests run without Docker, SSH, git, GitHub/GitLab, a QScheduler or a HEAppE server: those are replaced by mocks.
+The tests therefore cover **decision logic** (validation, what is sent to QScheduler and HEAppE, blocking rules,
+version gating). They do not cover the **I/O layer** (running docker commands, SSH sessions, health polling,
+background threads). That layer accounts for most of the uncovered code."""
+
+[files]
+core = "heappe_ui/view/qscheduler_core.py"
+deploy = "heappe_ui/view/qscheduler_deploy.py"
+machines = "heappe_ui/view/qscheduler_machines.py"
+
+[file_descriptions]
+core = "Docker/SSH runners, targets, HEAppE and git helpers"
+deploy = "QScheduler page, instances, assignments"
+machines = "Clusters page: add/remove machine"
+
+[tests]
+module = "heappe_ui.tests"
+path = "heappe_ui/tests.py"
+class_pattern = '^class (QScheduler\w*)\('
+
+[thresholds]
+# Feature status from the line coverage of its code: >= covered -> covered, >= partial -> partly covered.
+covered = 80
+partial = 1
+# "Least covered functions": functions with at least this many statements, this many rows.
+least_covered_min_statements = 10
+least_covered_rows = 10
+gap_rows = 6
+
+[unmapped]
+# Small helpers that need no feature of their own.
+ignore = ["deploy:_json_body", "deploy:_error", "deploy:_started", "deploy:_post_only", "deploy:_instance_or_404",
+          "machines:_json_body", "machines:_error"]
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+[[sections]]
+title = "QScheduler instances (QScheduler page)"
+
+[[sections.features]]
+name = "Deploy – form validation"
+code = ["deploy:parse_deploy_options", "deploy:_validate_source", "deploy:_Reader", "deploy:qscheduler_deploy_api"]
+verified = "Defaults (name `qscheduler-<id>`, git source, no host port); invalid git URL and branch/tag rejected; image source accepted."
+not_tested = "Invalid ports, existing-DB URL and DB network validation, refusal of a HEAppE < 6.6.0 to assign, the deploy API."
+
+[[sections.features]]
+name = "Deploy – execution"
+code = ["deploy:deploy_worker", "deploy:_build_or_check_image", "deploy:_wait_for_postgres"]
+verified = "–"
+not_tested = "Image build/reuse, PostgreSQL container, service container, healthcheck wait, cleanup hints, assignment after deploy."
+
+[[sections.features]]
+name = "Branch / tag list"
+code = ["core:list_git_refs", "core:_github_refs", "core:_gitlab_refs", "core:_ls_remote_refs", "core:_http_json_pages",
+        "core:_sorted_refs", "core:_version_key", "deploy:qscheduler_git_refs_api"]
+verified = "GitHub API (default branch first, newest tag first, 5-minute cache); GitLab API for other https hosts (URL-encoded project path); fallback to `git ls-remote` (default branch from `HEAD`, peeled tags skipped, no prompts); SSH URLs go to `git ls-remote` only; invalid URLs rejected; unreachable repository → error; endpoint success / error / 400."
+not_tested = "Paging over 100 entries, the 200-entry limit, JavaScript picker (fallback to the text field)."
+
+[[sections.features]]
+name = "Register existing – validation"
+code = ["deploy:parse_register_options", "deploy:qscheduler_register_api"]
+verified = "Local mode defaults (name and service host = container); SSH modes require user and private key; SSH port, service host default, default restart command `kill -TERM 1`; unsafe docker command rejected."
+not_tested = "Name derived from SSH host, invalid `DATABASE_URL`, invalid service host, the register API."
+
+[[sections.features]]
+name = "Register existing – execution"
+code = ["deploy:register_worker"]
+verified = "–"
+not_tested = "SSH connect and host-key pinning, container inspection, health/version/notifier checks, saving the record."
+
+[[sections.features]]
+name = "Update – validation"
+code = ["deploy:parse_update_options", "deploy:qscheduler_update_api"]
+verified = "–"
+not_tested = "All."
+
+[[sections.features]]
+name = "Update – recreate container"
+code = ["deploy:recreate_args_from_inspect", "deploy:_network_is_internal", "deploy:update_worker"]
+verified = "`recreate_args_from_inspect`: env (without `PATH`), labels, restart policy, published port, aliases, egress network first, healthcheck, image + command."
+not_tested = "`update_worker`: build, stop/rename, rollback on failure, record update."
+
+[[sections.features]]
+name = "Restart"
+code = ["deploy:restart_worker", "deploy:qscheduler_restart_api"]
+verified = "*Confirm manual restart* (SSH into container without restart command) only checks health and clears *restart pending*."
+not_tested = "Normal restart path, the restart API."
+
+[[sections.features]]
+name = "Undeploy / Unregister"
+code = ["deploy:undeploy_worker", "deploy:qscheduler_undeploy_api"]
+verified = "View refuses undeploy while HEAppE instances are assigned and does not start the operation."
+not_tested = "`undeploy_worker`: container/network/volume removal, unregister path."
+
+[[sections.features]]
+name = "Live status (health, version, machines, notifiers)"
+code = ["deploy:qscheduler_live_api"]
+verified = "–"
+not_tested = "`qscheduler_live_api`, notifier *unmanaged* flag."
+
+[[sections.features]]
+name = "Local Docker images and containers"
+code = ["deploy:list_local_images", "deploy:list_local_qscheduler_containers", "deploy:qscheduler_local_docker_api"]
+verified = "–"
+not_tested = "Image and container suggestions for the deploy, update and register forms."
+
+[[sections.features]]
+name = "Import of legacy deployments"
+code = ["deploy:import_legacy_instances"]
+verified = "– (mocked out in page tests)."
+not_tested = "`import_legacy_instances`."
+
+[[sections.features]]
+name = "Page rendering"
+code = ["deploy:qscheduler_page", "deploy:instance_summary"]
+verified = "Page lists instances and assignments; \"SSH into container\" instances show the *Limited management* badge, modal warnings and *Confirm manual restart*; other instances don't show the badge."
+not_tested = "JavaScript behaviour (no browser tests)."
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+[[sections]]
+title = "HEAppE version gating (6.6.0+)"
+
+[[sections.features]]
+name = "Version check"
+code = ["core:supports_qscheduler", "core:unsupported_version_message", "deploy:_heappe_version_error"]
+verified = "6.6.0, `v6.6.0`, 6.6.1, 7.0.0 accepted; empty, 6.5.x, 6.4.0 refused. The assign API refuses an old HEAppE before starting the operation; `assign_worker` refuses it (with and without notifications) without QScheduler commands or a saved assignment."
+not_tested = "Deploy API refusal when *Assign HEAppE instance* is older."
+
+[[sections.features]]
+name = "Add machine on an old HEAppE"
+code = ["machines:qscheduler_machine_add_api"]
+verified = "API refuses 6.5.0 and an unknown version; starts the operation for an assigned instance on 6.6.0."
+not_tested = "Refusal inside `add_machine_worker`."
+
+[[sections.features]]
+name = "Clusters page menu"
+status = "covered"
+status_reason = "template condition (`clusters.html`)"
+verified = "QScheduler menu hidden before 6.6.0, shown from 6.6.0."
+not_tested = "Scheduler type option on the cluster detail page."
+
+[[sections.features]]
+name = "Cluster create"
+status = "covered"
+status_reason = "code in `clusters.py` (not measured)"
+verified = "QScheduler cluster refused on 6.4.0, 6.5.0 and an unknown version (redirect, message naming 6.6.0, no API call); accepted on 6.6.0 with vault toggles."
+not_tested = "Cluster edit."
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+[[sections]]
+title = "HEAppE assignments and notifications"
+note = "Each cluster has its own notifier `<HEAppE identifier>.<machine>` with its own token, stored in HEAppE Vault."
+
+[[sections.features]]
+name = "Assignment form validation"
+code = ["deploy:parse_assignment_options"]
+verified = "Valid input; missing HEAppE instance and non-HTTP callback URL rejected."
+not_tested = "–"
+
+[[sections.features]]
+name = "Assign / edit assignment"
+code = ["deploy:assign_worker", "deploy:qscheduler_assign_api", "deploy:qscheduler_heappe_info_api"]
+verified = "No clusters yet: identifier, network and auto-detected callback URL saved, no notifier, no restart, container joins the HEAppE network. Enabling notifications: one notifier per cluster with its own token, one restart for all, clusters updated. Disabling: this HEAppE's notifiers removed, other HEAppEs' untouched. Unchanged settings: no command, no restart. Duplicate HEAppE identifier on one QScheduler refused."
+not_tested = "Token rotation (*Generate new tokens*), callback URL change, remote instance without callback URL, `qscheduler_heappe_info_api`."
+
+[[sections.features]]
+name = "Cluster notification settings"
+code = ["core:notification_config", "core:build_cluster_custom_configuration", "core:update_cluster_notifications",
+        "core:cluster_notifier", "core:cluster_notifier_name", "core:new_notify_token", "core:replace_notifiers"]
+verified = "Own notifier: `EnableCallback`, `QSchedulerNotifier`, `QSchedulerNotifyToken` with the Vault toggle; updating existing clusters keeps other settings, masked values and unrelated vault toggles."
+not_tested = "–"
+
+[[sections.features]]
+name = "Matching clusters to an instance"
+code = ["core:qscheduler_clusters", "core:cluster_machine", "core:id_of", "core:as_dict"]
+verified = "By `QSchedulerHost`/`MasterNodeName` + port; other schedulers and ports ignored; machine taken from the queue."
+not_tested = "–"
+
+[[sections.features]]
+name = "Unassign"
+code = ["deploy:unassign_worker", "deploy:qscheduler_unassign_api"]
+verified = "Refused while the HEAppE has clusters on the instance (assignment kept); otherwise leftover notifiers removed and assignment deleted."
+not_tested = "*Force* when the HEAppE API is unreachable, network disconnect, the unassign API."
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+[[sections]]
+title = "Quantum machines (Clusters page)"
+
+[[sections.features]]
+name = "Add machine – validation"
+code = ["machines:parse_machine_options"]
+verified = "Defaults; QScheduler instance required; IQM URL, device, token and poll interval with unit required; existing-machine mode skips backend validation; no project → no project name."
+not_tested = "Integer range errors (queue size, allocation)."
+
+[[sections.features]]
+name = "QScheduler CLI arguments"
+code = ["core:machine_args", "core:machine_remove_args", "core:notifier_add_args", "core:parse_notifier_list"]
+verified = "`machine add` option order (options before backend), `--limit-check-interval`, IQM `--poll-interval`; `notifier add <name> --url --token`; `notifier list` parsing (table and \"No notifiers registered.\")."
+not_tested = "`machine remove [--force]` arguments."
+
+[[sections.features]]
+name = "Add machine"
+code = ["machines:add_machine_worker", "machines:_create_cluster", "machines:_register_cluster_resources",
+        "machines:_assignment_for"]
+verified = "New machine: refused when it already exists (points to *Use existing machine*), otherwise `machine add` + `notifier add`, one restart, cluster with the notifier and its token in Vault. Existing (shared) machine: only `notifier add`, cluster with `MasterNodeName` = QScheduler host and `EnableCallback=true`, no project when not requested. Without notifications: no command, no restart, `EnableCallback=false`."
+not_tested = "CLI failure, REST verification of the machine, project/allocation/credential creation, machine missing from the instance list."
+
+[[sections.features]]
+name = "Remove machine"
+code = ["machines:remove_machine_worker", "machines:_instance_of_cluster", "machines:qscheduler_machine_remove_api"]
+verified = "Cluster deleted, its notifier removed, one restart, machine kept in QScheduler."
+not_tested = "*Also remove the machine* (`machine remove`, `--force`), refused removal keeping the cluster, the remove API."
+
+[[sections.features]]
+name = "Machine dialog data"
+code = ["machines:qscheduler_machine_defaults_api", "machines:qscheduler_machine_list_api"]
+verified = "Lists the instances assigned to the current HEAppE; reports a HEAppE API error."
+not_tested = "Cluster list for removal, `qscheduler_machine_list_api`."
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+[[sections]]
+title = "Cluster detail of a QScheduler cluster"
+
+[[sections.features]]
+name = "Badge and notifier fields"
+status = "covered"
+status_reason = "template (`cluster_detail.html`)"
+verified = "QScheduler clusters show the *QScheduler cluster* badge and the `QSchedulerNotifier` / `QSchedulerNotifyToken` fields in *Webhook & Callback Notifications*; other clusters hide the badge."
+not_tested = "JavaScript serialization of the fields, the notifier URL hint."
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+[[sections]]
+title = "Remote access and helpers"
+
+[[sections.features]]
+name = "SSH into container"
+code = ["core:ContainerShellTarget", "core:_psql_machines_sql"]
+verified = "`DATABASE_URL` is exported before the command (given value, or read from `/proc/1/environ`)."
+not_tested = "Health check, restart + reconnect, machine listing via `psql`."
+
+[[sections.features]]
+name = "SSH to VM / local Docker"
+code = ["core:DockerTarget", "core:DockerCli", "core:QsTarget", "core:target_for", "core:apply_cli_change"]
+verified = "–"
+not_tested = "All (exec, restart, health wait, machine listing)."
+
+[[sections.features]]
+name = "SSH session"
+code = ["core:SshSession", "core:load_private_key", "core:ssh_session_for"]
+verified = "– (checked manually with generated RSA keys, encrypted and broken keys, not in the test suite)."
+not_tested = "Key loading, host-key pinning and mismatch, timeouts."
+
+[[sections.features]]
+name = "Command helpers and secret redaction"
+code = ["core:redact_args", "core:parse_serve_port", "core:status_of", "core:bash_http_get",
+        "core:qscheduler_healthcheck_args", "core:CommandResult"]
+verified = "`DATABASE_URL` password, `--token` values and `POSTGRES_PASSWORD` are masked in logs; `serve --port` parsing."
+not_tested = "Health-check command builders."
+
+[[sections.features]]
+name = "HEAppE API container, network, restart, reachability"
+code = ["core:find_heappe_api_container", "core:resolve_heappe_service_network", "core:restart_heappe",
+        "core:check_from_heappe"]
+verified = "– (checked manually on the local Docker host, not in the test suite)."
+not_tested = "All."
+
+[[sections.features]]
+name = "HEAppE version / identifier lookup"
+code = ["core:heappe_identity"]
+verified = "– (mocked in the workflow tests)."
+not_tested = "Health API, `appsettings.json` fallback."
+
+[[sections.features]]
+name = "Background operations"
+code = ["core:start_operation", "core:operation_status", "core:log_file_path", "core:make_logger",
+        "deploy:qscheduler_operation_status_api"]
+verified = "–"
+not_tested = "Single-operation lock, result/error state, log streaming."
+
+# ---------------------------------------------------------------------------------------------------------------------
+
+[[next_tests]]
+priority = "High"
+test = "`remove_machine_worker` with *Also remove the machine*: `machine remove` called; refused removal without `--force` keeps the cluster; \"not found\" treated as already removed."
+
+[[next_tests]]
+priority = "High"
+test = "`start_operation`: second operation refused while one runs; failure sets `error`; result returned in `operation_status`."
+
+[[next_tests]]
+priority = "High"
+test = "`update_worker` rollback: failed health check restores the previous container."
+
+[[next_tests]]
+priority = "Medium"
+test = "Assignment edit: token rotation and callback URL change recreate all cluster notifiers with new tokens."
+
+[[next_tests]]
+priority = "Medium"
+test = "`DockerTarget` with a fake `DockerCli`: `cli` refuses a stopped container, `wait_healthy` with healthy / unhealthy / no-healthcheck containers."
+
+[[next_tests]]
+priority = "Medium"
+test = "`SshSession` with a mocked `paramiko.SSHClient`: pinned host key mismatch, authentication failure. `load_private_key` with generated keys."
+
+[[next_tests]]
+priority = "Low"
+test = "Deploy API refuses an old HEAppE in *Assign HEAppE instance*; `register_worker` and `undeploy_worker` with mocked targets; `qscheduler_live_api` output."
+
+[[next_tests]]
+priority = "Low"
+test = "Integration test (CI only): deploy from the local `qscheduler:latest` image, assign a test HEAppE, add a `test` machine, run a job."

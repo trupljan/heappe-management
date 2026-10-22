@@ -1,0 +1,110 @@
+<!-- QScheduler operation progress (shared by the QScheduler page and the Clusters page) -->
+<div class="modal fade" id="qsProgressModal" tabindex="-1" aria-labelledby="qsProgressLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsProgressLabel">
+                    <i class="bi bi-cpu"></i><span id="qs-progress-title">QScheduler operation</span>
+                </h5>
+            </div>
+            <div class="modal-body p-4">
+                <div class="text-center mb-3" id="qs-progress-spinner">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <p class="text-muted mt-2 small" id="qs-progress-hint">Working... Image builds compile QScheduler from source and can take several minutes.</p>
+                </div>
+                <div id="qs-progress-success" class="alert alert-success border-0 rounded-3 small mb-3 d-none">
+                    <h6 class="alert-heading fw-bold d-flex align-items-center gap-2"><i class="bi bi-check-circle-fill"></i><span id="qs-progress-success-title">Done</span></h6>
+                    <div class="bg-white p-3 rounded border border-success-subtle font-monospace text-dark mt-2" id="qs-progress-success-details"></div>
+                </div>
+                <div id="qs-progress-error" class="alert alert-danger border-0 rounded-3 small mb-3 d-none">
+                    <h6 class="alert-heading fw-bold"><i class="bi bi-exclamation-octagon-fill me-1"></i>Operation failed</h6>
+                    <div id="qs-progress-error-text"></div>
+                </div>
+                <label class="form-label fw-bold text-secondary mb-2 small"><i class="bi bi-journal-text me-1"></i>Logs:</label>
+                <pre id="qs-progress-logs" class="p-3 mb-0 rounded text-light bg-dark font-monospace" style="height: 300px; overflow-y: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap; border: 1px solid #343a40;"></pre>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2 d-none" id="qs-progress-close" data-bs-dismiss="modal">Close</button>
+                <a href="#" class="btn btn-success btn-sm fw-bold rounded-3 shadow-sm px-3 py-2 d-none" id="qs-progress-link"></a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.qsUtil = (function () {
+    const esc = v => String(v ?? '-').replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
+    const csrf = '{{ csrf_token }}';
+
+    function postJson(url, data) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/json' },
+            body: JSON.stringify(data || {})
+        }).then(r => r.json().catch(() => ({ status: 'error', message: 'Server returned HTTP ' + r.status + '.' })));
+    }
+
+    function getJson(url) {
+        return fetch(url).then(r => r.json().catch(() => ({ status: 'error', message: 'Server returned HTTP ' + r.status + '.' })));
+    }
+
+    // Spinner inside a button while something loads; returns a restore function.
+    function setButtonLoading(btn, text) {
+        const html = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + text;
+        return () => { btn.disabled = false; btn.innerHTML = html; };
+    }
+
+    let pollTimer = null;
+    let modal = null;
+
+    /**
+     * Shows the progress modal and polls the operation status.
+     * opts: { title, hint, successTitle, details(result) -> html, link(result) -> {href, text} | null, reloadOnClose }
+     */
+    function track(opts) {
+        const el = document.getElementById('qsProgressModal');
+        modal = modal || new bootstrap.Modal(el);
+        const $ = id => document.getElementById(id);
+        $('qs-progress-title').textContent = opts.title || 'QScheduler operation';
+        $('qs-progress-hint').textContent = opts.hint || 'Working...';
+        $('qs-progress-logs').textContent = 'Starting...';
+        $('qs-progress-spinner').classList.remove('d-none');
+        ['qs-progress-success', 'qs-progress-error', 'qs-progress-close', 'qs-progress-link'].forEach(id => $(id).classList.add('d-none'));
+        modal.show();
+        clearInterval(pollTimer);
+        pollTimer = setInterval(() => {
+            getJson("{% url 'qscheduler_operation_status' %}").then(d => {
+                const logEl = $('qs-progress-logs');
+                logEl.textContent = d.logs || 'Waiting for logs...';
+                logEl.scrollTop = logEl.scrollHeight;
+                if (d.is_running) return;
+                clearInterval(pollTimer);
+                $('qs-progress-spinner').classList.add('d-none');
+                $('qs-progress-close').classList.remove('d-none');
+                const r = d.result || {};
+                if (d.success) {
+                    $('qs-progress-success-title').textContent = opts.successTitle || 'Done';
+                    $('qs-progress-success-details').innerHTML = opts.details ? opts.details(r, esc) : '';
+                    $('qs-progress-success').classList.remove('d-none');
+                    const link = opts.link ? opts.link(r) : null;
+                    if (link) {
+                        $('qs-progress-link').href = link.href;
+                        $('qs-progress-link').textContent = link.text;
+                        $('qs-progress-link').classList.remove('d-none');
+                    }
+                } else {
+                    $('qs-progress-error-text').textContent = d.error || 'Operation failed. See the logs.';
+                    $('qs-progress-error').classList.remove('d-none');
+                }
+                if (opts.reloadOnClose !== false) {
+                    el.addEventListener('hidden.bs.modal', () => location.reload(), { once: true });
+                }
+            }).catch(err => console.error('QScheduler status poll failed:', err));
+        }, 1500);
+    }
+
+    return { esc, postJson, getJson, setButtonLoading, track };
+})();
+</script>

@@ -2768,8 +2768,8 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
         return cluster
 
     @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
-    def test_cluster_create_post_qscheduler_v650_sends_vault_toggles(self, mock_api):
-        """cluster_create POST for QScheduler + v6.5.0 should pass CustomConfigurationVaultToggles."""
+    def test_cluster_create_post_qscheduler_v660_sends_vault_toggles(self, mock_api):
+        """cluster_create POST for QScheduler + v6.6.0 should pass CustomConfigurationVaultToggles."""
         mock_instance = mock.MagicMock()
         mock_api.return_value = mock_instance
         mock_instance.heappe_management_cluster_proxy_connections_get.return_value = []
@@ -2797,7 +2797,7 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
         request.session = {
             "chosen_instance": "test",
             "heappe_session_code": "tok",
-            "middleware_deployed_version": "6.5.0",
+            "middleware_deployed_version": "6.6.0",
         }
         request.api_instance = mock.MagicMock()
         request.session_code = "tok"
@@ -2822,54 +2822,33 @@ class QSchedulerVaultToggleSerializationTests(TestCase):
         self.assertTrue(toggles.get("ClusterCallbackNotifyToken"), "Expected vault flag to be True for token")
 
     @mock.patch("py4heappe.heappe_v6.core.ManagementApi")
-    def test_cluster_create_post_qscheduler_pre_v650_no_vault_toggles(self, mock_api):
-        """cluster_create POST for QScheduler + v < 6.5.0 should NOT pass CustomConfigurationVaultToggles."""
+    def test_cluster_create_post_qscheduler_pre_v660_refused(self, mock_api):
+        """QScheduler clusters need HEAppE 6.6.0+: cluster_create refuses them on older versions."""
         mock_instance = mock.MagicMock()
         mock_api.return_value = mock_instance
         mock_instance.heappe_management_cluster_proxy_connections_get.return_value = []
 
-        created_cluster = {"id": 11}
-        mock_instance.heappe_management_cluster_post.return_value = created_cluster
+        for version in ("6.4.0", "6.5.0", ""):
+            request = self.factory.post("/clusters/create/", {
+                "Name": "OldQCluster", "Description": "", "MasterNodeName": "qmaster", "SchedulerType": "32",
+                "ConnectionProtocol": "2", "TimeZone": "UTC", "Port": "22",
+                "UpdateJobStateByServiceAccount": "true", "DomainName": "qcluster.example.com",
+                "CustomConfiguration": '{"QSchedulerPort":"3000"}', "CustomConfigurationVaultToggles": '{}',
+            })
+            request.user = self.user
+            request.session = {"chosen_instance": "test", "heappe_session_code": "tok",
+                               "middleware_deployed_version": version}
+            request.api_instance = mock.MagicMock()
+            request.session_code = "tok"
+            from django.contrib.messages.storage.fallback import FallbackStorage
+            setattr(request, '_messages', FallbackStorage(request))
 
-        request = self.factory.post("/clusters/create/", {
-            "Name": "OldQCluster",
-            "Description": "",
-            "MasterNodeName": "qmaster",
-            "SchedulerType": "32",
-            "ConnectionProtocol": "2",
-            "TimeZone": "UTC",
-            "Port": "22",
-            "UpdateJobStateByServiceAccount": "true",
-            "DomainName": "qcluster.example.com",
-            "CustomConfiguration": '{"QSchedulerPort":"3000"}',
-            "CustomConfigurationVaultToggles": '{}',
-        })
-        request.user = self.user
-        request.session = {
-            "chosen_instance": "test",
-            "heappe_session_code": "tok",
-            "middleware_deployed_version": "6.4.0",
-        }
-        request.api_instance = mock.MagicMock()
-        request.session_code = "tok"
+            from heappe_ui.view.clusters import cluster_create
+            response = cluster_create(request)
 
-        from django.contrib.messages.storage.fallback import FallbackStorage
-        setattr(request, '_messages', FallbackStorage(request))
-
-        from heappe_ui.view.clusters import cluster_create
-        response = cluster_create(request)
-
-        mock_instance.heappe_management_cluster_post.assert_called_once()
-        call_kwargs = mock_instance.heappe_management_cluster_post.call_args[1]
-        body = call_kwargs["body"]
-
-        # For pre-6.5.0 no vault toggles should be set on the body
-        vault_field = getattr(body, "custom_configuration_vault_toggles", None)
-        # Either None or not set at all
-        self.assertFalse(
-            vault_field,
-            "Expected custom_configuration_vault_toggles to be falsy for pre-6.5.0"
-        )
+            self.assertEqual(response.status_code, 302, version)
+            mock_instance.heappe_management_cluster_post.assert_not_called()
+            self.assertIn("6.6.0", " ".join(str(m) for m in request._messages))
 
 
 class ApiSessionCodePatchingTests(TestCase):
@@ -5086,128 +5065,608 @@ class InstanceTeardownAndDeploymentFailureTests(TestCase):
 
 
 
-class QSchedulerDeployTests(TestCase):
-    """Tests for the automated QScheduler deployment helpers (one HEAppE cluster == one QScheduler machine)."""
+class QSchedulerHelperTests(TestCase):
+    """Pure helpers: CLI arguments, parsing, redaction, cluster configuration."""
 
-    def test_parse_defaults_new_instance(self):
-        from heappe_ui.view.qscheduler_deploy import parse_qscheduler_options
-        opts, errors = parse_qscheduler_options({}, "abcd1234")
+    def test_machine_options_defaults(self):
+        from heappe_ui.view.qscheduler_machines import parse_machine_options
+        opts, errors = parse_machine_options({"qscheduler_id": "3"}, "abcd1234")
         self.assertEqual(errors, [])
-        self.assertEqual(opts['target'], 'new')
-        self.assertEqual(opts['container_name'], 'qscheduler-abcd1234')
+        self.assertEqual(opts['machine_mode'], 'new')
         self.assertEqual(opts['machine_name'], 'SimulatorMachine')
+        self.assertEqual(opts['cluster_name'], 'SimulatorMachine')
         self.assertEqual(opts['project_name'], 'qs-abcd1234')
-        self.assertTrue(opts['enable_callback'])
-        self.assertIsNone(opts['host_port'])
 
-    def test_parse_existing_requires_instance(self):
-        from heappe_ui.view.qscheduler_deploy import parse_qscheduler_options
-        _, errors = parse_qscheduler_options({"target": "existing"}, "x")
-        self.assertTrue(any("instance" in e for e in errors))
-        opts, errors = parse_qscheduler_options({"target": "existing", "existing_container": "qscheduler-1"}, "x")
+    def test_machine_options_require_instance_and_iqm_fields(self):
+        from heappe_ui.view.qscheduler_machines import parse_machine_options
+        _, errors = parse_machine_options({"backend": "iqm", "machine_name": "VLQ", "iqm_poll_interval": "500"}, "x")
+        joined = " ".join(errors)
+        for text in ("QScheduler instance", "IQM server URL", "device", "IQM token", "unit suffix"):
+            self.assertIn(text, joined)
+
+    def test_machine_options_existing_machine_skips_backend_validation(self):
+        from heappe_ui.view.qscheduler_machines import parse_machine_options
+        opts, errors = parse_machine_options({"qscheduler_id": "1", "machine_mode": "existing", "machine_name": "Shared",
+                                              "backend": "iqm", "create_project": False}, "x")
         self.assertEqual(errors, [])
-        self.assertEqual(opts['container_name'], 'qscheduler-1')
+        self.assertIsNone(opts['project_name'])
 
-    def test_parse_iqm_validation(self):
-        from heappe_ui.view.qscheduler_deploy import parse_qscheduler_options
-        _, errors = parse_qscheduler_options({"backend": "iqm", "machine_name": "VLQ", "iqm_check_interval": "500"}, "x")
-        self.assertTrue(any("IQM server URL" in e for e in errors))
-        self.assertTrue(any("device" in e for e in errors))
-        self.assertTrue(any("unit suffix" in e for e in errors))
-
-    def test_machine_add_args_order_test_backend(self):
-        from heappe_ui.view.qscheduler_deploy import parse_qscheduler_options, build_machine_add_args
-        opts, _ = parse_qscheduler_options({"machine_name": "Sim"}, "x")
-        args = build_machine_add_args(opts, "http://h/heappe/JobManagement/TaskCallback", "tok")
+    def test_machine_args_new_cli(self):
+        from heappe_ui.view.qscheduler_machines import parse_machine_options
+        from heappe_ui.view.qscheduler_core import machine_args
+        opts, _ = parse_machine_options({"qscheduler_id": "1", "machine_name": "Sim"}, "x")
+        args = machine_args(opts)
         self.assertEqual(args[:3], ["machine", "add", "Sim"])
-        # global options must precede the backend sub-command
-        self.assertLess(args.index("--notify-url"), args.index("test"))
         self.assertEqual(args[-1], "test")
-
-    def test_machine_add_args_iqm(self):
-        from heappe_ui.view.qscheduler_deploy import parse_qscheduler_options, build_machine_add_args
-        opts, errors = parse_qscheduler_options({"backend": "iqm", "machine_name": "VLQ", "iqm_url": "https://vlq.it4i.cz",
-                                                 "iqm_device": "star24", "iqm_token": "secret"}, "x")
+        self.assertLess(args.index("--limit-check-interval"), args.index("test"))
+        self.assertNotIn("--notify-url", args)       # notifications are not part of a machine any more
+        opts, errors = parse_machine_options({"qscheduler_id": "1", "backend": "iqm", "machine_name": "VLQ",
+                                              "iqm_url": "https://vlq.it4i.cz", "iqm_device": "star24",
+                                              "iqm_token": "secret"}, "x")
         self.assertEqual(errors, [])
-        args = build_machine_add_args(opts)
+        args = machine_args(opts)
         i = args.index("iqm")
+        self.assertIn("--poll-interval", args[i:])
+        self.assertNotIn("--check-interval", args)
         self.assertIn("--machine-name", args[i:])
-        self.assertIn("--token", args[i:])
-        self.assertNotIn("--notify-url", args)
 
-    def test_cluster_custom_configuration(self):
-        from heappe_ui.view.qscheduler_deploy import parse_qscheduler_options, build_cluster_custom_configuration
-        opts, _ = parse_qscheduler_options({"port": "4301", "store_token_in_vault": True}, "x")
-        cfg, toggles = build_cluster_custom_configuration(opts, "tok", "6.5.2")
-        self.assertEqual(cfg["QSchedulerPort"], "4301")
-        self.assertEqual(cfg["QSchedulerHost"], "qscheduler-x")
-        self.assertEqual(cfg["EnableCallback"], "true")
-        self.assertEqual(cfg["ClusterCallbackNotifyToken"], "tok")
-        self.assertTrue(toggles["ClusterCallbackNotifyToken"])
+    def test_notifier_args_and_list_parsing(self):
+        from heappe_ui.view.qscheduler_core import notifier_add_args, parse_notifier_list, redact_args
+        args = notifier_add_args("heappe-dev", "http://h/heappe/JobManagement/TaskCallback", "tok")
+        self.assertEqual(args[:3], ["notifier", "add", "heappe-dev"])
+        self.assertEqual(redact_args(args)[-2:], ["--token", "********"])
+        out = "NAME        TOKEN  URL\nheappe-dev  yes    http://h/cb\nother       no     http://x/cb\n"
+        self.assertEqual(parse_notifier_list(out), [
+            {"name": "heappe-dev", "has_token": True, "url": "http://h/cb"},
+            {"name": "other", "has_token": False, "url": "http://x/cb"}])
+        self.assertEqual(parse_notifier_list("No notifiers registered.\n"), [])
 
-    def test_redact_args(self):
-        from heappe_ui.view.qscheduler_deploy import redact_args
-        out = redact_args(["-e", "DATABASE_URL=postgres://u:pw@h/db", "--token", "abc", "-e", "POSTGRES_PASSWORD=x"])
-        joined = " ".join(out)
+    def test_redact_and_serve_port(self):
+        from heappe_ui.view.qscheduler_core import redact_args, parse_serve_port
+        joined = " ".join(redact_args(["-e", "DATABASE_URL=postgres://u:pw@h/db", "--token", "abc", "-e", "POSTGRES_PASSWORD=x"]))
         self.assertNotIn("pw@", joined)
         self.assertNotIn("abc", joined)
         self.assertNotIn("PASSWORD=x", joined)
+        self.assertEqual(parse_serve_port(["serve", "--port", "4305"]), 4305)
+        self.assertEqual(parse_serve_port(["serve"]), 4300)
 
-    def test_parse_serve_port(self):
-        from heappe_ui.view.qscheduler_deploy import _parse_serve_port
-        self.assertEqual(_parse_serve_port(["serve", "--port", "4305"]), 4305)
-        self.assertEqual(_parse_serve_port(["serve"]), 4300)
+    def test_cluster_configuration_with_own_notifier(self):
+        from heappe_ui.view.qscheduler_core import build_cluster_custom_configuration, cluster_notifier_name
+        inst = mock.Mock(service_host="qs-1", port=4301)
+        name = cluster_notifier_name("heappe-dev", "Sim")
+        self.assertEqual(name, "heappe-dev.Sim")
+        cfg, toggles = build_cluster_custom_configuration(inst, (name, "tok"))
+        self.assertEqual(cfg, {"QSchedulerHost": "qs-1", "QSchedulerPort": "4301", "QSchedulerUseSessions": "true",
+                               "EnableCallback": "true", "QSchedulerNotifier": "heappe-dev.Sim", "QSchedulerNotifyToken": "tok"})
+        self.assertEqual(toggles, {"QSchedulerNotifyToken": True})        # token always in Vault
+        cfg, toggles = build_cluster_custom_configuration(inst, None, use_sessions=False)
+        self.assertEqual(cfg["EnableCallback"], "false")
+        self.assertNotIn("QSchedulerNotifier", cfg)
+        self.assertNotIn("QSchedulerNotifyToken", cfg)
+        self.assertEqual(toggles, {})
 
-    @mock.patch("heappe_ui.view.qscheduler_deploy.threading.Thread")
-    @mock.patch("heappe_ui.view.qscheduler_deploy._container_exists", return_value=False)
-    def test_setup_view_rejects_old_heappe(self, _exists, _thread):
-        import json as _json
-        from heappe_ui.view.qscheduler_deploy import setup_qscheduler_view
-        request = RequestFactory().post("/clusters/setup-qscheduler/", data=_json.dumps({}), content_type="application/json")
-        request.user = User.objects.create_user(username="qs_old", password="p")
-        request.session = {"chosen_instance": "test", "middleware_deployed_version": "6.4.0"}
-        response = setup_qscheduler_view(request)
-        self.assertEqual(response.status_code, 400)
-        _thread.assert_not_called()
+    def test_update_cluster_notifications_keeps_other_settings(self):
+        from heappe_ui.view.qscheduler_core import update_cluster_notifications
+        controller = mock.Mock()
+        cluster = {"id": 7, "name": "Sim", "description": "d", "master_node_name": "qs-1", "scheduler_type": 32,
+                   "connection_protocol": 8, "time_zone": "UTC", "port": 4300, "domain_name": None,
+                   "proxy_connection": None,
+                   "custom_configuration": {"QSchedulerHost": "qs-1", "QSchedulerPort": "4300", "EnableCallback": "true",
+                                            "QSchedulerNotifier": "old", "QSchedulerNotifyToken": "********",
+                                            "ClusterCallbackNotifyToken": "********"},
+                   "custom_configuration_vault_toggles": {"QSchedulerNotifyToken": True, "ClusterCallbackNotifyToken": True}}
+        update_cluster_notifications(controller, "sc", cluster, None, lambda *_: None)
+        body = controller.heappe_management_cluster_put.call_args.kwargs["body"]
+        self.assertEqual(body["Id"], 7)
+        # disabled: notifier removed; empty Vault-toggled token makes HEAppE delete it from Vault
+        self.assertEqual(body["CustomConfiguration"], {"QSchedulerHost": "qs-1", "QSchedulerPort": "4300",
+                                                       "EnableCallback": "false", "QSchedulerNotifyToken": "",
+                                                       "ClusterCallbackNotifyToken": "********"})
+        self.assertEqual(body["CustomConfigurationVaultToggles"], {"QSchedulerNotifyToken": True, "ClusterCallbackNotifyToken": True})
+        update_cluster_notifications(controller, "sc", cluster, ("heappe-dev.Sim", "new"), lambda *_: None)
+        body = controller.heappe_management_cluster_put.call_args.kwargs["body"]
+        self.assertEqual(body["CustomConfiguration"]["QSchedulerNotifier"], "heappe-dev.Sim")
+        self.assertEqual(body["CustomConfiguration"]["QSchedulerNotifyToken"], "new")
+        self.assertTrue(body["CustomConfigurationVaultToggles"]["QSchedulerNotifyToken"])
 
+    def test_qscheduler_clusters_match_host_and_port(self):
+        from heappe_ui.view.qscheduler_core import qscheduler_clusters, cluster_machine
+        inst = mock.Mock(service_host="qs-1", port=4300)
+        mk = lambda **kw: mock.Mock(to_dict=mock.Mock(return_value=kw))
+        controller = mock.Mock()
+        controller.heappe_management_clusters_get.return_value = [
+            mk(id=1, scheduler_type=32, master_node_name="qs-1", port=4300, custom_configuration={},
+               node_types=[{"queue": "Sim"}]),
+            mk(id=2, scheduler_type=32, master_node_name="x", custom_configuration={"QSchedulerHost": "qs-1", "QSchedulerPort": "4300"}),
+            mk(id=3, scheduler_type=32, master_node_name="qs-1", port=4301, custom_configuration={}),
+            mk(id=4, scheduler_type=4, master_node_name="qs-1", port=4300),
+        ]
+        found = qscheduler_clusters(controller, "sc", inst)
+        self.assertEqual([c["id"] for c in found], [1, 2])
+        self.assertEqual(cluster_machine(found[0]), "Sim")
 
-class QSchedulerManageTests(TestCase):
-    """Update-from-git / undeploy helpers for QScheduler instances deployed by this tool."""
-
-    INFO = {"Id": "abcdef1234567890", "Name": "/qs-1",
-            "Config": {"Image": "qscheduler:latest", "Cmd": ["serve", "--port", "4301"],
-                       "Env": ["DATABASE_URL=postgres://u:pw@qs-1-pgsql:5432/db", "PATH=/usr/bin"],
-                       "Labels": {"com.docker.compose.service": "qscheduler"}},
-            "HostConfig": {"RestartPolicy": {"Name": "unless-stopped"},
-                           "PortBindings": {"4301/tcp": [{"HostIp": "127.0.0.1", "HostPort": "14301"}]}},
-            "NetworkSettings": {"Networks": {"qs-1_db_net": {"Aliases": ["qs-1", "abcdef123456"]},
-                                             "inst_external_network": {"Aliases": ["qs-1"]}}}}
-
-    def test_parse_manage_options(self):
-        from heappe_ui.view.qscheduler_deploy import parse_manage_options
-        opts, errors = parse_manage_options({"action": "undeploy", "instance": "qs-1"})
-        self.assertEqual(errors, [])
-        self.assertTrue(opts['remove_clusters'])
-        self.assertFalse(opts['remove_data'])
-        _, errors = parse_manage_options({"action": "update", "instance": "qs-1", "repo": "file:///etc"})
-        self.assertTrue(errors)
-        _, errors = parse_manage_options({"action": "drop", "instance": ""})
-        self.assertEqual(len(errors), 2)
+    def test_container_shell_target_exports_database_url(self):
+        from heappe_ui.view.qscheduler_core import ContainerShellTarget, CommandResult
+        ssh = mock.Mock(host="h", port=2222)
+        ssh.run.return_value = CommandResult(0, "ok", "")
+        target = ContainerShellTarget(ssh, 4300, "postgres://u:p@db/q")
+        target.cli(["notifier", "list"], lambda *_: None)
+        cmd = ssh.run.call_args.args[0]
+        self.assertTrue(cmd.startswith("export DATABASE_URL="))
+        self.assertTrue(cmd.endswith("qscheduler notifier list"))
+        ContainerShellTarget(ssh, 4300).cli(["notifier", "list"], lambda *_: None)
+        self.assertIn("/proc/1/environ", ssh.run.call_args.args[0])
 
     def test_recreate_args_keep_configuration(self):
         from heappe_ui.view import qscheduler_deploy as q
+        info = {"Id": "abcdef1234567890", "Name": "/qs-1",
+                "Config": {"Image": "qscheduler:latest", "Cmd": ["serve", "--port", "4301"],
+                           "Env": ["DATABASE_URL=postgres://u:pw@qs-1-pgsql:5432/db", "PATH=/usr/bin"],
+                           "Labels": {"com.docker.compose.service": "qscheduler"}},
+                "HostConfig": {"RestartPolicy": {"Name": "unless-stopped"},
+                               "PortBindings": {"4301/tcp": [{"HostIp": "127.0.0.1", "HostPort": "14301"}]}},
+                "NetworkSettings": {"Networks": {"qs-1_db_net": {"Aliases": ["qs-1", "abcdef123456"]},
+                                                 "inst_external_network": {"Aliases": ["qs-1"]}}}}
         internal = {"qs-1_db_net": True, "inst_external_network": False}
-        with mock.patch.object(q, "_network_is_internal", side_effect=lambda n: internal[n]):
-            args, nets, port = q.recreate_args_from_inspect(self.INFO, "qscheduler:new", {"qscheduler.branch": "v2"})
+        with mock.patch.object(q, "_network_is_internal", side_effect=lambda n, d=None: internal[n]):
+            args, nets, port = q.recreate_args_from_inspect(info, "qscheduler:new", {"qscheduler.branch": "v2"})
         self.assertEqual(port, 4301)
-        self.assertEqual(nets[0][0], "inst_external_network")       # egress-capable network first
+        self.assertEqual(nets[0][0], "inst_external_network")
         self.assertIn("127.0.0.1:14301:4301", args)
         self.assertIn("DATABASE_URL=postgres://u:pw@qs-1-pgsql:5432/db", args)
         self.assertFalse(any(a.startswith("PATH=") for a in args))
         self.assertIn("qscheduler.branch=v2", args)
         self.assertIn("--health-cmd", args)
         self.assertEqual(args[-4:], ["qscheduler:new", "serve", "--port", "4301"])
-        self.assertNotIn("abcdef123456", sum((a for _, a in nets), []))
+
+
+class QSchedulerOptionParsingTests(TestCase):
+    def test_deploy_defaults_and_source(self):
+        from heappe_ui.view.qscheduler_deploy import parse_deploy_options
+        opts, errors = parse_deploy_options({}, "abcd1234")
+        self.assertEqual(errors, [])
+        self.assertEqual(opts['name'], "qscheduler-abcd1234")
+        self.assertEqual(opts['source'], "git")
+        self.assertIsNone(opts['host_port'])
+        _, errors = parse_deploy_options({"source": "git", "repo": "file:///etc", "ref": "bad ref"}, "x")
+        self.assertEqual(len(errors), 2)
+        opts, errors = parse_deploy_options({"source": "image", "image": "registry.example.org/qscheduler:v0.2"}, "x")
+        self.assertEqual(errors, [])
+
+    def test_register_local_and_ssh(self):
+        from heappe_ui.view.qscheduler_deploy import parse_register_options
+        opts, errors = parse_register_options({"kind": "local", "container_name": "qs-ext"})
+        self.assertEqual(errors, [])
+        self.assertEqual((opts['name'], opts['service_host']), ("qs-ext", "qs-ext"))
+        _, errors = parse_register_options({"kind": "ssh_host", "container_name": "qs", "ssh_host": "vm.example.org"})
+        self.assertTrue(any("SSH user" in e for e in errors))
+        self.assertTrue(any("private key" in e for e in errors))
+        key = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----"
+        opts, errors = parse_register_options({"kind": "ssh_container", "ssh_host": "vm.example.org", "ssh_port": "2222",
+                                               "ssh_user": "root", "ssh_private_key": key})
+        self.assertEqual(errors, [])
+        self.assertEqual((opts['ssh_port'], opts['service_host'], opts['restart_command']), (2222, "vm.example.org", "kill -TERM 1"))
+        _, errors = parse_register_options({"kind": "ssh_host", "container_name": "qs", "ssh_host": "vm", "ssh_user": "u",
+                                            "ssh_private_key": key, "docker_command": "rm -rf /; docker"})
+        self.assertTrue(any("Docker command" in e for e in errors))
+
+    def test_assignment_options(self):
+        from heappe_ui.view.qscheduler_deploy import parse_assignment_options
+        opts, errors = parse_assignment_options({"heappe_instance_id": "2", "notifications_enabled": True})
+        self.assertEqual(errors, [])
+        self.assertTrue(opts['notifications_enabled'])
+        _, errors = parse_assignment_options({"heappe_instance_id": "", "callback_url": "ftp://x"})
+        self.assertEqual(len(errors), 2)
+
+
+class QSchedulerWorkflowTests(TestCase):
+    """Assignment / machine workflows with QScheduler, Docker and HEAppE mocked."""
+
+    def setUp(self):
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance
+        self.cred = InstanceCredentials.objects.create(instance_name="dev", heappe_host="h", heappe_login="u",
+                                                       heappe_password="p", heappe_port="5000")
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300)
+        self.log = lambda *_: None
+
+    def _target(self, notifiers=None, machines=None):
+        from heappe_ui.view.qscheduler_core import CommandResult
+        target = mock.Mock()
+        target.list_notifiers.return_value = notifiers or []
+        target.list_machines.return_value = machines
+        target.cli.return_value = CommandResult(0, "ok", "")
+        target.docker.networks_of.return_value = []
+        return target
+
+    def _patches(self, target, version="6.6.0", clusters=None):
+        from heappe_ui.view import qscheduler_core as core
+        controller = mock.Mock()
+        return [
+            mock.patch.object(core, "target_for", return_value=target),
+            mock.patch.object(core, "heappe_identity", return_value=(version, "heappe-dev")),
+            mock.patch.object(core, "resolve_heappe_service_network", return_value=("dev_heappe", "dev_external")),
+            mock.patch.object(core, "restart_heappe"),
+            mock.patch.object(core, "check_from_heappe"),
+            mock.patch.object(core, "find_heappe_api_container", return_value="dev_heappe"),
+            mock.patch.object(core, "qscheduler_clusters", return_value=clusters or []),
+            mock.patch.object(core, "update_cluster_notifications"),
+            mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(controller, "sc", None)),
+        ], controller
+
+    def _run(self, patches, fn, *args):
+        for p in patches:
+            p.start()
+        try:
+            result = {}
+            fn(self.log, result, *args)
+            return result
+        finally:
+            for p in patches:
+                p.stop()
+
+    @staticmethod
+    def _cluster(cid, machine, notifier=None):
+        cfg = {"QSchedulerHost": "qs-1", "QSchedulerPort": "4300",
+               "EnableCallback": "true" if notifier else "false"}
+        if notifier:
+            cfg.update({"QSchedulerNotifier": notifier, "QSchedulerNotifyToken": "********"})
+        return {"id": cid, "name": machine, "node_types": [{"queue": machine}], "custom_configuration": cfg}
+
+    def _added(self, target):
+        return [c.args[0] for c in target.cli.call_args_list if c.args[0][:2] == ["notifier", "add"]]
+
+    def _removed(self, target):
+        return [c.args[0][2] for c in target.cli.call_args_list if c.args[0][:2] == ["notifier", "remove"]]
+
+    def test_assign_without_clusters_creates_no_notifier(self):
+        from heappe_ui.view.qscheduler_deploy import assign_worker
+        from heappe_ui.models import QSchedulerAssignment
+        target = self._target()
+        patches, _ = self._patches(target)
+        opts = {"heappe_instance_id": str(self.cred.id), "notifications_enabled": True, "callback_url": ""}
+        self._run(patches, assign_worker, self.inst.id, opts)
+        asg = QSchedulerAssignment.objects.get(qscheduler=self.inst, heappe_instance=self.cred)
+        self.assertTrue(asg.notifications_enabled)
+        self.assertEqual(asg.heappe_identifier, "heappe-dev")
+        self.assertEqual(asg.network, "dev_external")
+        self.assertEqual(asg.callback_url, "http://dev_heappe:80/heappe/JobManagement/TaskCallback")
+        self.assertEqual(self._added(target), [])    # notifiers are created per cluster on the Clusters page
+        target.restart.assert_not_called()
+        target.docker.run.assert_called()           # joined the HEAppE network
+
+    def test_enabling_notifications_creates_one_notifier_per_cluster(self):
+        from heappe_ui.view.qscheduler_deploy import assign_worker
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred, heappe_identifier="heappe-dev")
+        target = self._target()
+        patches, _ = self._patches(target, clusters=[self._cluster(5, "Sim"), self._cluster(6, "VLQ")])
+        opts = {"heappe_instance_id": str(self.cred.id), "notifications_enabled": True, "callback_url": "http://h/cb"}
+        for p in patches:
+            p.start()
+        try:
+            result = {}
+            assign_worker(self.log, result, self.inst.id, opts)
+            calls = core.update_cluster_notifications.call_args_list
+        finally:
+            for p in patches:
+                p.stop()
+        added = self._added(target)
+        self.assertEqual(sorted(a[2] for a in added), ["heappe-dev.Sim", "heappe-dev.VLQ"])
+        tokens = {a[2]: a[-1] for a in added}
+        self.assertNotEqual(tokens["heappe-dev.Sim"], tokens["heappe-dev.VLQ"])      # own token per cluster
+        target.restart.assert_called_once()                                        # one restart for all
+        notifiers = {c.args[2]["id"]: c.args[3] for c in calls}
+        self.assertEqual(notifiers[5], ("heappe-dev.Sim", tokens["heappe-dev.Sim"]))
+        self.assertEqual(result['updated_clusters'], [5, 6])
+
+    def test_disabling_notifications_removes_cluster_notifiers(self):
+        from heappe_ui.view.qscheduler_deploy import assign_worker
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred, heappe_identifier="heappe-dev",
+                                            notifications_enabled=True, callback_url="http://h/cb")
+        target = self._target(notifiers=[{"name": "heappe-dev.Sim", "has_token": True, "url": "http://h/cb"},
+                                         {"name": "other.Sim", "has_token": True, "url": "http://o/cb"}])
+        patches, _ = self._patches(target, clusters=[self._cluster(5, "Sim", "heappe-dev.Sim")])
+        opts = {"heappe_instance_id": str(self.cred.id), "notifications_enabled": False}
+        for p in patches:
+            p.start()
+        try:
+            assign_worker(self.log, {}, self.inst.id, opts)
+            calls = core.update_cluster_notifications.call_args_list
+        finally:
+            for p in patches:
+                p.stop()
+        self.assertEqual(self._removed(target), ["heappe-dev.Sim"])     # the other HEAppE's notifier is untouched
+        self.assertEqual(self._added(target), [])
+        self.assertIsNone(calls[0].args[3])
+
+    def test_unchanged_settings_keep_notifiers(self):
+        from heappe_ui.view.qscheduler_deploy import assign_worker
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred, heappe_identifier="heappe-dev",
+                                            notifications_enabled=True, callback_url="http://h/cb")
+        target = self._target()
+        patches, _ = self._patches(target, clusters=[self._cluster(5, "Sim", "heappe-dev.Sim")])
+        opts = {"heappe_instance_id": str(self.cred.id), "notifications_enabled": True, "callback_url": "http://h/cb"}
+        self._run(patches, assign_worker, self.inst.id, opts)
+        target.cli.assert_not_called()
+        target.restart.assert_not_called()
+
+    def test_assign_refuses_duplicate_identifier(self):
+        from heappe_ui.view.qscheduler_deploy import assign_worker
+        from heappe_ui.models import InstanceCredentials, QSchedulerAssignment
+        other = InstanceCredentials.objects.create(instance_name="other", heappe_host="h2", heappe_login="u",
+                                                   heappe_password="p", heappe_port="5001")
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=other, heappe_identifier="heappe-dev")
+        patches, _ = self._patches(self._target())
+        opts = {"heappe_instance_id": str(self.cred.id), "notifications_enabled": True}
+        with self.assertRaisesRegex(RuntimeError, "same instance identifier"):
+            self._run(patches, assign_worker, self.inst.id, opts)
+
+    def test_assign_rejects_heappe_older_than_660(self):
+        from heappe_ui.view.qscheduler_deploy import assign_worker
+        from heappe_ui.models import QSchedulerAssignment
+        for version, notify in (("6.5.2", True), ("6.5.2", False), ("", False)):
+            target = self._target()
+            patches, _ = self._patches(target, version=version)
+            opts = {"heappe_instance_id": str(self.cred.id), "notifications_enabled": notify}
+            with self.assertRaisesRegex(RuntimeError, "6.6.0"):
+                self._run(patches, assign_worker, self.inst.id, opts)
+            target.cli.assert_not_called()
+        self.assertFalse(QSchedulerAssignment.objects.filter(qscheduler=self.inst, heappe_instance=self.cred).exists())
+
+    def test_supports_qscheduler_versions(self):
+        from heappe_ui.view import qscheduler_core as core
+        for v in ("6.6.0", "v6.6.0", "6.6.1", "7.0.0"):
+            self.assertTrue(core.supports_qscheduler(v), v)
+        for v in ("", None, "6.5.0", "v6.5.9", "6.4.0"):
+            self.assertFalse(core.supports_qscheduler(v), v)
+
+    def test_unassign_blocked_while_clusters_exist(self):
+        from heappe_ui.view.qscheduler_deploy import unassign_worker
+        from heappe_ui.models import QSchedulerAssignment
+        asg = QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred)
+        patches, _ = self._patches(self._target(), clusters=[self._cluster(5, "Sim")])
+        with self.assertRaisesRegex(RuntimeError, "still has clusters"):
+            self._run(patches, unassign_worker, asg.id, False)
+        self.assertTrue(QSchedulerAssignment.objects.filter(pk=asg.pk).exists())
+
+    def test_unassign_removes_leftover_notifiers(self):
+        from heappe_ui.view.qscheduler_deploy import unassign_worker
+        from heappe_ui.models import QSchedulerAssignment
+        asg = QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred,
+                                                  heappe_identifier="heappe-dev", notifications_enabled=True)
+        target = self._target(notifiers=[{"name": "heappe-dev.Old", "has_token": True, "url": "http://x"},
+                                         {"name": "other.Sim", "has_token": True, "url": "http://o"}])
+        patches, _ = self._patches(target)
+        self._run(patches, unassign_worker, asg.id, False)
+        self.assertEqual(self._removed(target), ["heappe-dev.Old"])
+        self.assertFalse(QSchedulerAssignment.objects.filter(pk=asg.pk).exists())
+
+    def test_add_new_machine_that_exists_is_refused(self):
+        from heappe_ui.view.qscheduler_machines import add_machine_worker, parse_machine_options
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred)
+        opts, _ = parse_machine_options({"qscheduler_id": str(self.inst.id), "machine_name": "Sim"}, "x")
+        patches, _ = self._patches(self._target(machines=[{"name": "Sim", "backend": "test"}]))
+        with self.assertRaisesRegex(RuntimeError, "Use existing machine"):
+            self._run(patches, add_machine_worker, "dev", opts, "x")
+
+    def test_add_new_machine_creates_machine_and_notifier_with_one_restart(self):
+        from heappe_ui.view.qscheduler_machines import add_machine_worker, parse_machine_options
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred, heappe_identifier="heappe-dev",
+                                            notifications_enabled=True, callback_url="http://h/cb")
+        opts, _ = parse_machine_options({"qscheduler_id": str(self.inst.id), "machine_name": "Sim", "create_project": False}, "x")
+        target = self._target(machines=[])
+        patches, controller = self._patches(target)
+        controller.heappe_management_cluster_post.return_value = {"id": 12}
+        result = self._run(patches, add_machine_worker, "dev", opts, "x")
+        commands = [c.args[0][:2] for c in target.cli.call_args_list]
+        self.assertEqual(commands, [["machine", "add"], ["notifier", "add"]])
+        target.restart.assert_called_once()
+        added = self._added(target)[0]
+        self.assertEqual(added[2:5], ["heappe-dev.Sim", "--url", "http://h/cb"])
+        body = controller.heappe_management_cluster_post.call_args.kwargs["body"]
+        self.assertEqual(body["CustomConfiguration"]["QSchedulerNotifyToken"], added[-1])
+        self.assertEqual(body["CustomConfigurationVaultToggles"], {"QSchedulerNotifyToken": True})
+        self.assertEqual(result['notifier'], "heappe-dev.Sim")
+
+    def test_add_existing_machine_gets_own_notifier(self):
+        from heappe_ui.view.qscheduler_machines import add_machine_worker, parse_machine_options
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred, heappe_identifier="heappe-dev",
+                                            notifications_enabled=True, callback_url="http://h/cb")
+        opts, _ = parse_machine_options({"qscheduler_id": str(self.inst.id), "machine_mode": "existing",
+                                         "machine_name": "Sim", "create_project": False}, "x")
+        # machine shared with another HEAppE, which has its own notifier for it
+        target = self._target(machines=[{"name": "Sim", "backend": "test"}],
+                              notifiers=[{"name": "other.Sim", "has_token": True, "url": "http://o/cb"}])
+        patches, controller = self._patches(target)
+        controller.heappe_management_cluster_post.return_value = {"id": 11}
+        result = self._run(patches, add_machine_worker, "dev", opts, "x")
+        self.assertEqual([c.args[0][:2] for c in target.cli.call_args_list], [["notifier", "add"]])   # no machine add
+        self.assertEqual(self._removed(target), [])
+        target.restart.assert_called_once()
+        body = controller.heappe_management_cluster_post.call_args.kwargs["body"]
+        self.assertEqual(body["MasterNodeName"], "qs-1")
+        self.assertEqual(body["CustomConfiguration"]["QSchedulerNotifier"], "heappe-dev.Sim")
+        self.assertEqual(body["CustomConfiguration"]["EnableCallback"], "true")
+        self.assertTrue(body["CustomConfigurationVaultToggles"]["QSchedulerNotifyToken"])
+        self.assertEqual(result['cluster_id'], 11)
+        controller.heappe_management_project_post.assert_not_called()
+
+    def test_add_machine_without_notifications(self):
+        from heappe_ui.view.qscheduler_machines import add_machine_worker, parse_machine_options
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred)
+        opts, _ = parse_machine_options({"qscheduler_id": str(self.inst.id), "machine_mode": "existing",
+                                         "machine_name": "Sim", "create_project": False}, "x")
+        target = self._target(machines=[{"name": "Sim", "backend": "test"}])
+        patches, controller = self._patches(target)
+        controller.heappe_management_cluster_post.return_value = {"id": 11}
+        self._run(patches, add_machine_worker, "dev", opts, "x")
+        target.cli.assert_not_called()
+        target.restart.assert_not_called()
+        body = controller.heappe_management_cluster_post.call_args.kwargs["body"]
+        self.assertEqual(body["CustomConfiguration"]["EnableCallback"], "false")
+        self.assertNotIn("QSchedulerNotifyToken", body["CustomConfiguration"])
+
+    def test_remove_machine_removes_cluster_notifier(self):
+        from heappe_ui.view.qscheduler_machines import remove_machine_worker
+        target = self._target(notifiers=[{"name": "heappe-dev.Sim", "has_token": True, "url": "http://h/cb"}])
+        patches, controller = self._patches(target)
+        cluster = dict(self._cluster(5, "Sim", "heappe-dev.Sim"), scheduler_type=32, master_node_name="qs-1", port=4300)
+        controller.heappe_management_cluster_get.return_value = cluster
+        result = self._run(patches, remove_machine_worker, "dev",
+                           {"cluster_id": 5, "remove_from_qscheduler": False, "force": False})
+        self.assertEqual(self._removed(target), ["heappe-dev.Sim"])
+        self.assertFalse(any(c.args[0][:2] == ["machine", "remove"] for c in target.cli.call_args_list))
+        target.restart.assert_called_once()
+        controller.heappe_management_cluster_delete.assert_called_once()
+        self.assertEqual(result['removed_notifier'], "heappe-dev.Sim")
+
+
+class QSchedulerClusterDetailTemplateTests(TestCase):
+    """Cluster detail: QScheduler badge and notifier fields in the Webhook & Callback section."""
+
+    def _render(self, scheduler_type):
+        import json as _json
+        import re
+        from django.template.loader import get_template
+        request = RequestFactory().get("/")
+        request.session = {}
+        request.user = AnonymousUser()
+        html = get_template("cluster_detail.html").render({
+            'cluster': {'id': 7, 'name': 'Sim', 'scheduler_type': scheduler_type, 'connection_protocol': 8},
+            'active_tab': 'detail', 'proxy_connections': [], 'is_v6_4_0_plus': True, 'is_v6_5_0_plus': True,
+            'custom_configuration_json': _json.dumps({"EnableCallback": "true", "QSchedulerNotifier": "heappe-dev.Sim",
+                                                      "QSchedulerNotifyToken": "********"}),
+            'custom_configuration_vault_toggles_json': _json.dumps({"QSchedulerNotifyToken": True}),
+            'custom_config_metadata_json': '[]'}, request)
+        badge = re.search(r'id="qs-cluster-badge" class="([^"]*)"', html).group(1)
+        return html, badge
+
+    def test_qscheduler_cluster_has_badge_and_notifier_fields(self):
+        html, badge = self._render(32)
+        self.assertNotIn("d-none", badge)
+        self.assertIn("QScheduler cluster", html)
+        self.assertIn('id="cb-QSchedulerNotifier"', html)
+        self.assertIn('id="cb-QSchedulerNotifyToken"', html)
+        # notifier keys are handled by the callback section, not listed as additional parameters
+        self.assertIn("'QSchedulerNotifier', 'QSchedulerNotifyToken'];", html)
+
+    def test_other_clusters_hide_badge(self):
+        _, badge = self._render(4)
+        self.assertIn("d-none", badge)
+
+
+class QSchedulerViewTests(TestCase):
+    def setUp(self):
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance, QSchedulerAssignment
+        self.user = User.objects.create_user(username="qs_admin", password="p")
+        self.client.force_login(self.user)
+        self.cred = InstanceCredentials.objects.create(instance_name="dev", heappe_host="h", heappe_login="u",
+                                                       heappe_password="p", heappe_port="5000")
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300)
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred)
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session["middleware_deployed_version"] = "6.6.0"
+        session.save()
+
+    @mock.patch("heappe_ui.view.qscheduler_core.start_operation")
+    def test_undeploy_blocked_while_assigned(self, start):
+        response = self.client.post(f"/qscheduler/{self.inst.id}/undeploy/", data="{}", content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("dev", response.json()["message"])
+        start.assert_not_called()
+
+    @mock.patch("heappe_ui.view.qscheduler_core.start_operation")
+    def test_machine_add_requires_assignment(self, start):
+        from heappe_ui.models import QSchedulerInstance
+        other = QSchedulerInstance.objects.create(name="qs-2", kind="managed", container_name="qs-2", service_host="qs-2")
+        response = self.client.post("/clusters/qscheduler/machine-add/", data=json.dumps({"qscheduler_id": other.id}),
+                                    content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        start.assert_not_called()
+        start.return_value = (True, "started")
+        response = self.client.post("/clusters/qscheduler/machine-add/", data=json.dumps({"qscheduler_id": self.inst.id}),
+                                    content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        start.assert_called_once()
+
+    @mock.patch("heappe_ui.view.qscheduler_core.start_operation")
+    def test_machine_add_requires_heappe_660(self, start):
+        for version in ("6.5.0", ""):
+            session = self.client.session
+            session["middleware_deployed_version"] = version
+            session.save()
+            response = self.client.post("/clusters/qscheduler/machine-add/",
+                                        data=json.dumps({"qscheduler_id": self.inst.id}), content_type="application/json")
+            self.assertEqual(response.status_code, 400, version)
+            self.assertIn("6.6.0", response.json()["message"])
+        start.assert_not_called()
+
+    @mock.patch("heappe_ui.view.qscheduler_core.start_operation")
+    @mock.patch("heappe_ui.view.qscheduler_core.heappe_identity", return_value=("6.5.0", "heappe-dev"))
+    def test_assign_api_refuses_old_heappe(self, _identity, start):
+        response = self.client.post(f"/qscheduler/{self.inst.id}/assign/",
+                                    data=json.dumps({"heappe_instance_id": str(self.cred.id)}), content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("6.6.0", response.json()["message"])
+        start.assert_not_called()
+
+    def test_clusters_page_hides_qscheduler_menu_before_660(self):
+        from django.template.loader import render_to_string
+        html_old = render_to_string("clusters.html", {"clusters": [], "is_v6_6_0_plus": False})
+        html_new = render_to_string("clusters.html", {"clusters": [], "is_v6_6_0_plus": True})
+        self.assertNotIn('id="qschedulerMenuBtnEmpty"', html_old)
+        self.assertIn('id="qschedulerMenuBtnEmpty"', html_new)
+
+    @mock.patch("heappe_ui.view.qscheduler_deploy.import_legacy_instances")
+    def test_page_lists_instances_and_assignments(self, _import):
+        response = self.client.get("/qscheduler/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "qs-1")
+        self.assertContains(response, "Assigned HEAppE instances")
+
+    @mock.patch("heappe_ui.view.qscheduler_deploy.import_legacy_instances")
+    def test_ssh_container_instance_shows_limited_management_warning(self, _import):
+        from heappe_ui.models import QSchedulerInstance
+        response = self.client.get("/qscheduler/")
+        self.assertNotContains(response, "Limited management: no Docker control")
+        QSchedulerInstance.objects.create(name="qs-remote", kind="ssh_container", service_host="vm", ssh_host="vm",
+                                          ssh_user="root", restart_command="")
+        response = self.client.get("/qscheduler/")
+        self.assertContains(response, "Limited management: no Docker control")   # card badge
+        self.assertContains(response, "qs-sshc-warning")                         # modal reminders
+        self.assertContains(response, "Confirm manual restart")
+
+    def test_manual_restart_confirmation_only_checks_health(self):
+        from heappe_ui.models import QSchedulerInstance
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_deploy import restart_worker
+        inst = QSchedulerInstance.objects.create(name="qs-remote", kind="ssh_container", service_host="vm",
+                                                 restart_command="", restart_pending=True)
+        target = mock.Mock()
+        with mock.patch.object(core, "target_for", return_value=target):
+            restart_worker(lambda *_: None, {}, inst.id)
+        target.restart.assert_not_called()
+        target.wait_healthy.assert_called_once()
+        inst.refresh_from_db()
+        self.assertFalse(inst.restart_pending)
+
+    @mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", side_effect=RuntimeError("down"))
+    def test_machine_defaults_lists_assigned_instances(self, _conn):
+        response = self.client.get("/clusters/qscheduler/machine-defaults/")
+        data = response.json()
+        self.assertEqual([i["name"] for i in data["instances"]], ["qs-1"])
+        self.assertIn("down", data["clusters_error"])
 
 
 class InstanceConfigOidcActionTests(TestCase):
@@ -5506,3 +5965,134 @@ class TestHeappeIdentifierFormulaAndPropagation(TestCase):
             data = response.json()
             self.assertEqual(data["instance_identifier"], "core_stage_it4i_inference")
 
+
+
+class QSchedulerGitRefsTests(TestCase):
+    """Branch / tag picker of the deploy and update forms."""
+
+    def setUp(self):
+        from heappe_ui.view import qscheduler_core as core
+        core._git_refs_cache.clear()
+
+    @staticmethod
+    def _resp(data):
+        r = mock.Mock()
+        r.json.return_value = data
+        r.raise_for_status.return_value = None
+        return r
+
+    def test_github_api(self):
+        from heappe_ui.view import qscheduler_core as core
+        def get(url, **kw):
+            if url.endswith("/branches"):
+                return self._resp([{"name": "feature"}, {"name": "main"}])
+            if url.endswith("/tags"):
+                return self._resp([{"name": "v0.2.0"}, {"name": "v0.10.0"}])
+            return self._resp({"default_branch": "main"})
+        with mock.patch("requests.get", side_effect=get) as g:
+            r = core.list_git_refs("https://github.com/It4innovations/qscheduler.git")
+        self.assertEqual(r["source"], "github")
+        self.assertEqual(r["branches"], ["main", "feature"])      # default branch first
+        self.assertEqual(r["tags"], ["v0.10.0", "v0.2.0"])         # newest version first
+        self.assertTrue(g.call_args_list[0][0][0].startswith("https://api.github.com/repos/It4innovations/qscheduler"))
+        with mock.patch("requests.get") as g2:                     # cached
+            core.list_git_refs("https://github.com/It4innovations/qscheduler.git")
+            g2.assert_not_called()
+
+    def test_gitlab_api_for_other_hosts(self):
+        from heappe_ui.view import qscheduler_core as core
+        def get(url, **kw):
+            if url.endswith("/repository/branches"):
+                return self._resp([{"name": "master"}])
+            if url.endswith("/repository/tags"):
+                return self._resp([{"name": "1.0"}])
+            return self._resp({"default_branch": "master"})
+        with mock.patch("requests.get", side_effect=get) as g:
+            r = core.list_git_refs("https://gitlab.example.org/group/sub/qscheduler.git")
+        self.assertEqual((r["source"], r["branches"], r["tags"]), ("gitlab", ["master"], ["1.0"]))
+        self.assertIn("/api/v4/projects/group%2Fsub%2Fqscheduler", g.call_args_list[0][0][0])
+
+    def test_falls_back_to_ls_remote(self):
+        from heappe_ui.view import qscheduler_core as core
+        out = ("ref: refs/heads/dev\tHEAD\nabc\tHEAD\nabc\trefs/heads/dev\nabd\trefs/heads/main\n"
+               "abe\trefs/tags/v1.0\nabf\trefs/tags/v1.0^{}\n")
+        with mock.patch("requests.get", side_effect=OSError("no API")), \
+             mock.patch.object(core.subprocess, "run", return_value=mock.Mock(returncode=0, stdout=out, stderr="")) as run:
+            r = core.list_git_refs("https://git.example.org/qscheduler.git")
+        self.assertEqual((r["source"], r["branches"], r["tags"], r["default_branch"]), ("git", ["dev", "main"], ["v1.0"], "dev"))
+        self.assertEqual(run.call_args[1]["env"]["GIT_TERMINAL_PROMPT"], "0")
+
+    def test_ssh_url_uses_ls_remote_only(self):
+        from heappe_ui.view import qscheduler_core as core
+        with mock.patch("requests.get") as g, \
+             mock.patch.object(core.subprocess, "run", return_value=mock.Mock(returncode=0, stdout="a\trefs/heads/main\n", stderr="")):
+            r = core.list_git_refs("git@github.com:It4innovations/qscheduler.git")
+        g.assert_not_called()
+        self.assertEqual(r["branches"], ["main"])
+
+    def test_invalid_and_unreachable(self):
+        from heappe_ui.view import qscheduler_core as core
+        for bad in ("", "ftp://x/y", "-uhttps://x", "https://x/y z"):
+            with self.assertRaises(ValueError):
+                core.list_git_refs(bad)
+        with mock.patch("requests.get", side_effect=OSError("down")), \
+             mock.patch.object(core.subprocess, "run", return_value=mock.Mock(returncode=128, stdout="", stderr="fatal: nope")):
+            with self.assertRaisesRegex(RuntimeError, "nope"):
+                core.list_git_refs("https://git.example.org/x.git")
+
+    def test_view(self):
+        from django.contrib.auth.models import User
+        self.client.force_login(User.objects.create_user(username="refs_admin", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        with mock.patch("heappe_ui.view.qscheduler_core.list_git_refs",
+                        return_value={"branches": ["main"], "tags": [], "default_branch": "main", "source": "github"}):
+            d = self.client.get("/qscheduler/git-refs/", {"repo": "https://github.com/a/b.git"}).json()
+        self.assertEqual((d["status"], d["branches"]), ("success", ["main"]))
+        with mock.patch("heappe_ui.view.qscheduler_core.list_git_refs", side_effect=RuntimeError("down")):
+            d = self.client.get("/qscheduler/git-refs/", {"repo": "https://github.com/a/b.git"}).json()
+        self.assertEqual(d["status"], "error")
+        self.assertIn("down", d["message"])
+        self.assertEqual(self.client.get("/qscheduler/git-refs/", {"repo": "ftp://x"}).status_code, 400)
+
+
+class CoverageReportDataTests(TestCase):
+    """`manage.py qscheduler_coverage` input: runs without coverage.py (not named QScheduler*, so not measured)."""
+
+    def test_feature_code_references_exist(self):
+        import tomllib
+        from pathlib import Path
+        from django.conf import settings
+        from heappe_ui.management.commands import qscheduler_coverage as qc
+        cfg = tomllib.loads(qc.DATA_FILE.read_text())
+        indexes = {k: qc.code_index(Path(settings.BASE_DIR) / p) for k, p in cfg["files"].items()}
+        qc.Command().validate_refs(cfg, indexes)      # raises CommandError on a renamed / removed function
+        for section in cfg["sections"]:
+            for f in section["features"]:
+                self.assertTrue(f.get("code") or f.get("status") in qc.STATUSES, f["name"])
+
+    def test_code_index_and_counting(self):
+        import tempfile
+        from pathlib import Path
+        from heappe_ui.management.commands import qscheduler_coverage as qc
+        src = "import os\n\n\n@decorator\ndef f(x):\n    if x:\n        return 1\n    return 2\n\n\nclass C:\n    A = 1\n\n    def m(self):\n        return 3\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "m.py"
+            path.write_text(src)
+            index = qc.code_index(path)
+        self.assertEqual(index["f"], [(6, 8)])           # body only: decorator and def run at import time
+        self.assertEqual(index["C.m"], [(15, 15)])
+        self.assertEqual(index["C"], [(15, 15)])         # class = its methods
+        measured = qc.Measured({"executed_lines": [1, 5, 6, 7, 11, 12, 14], "missing_lines": [8, 15],
+                                "executed_branches": [[6, 7]], "missing_branches": [[6, 8]]})
+        self.assertEqual(measured.count(index["f"]), {'lines': 3, 'covered': 2, 'branches': 2, 'covered_branches': 1})
+        self.assertEqual(measured.count(index["C"])["covered"], 0)
+
+    def test_unmapped_lists_whole_classes_once(self):
+        from heappe_ui.management.commands import qscheduler_coverage as qc
+        indexes = {"core": {"f": [(1, 1)], "g": [(2, 2)], "C": [(3, 3)], "C.a": [(3, 3)], "D": [(4, 5)], "D.a": [(4, 4)],
+                            "D.b": [(5, 5)]}}
+        cfg = {"unmapped": {"ignore": ["core:g"]}}
+        rows = qc.Command().unmapped(cfg, indexes, {("core", "f"), ("core", "D.a")})
+        self.assertEqual([r["ref"] for r in rows], ["core:C", "core:D.b"])

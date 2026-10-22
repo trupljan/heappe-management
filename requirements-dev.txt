@@ -1,0 +1,5 @@
+# Development and CI tools (not needed to run HEAppE Management).
+-r requirements.txt
+
+# Test coverage; generates QScheduler_COVERAGE.md (python manage.py qscheduler_coverage)
+coverage==7.6.1

@@ -46,6 +46,10 @@
                         <div class="d-flex align-items-center gap-2">
                             <i class="bi bi-gear text-primary fs-5"></i>
                             <h5 class="h6 mb-0 fw-bold text-dark">Cluster Configuration</h5>
+                            <span id="qs-cluster-badge" class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle fw-semibold{% if cluster.scheduler_type != 32 %} d-none{% endif %}"
+                                  role="note" title="This cluster is scheduled by QScheduler (quantum task scheduler)">
+                                <i class="bi bi-cpu-fill me-1"></i>QScheduler cluster
+                            </span>
                         </div>
                         <div class="d-flex gap-2">
                             {% if cluster.id %}
@@ -96,6 +100,8 @@
                                         <option value="8" {% if cluster.scheduler_type == 8 %}selected{% endif %}>HyperQueue</option>
                                         {% if is_v6_4_0_plus %}
                                         <option value="16" {% if cluster.scheduler_type == 16 %}selected{% endif %}>FirecREST (Slurm)</option>
+                                        {% endif %}
+                                        {% if is_v6_6_0_plus or cluster.scheduler_type == 32 %}
                                         <option value="32" {% if cluster.scheduler_type == 32 %}selected{% endif %}>QScheduler</option>
                                         {% endif %}
                                     </select>
@@ -184,18 +190,41 @@
                                                         <label class="form-check-label small text-dark fw-medium" for="cb-EnableCallback">Enable Callback Notifications</label>
                                                     </div>
                                                 </div>
-                                                <div class="col-md-6">
+                                                <div class="col-md-6 cb-generic-only">
                                                     <label class="form-label small text-muted fw-semibold mb-1" for="cb-CallbackUrl">Callback URL</label>
                                                     <input type="url" class="form-control form-control-sm border-light-subtle bg-white" id="cb-CallbackUrl" placeholder="e.g. https://my-service.com/heappe-webhook">
                                                     <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Push notification endpoint replacing SSH polling for job status updates.</div>
                                                 </div>
+                                                <div class="col-md-6 cb-qs-only d-none">
+                                                    <div class="form-text text-muted mt-0" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>QScheduler sends task and session events to the notifier below; HEAppE stops polling task state.</div>
+                                                </div>
+                                                <div class="col-md-6 mt-2 cb-qs-only d-none">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="cb-QSchedulerNotifier">QScheduler Notifier</label>
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white font-monospace" id="cb-QSchedulerNotifier" placeholder="e.g. heappe-dev.SimulatorMachine" maxlength="512">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Name of this cluster's notifier registered in QScheduler (<code>QSchedulerNotifier</code>). Sent as <code>notify=</code> with tasks and sessions.</div>
+                                                </div>
+                                                <div class="col-md-6 mt-2 cb-qs-only d-none">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="cb-QSchedulerNotifyToken">
+                                                        QScheduler Notify Token
+                                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-1" style="font-size: 0.65rem;"><i class="bi bi-shield-lock me-1"></i>Vault</span>
+                                                    </label>
+                                                    <input type="password" class="form-control form-control-sm border-light-subtle bg-white" id="cb-QSchedulerNotifyToken" placeholder="********" autocomplete="new-password">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Must match the token of the notifier in QScheduler (<code>QSchedulerNotifyToken</code>). Always stored in HashiCorp Vault. Leave '********' to keep it, clear it to remove it.</div>
+                                                </div>
+                                                <div class="col-12 mt-2 cb-qs-only d-none">
+                                                    <div class="alert alert-light border small py-2 px-3 mb-0" style="font-size: 0.75rem;">
+                                                        <i class="bi bi-link-45deg me-1"></i>The notifier URL (HEAppE TaskCallback endpoint QScheduler sends events to) is stored in QScheduler, not in this cluster.
+                                                        To change it, open the <a href="{% url 'qscheduler_page' %}" class="fw-semibold">QScheduler</a> page, find this HEAppE instance under the QScheduler instance's assignments,
+                                                        click <i class="bi bi-pencil"></i> <strong>Edit</strong> and set <strong>Callback URL</strong>. Saving recreates the notifiers of all clusters of this HEAppE on that QScheduler with new tokens and restarts QScheduler.
+                                                    </div>
+                                                </div>
                                                 {% if is_v6_5_0_plus %}
-                                                <div class="col-md-8 mt-2">
+                                                <div class="col-md-8 mt-2 cb-generic-only">
                                                     <label class="form-label small text-muted fw-semibold mb-1" for="cb-ClusterCallbackNotifyToken">Cluster Callback Notify Token</label>
                                                     <input type="password" class="form-control form-control-sm border-light-subtle bg-white" id="cb-ClusterCallbackNotifyToken" placeholder="********">
                                                     <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Token used for verifying secure callbacks from cluster. Leave as is (or '********') to keep unchanged.</div>
                                                 </div>
-                                                <div class="col-md-4 mt-2 d-flex align-items-center pt-3">
+                                                <div class="col-md-4 mt-2 d-flex align-items-center pt-3 cb-generic-only">
                                                     <div class="form-check">
                                                         <input class="form-check-input border-secondary-subtle shadow-none" type="checkbox" id="cb-StoreInVault">
                                                         <label class="form-check-label small text-dark fw-medium" for="cb-StoreInVault">Store token in HashiCorp Vault</label>
@@ -416,6 +445,10 @@
                                           const cbCallbackUrl = document.getElementById('cb-CallbackUrl');
                                           const cbClusterCallbackNotifyToken = document.getElementById('cb-ClusterCallbackNotifyToken');
                                           const cbStoreInVault = document.getElementById('cb-StoreInVault');
+                                          const cbQSchedulerNotifier = document.getElementById('cb-QSchedulerNotifier');
+                                          const cbQSchedulerNotifyToken = document.getElementById('cb-QSchedulerNotifyToken');
+                                          const qsClusterBadge = document.getElementById('qs-cluster-badge');
+                                          let qsTokenExisted = false;   // the cluster already has a QSchedulerNotifyToken (Vault)
 
                                           const gtSettingsSection = document.getElementById('gt-settings-section');
                                           const gtEnableGracefulTimeout = document.getElementById('gt-EnableGracefulTimeout');
@@ -441,7 +474,7 @@
                                           
                                           if (!customConfigTextarea || !schedulerSelect) return;
 
-                                          const RESERVED_CB_KEYS = ['EnableCallback', 'CallbackUrl', 'ClusterCallbackNotifyToken'];
+                                          const RESERVED_CB_KEYS = ['EnableCallback', 'CallbackUrl', 'ClusterCallbackNotifyToken', 'QSchedulerNotifier', 'QSchedulerNotifyToken'];
                                           const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate', 'FirecrestUrl', 'ClientId', 'ClientSecret', 'ClusterName'];
                                           const RESERVED_QS_KEYS = ['QSchedulerPort', 'QSchedulerHost', 'QSchedulerUseSessions'];
                                           const RESERVED_GROUP_KEYS = [
@@ -710,6 +743,12 @@
                                               if (cbStoreInVault) {
                                                   cbStoreInVault.checked = !!vaultToggles['ClusterCallbackNotifyToken'];
                                               }
+                                              if (cbQSchedulerNotifier) cbQSchedulerNotifier.value = data['QSchedulerNotifier'] || '';
+                                              qsTokenExisted = Object.prototype.hasOwnProperty.call(data, 'QSchedulerNotifyToken');
+                                              if (cbQSchedulerNotifyToken) {
+                                                  // Vault-stored values come back masked ('********'), or empty from older HEAppE versions
+                                                  cbQSchedulerNotifyToken.value = data['QSchedulerNotifyToken'] || (vaultToggles['QSchedulerNotifyToken'] ? '********' : '');
+                                              }
 
                                               // Graceful Timeout
                                               if (gtEnableGracefulTimeout) gtEnableGracefulTimeout.checked = data['EnableGracefulTimeout'] === 'true' || data['EnableGracefulTimeout'] === true;
@@ -779,6 +818,17 @@
                                                       data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
                                                   }
                                               } else if (st === '32') {
+                                                  // Webhook & Callback section: QScheduler notifier of this cluster
+                                                  if (cbQSchedulerNotifier && cbQSchedulerNotifier.value.trim()) {
+                                                      data['QSchedulerNotifier'] = cbQSchedulerNotifier.value.trim();
+                                                  }
+                                                  if (cbQSchedulerNotifyToken) {
+                                                      const tok = cbQSchedulerNotifyToken.value;
+                                                      if (tok || qsTokenExisted) {
+                                                          data['QSchedulerNotifyToken'] = tok;          // '' removes it from Vault
+                                                          vaultToggles['QSchedulerNotifyToken'] = true;  // always kept in Vault
+                                                      }
+                                                  }
                                                   if (qsQSchedulerPort) {
                                                       data['QSchedulerPort'] = qsQSchedulerPort.value.trim() || '3000';
                                                   }
@@ -892,6 +942,11 @@
                                                   scSettingsSection.style.display = 'block';
                                               }
 
+                                              const isQs = st === '32';
+                                              document.querySelectorAll('#cb-settings-section .cb-qs-only').forEach(el => el.classList.toggle('d-none', !isQs));
+                                              document.querySelectorAll('#cb-settings-section .cb-generic-only').forEach(el => el.classList.toggle('d-none', isQs));
+                                              if (qsClusterBadge) qsClusterBadge.classList.toggle('d-none', !isQs);
+
                                               updatePredefinedKeysSelect(st);
                                               serializeToJSON();
                                           }
@@ -900,6 +955,7 @@
                                           
                                           const inputListeners = [
                                               cbEnableCallback, cbCallbackUrl, cbClusterCallbackNotifyToken, cbStoreInVault,
+                                              cbQSchedulerNotifier, cbQSchedulerNotifyToken,
                                               gtEnableGracefulTimeout, gtGracefulTimeoutSeconds,
                                               scSshCommandPrefix, scSyncScriptsViaSftp,
                                               fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate,
