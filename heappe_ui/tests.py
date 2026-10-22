@@ -3341,6 +3341,96 @@ class LogViewerJsonTests(TestCase):
             os.remove(tmp_path)
             user.delete()
 
+    def test_adjust_to_utc(self):
+        from heappe_ui.views import adjust_to_utc
+        # Zero offset
+        d, t = adjust_to_utc('2026-10-22', '15:30', 0)
+        self.assertEqual(d, '2026-10-22')
+        self.assertEqual(t, '15:30')
+
+        # Negative offset (CEST UTC+2 has JS offset -120)
+        d, t = adjust_to_utc('2026-10-22', '17:30', -120)
+        self.assertEqual(d, '2026-10-22')
+        self.assertEqual(t, '15:30')
+
+        # Midnight shift (01:00 CEST -> 23:00 previous day)
+        d, t = adjust_to_utc('2026-10-23', '01:00', -120)
+        self.assertEqual(d, '2026-10-22')
+        self.assertEqual(t, '23:00')
+
+        # Positive offset (US EST UTC-5 has JS offset +300)
+        d, t = adjust_to_utc('2026-10-22', '10:30', 300)
+        self.assertEqual(d, '2026-10-22')
+        self.assertEqual(t, '15:30')
+
+        # Empty time or invalid offset returns as-is
+        d, t = adjust_to_utc('2026-10-22', '', -120)
+        self.assertEqual(t, '')
+        d, t = adjust_to_utc('2026-10-22', '15:30', 'invalid')
+        self.assertEqual(t, '15:30')
+
+    def test_matches_filters_open_ended_and_midnight(self):
+        from heappe_ui.views import matches_filters
+        entry_morning = {'timestamp_str': '2026-10-22 09:15:00', 'level': 'INFO', 'content': 'Morning'}
+        entry_noon = {'timestamp_str': '2026-10-22 12:30:45', 'level': 'INFO', 'content': 'Noon'}
+        entry_afternoon = {'timestamp_str': '2026-10-22 15:34:58', 'level': 'INFO', 'content': 'Afternoon'}
+        entry_night = {'timestamp_str': '2026-10-22 23:45:00', 'level': 'INFO', 'content': 'Night'}
+        entry_late_night = {'timestamp_str': '2026-10-22 00:30:00', 'level': 'INFO', 'content': 'Late night'}
+
+        # Open-ended start (from 12:30 onwards)
+        self.assertFalse(matches_filters(entry_morning, "", "", "12:30", ""))
+        self.assertTrue(matches_filters(entry_noon, "", "", "12:30", ""))
+        self.assertTrue(matches_filters(entry_afternoon, "", "", "12:30", ""))
+        self.assertTrue(matches_filters(entry_night, "", "", "12:30", ""))
+
+        # Open-ended end (up to 12:30)
+        self.assertTrue(matches_filters(entry_morning, "", "", "", "12:30"))
+        self.assertTrue(matches_filters(entry_noon, "", "", "", "12:30"))
+        self.assertFalse(matches_filters(entry_afternoon, "", "", "", "12:30"))
+        self.assertFalse(matches_filters(entry_night, "", "", "", "12:30"))
+
+        # Midnight crossing interval (23:00 to 01:00)
+        self.assertTrue(matches_filters(entry_night, "", "", "23:00", "01:00"))
+        self.assertTrue(matches_filters(entry_late_night, "", "", "23:00", "01:00"))
+        self.assertFalse(matches_filters(entry_noon, "", "", "23:00", "01:00"))
+
+    def test_log_viewer_view_timezone_handling(self):
+        from django.test import RequestFactory
+        from django.contrib.auth.models import User
+        from heappe_ui.views import log_viewer_view
+        import json as pyjson
+
+        factory = RequestFactory()
+        user = User.objects.create_user(username='test_tz_viewer_user', password='password')
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            # Entry at 15:34:58 UTC
+            tmp.write('{"timestamp":"2026-10-22T15:34:58.000Z","level":"INFO","logger":"L","message":"UTC log"}\n')
+            tmp.flush()
+            tmp_path = tmp.name
+
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
+                # 1. User inputs Local time 17:30 (CEST, offset -120), expecting to match 15:34:58 UTC
+                req = factory.get('/logs/?date=2026-10-22&time_from=17:30&tz_mode=local&tz_offset=-120')
+                req.user = user
+                req.session = {'chosen_instance': 'test'}
+                resp = log_viewer_view(req)
+                self.assertEqual(resp.status_code, 200)
+                # The entry at 15:34:58 UTC is after 15:30:00 UTC (17:30 CEST adjusted), so it matches!
+                self.assertIn('UTC log', resp.content.decode('utf-8'))
+
+                # 2. Open-ended start (time_to is empty) does NOT truncate logs occurring hours later
+                req = factory.get('/logs/?date=2026-10-22&time_from=12:30&time_to=')
+                req.user = user
+                req.session = {'chosen_instance': 'test'}
+                resp = log_viewer_view(req)
+                self.assertEqual(resp.status_code, 200)
+                self.assertIn('UTC log', resp.content.decode('utf-8'))
+        finally:
+            os.remove(tmp_path)
+            user.delete()
+
 
 class VaultUnsealApiTests(TestCase):
     def setUp(self):

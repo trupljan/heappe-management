@@ -374,6 +374,8 @@
     <!-- Top Control Bar -->
     <div class="card filter-card p-3 bg-white mb-3">
         <form method="GET" id="logFilterForm" class="d-flex flex-wrap align-items-end gap-2.5">
+            <input type="hidden" name="tz_mode" id="tzModeInput" value="{{ tz_mode|default:'utc' }}">
+            <input type="hidden" name="tz_offset" id="tzOffsetInput" value="{{ tz_offset|default:'0' }}">
             <div class="flex-grow-1" style="min-width: 150px; flex-basis: 0;">
                 <label class="filter-label">Log Source</label>
                 <select name="service" class="form-select form-control-custom w-100">
@@ -393,13 +395,20 @@
                 <input type="date" name="date" class="form-control form-control-custom w-100" value="{{ selected_date }}">
             </div>
             
-            <div class="flex-grow-1" style="min-width: 200px; flex-basis: 0;">
-                <label class="filter-label">Time Window <span class="text-primary fw-normal" style="font-size:0.65rem;">(UTC)</span></label>
+            <div class="flex-grow-1" style="min-width: 220px; flex-basis: 0;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="filter-label mb-0">Time Window <span id="timeWindowTzBadge" class="text-primary fw-normal" style="font-size:0.65rem;">(UTC)</span></label>
+                    <div class="btn-group btn-group-sm" role="group" style="height: 20px;">
+                        <button type="button" class="btn btn-xs py-0 px-1.5 btn-primary fw-semibold" id="btnTzUtc" style="font-size: 0.65rem; line-height: 1.2;">UTC</button>
+                        <button type="button" class="btn btn-xs py-0 px-1.5 btn-outline-secondary fw-semibold" id="btnTzLocal" style="font-size: 0.65rem; line-height: 1.2;">Local</button>
+                    </div>
+                </div>
                 <div class="d-flex gap-1.5 align-items-center">
                     <input type="time" name="time_from" class="form-control form-control-custom w-100" value="{{ time_from }}" id="timeFromInput">
                     <span class="text-muted small px-1">to</span>
                     <input type="time" name="time_to" class="form-control form-control-custom w-100" value="{{ time_to }}" id="timeToInput">
                 </div>
+                <div id="tzConversionHint" class="text-muted mt-1 font-monospace" style="font-size: 0.68rem; display: none;"></div>
             </div>
 
             <div class="flex-grow-1" style="min-width: 125px; flex-basis: 0;">
@@ -436,6 +445,16 @@
                 <a href="{% url 'logs' %}" class="btn btn-outline-secondary btn-filter-reset w-100">
                     Reset
                 </a>
+            </div>
+
+            <!-- Quick Preset Buttons -->
+            <div class="w-100 d-flex align-items-center gap-1.5 pt-2 border-top mt-1 flex-wrap" style="font-size: 0.72rem;">
+                <span class="text-muted fw-semibold me-1"><i class="bi bi-lightning-charge-fill text-warning me-0.5"></i>Quick Range:</span>
+                <button type="button" class="btn btn-xs btn-outline-secondary py-0.5 px-2 rounded-2" onclick="setQuickRange('all')">All Day</button>
+                <button type="button" class="btn btn-xs btn-outline-secondary py-0.5 px-2 rounded-2" onclick="setQuickRange('15m')">Last 15m</button>
+                <button type="button" class="btn btn-xs btn-outline-secondary py-0.5 px-2 rounded-2" onclick="setQuickRange('1h')">Last 1h</button>
+                <button type="button" class="btn btn-xs btn-outline-secondary py-0.5 px-2 rounded-2" onclick="setQuickRange('4h')">Last 4h</button>
+                <button type="button" class="btn btn-xs btn-outline-secondary py-0.5 px-2 rounded-2" onclick="setQuickRange('24h')">Last 24h</button>
             </div>
         </form>
     </div>
@@ -523,6 +542,153 @@
     const liveStatus = document.getElementById('liveStatus');
     const headerLiveStatus = document.getElementById('headerLiveStatus');
     const entryCountDisplay = document.getElementById('entryCount');
+
+    // Timezone & Time Window handling
+    let currentTzMode = "{{ tz_mode|default:'' }}" || localStorage.getItem('heappe_log_tz_mode') || 'utc';
+
+    function getTimezoneOffsetMinutes() {
+        return new Date().getTimezoneOffset(); // e.g. -120 for UTC+2
+    }
+
+    function getTimezoneOffsetString() {
+        const offsetMinutes = -getTimezoneOffsetMinutes();
+        const sign = offsetMinutes >= 0 ? '+' : '-';
+        const absMinutes = Math.abs(offsetMinutes);
+        const hrs = Math.floor(absMinutes / 60);
+        const mins = absMinutes % 60;
+        return `UTC${sign}${hrs}${mins ? ':' + String(mins).padStart(2, '0') : ''}`;
+    }
+
+    function convertTime(timeStr, fromTz, toTz) {
+        if (!timeStr) return '';
+        const parts = timeStr.split(':');
+        if (parts.length < 2) return timeStr;
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const s = parts.length > 2 ? parseInt(parts[2], 10) : 0;
+        const pad = n => String(n).padStart(2, '0');
+
+        if (fromTz === 'utc' && toTz === 'local') {
+            const now = new Date();
+            const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, m, s));
+            return `${pad(d.getHours())}:${pad(d.getMinutes())}${parts.length > 2 ? ':' + pad(d.getSeconds()) : ''}`;
+        } else if (fromTz === 'local' && toTz === 'utc') {
+            const now = new Date();
+            const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, s);
+            return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}${parts.length > 2 ? ':' + pad(d.getUTCSeconds()) : ''}`;
+        }
+        return timeStr;
+    }
+
+    function updateTzConversionHint() {
+        const hintEl = document.getElementById('tzConversionHint');
+        const tfEl = document.getElementById('timeFromInput');
+        const ttEl = document.getElementById('timeToInput');
+        if (!hintEl || !tfEl || !ttEl) return;
+
+        const tf = tfEl.value;
+        const tt = ttEl.value;
+        if (!tf && !tt) {
+            hintEl.style.display = 'none';
+            return;
+        }
+
+        hintEl.style.display = 'block';
+        if (currentTzMode === 'utc') {
+            const localFrom = convertTime(tf, 'utc', 'local');
+            const localTo = convertTime(tt, 'utc', 'local');
+            let text = `Local (${getTimezoneOffsetString()}): ${localFrom || '...'}`;
+            if (tt) text += ` to ${localTo}`;
+            hintEl.innerHTML = `<i class="bi bi-arrow-left-right text-muted me-1"></i>${escapeHtml(text)}`;
+        } else {
+            const utcFrom = convertTime(tf, 'local', 'utc');
+            const utcTo = convertTime(tt, 'local', 'utc');
+            let text = `UTC log time: ${utcFrom || '...'}`;
+            if (tt) text += ` to ${utcTo}`;
+            hintEl.innerHTML = `<i class="bi bi-arrow-left-right text-muted me-1"></i>${escapeHtml(text)}`;
+        }
+    }
+
+    function setTzMode(mode, convertExisting = true) {
+        const prevMode = currentTzMode;
+        currentTzMode = mode;
+        try {
+            localStorage.setItem('heappe_log_tz_mode', mode);
+        } catch (e) {}
+
+        const btnUtc = document.getElementById('btnTzUtc');
+        const btnLocal = document.getElementById('btnTzLocal');
+        const badge = document.getElementById('timeWindowTzBadge');
+        const tzModeInput = document.getElementById('tzModeInput');
+        const tzOffsetInput = document.getElementById('tzOffsetInput');
+        const tfEl = document.getElementById('timeFromInput');
+        const ttEl = document.getElementById('timeToInput');
+
+        if (tzModeInput) tzModeInput.value = mode;
+        if (tzOffsetInput) tzOffsetInput.value = mode === 'local' ? getTimezoneOffsetMinutes() : 0;
+
+        if (mode === 'local') {
+            if (btnLocal) {
+                btnLocal.classList.remove('btn-outline-secondary');
+                btnLocal.classList.add('btn-primary');
+            }
+            if (btnUtc) {
+                btnUtc.classList.remove('btn-primary');
+                btnUtc.classList.add('btn-outline-secondary');
+            }
+            if (badge) badge.textContent = `(Local, ${getTimezoneOffsetString()})`;
+        } else {
+            if (btnUtc) {
+                btnUtc.classList.remove('btn-outline-secondary');
+                btnUtc.classList.add('btn-primary');
+            }
+            if (btnLocal) {
+                btnLocal.classList.remove('btn-primary');
+                btnLocal.classList.add('btn-outline-secondary');
+            }
+            if (badge) badge.textContent = '(UTC)';
+        }
+
+        if (convertExisting && prevMode !== mode && tfEl && ttEl) {
+            if (tfEl.value) tfEl.value = convertTime(tfEl.value, prevMode, mode);
+            if (ttEl.value) ttEl.value = convertTime(ttEl.value, prevMode, mode);
+        }
+
+        updateTzConversionHint();
+    }
+
+    function setQuickRange(preset) {
+        const tfEl = document.getElementById('timeFromInput');
+        const ttEl = document.getElementById('timeToInput');
+        const dateInput = document.querySelector('input[name="date"]');
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+
+        if (preset === 'all') {
+            if (tfEl) tfEl.value = '';
+            if (ttEl) ttEl.value = '';
+        } else {
+            let minutesBack = 15;
+            if (preset === '1h') minutesBack = 60;
+            else if (preset === '4h') minutesBack = 240;
+            else if (preset === '24h') minutesBack = 1440;
+
+            const targetTime = new Date(now.getTime() - minutesBack * 60 * 1000);
+
+            if (currentTzMode === 'utc') {
+                if (tfEl) tfEl.value = `${pad(targetTime.getUTCHours())}:${pad(targetTime.getUTCMinutes())}`;
+                if (dateInput) dateInput.value = `${targetTime.getUTCFullYear()}-${pad(targetTime.getUTCMonth() + 1)}-${pad(targetTime.getUTCDate())}`;
+            } else {
+                if (tfEl) tfEl.value = `${pad(targetTime.getHours())}:${pad(targetTime.getMinutes())}`;
+                if (dateInput) dateInput.value = `${targetTime.getFullYear()}-${pad(targetTime.getMonth() + 1)}-${pad(targetTime.getDate())}`;
+            }
+            if (ttEl) ttEl.value = '';
+        }
+
+        updateTzConversionHint();
+        const form = document.getElementById('logFilterForm');
+        if (form) form.submit();
+    }
 
     function isScrolledNearBottom() {
         return (logWindow.scrollHeight - logWindow.scrollTop - logWindow.clientHeight) < 80;
@@ -713,7 +879,40 @@
     function renderLogs(entries) {
         consoleContent.innerHTML = '';
         if (!entries || entries.length === 0) {
-            consoleContent.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No matching logs found.</div>';
+            const tfEl = document.getElementById('timeFromInput');
+            const ttEl = document.getElementById('timeToInput');
+            const tf = tfEl ? tfEl.value : '';
+            const tt = ttEl ? ttEl.value : '';
+            const now = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const utcNowStr = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}`;
+            const localNowStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+            const tzLabel = getTimezoneOffsetString();
+
+            if (tf || tt) {
+                const rangeDesc = tf && tt ? `${tf} - ${tt}` : (tf ? `from ${tf} onwards` : `up to ${tt}`);
+                consoleContent.innerHTML = `
+                    <div class="text-center py-5 px-3">
+                        <div class="d-inline-flex p-3 rounded-circle bg-light mb-3 text-muted">
+                            <i class="bi bi-clock-history fs-2"></i>
+                        </div>
+                        <h6 class="fw-bold text-dark mb-1">No logs found for time window (${escapeHtml(rangeDesc)})</h6>
+                        <p class="text-muted small mb-3" style="max-width: 550px; margin: 0 auto;">
+                            HEAppE log files record timestamps in <strong>UTC</strong>. Current UTC time is <strong>${utcNowStr}</strong> (your local time is <strong>${localNowStr} ${tzLabel}</strong>).
+                        </p>
+                        <div class="d-flex justify-content-center gap-2 mt-2">
+                            <button type="button" class="btn btn-sm btn-primary rounded-3" onclick="setQuickRange('all')">
+                                <i class="bi bi-calendar-check me-1"></i>View All Today's Logs
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-3" onclick="setQuickRange('1h')">
+                                <i class="bi bi-clock me-1"></i>View Last 1 Hour
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                consoleContent.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No matching logs found.</div>';
+            }
             entryCountDisplay.textContent = '0';
             return;
         }
@@ -739,9 +938,11 @@
             const timeToInput = document.getElementById('timeToInput');
             const timeFromVal = timeFromInput ? encodeURIComponent(timeFromInput.value) : '';
             const timeToVal = timeToInput ? encodeURIComponent(timeToInput.value) : '';
+            const tzModeVal = encodeURIComponent(currentTzMode);
+            const tzOffsetVal = encodeURIComponent(currentTzMode === 'local' ? getTimezoneOffsetMinutes() : 0);
             const offsetParam = typeof logOffset === 'object' ? encodeURIComponent(JSON.stringify(logOffset)) : logOffset;
 
-            const response = await fetch(`${baseUrl}?offset=${offsetParam}&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}&time_from=${timeFromVal}&time_to=${timeToVal}`);
+            const response = await fetch(`${baseUrl}?offset=${offsetParam}&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}&time_from=${timeFromVal}&time_to=${timeToVal}&tz_mode=${tzModeVal}&tz_offset=${tzOffsetVal}`);
             if (!response.ok) return;
             const data = await response.json();
             
@@ -805,9 +1006,11 @@
             const timeToInput = document.getElementById('timeToInput');
             const timeFromVal = timeFromInput ? encodeURIComponent(timeFromInput.value) : '';
             const timeToVal = timeToInput ? encodeURIComponent(timeToInput.value) : '';
+            const tzModeVal = encodeURIComponent(currentTzMode);
+            const tzOffsetVal = encodeURIComponent(currentTzMode === 'local' ? getTimezoneOffsetMinutes() : 0);
 
             // Use offset=-1 to tail current file ends
-            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}&time_from=${timeFromVal}&time_to=${timeToVal}`)
+            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}&time_from=${timeFromVal}&time_to=${timeToVal}&tz_mode=${tzModeVal}&tz_offset=${tzOffsetVal}`)
                 .then(r => r.json())
                 .then(data => {
                     logOffset = data.offset !== undefined ? data.offset : {};
@@ -894,21 +1097,25 @@
 
     const timeFromInputEl = document.getElementById('timeFromInput');
     const timeToInputEl = document.getElementById('timeToInput');
-    if (timeFromInputEl && timeToInputEl) {
-        timeFromInputEl.addEventListener('change', function() {
-            if (this.value && !timeToInputEl.value) {
-                const parts = this.value.split(':');
-                if (parts.length >= 2) {
-                    let h = parseInt(parts[0], 10);
-                    let m = parseInt(parts[1], 10) + 30;
-                    if (m >= 60) {
-                        h = (h + Math.floor(m / 60)) % 24;
-                        m = m % 60;
-                    }
-                    const pad = n => String(n).padStart(2, '0');
-                    timeToInputEl.value = `${pad(h)}:${pad(m)}`;
-                }
-            }
+    if (timeFromInputEl) {
+        timeFromInputEl.addEventListener('input', updateTzConversionHint);
+        timeFromInputEl.addEventListener('change', updateTzConversionHint);
+    }
+    if (timeToInputEl) {
+        timeToInputEl.addEventListener('input', updateTzConversionHint);
+        timeToInputEl.addEventListener('change', updateTzConversionHint);
+    }
+
+    const btnTzUtc = document.getElementById('btnTzUtc');
+    const btnTzLocal = document.getElementById('btnTzLocal');
+    if (btnTzUtc) {
+        btnTzUtc.addEventListener('click', function() {
+            setTzMode('utc', true);
+        });
+    }
+    if (btnTzLocal) {
+        btnTzLocal.addEventListener('click', function() {
+            setTzMode('local', true);
         });
     }
 
@@ -1050,6 +1257,11 @@
         const logFilterForm = document.getElementById('logFilterForm');
         if (logFilterForm) {
             logFilterForm.addEventListener('submit', function() {
+                const tzModeInput = document.getElementById('tzModeInput');
+                const tzOffsetInput = document.getElementById('tzOffsetInput');
+                if (tzModeInput) tzModeInput.value = currentTzMode;
+                if (tzOffsetInput) tzOffsetInput.value = currentTzMode === 'local' ? getTimezoneOffsetMinutes() : 0;
+
                 const btn = document.getElementById('applyFilterBtn');
                 if (btn) {
                     btn.disabled = true;
@@ -1069,6 +1281,9 @@
             });
         }
 
+        // Initialize Timezone UI state
+        setTzMode(currentTzMode, false);
+
         const initialDataEl = document.getElementById('initialLogsData');
         if (initialDataEl) {
             try {
@@ -1080,7 +1295,7 @@
             }
         }
     };
-    // UTC clock hint for Time Window filter
+    // Clock with dual UTC and Local display
     function updateUtcClock() {
         const hint = document.getElementById('utcClockHint');
         if (!hint) return;
@@ -1088,7 +1303,12 @@
         const pad = n => String(n).padStart(2, '0');
         const utcTime = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
         const utcDate = `${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())}`;
-        hint.innerHTML = `<i class="bi bi-clock text-primary me-1"></i> UTC: <span class="font-monospace text-dark fw-bold ms-1">${utcDate} ${utcTime}</span>`;
+        const localTime = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+        const localDate = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+        const tzLabel = getTimezoneOffsetString();
+
+        hint.title = `UTC: ${utcDate} ${utcTime} | Local: ${localDate} ${localTime} (${tzLabel})`;
+        hint.innerHTML = `<i class="bi bi-clock text-primary me-1"></i> UTC: <span class="font-monospace text-dark fw-bold ms-1">${utcTime}</span> <span class="text-muted mx-1">|</span> Local: <span class="font-monospace text-secondary fw-semibold">${localTime}</span> <span class="text-muted" style="font-size:0.7rem;">(${tzLabel})</span>`;
     }
     updateUtcClock();
     setInterval(updateUtcClock, 1000);

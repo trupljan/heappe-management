@@ -1762,10 +1762,20 @@ def matches_filters(parsed, level_filter, search_query, time_from, time_to):
         tf = (time_from + ":00") if (time_from and len(time_from) == 5) else (time_from or "")
         tt = (time_to + ":59") if (time_to and len(time_to) == 5) else (time_to or "")
 
-        if tf and time_part < tf:
-            return False
-        if tt and time_part > tt:
-            return False
+        if tf and tt:
+            if tf <= tt:
+                if time_part < tf or time_part > tt:
+                    return False
+            else:
+                # Range crossing midnight, e.g. 23:00 to 01:00
+                if time_part < tf and time_part > tt:
+                    return False
+        elif tf:
+            if time_part < tf:
+                return False
+        elif tt:
+            if time_part > tt:
+                return False
             
     if search_query:
         content = parsed.get('content', '')
@@ -1865,7 +1875,18 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
         if entries_count >= buffer_limit:
             break
 
-    all_entries.sort(key=lambda x: x.get('timestamp_str') or '', reverse=True)
+    def entry_sort_key(entry):
+        ts = str(entry.get('timestamp_str') or '')
+        m = re.search(r'(\d{4}[-_/]\d{2}[-_/]\d{2}[T\s])?(\d{2}:\d{2}:\d{2})', ts)
+        if m:
+            date_prefix = (m.group(1) or '').replace('T', ' ').replace('/', '-').replace('_', '-')
+            time_part = m.group(2)
+            if not date_prefix:
+                date_prefix = '1970-01-01 '
+            return f"{date_prefix.strip()} {time_part}"
+        return ts
+
+    all_entries.sort(key=entry_sort_key, reverse=True)
     for entry in all_entries[:max_entries]:
         yield entry
 
@@ -1874,6 +1895,7 @@ def get_log_file_paths(instance, date_str, service="API"):
     base_logs_dir = f"/opt/heappe-deployment/{instance}/app/logs"
     date_formatted_us = date_str.replace("-", "_")
     date_formatted_hy = date_str.replace("_", "-")
+    date_formatted_raw = date_str.replace("-", "").replace("_", "")
 
     if not os.path.exists(base_logs_dir):
         return []
@@ -1882,7 +1904,7 @@ def get_log_file_paths(instance, date_str, service="API"):
     matching_files = []
 
     date_pattern = re.compile(
-        rf"^(?:[a-zA-Z0-9_\-]*?_)?(?:{re.escape(date_formatted_us)}|{re.escape(date_formatted_hy)})(?:[_\-]\d+)?\.(?:log|json)(?:\.\d+)?$",
+        rf"^(?:[a-zA-Z0-9_\-]*?[_\-])?(?:{re.escape(date_formatted_us)}|{re.escape(date_formatted_hy)}|{re.escape(date_formatted_raw)})(?:[_\-]\d+)?\.(?:log|json)(?:\.\d+)?$",
         re.IGNORECASE
     )
 
@@ -1952,6 +1974,38 @@ def get_log_file_path(instance, date_str, service="API"):
     return None
 
 
+def adjust_to_utc(date_str, time_str, tz_offset_minutes):
+    """
+    Given a date (YYYY-MM-DD), time (HH:MM or HH:MM:SS), and browser timezone offset in minutes
+    (from Date.prototype.getTimezoneOffset(), where UTC = Local + offset),
+    returns (utc_date_str, utc_time_str).
+    """
+    if not time_str:
+        return date_str, time_str
+    try:
+        offset_int = int(tz_offset_minutes)
+    except (ValueError, TypeError):
+        return date_str, time_str
+
+    if offset_int == 0:
+        return date_str, time_str
+
+    time_parts = [int(p) for p in time_str.split(':')]
+    h = time_parts[0]
+    m = time_parts[1] if len(time_parts) > 1 else 0
+    s = time_parts[2] if len(time_parts) > 2 else 0
+
+    try:
+        y, mo, d = [int(p) for p in date_str.split('-')]
+        dt = datetime(y, mo, d, h, m, s)
+    except Exception:
+        dt = datetime.combine(datetime.utcnow().date(), datetime.min.time()).replace(hour=h, minute=m, second=s)
+
+    utc_dt = dt + timedelta(minutes=offset_int)
+    fmt = '%H:%M:%S' if len(time_parts) > 2 else '%H:%M'
+    return utc_dt.strftime('%Y-%m-%d'), utc_dt.strftime(fmt)
+
+
 @login_required
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
@@ -1962,6 +2016,8 @@ def log_viewer_view(request):
     search_query = request.GET.get('search', '').lower()
     level_filter = request.GET.get('level', '').upper()
     service_filter = request.GET.get('service', 'API').upper()
+    tz_mode = request.GET.get('tz_mode', 'utc').lower()
+    tz_offset_param = request.GET.get('tz_offset', '0')
 
     limit_param = request.GET.get('limit', '1000')
     try:
@@ -1971,20 +2027,17 @@ def log_viewer_view(request):
     except (ValueError, TypeError):
         limit = 1000
 
-    effective_time_to = time_to
-    if time_from and not effective_time_to:
-        try:
-            parts = time_from.split(':')
-            h = int(parts[0]) + 1
-            m = int(parts[1])
-            if h >= 24:
-                effective_time_to = "23:59"
-            else:
-                effective_time_to = f"{h:02d}:{m:02d}"
-        except Exception:
-            effective_time_to = ""
+    effective_date = selected_date
+    utc_time_from = time_from
+    utc_time_to = time_to
 
-    log_paths = get_log_file_paths(instance, selected_date, service=service_filter)
+    if tz_mode == 'local' and (time_from or time_to):
+        if time_from:
+            effective_date, utc_time_from = adjust_to_utc(selected_date, time_from, tz_offset_param)
+        if time_to:
+            _, utc_time_to = adjust_to_utc(selected_date, time_to, tz_offset_param)
+
+    log_paths = get_log_file_paths(instance, effective_date, service=service_filter)
     
     try:
         entries = list(get_log_entries_backwards(
@@ -1992,8 +2045,8 @@ def log_viewer_view(request):
             max_entries=limit,
             level_filter=level_filter,
             search_query=search_query,
-            time_from=time_from,
-            time_to=effective_time_to
+            time_from=utc_time_from,
+            time_to=utc_time_to
         ))
         entries.reverse()
     except Exception as e:
@@ -2011,12 +2064,14 @@ def log_viewer_view(request):
         'logs_count': len(entries),
         'selected_date': selected_date,
         'time_from': time_from,
-        'time_to': time_to or effective_time_to,
+        'time_to': time_to,
         'search_query': search_query,
         'level_filter': level_filter,
         'service_filter': service_filter,
         'instance': instance,
-        'limit': limit
+        'limit': limit,
+        'tz_mode': tz_mode,
+        'tz_offset': tz_offset_param
     })
 
 
@@ -2034,6 +2089,18 @@ def fetch_new_logs(request):
     search_query = request.GET.get('search', '').lower()
     time_from = request.GET.get('time_from', '').strip()
     time_to = request.GET.get('time_to', '').strip()
+    tz_mode = request.GET.get('tz_mode', 'utc').lower()
+    tz_offset_param = request.GET.get('tz_offset', '0')
+
+    effective_date = selected_date
+    utc_time_from = time_from
+    utc_time_to = time_to
+
+    if tz_mode == 'local' and (time_from or time_to):
+        if time_from:
+            effective_date, utc_time_from = adjust_to_utc(selected_date, time_from, tz_offset_param)
+        if time_to:
+            _, utc_time_to = adjust_to_utc(selected_date, time_to, tz_offset_param)
 
     raw_offset = request.GET.get('offset', '0')
     is_dict_offset = False
@@ -2053,8 +2120,8 @@ def fetch_new_logs(request):
         except ValueError:
             num_offset = 0
 
-    log_paths = get_log_file_paths(instance, selected_date, service=service_filter)
-    if not log_paths and selected_date == today:
+    log_paths = get_log_file_paths(instance, effective_date, service=service_filter)
+    if not log_paths and effective_date == today:
         utc_today = datetime.utcnow().strftime('%Y-%m-%d')
         if utc_today != today:
             log_paths = get_log_file_paths(instance, utc_today, service=service_filter)
@@ -2137,7 +2204,7 @@ def fetch_new_logs(request):
                 parsed = parse_json_log_line(line_stripped, service=svc_tag)
                 if parsed:
                     processed_bytes += len(line.encode('utf-8'))
-                    if matches_filters(parsed, level_filter, search_query, time_from, time_to):
+                    if matches_filters(parsed, level_filter, search_query, utc_time_from, utc_time_to):
                         new_entries.append(parsed)
                     if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL:
                         break
@@ -2167,7 +2234,7 @@ def fetch_new_logs(request):
                     if current_entry_lines:
                         entry_text = "".join(current_entry_lines)
                         parsed = parse_log_line(entry_text, service=svc_tag)
-                        if matches_filters(parsed, level_filter, search_query, time_from, time_to):
+                        if matches_filters(parsed, level_filter, search_query, utc_time_from, utc_time_to):
                             new_entries.append(parsed)
                     current_entry_lines = [line]
                 else:
@@ -2179,7 +2246,7 @@ def fetch_new_logs(request):
             if current_entry_lines and len(new_entries) < MAX_LOG_ENTRIES_PER_PULL:
                 entry_text = "".join(current_entry_lines)
                 parsed = parse_log_line(entry_text, service=svc_tag)
-                if matches_filters(parsed, level_filter, search_query, time_from, time_to):
+                if matches_filters(parsed, level_filter, search_query, utc_time_from, utc_time_to):
                     new_entries.append(parsed)
 
             updated_offsets[log_path] = cur_file_offset + (lines_consumed_bytes if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL else consumed_bytes)
