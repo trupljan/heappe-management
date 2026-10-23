@@ -455,6 +455,25 @@ document.addEventListener('DOMContentLoaded', function () {
     let pollTimer = null;
     let defaultsLoaded = false;
 
+    function scrollLogToBottom(el) {
+        if (!el) return;
+        const target = el.jquery ? el[0] : (typeof el === 'string' ? document.getElementById(el) : el);
+        if (!target) return;
+        target.scrollTop = target.scrollHeight;
+        requestAnimationFrame(() => {
+            target.scrollTop = target.scrollHeight;
+            setTimeout(() => { target.scrollTop = target.scrollHeight; }, 50);
+            setTimeout(() => { target.scrollTop = target.scrollHeight; }, 320);
+        });
+    }
+
+    progressModalEl.addEventListener('shown.bs.modal', function () {
+        scrollLogToBottom(logEl);
+    });
+    progressModalEl.addEventListener('show.bs.modal', function () {
+        scrollLogToBottom(logEl);
+    });
+
     function toggleSections() {
         const isIqm = form.backend.value === 'iqm';
         form.querySelectorAll('.qs-iqm-only').forEach(el => el.classList.toggle('d-none', !isIqm));
@@ -666,6 +685,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('qs-error-text').textContent = (data && (data.error || data.message)) || 'Deployment failed.';
             errorEl.classList.remove('d-none');
         }
+        scrollLogToBottom(logEl);
     }
 
     function poll() {
@@ -675,7 +695,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 .then(r => r.json())
                 .then(d => {
                     logEl.textContent = d.logs || 'Waiting for logs...';
-                    logEl.scrollTop = logEl.scrollHeight;
+                    scrollLogToBottom(logEl);
                     if (!d.is_running) finish(d.success, d);
                 })
                 .catch(err => console.error('QScheduler status poll failed:', err));

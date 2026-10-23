@@ -511,9 +511,32 @@
         
         let pollInterval = null;
 
+        function scrollLogToBottom(el) {
+            if (!el) return;
+            const target = el.jquery ? el[0] : (typeof el === 'string' ? document.getElementById(el) : el);
+            if (!target) return;
+            target.scrollTop = target.scrollHeight;
+            requestAnimationFrame(() => {
+                target.scrollTop = target.scrollHeight;
+                setTimeout(() => { target.scrollTop = target.scrollHeight; }, 50);
+                setTimeout(() => { target.scrollTop = target.scrollHeight; }, 320);
+            });
+        }
+
+        const slurmSetupModalEl = document.getElementById('slurmSetupModal');
+        if (slurmSetupModalEl) {
+            slurmSetupModalEl.addEventListener('shown.bs.modal', function () {
+                scrollLogToBottom(logElement);
+            });
+            slurmSetupModalEl.addEventListener('show.bs.modal', function () {
+                scrollLogToBottom(logElement);
+            });
+        }
+
         function startSlurmSetup() {
             // Reset modal UI
             logElement.textContent = 'Initializing setup...';
+            scrollLogToBottom(logElement);
             spinner.classList.remove('d-none');
             successAlert.classList.add('d-none');
             errorAlert.classList.add('d-none');
@@ -553,7 +576,7 @@
                     if (data.status === 'success') {
                         // Update logs
                         logElement.textContent = data.logs || 'No logs yet...';
-                        logElement.scrollTop = logElement.scrollHeight;
+                        scrollLogToBottom(logElement);
                         
                         if (!data.is_running) {
                             clearInterval(pollInterval);

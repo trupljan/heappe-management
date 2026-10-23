@@ -1434,6 +1434,29 @@ let updatePollInterval = null;
 let treeEditor = null;
 let currentEditorMode = 'tree'; // 'tree', 'code', 'split'
 
+function scrollLogToBottom(el, force = true, shouldContinue = null) {
+    if (!el) return;
+    const target = el.jquery ? el[0] : (typeof el === 'string' ? document.getElementById(el) : el);
+    if (!target) return;
+
+    target.scrollTop = target.scrollHeight;
+
+    requestAnimationFrame(() => {
+        if (shouldContinue && !shouldContinue()) return;
+        target.scrollTop = target.scrollHeight;
+
+        setTimeout(() => {
+            if (shouldContinue && !shouldContinue()) return;
+            target.scrollTop = target.scrollHeight;
+        }, 50);
+
+        setTimeout(() => {
+            if (shouldContinue && !shouldContinue()) return;
+            target.scrollTop = target.scrollHeight;
+        }, 320);
+    });
+}
+
 function startUpdatePolling(actionType = 'update') {
     // Show update progress modal (non-dismissible)
     const updateModalEl = document.getElementById('updateProgressModal');
@@ -1488,7 +1511,7 @@ function startUpdatePolling(actionType = 'update') {
                     // Display logs
                     const logElement = $('#update-logs');
                     logElement.text(response.logs || 'Initializing log stream...');
-                    logElement.scrollTop(logElement[0].scrollHeight);
+                    scrollLogToBottom(logElement[0]);
 
                     if (!response.is_updating) {
                         // Action has finished!
@@ -1568,6 +1591,14 @@ function startUpdatePolling(actionType = 'update') {
 }
 
 $(document).ready(function() {
+    // Ensure deployment and update logs scroll to the bottom when modal opens
+    $('#deployLogViewerModal').on('show.bs.modal shown.bs.modal', function() {
+        scrollLogToBottom($('#deploy-error-logs-content')[0]);
+    });
+    $('#updateProgressModal').on('show.bs.modal shown.bs.modal', function() {
+        scrollLogToBottom($('#update-logs')[0]);
+    });
+
     // --- OPENTELEMETRY TOGGLE SWITCH LOGIC ---
     {% if instance_name %}
     $('#otel-toggle-switch').on('change', function() {
@@ -2178,7 +2209,7 @@ $(document).ready(function() {
                 const wasAtBottom = (pre.scrollHeight - pre.scrollTop - pre.clientHeight) < 40;
                 $logsContent.text(r.logs || 'No logs available.');
                 if (logsAutoScroll || wasAtBottom) {
-                    pre.scrollTop = pre.scrollHeight;
+                    scrollLogToBottom(pre, false, () => logsAutoScroll);
                 }
                 $liveDot.css({ background: '#22c55e', boxShadow: '0 0 6px #22c55e' });
             },
@@ -2211,8 +2242,8 @@ $(document).ready(function() {
     $('#logs-refresh-btn').on('click', function() { fetchLogs(); });
     $('#logs-scroll-btn').on('click', function() {
         const pre = $logsContent[0];
-        pre.scrollTop = pre.scrollHeight;
         logsAutoScroll = true;
+        scrollLogToBottom(pre, true);
     });
 
     // Page Visibility API — pause when tab is hidden, resume when visible
@@ -2239,6 +2270,10 @@ $(document).ready(function() {
         }
         if (!logsCurrentCid) return;
         startLogsPolling();
+    }).on('shown.bs.modal', function() {
+        if (logsAutoScroll) {
+            scrollLogToBottom($logsContent[0], true);
+        }
     }).on('hidden.bs.modal', function() {
         stopLogsPolling();
         // Do NOT clear logsCurrentCid — so re-open keeps context

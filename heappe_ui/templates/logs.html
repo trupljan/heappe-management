@@ -781,6 +781,15 @@
                         `;
                     });
                     document.getElementById('contextLogsContainer').innerHTML = logsHtml;
+                    requestAnimationFrame(() => {
+                        const targetEl = document.querySelector('#contextLogsContainer .is-target');
+                        if (targetEl) {
+                            targetEl.scrollIntoView({ block: 'center' });
+                        } else {
+                            const c = document.getElementById('contextLogsContainer');
+                            if (c) c.scrollTop = c.scrollHeight;
+                        }
+                    });
                 } else {
                     document.getElementById('contextLogsContainer').innerHTML = `<div class="alert alert-danger m-3 text-xs">${data.message || 'Failed to fetch preceding logs.'}</div>`;
                 }

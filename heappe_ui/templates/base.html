@@ -999,6 +999,36 @@
             });
     }
 
+    function scrollLogToBottom(el) {
+        if (!el) return;
+        const target = el.jquery ? el[0] : (typeof el === 'string' ? document.getElementById(el) : el);
+        if (!target) return;
+
+        target.scrollTop = target.scrollHeight;
+
+        requestAnimationFrame(() => {
+            target.scrollTop = target.scrollHeight;
+
+            setTimeout(() => {
+                target.scrollTop = target.scrollHeight;
+            }, 50);
+
+            setTimeout(() => {
+                target.scrollTop = target.scrollHeight;
+            }, 320);
+        });
+    }
+
+    const updateModalEl = document.getElementById('updateModal');
+    if (updateModalEl) {
+        const handleModalScroll = function() {
+            const logsEl = document.getElementById('admin-update-live-logs');
+            if (logsEl) scrollLogToBottom(logsEl);
+        };
+        updateModalEl.addEventListener('shown.bs.modal', handleModalScroll);
+        updateModalEl.addEventListener('show.bs.modal', handleModalScroll);
+    }
+
     function confirmAndDeploy() {
         if (!confirm("Are you sure you want to start the update process now?")) return;
 
@@ -1032,7 +1062,10 @@
             phaseBadge.className = 'badge bg-primary-subtle text-primary border border-primary-subtle';
             phaseBadge.textContent = 'Deploying';
         }
-        if (logsEl) logsEl.textContent = 'Initializing deployment...';
+        if (logsEl) {
+            logsEl.textContent = 'Initializing deployment...';
+            scrollLogToBottom(logsEl);
+        }
 
         fetch('{% url "trigger_deployment_direct" %}', {
             method: 'POST',
@@ -1086,6 +1119,7 @@
         }
         if (logsEl && logText) {
             logsEl.textContent = logText;
+            scrollLogToBottom(logsEl);
         }
 
         if (modalFooter) {
@@ -1198,7 +1232,7 @@
 
                 if (data.logs && logsEl) {
                     logsEl.textContent = data.logs;
-                    logsEl.scrollTop = logsEl.scrollHeight;
+                    scrollLogToBottom(logsEl);
                 }
 
                 const currentLogs = data.logs || '';

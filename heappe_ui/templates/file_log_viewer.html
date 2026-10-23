@@ -697,6 +697,21 @@
     function scrollToBottom(force = true) { 
         if (force || isScrolledNearBottom()) {
             logWindow.scrollTop = logWindow.scrollHeight; 
+            requestAnimationFrame(() => {
+                if (force || isScrolledNearBottom()) {
+                    logWindow.scrollTop = logWindow.scrollHeight;
+                }
+                setTimeout(() => {
+                    if (force || isScrolledNearBottom()) {
+                        logWindow.scrollTop = logWindow.scrollHeight;
+                    }
+                }, 50);
+                setTimeout(() => {
+                    if (force || isScrolledNearBottom()) {
+                        logWindow.scrollTop = logWindow.scrollHeight;
+                    }
+                }, 320);
+            });
         }
     }
 

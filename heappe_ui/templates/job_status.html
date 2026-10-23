@@ -123,11 +123,31 @@
         const modalEl = document.getElementById('fileViewerModal');
         if (modalEl) {
             fileModal = new bootstrap.Modal(modalEl);
+            const handleModalScroll = function () {
+                const contentEl = document.getElementById('file-content');
+                if (contentEl && !contentEl.classList.contains('d-none')) {
+                    scrollLogToBottom(contentEl);
+                }
+            };
+            modalEl.addEventListener('shown.bs.modal', handleModalScroll);
+            modalEl.addEventListener('show.bs.modal', handleModalScroll);
             modalEl.addEventListener('hidden.bs.modal', function () {
                 activeModalJobId = null;
                 activeModalFilePath = null;
             });
         }
+
+    function scrollLogToBottom(el) {
+        if (!el) return;
+        const target = el.jquery ? el[0] : (typeof el === 'string' ? document.getElementById(el) : el);
+        if (!target) return;
+        target.scrollTop = target.scrollHeight;
+        requestAnimationFrame(() => {
+            target.scrollTop = target.scrollHeight;
+            setTimeout(() => { target.scrollTop = target.scrollHeight; }, 50);
+            setTimeout(() => { target.scrollTop = target.scrollHeight; }, 320);
+        });
+    }
 
         function updateUI() {
             if (isPaused) {
@@ -270,7 +290,7 @@
                 errorEl.classList.add('d-none');
                 
                 if (wasAtBottom) {
-                    contentEl.scrollTop = contentEl.scrollHeight;
+                    scrollLogToBottom(contentEl);
                 }
             })
             .catch(error => {
@@ -328,7 +348,7 @@
                 contentEl.textContent = data.content;
                 contentEl.classList.remove('d-none');
                 // Scroll to bottom initially for stdout/stderr logs
-                contentEl.scrollTop = contentEl.scrollHeight;
+                scrollLogToBottom(contentEl);
             })
             .catch(error => {
                 spinnerEl.classList.add('d-none');
