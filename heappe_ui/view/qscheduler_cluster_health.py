@@ -7,12 +7,15 @@ QScheduler panel of a HEAppE QScheduler cluster (cluster detail, Cluster Configu
     callbacks on, a QSchedulerNotifyToken set (Vault), the notifier registered in QScheduler with the callback URL;
     otherwise "Recreate notifier" (new notifier + token, or callbacks disabled when notifications are off),
   * whether the cluster's machine (the queue of its node type) exists in QScheduler; otherwise "Recover machine":
-    register a new machine with that name, or switch the cluster to an existing machine.
+    register a new machine with that name, or switch the cluster to an existing machine,
+  * when its QScheduler instance is not registered, archived or cannot be reached: "Move to another QScheduler" -
+    the cluster (with its queues, projects and job history) is kept and pointed to another healthy instance assigned
+    to this HEAppE, with a new or existing machine there and a new notifier and token.
 """
 from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, HttpResponse, JsonResponse
 
-from heappe_ui.models import QSchedulerMachine
+from heappe_ui.models import QSchedulerAssignment, QSchedulerMachine
 
 from . import qscheduler_core as core
 from .qscheduler_core import SCHEDULER_TYPE_QSCHEDULER
@@ -48,13 +51,22 @@ def cluster_status(instance_name, cluster):
     machine = core.cluster_machine(cluster)
     endpoint = f"{cfg.get('QSchedulerHost') or cluster.get('master_node_name')}:{cfg.get('QSchedulerPort') or cluster.get('port')}"
     out = {'cluster_id': cluster.get('id'), 'machine': machine, 'endpoint': endpoint, 'instance': None,
-           'assigned': False, 'notifications': None, 'machine_status': None, 'error': None}
+           'assigned': False, 'notifications': None, 'machine_status': None, 'error': None,
+           'move_candidates': [], 'can_move': False}
     inst = _instance_of_cluster(cluster)
+    out['move_candidates'] = [{'id': a.qscheduler.id, 'name': a.qscheduler.name,
+                               'endpoint': f"{a.qscheduler.service_host}:{a.qscheduler.port}"}
+                              for a in QSchedulerAssignment.objects.select_related("qscheduler")
+                              .filter(heappe_instance__instance_name=instance_name, qscheduler__archived_at__isnull=True)
+                              .order_by("qscheduler__name") if not inst or a.qscheduler.id != inst.id]
     if not inst:
+        out['can_move'] = True          # its QScheduler is not (or no longer) registered here
         return out
     out['instance'] = {'id': inst.id, 'name': inst.name, 'kind': inst.get_kind_display(), 'archived': inst.is_archived}
     asg = _assignment_for(instance_name, inst.id)
     out['assigned'] = bool(asg)
+    if inst.is_archived:
+        out['can_move'] = True
     if not asg or inst.is_archived:
         return out
 
@@ -77,6 +89,7 @@ def cluster_status(instance_name, cluster):
         names = target.list_machines()
     except Exception as e:
         out['error'] = f"QScheduler '{inst.name}' cannot be checked: {str(e).splitlines()[0][:300]}"
+        out['can_move'] = True          # unreachable or gone: the cluster can be moved to a healthy instance
     finally:
         if target:
             target.close()
@@ -263,6 +276,122 @@ def recover_machine_worker(log, result, instance_name, cluster_id, opts):
 
 
 # ---------------------------------------------------------------------------
+# Move a cluster to another QScheduler instance (its own one is gone)
+# ---------------------------------------------------------------------------
+
+def parse_move_options(data, machine):
+    data = data or {}
+    raw = str(data.get('qscheduler_id') or "").strip()
+    opts, errors = parse_recover_options(data, machine)
+    if not raw.isdigit():
+        errors = ["Select the QScheduler instance to move the cluster to."] + errors
+    return (dict(opts or {}, qscheduler_id=int(raw) if raw.isdigit() else None), errors)
+
+
+def _remove_old_notifier(controller, session_code, old_inst, cluster, log):
+    """Best effort: drop the cluster's notifier from its old instance when that one is still reachable."""
+    old = (cluster.get('custom_configuration') or {}).get(core.NOTIFIER_KEY)
+    if not old or not old_inst or old_inst.is_archived:
+        return
+    if _other_users(controller, session_code, old_inst, cluster.get('id'), old):
+        log(f"Notifier '{old}' on '{old_inst.name}' is used by other clusters; kept.")
+        return
+    target = None
+    try:
+        target = core.target_for(old_inst)
+        current = {n['name']: n for n in target.list_notifiers(log)}
+        if old in current and core.replace_notifiers(target, {}, {old}, current, log):
+            core.apply_cli_change(old_inst, target, log)
+    except Exception as e:
+        log(f"WARNING: could not remove notifier '{old}' from '{old_inst.name}' ({str(e).splitlines()[0][:200]}); "
+            f"remove it there once it is reachable.")
+    finally:
+        if target:
+            target.close()
+
+
+def move_cluster_worker(log, result, instance_name, cluster_id, opts):
+    controller, session_code = _connect(instance_name, log)
+    cluster = _qs_cluster(controller, session_code, cluster_id)
+    old_inst = _instance_of_cluster(cluster)
+    asg = _assignment_for(instance_name, opts['qscheduler_id'])
+    if not asg:
+        raise RuntimeError(f"HEAppE '{instance_name}' is not assigned to the selected QScheduler instance.")
+    inst = asg.qscheduler
+    if inst.is_archived:
+        raise RuntimeError(f"QScheduler instance '{inst.name}' is archived.")
+    if old_inst and old_inst.id == inst.id:
+        raise RuntimeError(f"The cluster already belongs to '{inst.name}'.")
+    old_machine = core.cluster_machine(cluster)
+    new_machine = opts['machine_name'] if opts['mode'] == 'existing' else old_machine
+    log(f"=== QSCHEDULER: MOVE CLUSTER '{cluster.get('name')}' from "
+        f"{old_inst.name if old_inst else (cluster.get('master_node_name') or '?')} to '{inst.name}' "
+        f"({'existing' if opts['mode'] == 'existing' else 'new'} machine '{new_machine}') ===")
+    for c in core.qscheduler_clusters(controller, session_code, inst):
+        if core.cluster_machine(c) == new_machine:
+            raise RuntimeError(f"HEAppE cluster '{c.get('name')}' (ID {c.get('id')}) already uses machine "
+                               f"'{new_machine}' on '{inst.name}'.")
+
+    target = core.target_for(inst)
+    changed = False
+    try:
+        if target.health() != 200:
+            raise RuntimeError(f"QScheduler '{inst.name}' is not healthy; choose a healthy instance.")
+        machines = target.list_machines(log)
+        if machines is None:
+            raise RuntimeError(f"Machines of '{inst.name}' cannot be listed; the machine cannot be verified.")
+        names = {m['name'] for m in machines}
+        if opts['mode'] == 'new':
+            if old_machine in names:
+                raise RuntimeError(f"Machine '{old_machine}' already exists in '{inst.name}'. Choose 'Use an existing "
+                                   f"machine' to share it.")
+            res = target.cli(core.machine_args(dict(opts, machine_name=old_machine, action='add')), log, check=False)
+            if res.returncode != 0:
+                raise RuntimeError(f"Machine registration failed:\n{res.output[-3000:]}")
+            backend, options = core.machine_definition(opts)
+            QSchedulerMachine.objects.update_or_create(qscheduler=inst, name=old_machine,
+                                                       defaults={'backend': backend, 'options': options})
+            log(f"Machine '{old_machine}' registered in '{inst.name}' ({backend}).")
+            changed = True
+        elif new_machine not in names:
+            raise RuntimeError(f"Machine '{new_machine}' does not exist in '{inst.name}' (known: {', '.join(sorted(names)) or 'none'}).")
+
+        # New notifier on the new instance; the old one belongs to the old instance (handled below)
+        moved = dict(cluster, custom_configuration={k: v for k, v in (cluster.get('custom_configuration') or {}).items()
+                                                    if k != core.NOTIFIER_KEY})
+        add, remove, notifier = _notifier_change(controller, session_code, inst, asg, moved, new_machine, log)
+        current = {n['name']: n for n in target.list_notifiers(log)}
+        remove = {r for r in remove if r in current}
+        changed |= core.replace_notifiers(target, add, remove, current, log)
+        if changed:
+            core.apply_cli_change(inst, target, log)
+    finally:
+        target.close()
+
+    # Network: a local instance joins the HEAppE network if the assignment did not do it yet
+    if inst.kind in ("managed", "local") and asg.network:
+        try:
+            docker = core.DockerCli()
+            if asg.network not in docker.networks_of(inst.container_name):
+                docker.run(["network", "connect", "--alias", inst.service_host, asg.network, inst.container_name], log)
+        except Exception as e:
+            log(f"WARNING: could not connect '{inst.container_name}' to '{asg.network}': {e}")
+
+    _remove_old_notifier(controller, session_code, old_inst, cluster, log)
+    if new_machine != old_machine:
+        _set_queue(controller, session_code, cluster, old_machine, new_machine, log)
+    location = (inst.service_host, inst.port)
+    core.update_cluster_notifications(controller, session_code, cluster, notifier, log, location=location)
+    core.repoint_file_transfer_methods(controller, session_code, cluster, inst.service_host, inst.port, log)
+    result.update({'cluster': cluster.get('name'), 'machine': new_machine, 'mode': opts['mode'],
+                   'notifier': notifier[0] if notifier else None, 'qscheduler': inst.name,
+                   'from': old_inst.name if old_inst else cluster.get('master_node_name')})
+    log(f"SUCCESS: cluster '{cluster.get('name')}' moved to '{inst.name}' (machine '{new_machine}'"
+        f"{', notifier ' + repr(notifier[0]) + ' with a new token' if notifier else ''}); its queues, projects and "
+        f"job history are kept.")
+
+
+# ---------------------------------------------------------------------------
 # Views
 # ---------------------------------------------------------------------------
 
@@ -309,4 +438,22 @@ def qscheduler_cluster_recover_machine_api(request: HttpRequest, cluster_id: int
         return _error(" ".join(errors))
     ok, msg = core.start_operation("recover_machine", recover_machine_worker,
                                    request.session.get("chosen_instance"), cluster_id, opts)
+    return JsonResponse({'status': 'success' if ok else 'error', 'message': msg}, status=200 if ok else 409)
+
+
+@login_required
+def qscheduler_cluster_move_api(request: HttpRequest, cluster_id: int) -> HttpResponse:
+    if request.method != "POST":
+        return _error('Only POST method is allowed', 405)
+    err = _version_error(request)
+    if err:
+        return _error(err)
+    data = _json_body(request)
+    opts, errors = parse_move_options(data, str(data.get('current_machine') or "").strip() or "machine")
+    if errors:
+        return _error(" ".join(errors))
+    if not _assignment_for(request.session.get("chosen_instance"), opts['qscheduler_id']):
+        return _error("This HEAppE instance is not assigned to the selected QScheduler instance.")
+    ok, msg = core.start_operation("move_cluster", move_cluster_worker, request.session.get("chosen_instance"),
+                                   cluster_id, opts)
     return JsonResponse({'status': 'success' if ok else 'error', 'message': msg}, status=200 if ok else 409)

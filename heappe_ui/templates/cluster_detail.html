@@ -70,6 +70,8 @@
                              data-status-url="{% url 'qscheduler_cluster_status' cluster.id %}"
                              data-recreate-url="{% url 'qscheduler_cluster_recreate_notifier' cluster.id %}"
                              data-recover-url="{% url 'qscheduler_cluster_recover_machine' cluster.id %}"
+                             data-move-url="{% url 'qscheduler_cluster_move' cluster.id %}"
+                             data-machines-url="{% url 'qscheduler_machine_list' 0 %}"
                              data-qs-page-url="{% url 'qscheduler_page' %}">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <div class="fw-bold small text-primary"><i class="bi bi-cpu me-1"></i>QScheduler</div>
@@ -1540,12 +1542,20 @@
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsRecoverForm" novalidate data-no-loading autocomplete="off">
             <div class="modal-header bg-primary text-white border-0 py-3 px-4">
-                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsRecoverLabel"><i class="bi bi-motherboard"></i>Recover machine <code class="text-white" id="qs-rec-machine"></code></h5>
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsRecoverLabel"><i class="bi bi-motherboard"></i><span id="qs-rec-title">Recover machine</span> <code class="text-white" id="qs-rec-machine"></code></h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-4">
-                <p class="small text-secondary mb-3">The cluster's queue uses a machine that does not exist in <strong id="qs-rec-instance"></strong>. Register it again, or move the cluster to an existing machine.
+                <p class="small text-secondary mb-3 qs-rec-recover-only">The cluster's queue uses a machine that does not exist in <strong id="qs-rec-instance"></strong>. Register it again, or move the cluster to an existing machine.
                     Either way the cluster gets a notifier <code>&lt;identifier&gt;.&lt;machine&gt;</code> with a new token (if notifications are on) and QScheduler is restarted once.</p>
+                <div class="qs-rec-move-only d-none">
+                    <p class="small text-secondary mb-2">The cluster is <strong>kept</strong> (queues, projects, allocations and job history) and pointed to another QScheduler instance assigned to this HEAppE:
+                        its endpoint and file transfer methods are updated, it gets a machine there and a notifier <code>&lt;identifier&gt;.&lt;machine&gt;</code> with a new token (if notifications are on).
+                        Tasks still running on the old instance are not moved.</p>
+                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-qscheduler_id">Move to QScheduler instance</label>
+                    <select class="form-select form-select-sm mb-1" id="qs-rec-qscheduler_id" name="qscheduler_id"></select>
+                    <div class="form-text mb-3" style="font-size: 0.72rem;" id="qs-rec-target-info"></div>
+                </div>
                 <div class="form-check">
                     <input class="form-check-input" type="radio" name="mode" id="qs-rec-mode-new" value="new" checked>
                     <label class="form-check-label small fw-semibold" for="qs-rec-mode-new">Register a new machine with this name</label>
@@ -1578,7 +1588,7 @@
                 </div>
                 <div class="form-check">
                     <input class="form-check-input" type="radio" name="mode" id="qs-rec-mode-existing" value="existing">
-                    <label class="form-check-label small fw-semibold" for="qs-rec-mode-existing">Use an existing machine (the cluster's queue is switched to it)</label>
+                    <label class="form-check-label small fw-semibold" for="qs-rec-mode-existing">Use an existing machine (the cluster's queue is switched to it if the name differs)</label>
                 </div>
                 <div class="row g-2 ms-3 qs-rec-existing-only d-none">
                     <div class="col-md-6">
@@ -1606,26 +1616,36 @@ document.addEventListener('DOMContentLoaded', function () {
     let status = null;
     const line = (icon, cls, html) => '<div class="d-flex gap-2 mb-1"><i class="bi bi-' + icon + ' ' + cls + '"></i><div>' + html + '</div></div>';
     const qsLink = name => '<a href="' + box.dataset.qsPageUrl + '" class="fw-semibold">' + esc(name) + '</a>';
+    let dialogMode = 'recover';
+    const moveHtml = d => !d.can_move ? '' : (d.move_candidates.length
+        ? '<div class="mt-2"><button type="button" class="btn btn-sm btn-outline-primary fw-semibold qs-cs-move"><i class="bi bi-arrow-left-right me-1"></i>Move to another QScheduler...</button>' +
+          ' <span class="text-muted" style="font-size: 0.72rem;">keeps the cluster, its projects and job history</span></div>'
+        : line('info-circle', 'text-secondary', 'To move this cluster to another QScheduler, assign this HEAppE instance to a healthy one on the ' + qsLink('QScheduler page') + ' first.'));
 
     function render(d) {
         status = d;
         if (d.status !== 'success') { body.innerHTML = line('exclamation-triangle', 'text-danger', esc(d.message || 'Status unavailable.')); return; }
         let html = '';
         if (!d.instance) {
-            body.innerHTML = line('question-circle', 'text-warning', 'Endpoint <code>' + esc(d.endpoint) + '</code> is not a QScheduler instance registered in HEAppE Management (' + qsLink('QScheduler page') + ').');
+            body.innerHTML = line('question-circle', 'text-warning', 'Endpoint <code>' + esc(d.endpoint) + '</code> is not a QScheduler instance registered in HEAppE Management (' + qsLink('QScheduler page') + ').') + moveHtml(d);
+            bindMove();
             return;
         }
         html += line('hdd-network', 'text-primary', 'Attached to ' + qsLink(d.instance.name) + ' <span class="text-muted">(' + esc(d.instance.kind) + ', <code>' + esc(d.endpoint) + '</code>)</span>' +
             (d.instance.archived ? ' <span class="badge bg-dark-subtle text-dark-emphasis border">archived</span>' : '') + ' &middot; machine <code>' + esc(d.machine) + '</code>');
         if (d.instance.archived) {
-            html += line('archive', 'text-secondary', 'The instance is archived: restore it on the ' + qsLink('QScheduler page') + ' (this reassigns the cluster with a new notifier token).');
-            body.innerHTML = html; return;
+            html += line('archive', 'text-secondary', 'The instance is archived: restore it on the ' + qsLink('QScheduler page') + ' (this reassigns the cluster with a new notifier token), or move this cluster to another QScheduler.');
+            body.innerHTML = html + moveHtml(d); bindMove(); return;
         }
         if (!d.assigned) {
             html += line('exclamation-triangle', 'text-warning', 'This HEAppE instance is not assigned to ' + esc(d.instance.name) + '. Assign it on the ' + qsLink('QScheduler page') + ' first.');
             body.innerHTML = html; return;
         }
-        if (d.error) html += line('exclamation-triangle', 'text-warning', esc(d.error));
+        if (d.error) {
+            body.innerHTML = html + line('exclamation-triangle', 'text-warning', esc(d.error)) + moveHtml(d);
+            bindMove();
+            return;
+        }
 
         const n = d.notifications;
         if (n.enabled) {
@@ -1662,7 +1682,10 @@ document.addEventListener('DOMContentLoaded', function () {
             start(rc, box.dataset.recreateUrl, {}, n.enabled ? 'Recreating notifier' : 'Disabling callbacks');
         });
         const rv = document.getElementById('qs-cs-recover');
-        if (rv) rv.addEventListener('click', openRecover);
+        if (rv) rv.addEventListener('click', () => openRecover('recover'));
+    }
+    function bindMove() {
+        body.querySelectorAll('.qs-cs-move').forEach(b => b.addEventListener('click', () => openRecover('move')));
     }
 
     function start(btn, postUrl, data, title, errId) {
@@ -1676,7 +1699,8 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             if (errId) bootstrap.Modal.getOrCreateInstance(document.getElementById('qsRecoverModal')).hide();
             U.track({ title: title + ' for ' + status.machine, successTitle: 'Done',
-                      details: (res, e) => 'Cluster: ' + e(res.cluster) + (res.machine ? '<br>Machine: ' + e(res.machine) : '') + '<br>Notifier: ' + e(res.notifier || 'none (callbacks off)') });
+                      details: (res, e) => 'Cluster: ' + e(res.cluster) + (res.qscheduler ? '<br>QScheduler: ' + e(res.from || '?') + ' &rarr; ' + e(res.qscheduler) : '') +
+                          (res.machine ? '<br>Machine: ' + e(res.machine) : '') + '<br>Notifier: ' + e(res.notifier || 'none (callbacks off)') });
         }).catch(err => { restore(); alert(err.message || 'Network error.'); });
     }
 
@@ -1689,21 +1713,54 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     recForm.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', recToggle));
     recForm.backend.addEventListener('change', recToggle);
-    function openRecover() {
-        document.getElementById('qs-rec-error').classList.add('d-none');
-        document.getElementById('qs-rec-machine').textContent = status.machine;
-        document.getElementById('qs-rec-instance').textContent = status.instance.name;
-        const sel = recForm.machine_name;
-        sel.innerHTML = status.machine_status.machines.map(m => '<option value="' + esc(m) + '">' + esc(m) + '</option>').join('');
-        document.getElementById('qs-rec-mode-existing').disabled = !status.machine_status.machines.length;
+    function setMachines(names) {
+        recForm.machine_name.innerHTML = names.map(m => '<option value="' + esc(m) + '"' + (m === status.machine ? ' selected' : '') + '>' + esc(m) + '</option>').join('');
+        const existing = document.getElementById('qs-rec-mode-existing');
+        existing.disabled = !names.length;
+        if (existing.disabled && existing.checked) document.getElementById('qs-rec-mode-new').checked = true;
+        if (!existing.disabled && names.includes(status.machine)) existing.checked = true;   // same machine already there
         recToggle();
+    }
+    function loadTargetMachines() {
+        const id = recForm.qscheduler_id.value;
+        const info = document.getElementById('qs-rec-target-info');
+        setMachines([]);
+        if (!id) return;
+        info.textContent = 'Loading machines...';
+        U.getJson(box.dataset.machinesUrl.replace('/0/', '/' + id + '/')).then(d => {
+            if (!d.machines) { info.textContent = 'Machines of this instance cannot be listed.'; return; }
+            info.textContent = d.machines.length ? 'Machines: ' + d.machines.map(m => m.name + ' (' + m.backend + ')').join(', ') : 'No machine registered yet.';
+            setMachines(d.machines.map(m => m.name));
+        }).catch(() => { info.textContent = 'Could not load machines.'; });
+    }
+    recForm.qscheduler_id.addEventListener('change', loadTargetMachines);
+    function openRecover(mode) {
+        dialogMode = mode;
+        const move = mode === 'move';
+        document.getElementById('qs-rec-error').classList.add('d-none');
+        document.getElementById('qs-rec-title').textContent = move ? 'Move cluster with machine' : 'Recover machine';
+        document.getElementById('qs-rec-machine').textContent = status.machine;
+        recForm.querySelectorAll('.qs-rec-move-only').forEach(el => el.classList.toggle('d-none', !move));
+        recForm.querySelectorAll('.qs-rec-recover-only').forEach(el => el.classList.toggle('d-none', move));
+        document.getElementById('qsRecoverBtn').innerHTML = move ? '<i class="bi bi-arrow-left-right me-1"></i>Move' : '<i class="bi bi-wrench-adjustable me-1"></i>Recover';
+        if (move) {
+            recForm.qscheduler_id.innerHTML = status.move_candidates.map(c => '<option value="' + c.id + '">' + esc(c.name) + ' (' + esc(c.endpoint) + ')</option>').join('');
+            loadTargetMachines();
+        } else {
+            document.getElementById('qs-rec-instance').textContent = status.instance.name;
+            setMachines(status.machine_status.machines);
+            document.getElementById('qs-rec-mode-new').checked = true;
+            recToggle();
+        }
         bootstrap.Modal.getOrCreateInstance(document.getElementById('qsRecoverModal')).show();
     }
     recForm.addEventListener('submit', e => {
         e.preventDefault();
         const data = { current_machine: status.machine };
         new FormData(recForm).forEach((v, k) => { data[k] = v; });
-        start(document.getElementById('qsRecoverBtn'), box.dataset.recoverUrl, data, 'Recovering machine', 'qs-rec-error');
+        if (dialogMode !== 'move') delete data.qscheduler_id;
+        start(document.getElementById('qsRecoverBtn'), dialogMode === 'move' ? box.dataset.moveUrl : box.dataset.recoverUrl, data,
+              dialogMode === 'move' ? 'Moving cluster' : 'Recovering machine', 'qs-rec-error');
     });
 
     function load() {

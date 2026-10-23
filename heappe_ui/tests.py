@@ -5226,6 +5226,12 @@ class QSchedulerOptionParsingTests(TestCase):
         opts, errors = parse_deploy_options({}, "abcd1234")
         self.assertEqual(errors, [])
         self.assertEqual(opts['name'], "qscheduler-abcd1234")
+        opts, errors = parse_deploy_options({"name": "mydev"}, "5190156f")
+        self.assertEqual((opts['name'], errors), ("mydev-5190156f", []))           # custom prefix + random id
+        self.assertEqual(parse_deploy_options({"name": "dev-"}, "5190156f")[0]['name'], "dev-5190156f")
+        self.assertTrue(parse_deploy_options({"name": "-bad"}, "x")[1])
+        self.assertTrue(parse_deploy_options({"name": "a" * 55}, "x")[1])
+        self.assertEqual(parse_deploy_options({"name": "a" * 54}, "5190156f")[0]['name'], "a" * 54 + "-5190156f")
         self.assertEqual(opts['source'], "git")
         self.assertIsNone(opts['host_port'])
         _, errors = parse_deploy_options({"source": "git", "repo": "file:///etc", "ref": "bad ref"}, "x")
@@ -6768,3 +6774,237 @@ class QSchedulerClusterHealthTests(TestCase):
         self.assertNotIn('id="qs-cluster-status"', html)
         html = render_to_string("cluster_detail.html", dict(ctx, cluster={'scheduler_type': 32}))   # create form
         self.assertNotIn('id="qs-cluster-status"', html)
+
+
+class QSchedulerClusterMoveTests(TestCase):
+    """Move a cluster whose QScheduler is gone to another healthy instance (the cluster is kept)."""
+
+    def setUp(self):
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance, QSchedulerAssignment
+        self.cred = InstanceCredentials.objects.create(instance_name="dev", heappe_host="h", heappe_login="u",
+                                                       heappe_password="p", heappe_port="5000")
+        self.old = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                     service_host="qs-1", port=4300)
+        self.new = QSchedulerInstance.objects.create(name="qs-2", kind="managed", container_name="qs-2",
+                                                     service_host="qs-2", port=4400)
+        for inst in (self.old, self.new):
+            QSchedulerAssignment.objects.create(qscheduler=inst, heappe_instance=self.cred, heappe_identifier="heappe-dev",
+                                                notifications_enabled=True, callback_url="http://h/cb")
+        self.log = lambda *_: None
+
+    _cluster = staticmethod(QSchedulerClusterHealthTests._cluster)
+
+    def _target(self, machines=("Sim",), health=200):
+        from heappe_ui.view.qscheduler_core import CommandResult
+        t = mock.Mock()
+        t.health.return_value = health
+        t.list_machines.return_value = [{"name": m, "backend": "test"} for m in machines]
+        t.list_notifiers.return_value = []
+        t.cli.return_value = CommandResult(0, "ok", "")
+        return t
+
+    def _move(self, opts_data, target, on_new=(), old_target=None, cluster=None):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_cluster_health import move_cluster_worker, parse_move_options
+        opts, errors = parse_move_options(dict({"qscheduler_id": str(self.new.id)}, **opts_data), "Sim")
+        self.assertEqual(errors, [])
+        cluster = cluster or self._cluster()
+        controller = mock.Mock()
+        controller.heappe_management_cluster_get.return_value = cluster
+        targets = {"qs-2": target, "qs-1": old_target or mock.Mock(**{"list_notifiers.side_effect": RuntimeError("gone")})}
+        clusters = lambda c, sc, inst: list(on_new) if inst.name == "qs-2" else [cluster]
+        result = {}
+        with mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(controller, "sc", None)), \
+             mock.patch.object(core, "target_for", side_effect=lambda inst: targets[inst.name]), \
+             mock.patch.object(core, "qscheduler_clusters", side_effect=clusters), \
+             mock.patch.object(core, "DockerCli"), \
+             mock.patch.object(core, "update_cluster_notifications") as upd, \
+             mock.patch.object(core, "repoint_file_transfer_methods") as ftm:
+            move_cluster_worker(self.log, result, "dev", 5, opts)
+        return controller, upd, ftm, result
+
+    def test_status_offers_move_for_unreachable_or_unknown_instance(self):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_cluster_health import cluster_status
+        broken = mock.Mock(**{"list_notifiers.side_effect": RuntimeError("SSH connection failed")})
+        with mock.patch.object(core, "target_for", return_value=broken):
+            s = cluster_status("dev", self._cluster())
+        self.assertTrue(s['can_move'])
+        self.assertEqual([c['name'] for c in s['move_candidates']], ["qs-2"])   # not the cluster's own instance
+        other = dict(self._cluster(), master_node_name="gone-host", custom_configuration={"QSchedulerPort": "4300"})
+        s = cluster_status("dev", other)
+        self.assertTrue(s['can_move'])
+        self.assertEqual(len(s['move_candidates']), 2)
+        healthy = mock.Mock(**{"list_notifiers.return_value": [], "list_machines.return_value": []})
+        with mock.patch.object(core, "target_for", return_value=healthy):
+            self.assertFalse(cluster_status("dev", self._cluster())['can_move'])
+
+    def test_move_with_new_machine_keeps_cluster(self):
+        from heappe_ui.models import QSchedulerMachine
+        target = self._target(machines=())
+        controller, upd, ftm, result = self._move({"mode": "new", "backend": "test"}, target)
+        cmds = [c.args[0] for c in target.cli.call_args_list]
+        self.assertEqual([c[:3] for c in cmds], [["machine", "add", "Sim"], ["notifier", "add", "heappe-dev.Sim"]])
+        target.restart.assert_called_once()
+        controller.heappe_management_cluster_delete.assert_not_called()
+        self.assertEqual(upd.call_args.kwargs['location'], ("qs-2", 4400))
+        self.assertEqual(upd.call_args.args[3][0], "heappe-dev.Sim")
+        self.assertEqual(ftm.call_args.args[3:5], ("qs-2", 4400))
+        self.assertTrue(QSchedulerMachine.objects.filter(qscheduler=self.new, name="Sim").exists())
+        self.assertEqual((result['qscheduler'], result['from']), ("qs-2", "qs-1"))
+
+    def test_move_to_existing_machine_with_other_name(self):
+        target = self._target(machines=("VLQ",))
+        controller, upd, _, _ = self._move({"mode": "existing", "machine_name": "VLQ"}, target)
+        self.assertFalse(any(c.args[0][0] == "machine" for c in target.cli.call_args_list))
+        self.assertEqual(controller.heappe_management_cluster_node_type_put.call_args.kwargs['body']['Queue'], "VLQ")
+        self.assertEqual(upd.call_args.args[3][0], "heappe-dev.VLQ")
+
+    def test_move_removes_old_notifier_when_old_instance_reachable(self):
+        old_target = mock.Mock()
+        old_target.list_notifiers.return_value = [{"name": "heappe-dev.Sim", "url": "http://h/cb"}]
+        target = self._target(machines=("Sim",))
+        from heappe_ui.view import qscheduler_core as core
+        # the old instance only sees other clusters: the moving one is excluded
+        self._move({"mode": "existing", "machine_name": "Sim"}, target, old_target=old_target)
+        self.assertIn(["notifier", "remove", "heappe-dev.Sim"], [c.args[0] for c in old_target.cli.call_args_list])
+
+    def test_move_refusals(self):
+        with self.assertRaisesRegex(RuntimeError, "already uses machine 'Sim'"):
+            self._move({"mode": "existing", "machine_name": "Sim"}, self._target(), on_new=[self._cluster(cid=9)])
+        with self.assertRaisesRegex(RuntimeError, "not healthy"):
+            self._move({"mode": "new", "backend": "test"}, self._target(machines=(), health=None))
+        with self.assertRaisesRegex(RuntimeError, "already exists"):
+            self._move({"mode": "new", "backend": "test"}, self._target(machines=("Sim",)))
+        from heappe_ui.view.qscheduler_cluster_health import parse_move_options
+        _, errors = parse_move_options({"mode": "new", "backend": "test"}, "Sim")
+        self.assertTrue(any("Select the QScheduler" in e for e in errors))
+
+    def test_move_api_requires_assigned_target(self):
+        from heappe_ui.models import QSchedulerInstance
+        from heappe_ui.view import qscheduler_core as core
+        self.client.force_login(User.objects.create_user(username="mv_admin", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session["middleware_deployed_version"] = "6.6.0"
+        session.save()
+        lonely = QSchedulerInstance.objects.create(name="qs-3", kind="managed", container_name="qs-3", service_host="qs-3")
+        with mock.patch.object(core, "start_operation", return_value=(True, "started")) as start:
+            post = lambda qid: self.client.post("/clusters/qscheduler/cluster/5/move/", content_type="application/json",
+                                                data=json.dumps({"qscheduler_id": qid, "mode": "new", "backend": "test",
+                                                                 "current_machine": "Sim"}))
+            self.assertEqual(post(lonely.id).status_code, 400)
+            start.assert_not_called()
+            self.assertEqual(post(self.new.id).status_code, 200)
+            start.assert_called_once()
+
+
+class QSchedulerImageBuildTests(TestCase):
+    """Rebuild / clean rebuild (no cache) of the QScheduler image on deploy, update and restore."""
+
+    def test_build_args_and_options(self):
+        from heappe_ui.view.qscheduler_deploy import build_args, parse_deploy_options, parse_update_options
+        self.assertEqual(build_args("qs:latest", "https://g/q.git", "main"), ["build", "-t", "qs:latest", "https://g/q.git#main"])
+        self.assertEqual(build_args("qs:latest", "https://g/q.git", "main", True)[:3], ["build", "--no-cache", "--pull"])
+        self.assertTrue(parse_deploy_options({"no_cache": True}, "x")[0]['no_cache'])
+        self.assertFalse(parse_deploy_options({}, "x")[0]['no_cache'])
+        self.assertTrue(parse_update_options({"no_cache": "on"})[0]['no_cache'])
+
+    def test_clean_rebuild_builds_even_if_image_exists(self):
+        from heappe_ui.view.qscheduler_deploy import _build_or_check_image
+        docker = mock.Mock(where="")
+        docker.exists.return_value = True
+        _build_or_check_image(docker, "git", "https://g/q.git", "main", "qs:latest", False, lambda *_: None)
+        docker.run.assert_not_called()                                   # existing image reused
+        _build_or_check_image(docker, "git", "https://g/q.git", "main", "qs:latest", False, lambda *_: None, no_cache=True)
+        self.assertEqual(docker.run.call_args.args[0][:3], ["build", "--no-cache", "--pull"])
+        docker.reset_mock()
+        _build_or_check_image(docker, "image", "", "", "qs:latest", False, lambda *_: None, no_cache=True)
+        docker.run.assert_not_called()                                   # no build for an existing image source
+
+    def test_update_passes_clean_rebuild(self):
+        from heappe_ui.models import QSchedulerInstance
+        from heappe_ui.view import qscheduler_deploy as d
+        inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1", service_host="qs-1")
+        target = mock.Mock()
+        target.docker.inspect.return_value = None                        # stop right after the build step would run
+        with mock.patch.object(d.core, "target_for", return_value=target), \
+             mock.patch.object(d, "_build_or_check_image") as build:
+            with self.assertRaises(RuntimeError):
+                d.update_worker(lambda *_: None, {}, inst.id, d.parse_update_options({"no_cache": True})[0], "u")
+        build.assert_not_called()                                         # container missing: refused before building
+        target.docker.inspect.return_value = {"Config": {}}
+        with mock.patch.object(d.core, "target_for", return_value=target), \
+             mock.patch.object(d, "_build_or_check_image", side_effect=RuntimeError("stop")) as build:
+            with self.assertRaisesRegex(RuntimeError, "stop"):
+                d.update_worker(lambda *_: None, {}, inst.id, d.parse_update_options({"no_cache": True})[0], "u")
+        self.assertTrue(build.call_args.kwargs['no_cache'])
+
+
+class QSchedulerNetworkSubnetTests(TestCase):
+    """Internal database networks get a /27 from a dedicated pool (Docker's default pools can run out)."""
+
+    def _docker(self, subnets, create_results):
+        from heappe_ui.view.qscheduler_core import CommandResult
+        docker = mock.Mock()
+        docker.json.return_value = [{"IPAM": {"Config": [{"Subnet": s}]}} for s in subnets]
+        results = iter(create_results)
+        docker.run.side_effect = lambda args, *a, **k: (CommandResult(0, "id1 id2", "") if args[:2] == ["network", "ls"]
+                                                        else next(results))
+        return docker
+
+    def test_picks_first_free_subnet_and_retries_on_overlap(self):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_core import CommandResult
+        docker = self._docker(["172.17.0.0/16", "10.213.0.0/26"],
+                              [CommandResult(1, "", "Pool overlaps with other one on this address space"), CommandResult(0, "ok", "")])
+        subnet = core.create_internal_network(docker, "qs-1_db_net", {"qscheduler.instance": "qs-1"}, lambda *_: None)
+        self.assertEqual(subnet, "10.213.0.72/29")                    # default /29: .0/26 used, .64 overlapped meanwhile
+        create = [c.args[0] for c in docker.run.call_args_list if c.args[0][:2] == ["network", "create"]]
+        self.assertEqual(create[0][create[0].index("--subnet") + 1], "10.213.0.64/29")
+        self.assertIn("--internal", create[1])
+        self.assertEqual(create[1][-1], "qs-1_db_net")
+
+    def test_selected_network_size(self):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_core import CommandResult
+        from heappe_ui.view.qscheduler_deploy import parse_deploy_options
+        from heappe_ui.view.qscheduler_recovery import parse_restore_options
+        from heappe_ui.models import QSchedulerInstance
+        self.assertEqual(parse_deploy_options({}, "x")[0]['network_prefix'], 29)             # default /29
+        self.assertEqual(parse_deploy_options({"network_prefix": "/29"}, "x")[0]['network_prefix'], 29)
+        self.assertEqual(parse_deploy_options({"network_prefix": 24}, "x")[0]['network_prefix'], 24)
+        for bad in ("23", "30", "big"):
+            self.assertTrue(any("Network size" in e for e in parse_deploy_options({"network_prefix": bad}, "x")[1]), bad)
+        with self.settings(QSCHEDULER_NETWORK_PREFIX=28):
+            self.assertEqual(parse_deploy_options({}, "x")[0]['network_prefix'], 28)       # default from settings
+        inst = QSchedulerInstance(name="qs-1", kind="managed", port=4300)
+        self.assertEqual(parse_restore_options({"network_prefix": "26"}, inst)[0]['network_prefix'], 26)
+        docker = self._docker(["10.213.0.0/29"], [CommandResult(0, "ok", "")])
+        self.assertEqual(core.create_internal_network(docker, "n", {}, lambda *_: None, prefix=29), "10.213.0.8/29")
+        docker = self._docker([], [CommandResult(0, "ok", "")])
+        self.assertEqual(core.create_internal_network(docker, "n", {}, lambda *_: None, prefix=24), "10.213.0.0/24")
+
+    def test_deploy_passes_network_size(self):
+        from heappe_ui.view import qscheduler_deploy as d
+        opts, _ = d.parse_deploy_options({"network_prefix": "28"}, "abcd1234")
+        docker = mock.Mock(where="")
+        with mock.patch.object(d, "_build_or_check_image"), \
+             mock.patch.object(d.core, "create_internal_network", side_effect=RuntimeError("stop")) as create:
+            with self.assertRaisesRegex(RuntimeError, "stop"):
+                d.deploy_service(docker, opts, lambda *_: None)
+        self.assertEqual((create.call_args.args[1], create.call_args.kwargs['prefix']), ("qscheduler-abcd1234_db_net", 28))
+
+    def test_other_errors_and_configuration(self):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_core import CommandResult
+        docker = self._docker([], [CommandResult(1, "", "permission denied")])
+        with self.assertRaisesRegex(RuntimeError, "permission denied.*QSCHEDULER_NETWORK_POOL"):
+            core.create_internal_network(docker, "n", {}, lambda *_: None)
+        with self.settings(QSCHEDULER_NETWORK_POOL="192.168.250.0/26", QSCHEDULER_NETWORK_PREFIX=27):
+            docker = self._docker(["192.168.250.0/27", "192.168.250.32/27"], [])
+            with self.assertRaisesRegex(RuntimeError, "pool exhausted"):
+                core.create_internal_network(docker, "n", {}, lambda *_: None)
+        with self.settings(QSCHEDULER_NETWORK_POOL="10.0.0.0/28", QSCHEDULER_NETWORK_PREFIX=27):
+            with self.assertRaisesRegex(RuntimeError, "does not fit"):
+                core.network_pool()

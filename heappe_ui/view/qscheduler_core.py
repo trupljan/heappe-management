@@ -859,6 +859,80 @@ def replace_notifiers(target, add: dict, remove, current: dict, log):
 
 
 # ---------------------------------------------------------------------------
+# Internal Docker networks with small subnets
+# ---------------------------------------------------------------------------
+# Docker's default address pools hand out /16 or /20 subnets and run out ("all predefined address pools have been
+# fully subnetted"). QScheduler's database networks hold two containers, so they get a /29 (default) from a dedicated range.
+
+NETWORK_PREFIX_CHOICES = (24, 25, 26, 27, 28, 29)     # /29 = 6 usable addresses, enough for QScheduler + PostgreSQL
+
+
+def network_pool():
+    """(pool, default prefix) from QSCHEDULER_NETWORK_POOL / QSCHEDULER_NETWORK_PREFIX (settings or environment)."""
+    import ipaddress
+    pool = getattr(settings, "QSCHEDULER_NETWORK_POOL", None) or os.getenv("QSCHEDULER_NETWORK_POOL", "10.213.0.0/16")
+    prefix = int(getattr(settings, "QSCHEDULER_NETWORK_PREFIX", None) or os.getenv("QSCHEDULER_NETWORK_PREFIX", "29"))
+    net = ipaddress.ip_network(pool, strict=False)
+    check_network_prefix(net, prefix)
+    return net, prefix
+
+
+def check_network_prefix(pool, prefix):
+    if not pool.prefixlen <= prefix <= 29:
+        raise RuntimeError(f"A /{prefix} subnet does not fit QSCHEDULER_NETWORK_POOL {pool} (between /{pool.prefixlen} and /29).")
+
+
+def used_subnets(docker):
+    """Subnets of all existing Docker networks (IPv4 and IPv6)."""
+    import ipaddress
+    ids = [i for i in docker.run(["network", "ls", "-q"], check=False, quiet=True).stdout.split() if i]
+    used = []
+    for info in (docker.json(["network", "inspect", *ids]) or []) if ids else []:
+        for cfg in ((info.get("IPAM") or {}).get("Config") or []):
+            try:
+                used.append(ipaddress.ip_network(cfg.get("Subnet"), strict=False))
+            except (TypeError, ValueError):
+                pass
+    return used
+
+
+def free_subnets(docker, prefix=None):
+    """Free subnets of the QScheduler network pool (size /prefix, default from the settings), in order."""
+    pool, default = network_pool()
+    prefix = prefix or default
+    check_network_prefix(pool, prefix)
+    used = [u for u in used_subnets(docker) if u.version == pool.version]
+    for candidate in pool.subnets(new_prefix=prefix):
+        if not any(candidate.overlaps(u) for u in used):
+            yield candidate
+
+
+def create_internal_network(docker, name, labels, log, attempts=5, prefix=None):
+    """
+    `docker network create --internal` with an explicit small subnet: /prefix (chosen when deploying; default /29,
+    QSCHEDULER_NETWORK_PREFIX) from QSCHEDULER_NETWORK_POOL (default 10.213.0.0/16). Retries the next subnet when
+    Docker reports an overlap (e.g. a network created meanwhile).
+    """
+    pool, default = network_pool()
+    prefix = prefix or default
+    label_args = [arg for k, v in labels.items() for arg in ("--label", f"{k}={v}")]
+    last = ""
+    for i, subnet in enumerate(free_subnets(docker, prefix)):
+        if i >= attempts:
+            break
+        res = docker.run(["network", "create", "--driver", "bridge", "--internal", "--subnet", str(subnet),
+                          *label_args, name], log, check=False)
+        if res.returncode == 0:
+            log(f"Network '{name}' created with subnet {subnet}.")
+            return str(subnet)
+        last = res.output.strip()
+        if not re.search(r"overlap", last, re.I):
+            break
+    raise RuntimeError(f"Could not create network '{name}' with a /{prefix} subnet from {pool}: {last or 'pool exhausted'}. "
+                       f"Set QSCHEDULER_NETWORK_POOL to a free private range.")
+
+
+# ---------------------------------------------------------------------------
 # Presence of an instance (manually removed QScheduler) and machine definitions (restore)
 # ---------------------------------------------------------------------------
 

@@ -35,6 +35,7 @@ from .qscheduler_core import (DockerCli, DockerTarget, ContainerShellTarget, Ssh
                               NAME_RE, HOST_RE, GIT_REF_RE, IMAGE_RE)
 
 DOCKER_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL, Q.KIND_SSH_HOST)
+NAME_PREFIX_MAX = 54          # + "-<8 hex>" = 63, the maximum instance name
 ARCHIVED_MESSAGE = "QScheduler instance '{name}' is archived: restore it or delete it with its clusters."
 LOCAL_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL)
 
@@ -72,6 +73,18 @@ class _Reader:
             return default
 
 
+def _network_prefix(r):
+    """Size of the database network to create (/24 ... /29); default from QSCHEDULER_NETWORK_PREFIX (29)."""
+    raw = r.s('network_prefix').lstrip("/")
+    default = core.network_pool()[1]
+    if not raw:
+        return default
+    if not raw.isdigit() or int(raw) not in core.NETWORK_PREFIX_CHOICES:
+        r.errors.append(f"Network size must be one of {', '.join('/' + str(p) for p in core.NETWORK_PREFIX_CHOICES)}.")
+        return default
+    return int(raw)
+
+
 def _validate_source(r, opts):
     if opts['source'] not in ('git', 'image'):
         r.errors.append("Image source must be 'git' or 'image'.")
@@ -86,8 +99,12 @@ def _validate_source(r, opts):
 
 def parse_deploy_options(data: dict, uid: str) -> tuple:
     r = _Reader(data)
+    # The name entered is a prefix: a random suffix "-<uid>" is always appended (unique names, also of the database
+    # container, network and volume derived from it). Empty -> "qscheduler-<uid>".
+    base = r.s('name', 'qscheduler').rstrip("-_.")
     opts = {
-        'name': r.s('name', f"qscheduler-{uid}"),
+        'name_prefix': base,
+        'name': f"{base}-{uid}",
         'port': r.port('port', DEFAULT_PORT, "Service port"),
         'host_port': r.port('host_port', None, "Host port"),
         'source': r.s('source', 'git').lower(),
@@ -95,14 +112,17 @@ def parse_deploy_options(data: dict, uid: str) -> tuple:
         'ref': r.s('ref', DEFAULT_QSCHEDULER_REF),
         'image': r.s('image', DEFAULT_QSCHEDULER_IMAGE),
         'rebuild_image': r.b('rebuild_image'),
+        'no_cache': r.b('no_cache'),
         'db_mode': r.s('db_mode', 'new').lower(),
         'database_url': r.s('database_url'),
         'db_network': r.s('db_network'),
+        'network_prefix': _network_prefix(r),
         'assign_heappe_id': r.s('assign_heappe_id'),
         'assign_notifications': r.b('assign_notifications', True),
     }
-    if not NAME_RE.match(opts['name']):
-        r.errors.append("Name may contain only letters, digits, '_', '.', '-' (max 63 chars).")
+    if not NAME_RE.match(base) or len(base) > NAME_PREFIX_MAX:
+        r.errors.append(f"Name may contain only letters, digits, '_', '.', '-' and must start with a letter or digit "
+                        f"(max {NAME_PREFIX_MAX} chars; '-<random id>' is appended).")
     _validate_source(r, opts)
     if opts['db_mode'] not in ('new', 'existing'):
         r.errors.append("Database mode must be 'new' or 'existing'.")
@@ -168,7 +188,8 @@ def parse_register_options(data: dict) -> tuple:
 def parse_update_options(data: dict) -> tuple:
     r = _Reader(data)
     opts = {'source': r.s('source', 'git').lower(), 'repo': r.s('repo', DEFAULT_QSCHEDULER_REPO),
-            'ref': r.s('ref', DEFAULT_QSCHEDULER_REF), 'image': r.s('image', DEFAULT_QSCHEDULER_IMAGE)}
+            'ref': r.s('ref', DEFAULT_QSCHEDULER_REF), 'image': r.s('image', DEFAULT_QSCHEDULER_IMAGE),
+            'no_cache': r.b('no_cache')}
     _validate_source(r, opts)
     return opts, r.errors
 
@@ -293,11 +314,18 @@ def import_legacy_instances():
 # Workers (run in the background through core.start_operation)
 # ---------------------------------------------------------------------------
 
-def _build_or_check_image(docker, source, repo, ref, image, rebuild, log):
+def build_args(image, repo, ref, no_cache=False):
+    """docker build of a git ref; no_cache: clean rebuild (no layer cache, newer base images pulled)."""
+    return ["build"] + (["--no-cache", "--pull"] if no_cache else []) + ["-t", image, f"{repo}#{ref}"]
+
+
+def _build_or_check_image(docker, source, repo, ref, image, rebuild, log, no_cache=False):
     if source == 'git':
-        if rebuild or not docker.exists("image", image):
-            log(f"Building image '{image}' from {repo}#{ref}{docker.where} (Rust release build, can take several minutes)...")
-            docker.run(["build", "-t", image, f"{repo}#{ref}"], log, timeout=IMAGE_BUILD_TIMEOUT)
+        if rebuild or no_cache or not docker.exists("image", image):
+            log(f"Building image '{image}' from {repo}#{ref}{docker.where}"
+                f"{' from scratch (no build cache, pulling base images)' if no_cache else ''} "
+                f"(Rust release build, can take several minutes)...")
+            docker.run(build_args(image, repo, ref, no_cache), log, timeout=IMAGE_BUILD_TIMEOUT)
             log("Image built successfully.")
         else:
             log(f"Reusing existing image '{image}' (tick 'Rebuild image' to force a fresh build).")
@@ -315,12 +343,12 @@ def deploy_service(docker, opts, log):
     pg_name, db_net, volume = f"{name}-pgsql", f"{name}_db_net", f"{name}-pgdata"
     created = []
     try:
-        _build_or_check_image(docker, opts['source'], opts['repo'], opts['ref'], opts['image'], opts['rebuild_image'], log)
+        _build_or_check_image(docker, opts['source'], opts['repo'], opts['ref'], opts['image'], opts['rebuild_image'], log,
+                              no_cache=opts.get('no_cache', False))
 
         if opts['db_mode'] == 'new':
             db_password = secrets.token_hex(16)
-            docker.run(["network", "create", "--driver", "bridge", "--internal",
-                        "--label", f"{LABEL_INSTANCE}={name}", db_net], log)
+            core.create_internal_network(docker, db_net, {LABEL_INSTANCE: name}, log, prefix=opts.get('network_prefix'))
             created.append(("network", db_net))
             docker.run(["volume", "create", "--label", f"{LABEL_INSTANCE}={name}", volume], log)
             created.append(("volume", volume))
@@ -475,7 +503,8 @@ def update_worker(log, result, inst_id, opts, uid):
         info = docker.inspect(name)
         if not info:
             raise RuntimeError(f"Container '{name}' not found{docker.where}.")
-        _build_or_check_image(docker, opts['source'], opts['repo'], opts['ref'], opts['image'], True, log)
+        _build_or_check_image(docker, opts['source'], opts['repo'], opts['ref'], opts['image'], True, log,
+                              no_cache=opts.get('no_cache', False))
         labels = {LABEL_INSTANCE: name}
         if opts['source'] == 'git':
             labels.update({LABEL_REPO: opts['repo'], LABEL_BRANCH: opts['ref']})
@@ -809,6 +838,13 @@ def instance_summary(inst):
     }
 
 
+def _default_prefix():
+    try:
+        return core.network_pool()[1]
+    except Exception:
+        return 29
+
+
 @login_required
 def qscheduler_page(request: HttpRequest) -> HttpResponse:
     try:
@@ -821,7 +857,9 @@ def qscheduler_page(request: HttpRequest) -> HttpResponse:
         'instances_json': json.dumps(instances),
         'heappe_instances': list(InstanceCredentials.objects.order_by("instance_name").values("id", "instance_name")),
         'defaults': {'repo': DEFAULT_QSCHEDULER_REPO, 'ref': DEFAULT_QSCHEDULER_REF, 'image': DEFAULT_QSCHEDULER_IMAGE,
-                     'port': DEFAULT_PORT, 'restart_command': DEFAULT_RESTART_COMMAND},
+                     'port': DEFAULT_PORT, 'restart_command': DEFAULT_RESTART_COMMAND,
+                     'network_prefix': _default_prefix()},
+        'network_prefixes': list(core.NETWORK_PREFIX_CHOICES),
         'chosen_instance': request.session.get("chosen_instance"),
     })
 

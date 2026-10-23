@@ -141,6 +141,10 @@
                             <input class="form-check-input" type="checkbox" id="qs-rst-rebuild_image" name="rebuild_image">
                             <label class="form-check-label small" for="qs-rst-rebuild_image">Rebuild the image even if it already exists</label>
                         </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-rst-no_cache" name="no_cache">
+                            <label class="form-check-label small" for="qs-rst-no_cache">Force a clean rebuild: no build cache, pull newer base images (<code>--no-cache --pull</code>, slower)</label>
+                        </div>
                     </div>
                 </div>
 
@@ -173,6 +177,11 @@
                             <input class="form-check-input" type="radio" name="db_mode" id="qs-rst-db-existing" value="existing">
                             <label class="form-check-label small" for="qs-rst-db-existing">Use existing database</label>
                         </div>
+                    </div>
+                    <div class="col-md-4 qs-rst-db-net-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-network_prefix">Database network size</label>
+                        <select class="form-select form-select-sm" id="qs-rst-network_prefix" name="network_prefix"><option value="24">/24 (254 addresses)</option><option value="25">/25 (126 addresses)</option><option value="26">/26 (62 addresses)</option><option value="27">/27 (30 addresses)</option><option value="28">/28 (14 addresses)</option><option value="29">/29 (6 addresses, default)</option></select>
+                        <div class="form-text" style="font-size: 0.72rem;">Subnet of the internal <code>&lt;name&gt;_db_net</code>, taken from <code>QSCHEDULER_NETWORK_POOL</code>. Two containers use it.</div>
                     </div>
                     <div class="col-md-8 qs-rst-db-existing-only d-none">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-database_url">DATABASE_URL <span class="text-danger">*</span></label>
@@ -302,6 +311,8 @@ document.addEventListener('DOMContentLoaded', function () {
     function rstDbToggle() {
         const mode = rstForm.querySelector('input[name="db_mode"]:checked').value;
         rstForm.querySelectorAll('.qs-rst-db-existing-only').forEach(el => el.classList.toggle('d-none', mode !== 'existing'));
+        // A database network is created for a new database, and for a reused one whose network is gone
+        rstForm.querySelectorAll('.qs-rst-db-net-only').forEach(el => el.classList.toggle('d-none', mode === 'existing'));
         rstForm.querySelectorAll('.qs-rst-mode').forEach(sel => {
             const skip = sel.querySelector('option[value="skip"]');
             skip.disabled = mode !== 'reuse';
@@ -376,7 +387,8 @@ document.addEventListener('DOMContentLoaded', function () {
             rstForm.querySelector('input[name="source"][value="' + df.source + '"]').checked = true;
             rstForm.repo.value = df.repo; rstForm.ref.value = df.ref; rstForm.image.value = df.image;
             rstForm.name.value = df.name; rstForm.port.value = df.port; rstForm.host_port.value = '';
-            rstForm.rebuild_image.checked = false;
+            rstForm.rebuild_image.checked = false; rstForm.no_cache.checked = false;
+            rstForm.network_prefix.value = String(d.network_prefix || 29);
             P().sourceToggle(rstForm);
             rstRefs.load();
             document.getElementById('qs-rst-reuse-info').textContent = d.reusable_database ? '(' + d.reusable_database + ')' : '(not available)';
@@ -404,7 +416,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     rstForm.addEventListener('submit', e => {
         e.preventDefault();
-        const data = P().formData(rstForm, ['rebuild_image', 'skip_unreachable']);
+        const data = P().formData(rstForm, ['rebuild_image', 'no_cache', 'skip_unreachable']);
         data.machines = Array.from(document.querySelectorAll('#qs-rst-machines tr[data-machine]')).map(tr => {
             const o = JSON.parse(tr.dataset.options || '{}');
             return Object.assign(o, {

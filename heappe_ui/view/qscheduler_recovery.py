@@ -22,7 +22,7 @@ from heappe_ui.models import QSchedulerInstance as Q, QSchedulerMachine
 
 from . import qscheduler_core as core
 from .qscheduler_core import DockerCli, DockerTarget, LABEL_INSTANCE, NAME_RE
-from .qscheduler_deploy import (_Reader, _validate_source, _error, _json_body, _post_only, _started, _instance_or_404,
+from .qscheduler_deploy import (_Reader, _validate_source, _network_prefix, _error, _json_body, _post_only, _started, _instance_or_404,
                                 _wait_for_postgres, deploy_service, postgres_run_args, LOCAL_KINDS)
 
 ARCHIVE_REASON_MAX = 255
@@ -267,9 +267,11 @@ def parse_restore_options(data: dict, inst) -> tuple:
         'ref': r.s('ref', inst.ref or core.DEFAULT_QSCHEDULER_REF),
         'image': r.s('image', inst.image or core.DEFAULT_QSCHEDULER_IMAGE),
         'rebuild_image': r.b('rebuild_image'),
+        'no_cache': r.b('no_cache'),
         'db_mode': r.s('db_mode', 'new').lower(),
         'database_url': r.s('database_url'),
         'db_network': r.s('db_network'),
+        'network_prefix': _network_prefix(r),
         'skip_unreachable': r.b('skip_unreachable', False),
         'machines': {},
     }
@@ -315,7 +317,7 @@ def reusable_database(docker, inst):
     return None
 
 
-def _prepare_reused_database(docker, inst, log):
+def _prepare_reused_database(docker, inst, log, prefix=None):
     """Start / recreate the old PostgreSQL of a managed instance. Returns (database_url, db_network)."""
     name = inst.container_name
     pg, net, vol = f"{name}-pgsql", f"{name}_db_net", f"{name}-pgdata"
@@ -333,8 +335,7 @@ def _prepare_reused_database(docker, inst, log):
     elif docker.json(["volume", "inspect", vol]) and inst.database_url:
         password = urlparse(inst.database_url).password
         if not docker.json(["network", "inspect", net]):
-            docker.run(["network", "create", "--driver", "bridge", "--internal",
-                        "--label", f"{LABEL_INSTANCE}={name}", net], log)
+            core.create_internal_network(docker, net, {LABEL_INSTANCE: name}, log, prefix=prefix)
         docker.run(postgres_run_args(name, password), log)
         log(f"Recreated PostgreSQL container '{pg}' on the kept volume '{vol}'.")
     else:
@@ -390,7 +391,7 @@ def restore_worker(log, result, inst_id, opts):
     # 2. Database and service
     deploy_opts = dict(opts)
     if opts['db_mode'] == 'reuse':
-        url, net = _prepare_reused_database(docker, inst, log)
+        url, net = _prepare_reused_database(docker, inst, log, prefix=opts.get('network_prefix'))
         deploy_opts.update(db_mode='existing', database_url=url, db_network=net)
     elif opts['db_mode'] == 'new':
         _remove_leftovers(docker, name, log)
@@ -616,6 +617,7 @@ def qscheduler_restore_info_api(request: HttpRequest, inst_id: int) -> HttpRespo
                      'image': inst.image or core.DEFAULT_QSCHEDULER_IMAGE},
         'reusable_database': reuse, 'leftovers': leftovers,
         'machines': [machines[k] for k in sorted(machines)], 'machine_defaults': core.MACHINE_DEFAULTS,
+        'network_prefix': core.network_pool()[1], 'network_prefixes': list(core.NETWORK_PREFIX_CHOICES),
         'heappes': heappes,
     })
 

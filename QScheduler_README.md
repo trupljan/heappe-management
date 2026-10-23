@@ -102,13 +102,14 @@ step; machines are added from the Clusters page.
 | Section | Field | Description |
 |---|---|---|
 | Image | *Build from git (branch / tag)* | Builds the image with `docker build -t <image> <repository>#<branch or tag>`. An existing image with the same name is reused unless *Rebuild the image* is ticked. |
+| | *Force a clean rebuild* | Builds with `--no-cache --pull`: every step is run again and newer base images are pulled (slower). Use it when a rebuild with the cache does not pick up a change, e.g. of a dependency or base image. Also in *Update* and *Restore*. |
 | | *Image available on this host* | Uses an image that is already on the Docker host (pick from the suggestions or type its name). |
 | | Git repository, Branch / tag, Image | Defaults: `https://github.com/It4innovations/qscheduler.git`, `main`, `qscheduler:latest`. |
 | | Branch / tag picker | When the repository can be read, *Branch / tag* is a list of its branches (default branch first) and tags (newest first); *Other (type manually)...* allows any other ref. The list is loaded again when the repository URL changes. If the repository cannot be read, the field stays a plain text input. See [Branch / tag list](#branch--tag-list). |
-| Service | Container name | Default `qscheduler-<id>`. Also the instance name and the host name HEAppE uses. |
+| Service | Name | A prefix of your choice (letters, digits, `_`, `.`, `-`, max 54 characters); a random id is **always appended**: `mydev` becomes e.g. `mydev-5190156f`, empty gives `qscheduler-5190156f`. The result is the instance name, the container name and the host name HEAppE uses; the database container, network and volume are named after it. |
 | | Service port | Port of the REST API inside the container (default `4300`). |
 | | Publish on host | Optional. Publishes the port on `127.0.0.1` only. |
-| | Database | *Deploy new PostgreSQL*: creates the container `<name>-pgsql`, the internal network `<name>_db_net` and the volume `<name>-pgdata`. *Use existing database*: enter `DATABASE_URL` (`postgres://...`) and optionally the Docker network on which the database is reachable. |
+| | Database | *Deploy new PostgreSQL*: creates the container `<name>-pgsql`, the internal network `<name>_db_net` (subnet size chosen in *Database network size*, default `/29`, see [Networks](#networks)) and the volume `<name>-pgdata`. *Use existing database*: enter `DATABASE_URL` (`postgres://...`) and optionally the Docker network on which the database is reachable. |
 | Assignment | Assign HEAppE instance | Optional. Assigns a HEAppE instance right after the deployment (see [Assigning HEAppE instances](#assigning-heappe-instances)). |
 | | Enable notifications | Turns notifications on for that HEAppE instance; notifiers are created later, one per cluster. The HEAppE instance must run 6.6.0 or newer, otherwise the deployment is refused before it starts. |
 
@@ -191,7 +192,8 @@ when the page is opened. The HEAppE instance they were deployed for stays assign
 **Actions → Update** (Docker-based instances only: deployed, local container, SSH to VM).
 
 - *Build from git*: always rebuilds the image from the given repository and branch / tag, on the Docker host of the
-  instance.
+  instance, reusing Docker's build cache; tick *Force a clean rebuild* to build without the cache and pull newer base
+  images.
 - *Existing image*: switches to an image already present on that Docker host.
 
 *Branch / tag* offers the same list as in the deploy dialog.
@@ -420,6 +422,16 @@ panel at the top of it (checked when the page opens; the arrow checks again):
   Either way the cluster gets the notifier `<identifier>.<machine>` with a new token (notifications on) and
   QScheduler restarts once.
 
+- **Move to another QScheduler...**: offered when the cluster's QScheduler instance is not registered in HEAppE
+  Management, is archived, or cannot be reached. The cluster is **not deleted**: its queues, projects, allocations,
+  credentials and job history stay. Choose another instance this HEAppE is assigned to (it must be healthy) and
+  either *use an existing machine* there (the cluster's queue is switched to it if the name differs) or *register a
+  new machine* with the cluster's machine name. The cluster and its file transfer methods are pointed to the new
+  endpoint, it gets the notifier `<identifier>.<machine>` there with a new token (Vault), and the new QScheduler
+  restarts once. The old notifier is removed from the old instance only if that one still answers. Tasks that were
+  running on the old instance are not moved. Refused when another cluster of this HEAppE already uses the machine on
+  the target instance.
+
 The panel needs HEAppE 6.6.0+ for its actions. Its *Webhook & Callback
 Notifications* section contains the cluster's notifier settings instead of the generic webhook fields:
 
@@ -524,6 +536,38 @@ arriving during the restart fail, and HEAppE retries status queries later.
 
 ---
 
+## Networks
+
+Internal database networks (`<name>_db_net`, also when Restore recreates one) get an explicit small subnet instead of
+one from Docker's default address pools, which hand out `/16` or `/20` subnets and fail with *all predefined address
+pools have been fully subnetted* on hosts with many networks. The size is chosen in *Deploy New* and *Restore*
+(**Database network size**, shown with *Deploy new PostgreSQL*):
+
+| Size | Usable addresses |
+|---|---|
+| `/24` | 254 |
+| `/25` | 126 |
+| `/26` | 62 |
+| `/27` | 30 |
+| `/28` | 14 |
+| `/29` (default) | 6 |
+
+Only QScheduler and its PostgreSQL use the network, so the default `/29` (6 addresses) is enough; a larger size is only
+needed if you attach more containers to it yourself.
+The first subnet of that size in `10.213.0.0/16` not used by any existing Docker network is taken; if Docker reports
+an overlap (a network created meanwhile), the next one is tried.
+
+Change the range or size with environment variables of HEAppE Management, e.g. when `10.213.0.0/16` is used by your
+LAN or VPN:
+
+| Variable | Default | Description |
+|---|---|---|
+| `QSCHEDULER_NETWORK_POOL` | `10.213.0.0/16` | Private range the subnets are taken from. |
+| `QSCHEDULER_NETWORK_PREFIX` | `29` | Default of *Database network size* (`/24`–`/29`). |
+
+Only the database networks are created by HEAppE Management; QScheduler joins the existing networks of the HEAppE
+instances it is assigned to and the default `bridge` network (egress, e.g. to IQM).
+
 ## Security notes
 
 - SSH private keys, key passphrases and database URLs are stored in the HEAppE Management database in plain text, the
@@ -581,3 +625,4 @@ arriving during the restart fail, and HEAppE retries status queries later.
 | Clusters → QScheduler | Manage QScheduler instances | – | Opens the QScheduler page. |
 | Cluster detail → QScheduler | Recreate notifier / Disable callbacks | QScheduler clusters with wrong notification settings | New notifier and token for the cluster (or callbacks off), one restart. |
 | Cluster detail → QScheduler | Recover machine... | QScheduler clusters whose machine is missing | Registers the machine again or switches the cluster to an existing machine; new notifier and token. |
+| Cluster detail → QScheduler | Move to another QScheduler... | clusters whose instance is unknown, archived or unreachable | Keeps the cluster and points it to another assigned, healthy instance (new or existing machine, new notifier and token). |

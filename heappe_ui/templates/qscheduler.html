@@ -196,14 +196,22 @@
                             <input class="form-check-input" type="checkbox" id="qs-dep-rebuild_image" name="rebuild_image">
                             <label class="form-check-label small" for="qs-dep-rebuild_image">Rebuild the image even if it already exists</label>
                         </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-dep-no_cache" name="no_cache">
+                            <label class="form-check-label small" for="qs-dep-no_cache">Force a clean rebuild: no build cache, pull newer base images (<code>--no-cache --pull</code>, slower)</label>
+                        </div>
                     </div>
                 </div>
 
                 <div class="fw-bold small text-primary mb-2"><i class="bi bi-hdd-stack me-1"></i> Service</div>
                 <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
                     <div class="col-md-6">
-                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-name">Container name</label>
-                        <input type="text" class="form-control form-control-sm" id="qs-dep-name" name="name" placeholder="auto (qscheduler-&lt;id&gt;)">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-name">Name</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="qs-dep-name" name="name" placeholder="qscheduler" maxlength="54" aria-describedby="qs-dep-name-suffix qs-dep-name-help">
+                            <span class="input-group-text font-monospace text-muted" id="qs-dep-name-suffix">-&lt;random id&gt;</span>
+                        </div>
+                        <div class="form-text" style="font-size: 0.72rem;" id="qs-dep-name-help">A random id is always appended, e.g. <code><span id="qs-dep-name-example">qscheduler</span>-5190156f</code>: it is the instance and container name and the host name HEAppE uses.</div>
                     </div>
                     <div class="col-md-3">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-port">Service port</label>
@@ -224,6 +232,11 @@
                             <input class="form-check-input" type="radio" name="db_mode" id="qs-dep-db-existing" value="existing">
                             <label class="form-check-label small" for="qs-dep-db-existing">Use existing database</label>
                         </div>
+                    </div>
+                    <div class="col-md-4 qs-dep-db-new-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-network_prefix">Database network size</label>
+                        <select class="form-select form-select-sm" id="qs-dep-network_prefix" name="network_prefix"><option value="24">/24 (254 addresses)</option><option value="25">/25 (126 addresses)</option><option value="26">/26 (62 addresses)</option><option value="27">/27 (30 addresses)</option><option value="28">/28 (14 addresses)</option><option value="29">/29 (6 addresses, default)</option></select>
+                        <div class="form-text" style="font-size: 0.72rem;">Subnet of the internal <code>&lt;name&gt;_db_net</code>, taken from <code>QSCHEDULER_NETWORK_POOL</code>. Two containers use it.</div>
                     </div>
                     <div class="col-md-8 qs-db-existing-only d-none">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-database_url">DATABASE_URL <span class="text-danger">*</span></label>
@@ -393,6 +406,12 @@
                     <div class="col-md-3">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-upd-image">Image</label>
                         <input type="text" class="form-control form-control-sm" id="qs-upd-image" name="image" list="qs-local-images" autocomplete="off">
+                    </div>
+                    <div class="col-12 qs-git-only">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-upd-no_cache" name="no_cache">
+                            <label class="form-check-label small" for="qs-upd-no_cache">Force a clean rebuild: no build cache, pull newer base images (<code>--no-cache --pull</code>, slower)</label>
+                        </div>
                     </div>
                     <div class="col-12 form-text" style="font-size: 0.72rem;">
                         Recreates the container with the same configuration (database, networks, ports); for git the image is rebuilt on the
@@ -673,11 +692,18 @@ document.addEventListener('DOMContentLoaded', function () {
     depForm.querySelectorAll('input[name="db_mode"]').forEach(r => r.addEventListener('change', () => {
         const ex = depForm.querySelector('input[name="db_mode"]:checked').value === 'existing';
         depForm.querySelectorAll('.qs-db-existing-only').forEach(el => el.classList.toggle('d-none', !ex));
+        depForm.querySelectorAll('.qs-dep-db-new-only').forEach(el => el.classList.toggle('d-none', ex));
     }));
+    depForm.name.addEventListener('input', () => {
+        document.getElementById('qs-dep-name-example').textContent = depForm.name.value.trim().replace(/[-_.]+$/, '') || 'qscheduler';
+    });
     document.getElementById('qsDeployOpen').addEventListener('click', () => {
         hideErr('qs-dep-error');
         depForm.repo.value = defaults.repo; depForm.ref.value = defaults.ref; depForm.image.value = defaults.image;
         depForm.port.value = defaults.port;
+        depForm.rebuild_image.checked = false; depForm.no_cache.checked = false;
+        depForm.name.value = ''; document.getElementById('qs-dep-name-example').textContent = 'qscheduler';
+        depForm.network_prefix.value = String(defaults.network_prefix || 29);
         const sel = depForm.assign_heappe_id;
         sel.innerHTML = '<option value="">- none -</option>' + heappes.map(h => '<option value="' + h.id + '"' +
             (h.instance_name === chosen ? ' selected' : '') + '>' + U.esc(h.instance_name) + '</option>').join('');
@@ -688,7 +714,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     depForm.addEventListener('submit', e => {
         e.preventDefault();
-        const data = formData(depForm, ['rebuild_image', 'assign_notifications']);
+        const data = formData(depForm, ['rebuild_image', 'no_cache', 'assign_notifications']);
         if (data.db_mode !== 'existing') { delete data.database_url; delete data.db_network; }
         submitOperation(document.getElementById('qsDeployBtn'), 'qs-dep-error', 'qsDeployModal', "{% url 'qscheduler_deploy' %}", data, {
             title: 'Deploying QScheduler', hint: 'Building the image (several minutes on the first build), starting PostgreSQL and the service...',
@@ -739,7 +765,7 @@ document.addEventListener('DOMContentLoaded', function () {
     updForm.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', () => sourceToggle(updForm)));
     updForm.addEventListener('submit', e => {
         e.preventDefault();
-        submitOperation(document.getElementById('qsUpdateBtn'), 'qs-upd-error', 'qsUpdateModal', url('update', current.id), formData(updForm), {
+        submitOperation(document.getElementById('qsUpdateBtn'), 'qs-upd-error', 'qsUpdateModal', url('update', current.id), formData(updForm, ['no_cache']), {
             title: 'Updating ' + current.name, hint: 'Building / pulling the image and recreating the container...', successTitle: 'QScheduler instance updated',
             details: (r, esc) => 'Instance: ' + esc(r.name) + '<br>Image: ' + esc(r.image) + '<br>Version: ' + esc(r.version),
         });
@@ -853,6 +879,7 @@ document.addEventListener('DOMContentLoaded', function () {
             updForm.repo.value = current.repo || defaults.repo;
             updForm.ref.value = current.ref || defaults.ref;
             updForm.image.value = current.image || defaults.image;
+            updForm.no_cache.checked = false;
             sourceToggle(updForm);
             updRefs.load();
             if (current.kind !== 'ssh_host') loadLocalDocker();

@@ -71,9 +71,9 @@ not_tested = "Invalid ports, existing-DB URL and DB network validation, refusal 
 [[sections.features]]
 name = "Deploy – execution"
 code = ["deploy:deploy_worker", "deploy:deploy_service", "deploy:postgres_run_args", "deploy:_build_or_check_image",
-        "deploy:_wait_for_postgres"]
-verified = "–"
-not_tested = "Image build/reuse, PostgreSQL container, service container, healthcheck wait, cleanup hints, assignment after deploy."
+        "deploy:build_args", "deploy:_wait_for_postgres"]
+verified = "Image build arguments (clean rebuild: `--no-cache --pull`); existing image reused unless a (clean) rebuild is requested; no build for an image source."
+not_tested = "PostgreSQL container, service container, healthcheck wait, cleanup hints, assignment after deploy."
 
 [[sections.features]]
 name = "Branch / tag list"
@@ -279,6 +279,13 @@ verified = "New machine registered under the cluster's machine name with its def
 not_tested = "Machines that cannot be listed."
 
 [[sections.features]]
+name = "QScheduler panel: move to another QScheduler"
+code = ["health:move_cluster_worker", "health:parse_move_options", "health:_remove_old_notifier",
+        "health:qscheduler_cluster_move_api"]
+verified = "Offered for unknown, archived or unreachable instances (other assigned instances as targets), not for a healthy one; the cluster is kept: new machine registered or existing machine used (queue switched when the name differs), new notifier and token, one restart, cluster and file transfer methods repointed; the old notifier is removed when the old instance answers; refused when the machine is used by another cluster on the target, the target is unhealthy, a new machine already exists, or no target is selected; the API requires an assigned target."
+not_tested = "Joining the HEAppE network for local targets."
+
+[[sections.features]]
 name = "Badge and notifier fields"
 status = "covered"
 status_reason = "template (`cluster_detail.html`)"
@@ -342,6 +349,13 @@ name = "SSH session"
 code = ["core:SshSession", "core:load_private_key", "core:ssh_session_for"]
 verified = "– (checked manually with generated RSA keys, encrypted and broken keys, not in the test suite)."
 not_tested = "Key loading, host-key pinning and mismatch, timeouts."
+
+[[sections.features]]
+name = "Internal networks with small subnets"
+code = ["core:create_internal_network", "core:free_subnets", "core:used_subnets", "core:network_pool",
+        "core:check_network_prefix", "deploy:_network_prefix", "deploy:_default_prefix"]
+verified = "Selectable size (/24-/29, default /29 or QSCHEDULER_NETWORK_PREFIX) in deploy and restore options, passed to the network creation; first free subnet of that size, skipping subnets of existing Docker networks; next subnet tried when Docker reports an overlap; other errors and an exhausted pool reported with a hint; QSCHEDULER_NETWORK_POOL / QSCHEDULER_NETWORK_PREFIX validated. Checked once against the local Docker host (two networks created and removed)."
+not_tested = "IPv6 pools."
 
 [[sections.features]]
 name = "Command helpers and secret redaction"
