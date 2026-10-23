@@ -7010,3 +7010,231 @@ class QSchedulerNetworkSubnetTests(TestCase):
         with self.settings(QSCHEDULER_NETWORK_POOL="10.0.0.0/28", QSCHEDULER_NETWORK_PREFIX=27):
             with self.assertRaisesRegex(RuntimeError, "does not fit"):
                 core.network_pool()
+
+
+
+class _ExtraHostsTestBase(TestCase):
+    """Fixtures for the Extra Hosts tab: a temporary compose project 'inst' and request helpers."""
+
+    BASE_COMPOSE = (
+        "services:\n"
+        "  heappe:\n"
+        "    image: heappe\n"
+        "    extra_hosts:\n"
+        "      - \"host.docker.internal:host-gateway\"\n"
+        "  datastagingapi:\n"
+        "    image: ds\n"
+    )
+
+    def setUp(self):
+        import tempfile
+        from django.contrib.auth.models import User
+        from heappe_ui.view import extra_hosts
+        self.factory = RequestFactory()
+        self.user = User.objects.create_user(username="eh_admin", password="pw")
+        self.tmp = tempfile.mkdtemp()
+        self.compose_dir = os.path.join(self.tmp, "inst", "heappe-core")
+        os.makedirs(self.compose_dir)
+        with open(os.path.join(self.compose_dir, "docker-compose.yml"), "w") as f:
+            f.write(self.BASE_COMPOSE)
+        self.override = os.path.join(self.compose_dir, "docker-compose.override.yml")
+        for p in [mock.patch.object(extra_hosts, "DEPLOYMENT_BASE_PATH", self.tmp),
+                  mock.patch.object(extra_hosts, "_compose_running_hosts", return_value=None)]:
+            p.start()
+            self.addCleanup(p.stop)
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _call(self, method="get", **data):
+        import json
+        from heappe_ui.view.extra_hosts import instance_extra_hosts_view
+        req = getattr(self.factory, method)("/deploy/inst/extra-hosts/", data)
+        req.user = self.user
+        req.session = {}
+        req._dont_enforce_csrf_checks = True
+        resp = instance_extra_hosts_view(req, "inst")
+        return resp.status_code, json.loads(resp.content)
+
+    def _section(self, data, key):
+        return next(s for s in data["sections"] if s["key"] == key)
+
+    def _override(self):
+        import yaml
+        with open(self.override) as f:
+            return yaml.safe_load(f)
+
+    def _qscheduler(self, container_hosts, kind="managed", **kw):
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance, QSchedulerAssignment
+        cred = InstanceCredentials.objects.create(instance_name="inst", heappe_host="h", heappe_login="u",
+                                                  heappe_password="p", heappe_port="5000")
+        inst = QSchedulerInstance.objects.create(name="qs-1", kind=kind, container_name="qs-1", service_host="qs-1", **kw)
+        QSchedulerAssignment.objects.create(qscheduler=inst, heappe_instance=cred)
+        docker = mock.Mock(where="")
+        docker.inspect.return_value = {"HostConfig": {"ExtraHosts": container_hosts}}
+        p = mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=mock.Mock(docker=docker))
+        p.start()
+        self.addCleanup(p.stop)
+        return inst
+
+
+
+class ExtraHostsViewTests(_ExtraHostsTestBase):
+    """Extra hosts of the heappe / datastagingapi compose services."""
+
+    def test_list_shows_both_services_with_default_read_only(self):
+        code, data = self._call()
+        self.assertEqual(code, 200)
+        self.assertEqual([s["key"] for s in data["sections"]], ["compose:heappe", "compose:datastagingapi"])
+        heappe = self._section(data, "compose:heappe")
+        self.assertEqual(heappe["hosts"][0]["entry"], "host.docker.internal:host-gateway")
+        self.assertFalse(heappe["hosts"][0]["editable"])
+        self.assertEqual(self._section(data, "compose:datastagingapi")["hosts"], [])
+
+    def _apply(self, target, hosts, returncode=0):
+        import json
+        result = mock.Mock(returncode=returncode, stderr="boom")
+        with mock.patch("heappe_ui.view.deploy.execute_docker_compose", return_value=result) as m:
+            code, data = self._call("post", target=target, action="apply",
+                                    hosts=json.dumps([{"hostname": h, "ip": ip} for h, ip in hosts]))
+        return code, data, m
+
+    def test_apply_saves_list_per_service(self):
+        code, _, m = self._apply("compose:heappe", [("login.cluster", "10.0.0.5"), ("", "")])   # empty row ignored
+        self.assertEqual(code, 200)
+        self.assertEqual(m.call_args[0][0][-3:], ["--no-deps", "--force-recreate", "heappe"])
+        code, _, m = self._apply("compose:datastagingapi", [("ds.cluster", "10.0.0.9")])
+        self.assertEqual(code, 200)
+        self.assertEqual(m.call_args[0][0][-1], "datastagingapi")
+        svcs = self._override()["services"]
+        self.assertEqual(svcs["heappe"]["extra_hosts"], ["login.cluster:10.0.0.5"])
+        self.assertEqual(svcs["datastagingapi"]["extra_hosts"], ["ds.cluster:10.0.0.9"])
+
+        self._apply("compose:heappe", [("login2.cluster", "10.0.0.6")])                    # edit
+        self.assertEqual(self._override()["services"]["heappe"]["extra_hosts"], ["login2.cluster:10.0.0.6"])
+        self._apply("compose:heappe", [])                                                   # remove all
+        self.assertNotIn("heappe", self._override()["services"])
+        self._apply("compose:datastagingapi", [])
+        self.assertFalse(os.path.exists(self.override))
+
+        with open(os.path.join(self.compose_dir, "docker-compose.yml")) as f:
+            self.assertEqual(f.read(), self.BASE_COMPOSE)
+
+    def test_default_entry_is_protected(self):
+        code, _, m = self._apply("compose:heappe", [("host.docker.internal", "1.2.3.4")])
+        self.assertEqual(code, 403)
+        m.assert_not_called()
+        self.assertFalse(os.path.exists(self.override))
+        self._apply("compose:heappe", [("a", "10.0.0.1")])
+        code, data = self._call()
+        self.assertEqual([h["entry"] for h in self._section(data, "compose:heappe")["hosts"]],
+                         ["host.docker.internal:host-gateway", "a:10.0.0.1"])
+
+    def test_validation_duplicates_and_unknown_target(self):
+        self.assertEqual(self._apply("compose:heappe", [("bad host", "10.0.0.1")])[0], 400)
+        self.assertEqual(self._apply("compose:heappe", [("ok", "999.1.1.1")])[0], 400)
+        code, data, m = self._apply("compose:heappe", [("ok", "10.0.0.1"), ("OK", "10.0.0.2")])
+        self.assertEqual(code, 409)
+        self.assertIn("Row 2", data["message"])
+        m.assert_not_called()
+        self.assertEqual(self._apply("compose:mssql", [("a", "10.0.0.2")])[0], 404)
+        self.assertEqual(self._call("post", target="compose:heappe", action="add")[0], 400)
+
+    def test_apply_failure_keeps_saved_list(self):
+        code, data, _ = self._apply("compose:heappe", [("a", "10.0.0.1")], returncode=1)
+        self.assertEqual(code, 500)
+        self.assertIn("saved but not applied", data["message"])
+        self.assertEqual(self._override()["services"]["heappe"]["extra_hosts"], ["a:10.0.0.1"])
+
+    def test_override_keeps_other_content(self):
+        with open(self.override, "w") as f:
+            f.write("services:\n  heappe:\n    environment:\n      FOO: bar\n")
+        self._apply("compose:heappe", [("a.b", "::1")])
+        heappe = self._override()["services"]["heappe"]
+        self.assertEqual((heappe["environment"], heappe["extra_hosts"]), ({"FOO": "bar"}, ["a.b:::1"]))
+        self._apply("compose:heappe", [])
+        self.assertNotIn("extra_hosts", self._override()["services"]["heappe"])
+
+
+class QSchedulerExtraHostsTests(_ExtraHostsTestBase):
+    """Extra hosts of the QScheduler instances assigned to a HEAppE instance."""
+
+    def test_qscheduler_section_lists_container_hosts(self):
+        self._qscheduler(["host.docker.internal:host-gateway", "iqm.local:10.1.1.1"])
+        code, data = self._call()
+        qs = data["sections"][-1]
+        self.assertEqual(qs["kind"], "qscheduler")
+        self.assertEqual([(h["entry"], h["editable"]) for h in qs["hosts"]],
+                         [("host.docker.internal:host-gateway", False), ("iqm.local:10.1.1.1", True)])
+        self.assertFalse(qs["pending_apply"])
+
+    def test_qscheduler_apply_stores_list_and_starts_operation(self):
+        import json
+        inst = self._qscheduler(["host.docker.internal:host-gateway", "iqm.local:10.1.1.1"])
+        hosts = json.dumps([{"hostname": "iqm.local", "ip": "10.1.1.1"}, {"hostname": "a.b", "ip": "10.0.0.1"}])
+        with mock.patch("heappe_ui.view.qscheduler_core.start_operation", return_value=(True, "ok")) as m:
+            code, data = self._call("post", target=f"qscheduler:{inst.pk}", action="apply", hosts=hosts)
+        self.assertEqual((code, data["status"]), (200, "started"))
+        self.assertEqual(m.call_args[0][2], inst.pk)
+        inst.refresh_from_db()
+        self.assertEqual(inst.extra_hosts, ["iqm.local:10.1.1.1", "a.b:10.0.0.1"])
+        bad = json.dumps([{"hostname": "host.docker.internal", "ip": "1.1.1.1"}])
+        with mock.patch("heappe_ui.view.qscheduler_core.start_operation") as m:
+            code, _ = self._call("post", target=f"qscheduler:{inst.pk}", action="apply", hosts=bad)
+        self.assertEqual(code, 403)
+        m.assert_not_called()
+
+    def test_qscheduler_busy_operation_reports_saved(self):
+        import json
+        inst = self._qscheduler([])
+        with mock.patch("heappe_ui.view.qscheduler_core.start_operation", return_value=(False, "Another operation")):
+            code, data = self._call("post", target=f"qscheduler:{inst.pk}", action="apply",
+                                    hosts=json.dumps([{"hostname": "a", "ip": "10.0.0.1"}]))
+        self.assertEqual(code, 409)
+        self.assertIn("saved but not applied", data["message"])
+
+    def test_qscheduler_of_other_instance_or_ssh_container_not_listed(self):
+        from heappe_ui.models import QSchedulerInstance
+        QSchedulerInstance.objects.create(name="qs-other", kind="managed", container_name="qs-other", service_host="x")
+        self._qscheduler([], kind="ssh_container")
+        code, data = self._call()
+        self.assertEqual([s["kind"] for s in data["sections"]], ["compose", "compose"])
+
+    def test_qscheduler_container_extra_hosts(self):
+        from heappe_ui.view.extra_hosts import qscheduler_container_extra_hosts
+        self.assertIsNone(qscheduler_container_extra_hosts(["a:1.1.1.1"], None))
+        self.assertEqual(qscheduler_container_extra_hosts(["host.docker.internal:host-gateway", "a:1.1.1.1"],
+                                                          ["b:2.2.2.2", "host.docker.internal:9.9.9.9"]),
+                         ["host.docker.internal:host-gateway", "b:2.2.2.2"])
+
+    def test_recreate_args_extra_hosts(self):
+        from heappe_ui.view import qscheduler_deploy as q
+        info = {"Id": "abc", "Name": "/qs-1", "Config": {"Image": "qs", "Cmd": ["serve", "--port", "4300"]},
+                "HostConfig": {"ExtraHosts": ["kept:1.1.1.1"]}, "NetworkSettings": {"Networks": {}}}
+        args, _, _ = q.recreate_args_from_inspect(info, "qs")
+        self.assertIn("kept:1.1.1.1", args)                     # update keeps the container's extra hosts
+        args, _, _ = q.recreate_args_from_inspect(info, "qs", extra_hosts=["new:2.2.2.2"])
+        self.assertNotIn("kept:1.1.1.1", args)
+        self.assertEqual(args[args.index("--add-host") + 1], "new:2.2.2.2")
+
+    def test_extra_hosts_worker_recreates_with_same_image(self):
+        from heappe_ui.view import qscheduler_deploy as q
+        inst = self._qscheduler([])
+        inst.extra_hosts = ["a.b:10.0.0.1"]
+        inst.save()
+        docker = mock.Mock(where="")
+        docker.inspect.return_value = {"Id": "abc", "Name": "/qs-1",
+                                       "Config": {"Image": "qs:v1", "Cmd": ["serve", "--port", "4300"]},
+                                       "HostConfig": {"ExtraHosts": ["host.docker.internal:host-gateway"]},
+                                       "NetworkSettings": {"Networks": {}}}
+        target = mock.Mock(docker=docker)
+        result = {}
+        with mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
+            q.extra_hosts_worker(lambda *_: None, result, inst.pk, "u1")
+        self.assertEqual(result["extra_hosts"], ["host.docker.internal:host-gateway", "a.b:10.0.0.1"])
+        create = next(c.args[0] for c in docker.run.call_args_list if c.args[0][0] == "create")
+        self.assertIn("a.b:10.0.0.1", create)
+        self.assertIn("host.docker.internal:host-gateway", create)
+        self.assertIn("qs:v1", create)
+        target.wait_healthy.assert_called_once()

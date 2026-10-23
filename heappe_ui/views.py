@@ -20,6 +20,7 @@ from heappe_ui.view.file_transfer_method import *
 from heappe_ui.view.project import *
 from heappe_ui.view.accounting import *
 from heappe_ui.view.deploy import *
+from heappe_ui.view.extra_hosts import instance_extra_hosts_view
 from heappe_ui.view.command_template import *
 from heappe_ui.view.adaptor_user import *
 from heappe_ui.view.backups import *

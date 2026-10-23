@@ -7,10 +7,10 @@ QScheduler cluster settings) by the automated tests in `heappe_ui/tests.py`.
 | | |
 |---|---|
 | Date | 2026-10-23 |
-| Tests | 99, all passing (`QSchedulerConfigTests`, `QSchedulerVaultToggleSerializationTests`, `QSchedulerHelperTests`, `QSchedulerOptionParsingTests`, `QSchedulerWorkflowTests`, `QSchedulerClusterDetailTemplateTests`, `QSchedulerViewTests`, `QSchedulerGitRefsTests`, `QSchedulerRecoveryTests`, `QSchedulerUnmanagedNotifierTests`, `QSchedulerClusterHealthTests`, `QSchedulerClusterMoveTests`, `QSchedulerImageBuildTests`, `QSchedulerNetworkSubnetTests`) |
+| Tests | 106, all passing (`QSchedulerConfigTests`, `QSchedulerVaultToggleSerializationTests`, `QSchedulerHelperTests`, `QSchedulerOptionParsingTests`, `QSchedulerWorkflowTests`, `QSchedulerClusterDetailTemplateTests`, `QSchedulerViewTests`, `QSchedulerGitRefsTests`, `QSchedulerRecoveryTests`, `QSchedulerUnmanagedNotifierTests`, `QSchedulerClusterHealthTests`, `QSchedulerClusterMoveTests`, `QSchedulerImageBuildTests`, `QSchedulerNetworkSubnetTests`, `QSchedulerExtraHostsTests`) |
 | Measured code | `qscheduler_core.py`, `qscheduler_deploy.py`, `qscheduler_machines.py`, `qscheduler_recovery.py`, `qscheduler_cluster_health.py` |
 | Tool | coverage.py 7.6.1, line + branch coverage, Python 3.12 |
-| Source fingerprint | `0e1ac87b6cb2` (measured files + feature data) |
+| Source fingerprint | `891e19524486` (measured files + feature data) |
 
 ## Summary
 
@@ -21,11 +21,11 @@ Share of executable lines (statements) run by the tests.
 | File | Lines | Covered | Missed | Line coverage |
 |---|---:|---:|---:|---:|
 | `qscheduler_core.py` (Docker/SSH runners, targets, HEAppE and git helpers) | 800 | 427 | 373 | **53.4%** |
-| `qscheduler_deploy.py` (QScheduler page, instances, assignments) | 744 | 467 | 277 | **62.8%** |
+| `qscheduler_deploy.py` (QScheduler page, instances, assignments) | 774 | 501 | 273 | **64.7%** |
 | `qscheduler_machines.py` (Clusters page: add/remove machine) | 316 | 214 | 102 | **67.7%** |
-| `qscheduler_recovery.py` (missing instances: archive, cascade deletion, restore) | 459 | 361 | 98 | **78.6%** |
+| `qscheduler_recovery.py` (missing instances: archive, cascade deletion, restore) | 460 | 362 | 98 | **78.7%** |
 | `qscheduler_cluster_health.py` (cluster detail: QScheduler panel) | 318 | 282 | 36 | **88.7%** |
-| **Total** | **2637** | **1751** | **886** | **66.4%** |
+| **Total** | **2668** | **1786** | **882** | **66.9%** |
 
 ### Branch coverage
 
@@ -35,11 +35,11 @@ direction was taken.
 | File | Branches | Covered | Partial | Branch coverage |
 |---|---:|---:|---:|---:|
 | `qscheduler_core.py` | 269 | 111 | 19 | **41.3%** |
-| `qscheduler_deploy.py` | 367 | 225 | 54 | **61.3%** |
+| `qscheduler_deploy.py` | 377 | 232 | 57 | **61.5%** |
 | `qscheduler_machines.py` | 152 | 85 | 33 | **55.9%** |
 | `qscheduler_recovery.py` | 249 | 176 | 47 | **70.7%** |
 | `qscheduler_cluster_health.py` | 150 | 113 | 35 | **75.3%** |
-| **Total** | **1187** | **710** | **188** | **59.8%** |
+| **Total** | **1197** | **717** | **191** | **59.9%** |
 
 ### Combined coverage
 
@@ -49,14 +49,14 @@ pure line nor pure branch coverage.
 | File | Combined coverage |
 |---|---:|
 | `qscheduler_core.py` | **50.3%** |
-| `qscheduler_deploy.py` | **62.3%** |
+| `qscheduler_deploy.py` | **63.7%** |
 | `qscheduler_machines.py` | **63.9%** |
-| `qscheduler_recovery.py` | **75.8%** |
+| `qscheduler_recovery.py` | **75.9%** |
 | `qscheduler_cluster_health.py` | **84.4%** |
-| **Total** | **64.4%** |
+| **Total** | **64.8%** |
 
-Compared with the previous report: line coverage 65.8% → 66.4%, branch coverage
-59.4% → 59.8%, combined 63.8% → 64.4%.
+Compared with the previous report: line coverage 65.9% → 66.9%, branch coverage
+59.4% → 59.9%, combined 63.9% → 64.8%.
 
 All tests run without Docker, SSH, git, GitHub/GitLab, a QScheduler or a HEAppE server: those are replaced by mocks.
 The tests therefore cover **decision logic** (validation, what is sent to QScheduler and HEAppE, blocking rules,
@@ -75,12 +75,13 @@ status set by hand.
 | Feature | Status | Coverage | What the tests verify | Not tested | Code |
 |---|---|---:|---|---|---|
 | Deploy – form validation | 🟡 | 58.9% / 52.8% | Defaults (name `qscheduler-<id>`, git source, no host port); invalid git URL and branch/tag rejected; image source accepted. | Invalid ports, existing-DB URL and DB network validation, refusal of a HEAppE < 6.6.0 to assign, the deploy API. | `deploy:parse_deploy_options`, `deploy:_validate_source`, `deploy:_Reader`, `deploy:qscheduler_deploy_api` |
-| Deploy – execution | 🟡 | 40.6% / 43.5% | Image build arguments (clean rebuild: `--no-cache --pull`); existing image reused unless a (clean) rebuild is requested; no build for an image source. | PostgreSQL container, service container, healthcheck wait, cleanup hints, assignment after deploy. | `deploy:deploy_worker`, `deploy:deploy_service`, `deploy:postgres_run_args`, `deploy:_build_or_check_image`, `deploy:build_args`, `deploy:_wait_for_postgres` |
+| Deploy – execution | 🟡 | 39.4% / 40.0% | Image build arguments (clean rebuild: `--no-cache --pull`); existing image reused unless a (clean) rebuild is requested; no build for an image source. | PostgreSQL container, service container, healthcheck wait, cleanup hints, assignment after deploy. | `deploy:deploy_worker`, `deploy:deploy_service`, `deploy:postgres_run_args`, `deploy:_build_or_check_image`, `deploy:build_args`, `deploy:_wait_for_postgres` |
 | Branch / tag list | ✅ | 97.0% / 81.8% | GitHub API (default branch first, newest tag first, 5-minute cache); GitLab API for other https hosts (URL-encoded project path); fallback to `git ls-remote` (default branch from `HEAD`, peeled tags skipped, no prompts); SSH URLs go to `git ls-remote` only; invalid URLs rejected; unreachable repository → error; endpoint success / error / 400. | Paging over 100 entries, the 200-entry limit, JavaScript picker (fallback to the text field). | `core:list_git_refs`, `core:_github_refs`, `core:_gitlab_refs`, `core:_ls_remote_refs`, `core:_http_json_pages`, `core:_sorted_refs`, `core:_version_key`, `deploy:qscheduler_git_refs_api` |
 | Register existing – validation | 🟡 | 59.5% / 55.9% | Local mode defaults (name and service host = container); SSH modes require user and private key; SSH port, service host default, default restart command `kill -TERM 1`; unsafe docker command rejected. | Name derived from SSH host, invalid `DATABASE_URL`, invalid service host, the register API. | `deploy:parse_register_options`, `deploy:qscheduler_register_api` |
 | Register existing – execution | ❌ | 0.0% / 0.0% | – | SSH connect and host-key pinning, container inspection, health/version/notifier checks, saving the record. | `deploy:register_worker` |
 | Update – validation | 🟡 | 26.7% / 0.0% | – | All. | `deploy:parse_update_options`, `deploy:qscheduler_update_api` |
-| Update – recreate container | 🟡 | 59.0% / 71.9% | `recreate_args_from_inspect`: env (without `PATH`), labels, restart policy, published port, aliases, egress network first, healthcheck, image + command. | `update_worker`: build, stop/rename, rollback on failure, record update. | `deploy:recreate_args_from_inspect`, `deploy:_network_is_internal`, `deploy:update_worker` |
+| Update – recreate container | 🟡 | 75.4% / 81.2% | `recreate_args_from_inspect`: env (without `PATH`), labels, restart policy, published port, aliases, egress network first, healthcheck, image + command. | `update_worker`: build, stop/rename, rollback on failure, record update. | `deploy:recreate_args_from_inspect`, `deploy:_network_is_internal`, `deploy:update_worker` |
+| Extra hosts (Containers & Services tab) | 🟡 | 73.7% / 50.0% | `recreate_args_from_inspect` keeps the container's extra hosts or replaces them; `extra_hosts_worker` recreates with the same image, protected `host.docker.internal` entries + custom ones, and waits for health. Apply in the tab validates and stores the list on the instance record, then starts the operation (`ExtraHostsViewTests`). | `recreate_container` rollback on failure. | `deploy:extra_hosts_worker`, `deploy:recreate_container` |
 | Restart | 🟡 | 78.9% / 50.0% | *Confirm manual restart* (SSH into container without restart command) only checks health and clears *restart pending*. | Normal restart path, the restart API. | `deploy:restart_worker`, `deploy:qscheduler_restart_api` |
 | Undeploy / Unregister | 🟡 | 17.9% / 20.0% | View refuses undeploy while HEAppE instances are assigned and does not start the operation. | `undeploy_worker`: container/network/volume removal, unregister path. | `deploy:undeploy_worker`, `deploy:qscheduler_undeploy_api` |
 | Live status (health, version, machines, notifiers) | ✅ | 80.0% / 70.0% | – | `qscheduler_live_api`, notifier *unmanaged* flag. | `deploy:qscheduler_live_api` |
@@ -139,7 +140,7 @@ Detected as *missing* (container gone) or *unreachable*; resolved by archiving, 
 | Presence detection | ✅ | 86.0% / 76.5% | Missing / present (with the container state) from Docker; Docker unavailable → unreachable; SSH into container: login works → present, otherwise unreachable; live status of an archived instance reports presence only; an existing container that does not answer is marked restartable (*Try restart* button), a missing or healthy one is not. | SSH to VM presence. | `core:presence`, `deploy:qscheduler_live_api` |
 | Archive / unarchive | ✅ | 88.6% / 83.3% | A running instance is refused; a missing one is archived (also through the API, unarchive only when the service answers) with the detected reason, assignments kept; unarchive only when the service answers again. Archived instances: restart, undeploy, assign and unassign refused; no machine can be added; removing a cluster deletes only the HEAppE cluster without contacting QScheduler. | – | `recovery:archive_instance`, `recovery:unarchive_instance`, `recovery:_ensure_not_running`, `recovery:qscheduler_archive_api`, `recovery:qscheduler_unarchive_api` |
 | Delete with entities | ✅ | 80.0% / 70.5% | Clusters deleted after their Vault token is removed; projects and queue groups (with accounting) deleted only when selected and used by no other cluster; leftover PostgreSQL container removed, volume only when selected; without clusters HEAppE is not contacted; an unreachable HEAppE aborts before deleting anything unless skipped; a failed deletion keeps the instance; the API needs the typed name. | The preview API, allocations of shared accounting formulas. | `recovery:cascade_delete_worker`, `recovery:parse_cascade_options`, `recovery:cluster_dependents`, `recovery:_heappe_plan`, `recovery:_delete_queue_group`, `recovery:_leftovers`, `recovery:_connect`, `recovery:qscheduler_cascade_delete_api`, `recovery:qscheduler_cascade_preview_api` |
-| Restore | 🟡 | 69.5% / 61.1% | Options default to the old name, port and source; reuse only for managed instances under the original name; machine definitions validated (IQM token required). New endpoint: machines registered, one notifier per cluster with a new token, one restart, clusters and file transfer methods repointed, record updated and unarchived, machine definitions stored. Same endpoint with reused database: existing machines kept, clusters not repointed. Missing machine definition: nothing changed. Failed machine: other clusters restored, error reported. Reused database from the old container (password from its environment) or from the kept volume (stored password). | The restore info API, removing leftovers for a new database, HEAppE restart after joining networks. | `recovery:restore_worker`, `recovery:parse_restore_options`, `recovery:reusable_database`, `recovery:_prepare_reused_database`, `recovery:_remove_leftovers`, `recovery:qscheduler_restore_api`, `recovery:qscheduler_restore_info_api`, `core:repoint_file_transfer_methods` |
+| Restore | 🟡 | 69.7% / 61.1% | Options default to the old name, port and source; reuse only for managed instances under the original name; machine definitions validated (IQM token required). New endpoint: machines registered, one notifier per cluster with a new token, one restart, clusters and file transfer methods repointed, record updated and unarchived, machine definitions stored. Same endpoint with reused database: existing machines kept, clusters not repointed. Missing machine definition: nothing changed. Failed machine: other clusters restored, error reported. Reused database from the old container (password from its environment) or from the kept volume (stored password). | The restore info API, removing leftovers for a new database, HEAppE restart after joining networks. | `recovery:restore_worker`, `recovery:parse_restore_options`, `recovery:reusable_database`, `recovery:_prepare_reused_database`, `recovery:_remove_leftovers`, `recovery:qscheduler_restore_api`, `recovery:qscheduler_restore_info_api`, `core:repoint_file_transfer_methods` |
 
 ### Remote access and helpers
 
@@ -174,15 +175,15 @@ Functions with at least 10 statements, most missed lines first.
 | Function | File | Lines | Missed | Line coverage |
 |---|---|---:|---:|---:|
 | `register_worker` | `qscheduler_deploy.py` | 38 | 38 | 0.0% |
-| `update_worker` | `qscheduler_deploy.py` | 42 | 30 | 28.6% |
+| `deploy_service` | `qscheduler_deploy.py` | 40 | 29 | 27.5% |
 | `undeploy_worker` | `qscheduler_deploy.py` | 28 | 28 | 0.0% |
 | `DockerTarget.wait_healthy` | `qscheduler_core.py` | 27 | 27 | 0.0% |
-| `deploy_service` | `qscheduler_deploy.py` | 38 | 27 | 28.9% |
 | `add_machine_worker` | `qscheduler_machines.py` | 84 | 27 | 67.9% |
 | `qscheduler_restore_info_api` | `qscheduler_recovery.py` | 25 | 25 | 0.0% |
 | `SshSession.connect` | `qscheduler_core.py` | 21 | 21 | 0.0% |
 | `heappe_identity` | `qscheduler_core.py` | 21 | 21 | 0.0% |
 | `remove_machine_worker` | `qscheduler_machines.py` | 54 | 21 | 61.1% |
+| `start_operation` | `qscheduler_core.py` | 20 | 20 | 0.0% |
 
 ## Suggested next tests
 
@@ -210,4 +211,4 @@ python manage.py qscheduler_coverage --check    # fail if this report is out of 
 The command finds all `QScheduler*` test classes in `heappe_ui/tests.py`, runs them under coverage.py and fails when
 a test fails or a feature refers to code that no longer exists.
 
-<!-- qscheduler-coverage-state {"previous": {"branch": 59.4, "combined": 63.8, "line": 65.8}, "totals": {"branch": 59.8, "combined": 64.4, "line": 66.4}} -->
+<!-- qscheduler-coverage-state {"previous": {"branch": 59.4, "combined": 63.9, "line": 65.9}, "totals": {"branch": 59.9, "combined": 64.8, "line": 66.9}} -->

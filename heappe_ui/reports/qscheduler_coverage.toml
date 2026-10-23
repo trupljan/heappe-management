@@ -107,6 +107,12 @@ verified = "`recreate_args_from_inspect`: env (without `PATH`), labels, restart 
 not_tested = "`update_worker`: build, stop/rename, rollback on failure, record update."
 
 [[sections.features]]
+name = "Extra hosts (Containers & Services tab)"
+code = ["deploy:extra_hosts_worker", "deploy:recreate_container"]
+verified = "`recreate_args_from_inspect` keeps the container's extra hosts or replaces them; `extra_hosts_worker` recreates with the same image, protected `host.docker.internal` entries + custom ones, and waits for health. Apply in the tab validates and stores the list on the instance record, then starts the operation (`ExtraHostsViewTests`)."
+not_tested = "`recreate_container` rollback on failure."
+
+[[sections.features]]
 name = "Restart"
 code = ["deploy:restart_worker", "deploy:qscheduler_restart_api"]
 verified = "*Confirm manual restart* (SSH into container without restart command) only checks health and clears *restart pending*."

@@ -22,6 +22,7 @@ urlpatterns = [
     path("deploy/<str:instance_name>/config/", views.instance_config_view, name="instance_config_view"),
     path("deploy/<str:instance_name>/update-status/", views.update_status_view, name="update_status"),
     path("deploy/<str:instance_name>/telemetry/toggle/", views.toggle_telemetry_view, name="toggle_telemetry"),
+    path("deploy/<str:instance_name>/extra-hosts/", views.instance_extra_hosts_view, name="instance_extra_hosts"),
     path('chose-instance/', views.chose_instance_view, name='chose_instance_view'),
     path('reconnect/', views.reconnect_view, name='reconnect_view'),
     path('container/<str:container_id>/file/<str:action>/', views.handle_file_action, name='container_file_action'),

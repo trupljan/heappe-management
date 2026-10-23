@@ -135,6 +135,11 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="extrahosts-tab" data-bs-toggle="tab" data-bs-target="#extrahosts-pane" type="button" role="tab" aria-controls="extrahosts-pane" aria-selected="false">
+                <i class="bi bi-hdd-network fs-5"></i>Extra Hosts
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance-pane" type="button" role="tab" aria-controls="maintenance-pane" aria-selected="false">
                 <i class="bi bi-gear fs-5"></i>Maintenance &amp; Setup
             </button>
@@ -676,6 +681,26 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Extra Hosts Tab Pane -->
+        <div class="tab-pane fade" id="extrahosts-pane" role="tabpanel" aria-labelledby="extrahosts-tab">
+            <div class="row justify-content-center">
+                <div class="col-lg-9">
+                    <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                        <p class="text-muted small mb-0">
+                            Static hostname mappings added to <code>/etc/hosts</code> of the instance containers (<code>extra_hosts</code> / <code>--add-host</code>).
+                            Compose services keep custom entries in <code>docker-compose.override.yml</code>, so they survive branch switches; QScheduler entries are stored on its instance record.
+                            Default entries (e.g. <code>host.docker.internal:host-gateway</code>) are read-only.
+                        </p>
+                        <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" id="extrahosts-reload-btn" title="Reload"><i class="bi bi-arrow-clockwise"></i></button>
+                    </div>
+                    <div id="extrahosts-feedback"></div>
+                    <div id="extrahosts-sections">
+                        <div class="text-center text-muted small py-4"><span class="spinner-border spinner-border-sm me-2"></span>Loading...</div>
                     </div>
                 </div>
             </div>
@@ -1566,6 +1591,215 @@ function startUpdatePolling(actionType = 'update') {
     poll();
     updatePollInterval = setInterval(poll, 2000);
 }
+
+{% if instance_name %}
+// --- EXTRA HOSTS MANAGEMENT ---
+(function() {
+    const url = "{% url 'instance_extra_hosts' instance_name %}";
+    const opStatusUrl = "{% url 'qscheduler_operation_status' %}";
+    const csrf = '{{ csrf_token }}';
+    let loaded = false;
+
+    function esc(v) {
+        return $('<div>').text(v == null ? '' : String(v)).html();
+    }
+
+    // Shown above the given card (or above all cards), and scrolled into view.
+    function feedback(status, message, $card) {
+        const ok = status === 'success';
+        const $box = $card && $card.length ? $card.find('.extrahosts-messages') : $('#extrahosts-feedback');
+        $box.find('.extrahosts-alert').remove();
+        $box.prepend(`
+            <div class="alert alert-${ok ? 'success' : 'danger'} alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-3 d-flex align-items-center gap-2 small extrahosts-alert" role="alert">
+                <i class="bi ${ok ? 'bi-check-circle-fill text-success' : 'bi-exclamation-octagon-fill text-danger'} fs-5"></i>
+                <div style="white-space: pre-line;">${esc(message)}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>`);
+        const el = $box.find('.extrahosts-alert')[0];
+        if (el) el.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    }
+
+    const badges = {
+        'default': '<span class="badge bg-secondary-subtle text-secondary-emphasis border">default</span>',
+        'container': '<span class="badge bg-secondary-subtle text-secondary-emphasis border">default</span>',
+        'custom': '<span class="badge bg-primary-subtle text-primary-emphasis border">custom</span>'
+    };
+
+    function lockedRow(h) {
+        return $(`
+            <tr>
+                <td class="font-monospace small">${esc(h.hostname)}</td>
+                <td class="font-monospace small">${esc(h.ip)}</td>
+                <td>${badges[h.source] || esc(h.source)}</td>
+                <td class="text-end text-nowrap"><span class="text-muted small"><i class="bi bi-lock-fill"></i> read-only</span></td>
+            </tr>`);
+    }
+
+    function editRow(h) {
+        h = h || {hostname: '', ip: ''};
+        return $(`
+            <tr class="extrahost-edit-row">
+                <td><input type="text" class="form-control form-control-sm font-monospace eh-host" placeholder="e.g. login.cluster.local" value="${esc(h.hostname)}"></td>
+                <td><input type="text" class="form-control form-control-sm font-monospace eh-ip" placeholder="e.g. 10.0.0.5 or host-gateway" value="${esc(h.ip)}"></td>
+                <td>${badges.custom}</td>
+                <td class="text-end text-nowrap"><button type="button" class="btn btn-sm btn-outline-danger extrahost-remove" title="Remove row"><i class="bi bi-trash"></i></button></td>
+            </tr>`);
+    }
+
+    function sectionCard(sec) {
+        const icon = sec.kind === 'qscheduler' ? 'bi-cpu' : 'bi-box-seam';
+        const pending = sec.pending_apply
+            ? '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2" title="Saved entries differ from the running container">not applied</span>' : '';
+        const $card = $(`
+            <div class="card border-0 shadow-sm rounded-3 bg-white mb-4 extrahosts-section" style="border: 1px solid #dee2e6 !important;">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi ${icon} text-primary fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold text-dark">${esc(sec.title)}</h5>
+                    <code class="small">${esc(sec.name || '')}</code>${pending}
+                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-auto extrahosts-dirty" style="display:none;">unsaved changes</span>
+                </div>
+                <div class="card-body p-3">
+                    <div class="extrahosts-messages"></div>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="small text-secondary" style="width: 42%;">Hostname</th>
+                                    <th class="small text-secondary" style="width: 34%;">IP Address</th>
+                                    <th class="small text-secondary">Source</th>
+                                    <th class="small text-secondary text-end"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="extrahosts-controls d-flex flex-wrap align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-bold extrahosts-add-btn"><i class="bi bi-plus-lg me-1"></i>Add</button>
+                        <button type="button" class="btn btn-sm btn-warning fw-bold shadow-sm extrahosts-apply-btn"><i class="bi bi-arrow-repeat me-1"></i>Apply</button>
+                        <div class="form-text small m-0">
+                            <strong>Add</strong> inserts an empty row; edit or remove rows as needed. Nothing is saved until
+                            <strong>Apply</strong>, which saves the list and recreates the container. ${esc(sec.apply_note || '')}
+                        </div>
+                    </div>
+                </div>
+            </div>`);
+        $card.data('target', sec.key);
+        const $msgs = $card.find('.extrahosts-messages');
+        if (sec.error) {
+            $msgs.append(`<div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger-emphasis p-2 small mb-3">${esc(sec.error)}</div>`);
+            $card.find('.extrahosts-controls').remove();
+        }
+        if (sec.warning) {
+            $msgs.append(`<div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-warning-emphasis p-2 small mb-3">${esc(sec.warning)}</div>`);
+        }
+        const $tbody = $card.find('tbody');
+        (sec.hosts || []).forEach(h => $tbody.append(h.editable ? editRow(h) : lockedRow(h)));
+        updateEmpty($card);
+        return $card;
+    }
+
+    function updateEmpty($card) {
+        const $tbody = $card.find('tbody');
+        $tbody.find('.extrahosts-empty').remove();
+        if (!$tbody.children('tr').length) {
+            $tbody.append('<tr class="extrahosts-empty"><td colspan="4" class="text-center text-muted small py-3">No extra hosts defined. Click Add to create one.</td></tr>');
+        }
+    }
+
+    function markDirty($card) {
+        $card.find('.extrahosts-dirty').show();
+    }
+
+    function render(resp) {
+        const $wrap = $('#extrahosts-sections').empty();
+        (resp.sections || []).forEach(sec => $wrap.append(sectionCard(sec)));
+        if (!(resp.sections || []).length) {
+            $wrap.html('<div class="text-center text-muted small py-4">Nothing to manage for this instance.</div>');
+        }
+    }
+
+    function load() {
+        return $.get(url).done(function(resp) { loaded = true; render(resp); })
+            .fail(function(xhr) {
+                const msg = (xhr.responseJSON || {}).message || 'Failed to load extra hosts.';
+                $('#extrahosts-sections').html(`<div class="alert alert-danger small">${esc(msg)}</div>`);
+            });
+    }
+
+    function cardFor(target) {
+        return $('.extrahosts-section').filter(function() { return $(this).data('target') === target; });
+    }
+
+    function post(target, data) {
+        data.csrfmiddlewaretoken = csrf;
+        data.target = target;
+        return $.post(url, data).done(function(resp) {
+            if (resp.sections) render(resp);
+            if (resp.message && resp.status === 'success') feedback('success', resp.message, cardFor(target));
+        }).fail(function(xhr) {
+            const msg = (xhr.responseJSON || {}).message || 'Request failed.';
+            // Validation errors keep the edited rows; once saved (apply failed), reload the saved state first.
+            const reload = msg.startsWith('Extra hosts were saved') ? load() : $.Deferred().resolve();
+            reload.always(function() { feedback('danger', msg, cardFor(target)); });
+        });
+    }
+
+    // QScheduler apply runs as a background QScheduler operation: wait for it to finish.
+    function waitForQSchedulerOperation() {
+        const deferred = $.Deferred();
+        const timer = setInterval(function() {
+            $.get(opStatusUrl).done(function(st) {
+                if (st.is_running) return;
+                clearInterval(timer);
+                if (st.success) deferred.resolve(st);
+                else deferred.reject(st);
+            });
+        }, 2000);
+        return deferred.promise();
+    }
+
+    $(document).on('shown.bs.tab', '#extrahosts-tab', function() { if (!loaded) load(); });
+    $(document).on('click', '#extrahosts-reload-btn', load);
+
+    $(document).on('click', '.extrahosts-add-btn', function() {
+        const $card = $(this).closest('.extrahosts-section');
+        const $row = editRow();
+        $card.find('tbody').append($row);
+        updateEmpty($card);
+        markDirty($card);
+        $row.find('.eh-host').trigger('focus');
+    });
+
+    $(document).on('input', '.extrahosts-section .eh-host, .extrahosts-section .eh-ip', function() {
+        markDirty($(this).closest('.extrahosts-section'));
+    });
+
+    $(document).on('click', '.extrahost-remove', function() {
+        const $card = $(this).closest('.extrahosts-section');
+        $(this).closest('tr').remove();
+        updateEmpty($card);
+        markDirty($card);
+    });
+
+    $(document).on('click', '.extrahosts-apply-btn', function() {
+        const $card = $(this).closest('.extrahosts-section');
+        const title = $card.find('h5').text();
+        const hosts = $card.find('.extrahost-edit-row').map(function() {
+            return {hostname: $(this).find('.eh-host').val().trim(), ip: $(this).find('.eh-ip').val().trim()};
+        }).get().filter(h => h.hostname || h.ip);
+        if (!confirm(`Save ${hosts.length} custom extra host(s) and recreate ${title}? This causes a short downtime.`)) return;
+        showLoading('Applying extra hosts...', `Recreating ${title}...`);
+        post($card.data('target'), {action: 'apply', hosts: JSON.stringify(hosts)}).done(function(resp) {
+            if (resp.status !== 'started') { hideLoading(); return; }
+            const target = $card.data('target');
+            waitForQSchedulerOperation()
+                .done(function() { load().always(() => feedback('success', `Extra hosts applied. ${title} was recreated.`, cardFor(target))); })
+                .fail(function(st) { load().always(() => feedback('danger', (st && st.error) || 'Applying extra hosts failed.', cardFor(target))); })
+                .always(function() { hideLoading(); });
+        }).fail(function() { hideLoading(); });
+    });
+})();
+{% endif %}
 
 $(document).ready(function() {
     // --- OPENTELEMETRY TOGGLE SWITCH LOGIC ---

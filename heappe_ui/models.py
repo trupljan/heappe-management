@@ -77,6 +77,9 @@ class QSchedulerInstance(models.Model):
     image = models.CharField(max_length=255, blank=True, default="")
 
     restart_pending = models.BooleanField(default=False)
+    # Custom extra hosts ("host:ip") applied with --add-host when the container is (re)created; None = never
+    # managed from the UI (a recreate keeps whatever the container has).
+    extra_hosts = models.JSONField(null=True, blank=True, default=None)
     # Archived: the QScheduler service disappeared (e.g. removed manually); the record, its assignments and the
     # HEAppE clusters are kept until the instance is restored or deleted with its clusters.
     archived_at = models.DateTimeField(null=True, blank=True)

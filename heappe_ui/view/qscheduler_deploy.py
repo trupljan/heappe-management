@@ -33,6 +33,7 @@ from .qscheduler_core import (DockerCli, DockerTarget, ContainerShellTarget, Ssh
                               DEFAULT_POSTGRES_IMAGE, DEFAULT_PORT, DEFAULT_RESTART_COMMAND,
                               LABEL_INSTANCE, LABEL_REPO, LABEL_BRANCH, IMAGE_BUILD_TIMEOUT,
                               NAME_RE, HOST_RE, GIT_REF_RE, IMAGE_RE)
+from .extra_hosts import extra_hosts_as_list, format_extra_host, qscheduler_container_extra_hosts
 
 DOCKER_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL, Q.KIND_SSH_HOST)
 NAME_PREFIX_MAX = 54          # + "-<8 hex>" = 63, the maximum instance name
@@ -217,10 +218,11 @@ def _network_is_internal(net, docker=None):
     return (docker or DockerCli()).network_is_internal(net)
 
 
-def recreate_args_from_inspect(info, image, extra_labels=None, docker=None):
+def recreate_args_from_inspect(info, image, extra_labels=None, docker=None, extra_hosts=None):
     """
     Rebuilds `docker create` arguments for a QScheduler service container from `docker inspect`
-    output: env, labels, restart policy, published ports, command; adds the Docker healthcheck.
+    output: env, labels, restart policy, published ports, extra hosts, command; adds the Docker healthcheck.
+    extra_hosts: list of "host:ip" replacing the container's extra hosts (None keeps them).
     Returns (create_args, [(network, [aliases])...], port); the first network is used at create time.
     """
     cfg = info.get("Config", {}) or {}
@@ -243,6 +245,9 @@ def recreate_args_from_inspect(info, image, extra_labels=None, docker=None):
         for bnd in binds or []:
             hip, hport = bnd.get("HostIp") or "", bnd.get("HostPort") or ""
             args += ["-p", f"{hip + ':' if hip else ''}{hport}:{cport.split('/')[0]}"]
+    hosts = extra_hosts if extra_hosts is not None else host.get("ExtraHosts")
+    for h, ip in extra_hosts_as_list(hosts):
+        args += ["--add-host", format_extra_host(h, ip)]
     networks = []
     short_id = info.get("Id", "")[:12]
     for net, ncfg in (info.get("NetworkSettings", {}).get("Networks") or {}).items():
@@ -372,6 +377,8 @@ def deploy_service(docker, opts, log):
                    "-e", f"DATABASE_URL={database_url}", "--network", "bridge"]
         if opts['host_port']:
             run_cmd += ["-p", f"127.0.0.1:{opts['host_port']}:{opts['port']}"]
+        for h, ip in extra_hosts_as_list(opts.get('extra_hosts')):
+            run_cmd += ["--add-host", format_extra_host(h, ip)]
         run_cmd += core.qscheduler_healthcheck_args(opts['port'])
         run_cmd += [opts['image'], "serve", "--port", str(opts['port'])]
         docker.run(run_cmd, log)
@@ -508,24 +515,8 @@ def update_worker(log, result, inst_id, opts, uid):
         labels = {LABEL_INSTANCE: name}
         if opts['source'] == 'git':
             labels.update({LABEL_REPO: opts['repo'], LABEL_BRANCH: opts['ref']})
-        create_args, networks, _port = recreate_args_from_inspect(info, opts['image'], labels, docker)
-        backup = f"{name}-old-{uid}"
-        docker.run(["stop", name], log)
-        docker.run(["rename", name, backup], log)
-        try:
-            docker.run(create_args, log)
-            for net, aliases in networks[1:]:
-                alias_args = [arg for a in aliases for arg in ("--alias", a)]
-                docker.run(["network", "connect"] + alias_args + [net, name], log)
-            docker.run(["start", name], log)
-            target.wait_healthy(log)
-        except Exception as ex:
-            log(f"Update failed ({str(ex).splitlines()[0]}); rolling back to the previous container...")
-            docker.run(["rm", "-f", name], log, check=False)
-            docker.run(["rename", backup, name], log, check=False)
-            docker.run(["start", name], log, check=False)
-            raise RuntimeError(f"Update failed and was rolled back: {ex}")
-        docker.run(["rm", backup], log)
+        extra_hosts = qscheduler_container_extra_hosts((info.get("HostConfig") or {}).get("ExtraHosts"), inst.extra_hosts)
+        recreate_container(docker, target, info, opts['image'], labels, log, uid, "Update", extra_hosts)
         version = target.version()
     finally:
         target.close()
@@ -536,6 +527,53 @@ def update_worker(log, result, inst_id, opts, uid):
     inst.save()
     result.update({'name': inst.name, 'version': version, 'image': inst.image})
     log(f"SUCCESS: '{inst.name}' updated ({version or 'version unknown'}). Machines, notifiers and projects are kept in PostgreSQL.")
+
+
+def recreate_container(docker, target, info, image, labels, log, uid, what, extra_hosts=None):
+    """Recreate the QScheduler container from its inspect output; the previous one is restored on failure."""
+    name = info.get("Name", "").lstrip("/")
+    create_args, networks, _port = recreate_args_from_inspect(info, image, labels, docker, extra_hosts)
+    backup = f"{name}-old-{uid}"
+    docker.run(["stop", name], log)
+    docker.run(["rename", name, backup], log)
+    try:
+        docker.run(create_args, log)
+        for net, aliases in networks[1:]:
+            alias_args = [arg for a in aliases for arg in ("--alias", a)]
+            docker.run(["network", "connect"] + alias_args + [net, name], log)
+        docker.run(["start", name], log)
+        target.wait_healthy(log)
+    except Exception as ex:
+        log(f"{what} failed ({str(ex).splitlines()[0]}); rolling back to the previous container...")
+        docker.run(["rm", "-f", name], log, check=False)
+        docker.run(["rename", backup, name], log, check=False)
+        docker.run(["start", name], log, check=False)
+        raise RuntimeError(f"{what} failed and was rolled back: {ex}")
+    docker.run(["rm", backup], log)
+
+
+def extra_hosts_worker(log, result, inst_id, uid):
+    """Recreate the container (same image) so that it gets the extra hosts stored on the instance record."""
+    inst = Q.objects.get(pk=inst_id)
+    if inst.kind not in DOCKER_KINDS:
+        raise RuntimeError("Extra hosts can be applied only to Docker-based instances (local or SSH to the VM).")
+    target = core.target_for(inst)
+    docker = target.docker
+    name = inst.container_name
+    log(f"=== QSCHEDULER: APPLY EXTRA HOSTS TO '{inst.name}'{docker.where} ===")
+    try:
+        info = docker.inspect(name)
+        if not info:
+            raise RuntimeError(f"Container '{name}' not found{docker.where}.")
+        current = (info.get("HostConfig") or {}).get("ExtraHosts")
+        extra_hosts = qscheduler_container_extra_hosts(current, inst.extra_hosts or [])
+        log(f"Extra hosts: {', '.join(extra_hosts) or '(none)'}")
+        image = (info.get("Config") or {}).get("Image") or inst.image
+        recreate_container(docker, target, info, image, None, log, uid, "Applying extra hosts", extra_hosts)
+    finally:
+        target.close()
+    result.update({'name': inst.name, 'extra_hosts': extra_hosts})
+    log(f"SUCCESS: extra hosts applied to '{inst.name}'.")
 
 
 def restart_worker(log, result, inst_id):
