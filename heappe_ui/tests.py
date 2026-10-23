@@ -5633,6 +5633,8 @@ class QSchedulerViewTests(TestCase):
         html_new = render_to_string("clusters.html", {"clusters": [], "is_v6_6_0_plus": True})
         self.assertNotIn('id="qschedulerMenuBtnEmpty"', html_old)
         self.assertIn('id="qschedulerMenuBtnEmpty"', html_new)
+        self.assertIn('id="qs-add-machine_select"', html_new)        # existing machine: dropdown ...
+        self.assertIn('id="qs-add-machine_name" name="machine_name"', html_new)   # ... with the text field as fallback
 
     @mock.patch("heappe_ui.view.qscheduler_deploy.import_legacy_instances")
     def test_page_lists_instances_and_assignments(self, _import):

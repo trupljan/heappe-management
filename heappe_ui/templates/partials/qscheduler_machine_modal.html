@@ -44,6 +44,7 @@
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-machine_name">Machine name <span class="text-danger">*</span></label>
+                        <select class="form-select form-select-sm d-none" id="qs-add-machine_select" aria-label="Existing machine"></select>
                         <input type="text" class="form-control form-control-sm" id="qs-add-machine_name" name="machine_name" value="SimulatorMachine" maxlength="30" list="qs-add-machines" autocomplete="off" required>
                         <datalist id="qs-add-machines"></datalist>
                         <div class="form-text" id="qs-add-machines-info" style="font-size: 0.72rem;">Used as the HEAppE queue identifier.</div>
@@ -221,6 +222,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const m = addForm.machine_name;
         if (isNew && isIqm && m.value === 'SimulatorMachine') m.value = '';
         if (isNew && !isIqm && !m.value) m.value = 'SimulatorMachine';
+        machinePicker();
         const createProj = addForm.create_project.checked;
         addForm.custom_name.disabled = !createProj;
         if (!createProj) addForm.custom_name.checked = false;
@@ -229,6 +231,38 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     addForm.querySelectorAll('input[name="machine_mode"]').forEach(r => r.addEventListener('change', toggleAdd));
     ['backend', 'create_project', 'custom_name'].forEach(k => addForm[k].addEventListener('change', toggleAdd));
+
+    // Existing machine: a dropdown of the instance's machines when they can be listed, otherwise (or with
+    // "Other (type manually)...") the plain text field. The text field always carries the submitted value.
+    const OTHER_MACHINE = '__other__';
+    const machineSelect = document.getElementById('qs-add-machine_select');
+    let listedMachines = null;     // null: cannot be listed (yet)
+    function machinePicker() {
+        const m = addForm.machine_name;
+        const existing = addForm.querySelector('input[name="machine_mode"]:checked').value === 'existing';
+        const useSelect = existing && listedMachines && listedMachines.length > 0;
+        machineSelect.classList.toggle('d-none', !useSelect);
+        if (!useSelect) {
+            m.classList.remove('d-none', 'mt-1');
+            return;
+        }
+        const names = listedMachines.map(x => x.name);
+        if (machineSelect.dataset.for !== names.join('|')) {
+            machineSelect.innerHTML = listedMachines.map(x => '<option value="' + U.esc(x.name) + '">' + U.esc(x.name) + ' (' + U.esc(x.backend) + ')</option>').join('') +
+                '<option value="' + OTHER_MACHINE + '">Other (type manually)...</option>';
+            machineSelect.dataset.for = names.join('|');
+        }
+        if (machineSelect.value !== OTHER_MACHINE) machineSelect.value = names.includes(m.value) ? m.value : names[0];
+        applyMachineSelect();
+    }
+    function applyMachineSelect() {
+        const m = addForm.machine_name;
+        const other = machineSelect.value === OTHER_MACHINE;
+        if (!other) m.value = machineSelect.value;
+        m.classList.toggle('d-none', !other);
+        m.classList.toggle('mt-1', other);
+    }
+    machineSelect.addEventListener('change', () => { applyMachineSelect(); if (machineSelect.value === OTHER_MACHINE) addForm.machine_name.focus(); });
 
     function loadMachines() {
         const id = addForm.qscheduler_id.value;
@@ -241,13 +275,20 @@ document.addEventListener('DOMContentLoaded', function () {
         const dl = document.getElementById('qs-add-machines');
         const mInfo = document.getElementById('qs-add-machines-info');
         dl.innerHTML = '';
+        listedMachines = null;
+        machineSelect.dataset.for = '';
+        machineSelect.value = '';
+        machinePicker();
         if (!id) return;
         mInfo.textContent = 'Loading machines...';
         U.getJson(machineListUrl.replace('/0/', '/' + id + '/')).then(d => {
+            if (addForm.qscheduler_id.value !== id) return;      // another instance was selected meanwhile
             if (d.machines === null || d.machines === undefined) {
                 mInfo.textContent = 'Machines of this instance cannot be listed; type the name.';
                 return;
             }
+            listedMachines = d.machines;
+            machinePicker();
             d.machines.forEach(m => { const o = document.createElement('option'); o.value = m.name; o.label = m.backend; dl.appendChild(o); });
             mInfo.textContent = d.machines.length ? 'Registered machines: ' + d.machines.map(m => m.name + ' (' + m.backend + ')').join(', ')
                                                   : 'No machine registered in this instance yet.';

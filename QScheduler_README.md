@@ -374,7 +374,7 @@ Only QScheduler instances **assigned** to the current HEAppE instance are offere
 |---|---|---|
 | Quantum machine | *Register new machine* | Registers a new machine in QScheduler (`qscheduler machine add`). Refused if a machine with that name already exists. |
 | | *Use existing machine (shared)* | Uses a machine that is already registered (for example by another HEAppE instance). The machine itself is not changed. It is checked over the REST API. |
-| | Machine name | Up to 30 characters (letters, digits, `_`, `.`, `-`). Becomes the HEAppE queue. Registered machines are suggested. |
+| | Machine name | Up to 30 characters (letters, digits, `_`, `.`, `-`). Becomes the HEAppE queue. With *Use existing machine*, a dropdown lists the machines registered in the selected instance (with their backend); *Other (type manually)...* or an instance whose machines cannot be listed falls back to a text field. For a new machine, registered names are suggested. |
 | | Backend | `test` (in-process simulator) or `iqm`. For `iqm`: server URL, device name (for example `star24`), token and poll interval (for example `500ms`). |
 | | Machine limits | Queue size (`4`), max session time (`2h`), default task time limit (`1h`), limit check interval (`2s`), max clock skew (`4s`). Durations need a unit. |
 | HEAppE cluster | Cluster name | Default: the machine name. |
