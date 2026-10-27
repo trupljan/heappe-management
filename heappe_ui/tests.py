@@ -5065,6 +5065,18 @@ class InstanceTeardownAndDeploymentFailureTests(TestCase):
 
 
 
+def _cli_target(t):
+    """
+    Mock QScheduler target without the admin API (< 0.2.1): its machine / notifier operations run the real CLI code
+    path, so the tests can check the qscheduler commands in t.cli.call_args_list.
+    """
+    from heappe_ui.view.qscheduler_core import QsTarget
+    t.uses_admin_api.return_value = False
+    for name in ("add_machine", "remove_machine", "add_notifier", "remove_notifier", "_cli_write"):
+        setattr(t, name, getattr(QsTarget, name).__get__(t))
+    return t
+
+
 class QSchedulerHelperTests(TestCase):
     """Pure helpers: CLI arguments, parsing, redaction, cluster configuration."""
 
@@ -5283,7 +5295,7 @@ class QSchedulerWorkflowTests(TestCase):
         target.list_machines.return_value = machines
         target.cli.return_value = CommandResult(0, "ok", "")
         target.docker.networks_of.return_value = []
-        return target
+        return _cli_target(target)
 
     def _patches(self, target, version="6.6.0", clusters=None):
         from heappe_ui.view import qscheduler_core as core
@@ -6378,7 +6390,7 @@ class QSchedulerRecoveryTests(TestCase):
         docker = mock.Mock()
         docker.exists.return_value = False
         docker.networks_of.return_value = []
-        target = mock.Mock()
+        target = _cli_target(mock.Mock())
         target.list_machines.return_value = [{"name": m, "backend": "test"} for m in machines_in_db or []]
         target.list_notifiers.return_value = []
         target.cli.return_value = CommandResult(0, "ok", "")
@@ -6524,7 +6536,7 @@ class QSchedulerUnmanagedNotifierTests(TestCase):
         from heappe_ui.view import qscheduler_core as core
         from heappe_ui.view.qscheduler_core import CommandResult
         from heappe_ui.view.qscheduler_deploy import remove_notifier_worker
-        target = mock.Mock()
+        target = _cli_target(mock.Mock())
         target.list_notifiers.return_value = [{"name": n, "url": "http://h/cb"} for n in notifiers]
         target.cli.return_value = CommandResult(0, "ok", "")
         connect = mock.patch("heappe_ui.view.clusters.connect_heappe_management_api",
@@ -6605,7 +6617,7 @@ class QSchedulerClusterHealthTests(TestCase):
         t.list_notifiers.return_value = [{"name": n, "url": u} for n, u in notifiers]
         t.list_machines.return_value = None if machines is None else [{"name": m, "backend": "test"} for m in machines]
         t.cli.return_value = CommandResult(0, "ok", "")
-        return t
+        return _cli_target(t)
 
     def _status(self, cluster, target):
         from heappe_ui.view import qscheduler_core as core
@@ -6803,7 +6815,7 @@ class QSchedulerClusterMoveTests(TestCase):
         t.list_machines.return_value = [{"name": m, "backend": "test"} for m in machines]
         t.list_notifiers.return_value = []
         t.cli.return_value = CommandResult(0, "ok", "")
-        return t
+        return _cli_target(t)
 
     def _move(self, opts_data, target, on_new=(), old_target=None, cluster=None):
         from heappe_ui.view import qscheduler_core as core
@@ -6863,7 +6875,7 @@ class QSchedulerClusterMoveTests(TestCase):
         self.assertEqual(upd.call_args.args[3][0], "heappe-dev.VLQ")
 
     def test_move_removes_old_notifier_when_old_instance_reachable(self):
-        old_target = mock.Mock()
+        old_target = _cli_target(mock.Mock())
         old_target.list_notifiers.return_value = [{"name": "heappe-dev.Sim", "url": "http://h/cb"}]
         target = self._target(machines=("Sim",))
         from heappe_ui.view import qscheduler_core as core
@@ -7238,3 +7250,379 @@ class QSchedulerExtraHostsTests(_ExtraHostsTestBase):
         self.assertIn("host.docker.internal:host-gateway", create)
         self.assertIn("qs:v1", create)
         target.wait_healthy.assert_called_once()
+
+
+class QSchedulerAdminApiTests(TestCase):
+    """QScheduler >= 0.2.1: machines and notifiers only over the admin API (no restart, no CLI); CLI for older."""
+
+    def _target(self, version="qscheduler v0.2.1", responses=None):
+        from heappe_ui.view.qscheduler_core import QsTarget, CommandResult
+
+        class Fake(QsTarget):
+            def __init__(self):
+                self.port, self.requests, self.cli_calls, self.restarted = 4300, [], [], 0
+
+            def version(self):
+                return version
+
+            def admin_request(self, method, path, body=None, timeout=60):
+                self.requests.append((method, path, body))
+                res = (responses or {}).get((method, path), (200, "[]"))
+                if isinstance(res, Exception):
+                    raise res
+                return res
+
+            def cli(self, args, log, check=True, timeout=0):
+                self.cli_calls.append(list(args))
+                return CommandResult(0, "ok", "")
+
+            def restart(self, log):
+                self.restarted += 1
+        return Fake()
+
+    def _opts(self, **kw):
+        return dict({"machine_name": "Sim", "backend": "test", "queue_size": 4, "limit_check_interval": "2s",
+                     "max_session_time": "2h", "default_task_time_limit": "1h", "max_clock_skew": "4s",
+                     "iqm_url": "", "iqm_token": "", "iqm_device": "", "iqm_poll_interval": "500ms"}, **kw)
+
+    def test_version_gate(self):
+        from heappe_ui.view.qscheduler_core import supports_admin_api, parse_version
+        self.assertEqual(parse_version("qscheduler v0.2.1"), (0, 2, 1))
+        self.assertTrue(supports_admin_api("qscheduler v0.2.1"))
+        self.assertTrue(supports_admin_api("qscheduler v0.10.0"))
+        self.assertTrue(supports_admin_api("qscheduler v1.0.0"))
+        self.assertFalse(supports_admin_api("qscheduler v0.2.0"))
+        self.assertFalse(supports_admin_api(None))
+        self.assertFalse(supports_admin_api("qscheduler"))
+
+    def test_machine_request_body(self):
+        from heappe_ui.view.qscheduler_core import machine_request, duration_ms
+        self.assertEqual(machine_request(self._opts()), {
+            "name": "Sim", "queue_size": 4, "limit_check_interval_ms": 2000, "max_session_time_ms": 7200000,
+            "default_task_time_limit_ms": 3600000, "max_clock_skew_ms": 4000, "backend": {"type": "test"}})
+        iqm = machine_request(self._opts(backend="iqm", iqm_url="https://iqm", iqm_token="t", iqm_device="garnet"))
+        self.assertEqual(iqm["backend"], {"type": "iqm", "url": "https://iqm", "token": "t", "machine_name": "garnet",
+                                          "poll_interval_ms": 500})
+        self.assertEqual(duration_ms("1d"), 86400000)
+        self.assertEqual(duration_ms("5m"), 300000)
+        with self.assertRaises(ValueError):
+            duration_ms("5 minutes")
+
+    def test_admin_api_writes_need_no_restart(self):
+        from heappe_ui.view import qscheduler_core as core
+        t = self._target(responses={("POST", "/machines"): (201, "{}"), ("POST", "/notifiers"): (201, "{}")})
+        logs = []
+        self.assertTrue(t.uses_admin_api(logs.append))
+        self.assertEqual(t.add_machine(self._opts(), logs.append).returncode, 0)
+        self.assertTrue(core.replace_notifiers(t, {"heappe-dev.Sim": ("http://h/cb", "tok")}, (), {}, logs.append))
+        self.assertTrue(core.apply_changes(mock.Mock(restart_pending=False), t, logs.append))
+        self.assertEqual(t.restarted, 0)
+        self.assertEqual(t.cli_calls, [])
+        self.assertEqual([r[:2] for r in t.requests], [("POST", "/machines"), ("POST", "/notifiers")])
+        self.assertEqual(t.requests[0][2]["name"], "Sim")
+        self.assertEqual(t.requests[1][2], {"name": "heappe-dev.Sim", "url": "http://h/cb", "token": "tok"})
+        self.assertTrue(any("admin API" in l for l in logs))
+
+    def test_admin_api_errors_match_cli_wording(self):
+        t = self._target(responses={("POST", "/machines"): (409, '{"error": "exists"}'),
+                                    ("DELETE", "/machine/Sim"): (404, ""),
+                                    ("DELETE", "/machine/VLQ"): (409, "busy"),
+                                    ("DELETE", "/machine/X?force=true"): (200, '{"tasks": 3, "sessions": 1}'),
+                                    ("DELETE", "/notifiers/a.b"): (404, "")})
+        log = lambda *_: None
+        res = t.add_machine(self._opts(), log)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("already exists", res.output)
+        self.assertIn("not found", t.remove_machine("Sim", False, log).output)
+        self.assertIn("has tasks or sessions", t.remove_machine("VLQ", False, log).output)
+        ok = t.remove_machine("X", True, log)
+        self.assertEqual(ok.returncode, 0)
+        self.assertIn("3 task(s), 1 session(s)", ok.stdout)
+        self.assertFalse(t.remove_notifier("a.b", log, check=False))
+        with self.assertRaises(RuntimeError):
+            t.remove_notifier("a.b", log)
+        self.assertFalse(t.reload_needed)
+
+    def test_lists_over_admin_api(self):
+        t = self._target(responses={
+            ("GET", "/machines"): (200, '[{"name": "Sim", "backend": {"type": "test"}}, '
+                                        '{"name": "G", "backend": {"type": "iqm", "url": "u"}}]'),
+            ("GET", "/notifiers"): (200, '[{"name": "n", "url": "http://h/cb", "has_token": true}]')})
+        self.assertEqual(t.list_machines(), [{"name": "Sim", "backend": "test"}, {"name": "G", "backend": "iqm"}])
+        self.assertEqual(t.list_notifiers(), [{"name": "n", "has_token": True, "url": "http://h/cb"}])
+
+    def test_old_version_uses_cli_and_restarts(self):
+        from heappe_ui.view import qscheduler_core as core
+        t = self._target(version="qscheduler v0.2.0")
+        logs = []
+        self.assertEqual(t.add_machine(self._opts(), logs.append).returncode, 0)
+        t.add_notifier("n", "http://h/cb", "tok", logs.append)
+        self.assertEqual([c[:2] for c in t.cli_calls], [["machine", "add"], ["notifier", "add"]])
+        self.assertEqual(t.requests, [])
+        self.assertTrue(t.reload_needed)
+        self.assertTrue(core.apply_changes(mock.Mock(restart_pending=False), t, logs.append))
+        self.assertEqual(t.restarted, 1)
+        self.assertTrue(any("CLI" in l for l in logs))
+
+    def test_admin_token_problem_stops_without_cli(self):
+        from heappe_ui.view.qscheduler_admin import AdminTokenError
+        inst = mock.Mock(pk=7, kind="managed")
+        inst.name = "qs-1"
+        t = self._target(responses={("DELETE", "/machine/Sim"): AdminTokenError(inst, "rejected"),
+                                    ("GET", "/machines"): AdminTokenError(inst, "missing")})
+        with self.assertRaises(AdminTokenError) as ctx:
+            t.remove_machine("Sim", False, lambda *_: None)
+        self.assertEqual(ctx.exception.info()["reason"], "rejected")
+        self.assertTrue(ctx.exception.can_regenerate)
+        with self.assertRaises(AdminTokenError):
+            t.list_machines()                     # no fallback to the database either
+        self.assertEqual(t.cli_calls, [])
+
+    def test_admin_request_needs_admin_client_and_hides_details(self):
+        from heappe_ui.view.qscheduler_core import QsTarget
+        from heappe_ui.view.qscheduler_admin import AdminApiUnavailable
+        with self.assertRaises(AdminApiUnavailable):
+            QsTarget().admin_request("GET", "/machines")
+        t = QsTarget()
+        t.admin_client = mock.Mock()
+        t.admin_client.request.side_effect = ValueError("token secret in here")
+        with self.assertRaises(RuntimeError) as ctx:
+            t.admin_request("GET", "/machines")
+        self.assertNotIn("secret", str(ctx.exception))
+        t.admin_client.request.side_effect = None
+        t.admin_client.request.return_value = (200, "[]")
+        self.assertEqual(t.admin_request("GET", "/machines"), (200, "[]"))
+
+    def test_admin_token_redacted_and_added_on_update(self):
+        from heappe_ui.view.qscheduler_core import redact_args
+        from heappe_ui.view.qscheduler_deploy import admin_token_env, recreate_args_from_inspect
+        self.assertEqual(redact_args(["-e", "ADMIN_TOKEN=abc"]), ["-e", "ADMIN_TOKEN=********"])
+        info = {"Name": "/qs", "Config": {"Env": ["DATABASE_URL=postgres://x", "ADMIN_TOKEN="], "Cmd": ["serve"]}}
+        env = admin_token_env(info, lambda *_: None)
+        self.assertTrue(env["ADMIN_TOKEN"])
+        args, _, _ = recreate_args_from_inspect(info, "qs:new", extra_env=env)
+        envs = [args[i + 1] for i, a in enumerate(args) if a == "-e"]
+        self.assertEqual(envs, ["DATABASE_URL=postgres://x", f"ADMIN_TOKEN={env['ADMIN_TOKEN']}"])
+        info["Config"]["Env"] = ["ADMIN_TOKEN=keep"]
+        self.assertIsNone(admin_token_env(info, lambda *_: None))
+
+
+
+class QSchedulerAdminProxyTests(TestCase):
+    """Admin proxy container, admin client over HTTP, encrypted admin token and the admin token API."""
+
+    def setUp(self):
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance, QSchedulerAssignment
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300)
+        self.cred = InstanceCredentials.objects.create(instance_name="dev", heappe_host="h", heappe_login="u",
+                                                       heappe_password="p", heappe_port="5000")
+        self.asg = QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred,
+                                                       network="dev_external_network")
+
+    def _docker(self, proxy=None, container_env=None):
+        """Fake docker CLI: inspect of the proxy / service container, records run() calls."""
+        docker = mock.Mock(where="")
+        state = {"proxy": proxy}
+
+        def inspect(name):
+            if name.endswith("-admin-proxy"):
+                return state["proxy"]
+            return {"Config": {"Env": container_env or []}}
+
+        def run(args, log=None, check=True, **kw):
+            if args[0] == "run":
+                labels = dict(a.split("=", 1) for i, a in enumerate(args) if i and args[i - 1] == "--label")
+                state["proxy"] = {"Config": {"Labels": labels, "Image": args[args.index("sh") - 1]},
+                                  "State": {"Status": "running"},
+                                  "NetworkSettings": {"Networks": {args[args.index("--network") + 1]: {}},
+                                                      "Ports": {"8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": "49001"}]}}}
+            return mock.Mock(returncode=0)
+        docker.inspect.side_effect = inspect
+        docker.run.side_effect = run
+        docker.exists.side_effect = lambda kind, name: state["proxy"] is not None
+        return docker, state
+
+    def test_proxy_config_forwards_only_admin_endpoints(self):
+        from heappe_ui.view.qscheduler_admin import proxy_config, proxy_run_args
+        conf = proxy_config("qs-1", 4300)
+        self.assertIn("set $qscheduler http://qs-1:4300;", conf)
+        self.assertIn("location ~ ^/(machines|notifiers)$", conf)
+        self.assertIn("location ~ ^/(machine|notifiers)/[^/]+$", conf)
+        self.assertIn("location / { return 404; }", conf)
+        args = proxy_run_args(self.inst, "dev_external_network")
+        self.assertIn("127.0.0.1::8080", args)                 # published on localhost only
+        self.assertEqual(args[args.index("--network") + 1], "dev_external_network")
+        self.assertIn("qscheduler.admin-upstream=qs-1:4300", args)
+
+    def test_ensure_proxy_creates_repairs_and_follows_networks(self):
+        from heappe_ui.view import qscheduler_admin as qa
+        docker, state = self._docker()
+        self.assertEqual(qa.ensure_proxy(self.inst, docker=docker, extra_networks=["other_net"]), 49001)
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.assertEqual(cmds[0][0], "run")
+        self.assertIn(["network", "connect", "other_net", "qs-1-admin-proxy"], cmds)
+        # upstream changed (restore under a new name): recreated
+        docker.run.reset_mock()
+        self.inst.service_host = "qs-2"
+        qa.ensure_proxy(self.inst, docker=docker)
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.assertEqual(cmds[0], ["rm", "-f", "qs-1-admin-proxy"])
+        self.assertEqual(cmds[1][0], "run")
+        # a network that is no longer used is disconnected
+        state["proxy"]["NetworkSettings"]["Networks"]["gone_net"] = {}
+        docker.run.reset_mock()
+        qa.ensure_proxy(self.inst, docker=docker)
+        self.assertIn(["network", "disconnect", "gone_net", "qs-1-admin-proxy"], [c.args[0] for c in docker.run.call_args_list])
+
+    def test_proxy_needs_an_assignment_and_is_removed_with_the_last(self):
+        from heappe_ui.view import qscheduler_admin as qa
+        self.asg.delete()
+        with self.assertRaises(qa.AdminApiUnavailable):
+            qa.ensure_proxy(self.inst, docker=self._docker()[0])
+        docker, _ = self._docker(proxy={"Config": {}})
+        with mock.patch.object(qa, "DockerCli", return_value=docker):
+            qa.sync_proxy(self.inst)
+        self.assertIn(["rm", "-f", "qs-1-admin-proxy"], [c.args[0] for c in docker.run.call_args_list])
+
+    def test_admin_token_encrypted_and_adopted_from_container(self):
+        from heappe_ui.view import qscheduler_admin as qa
+        self.assertEqual(self.inst.admin_token, "")
+        docker, _ = self._docker(container_env=["DATABASE_URL=x", "ADMIN_TOKEN=from-env-123"])
+        self.assertEqual(qa.admin_token(self.inst, docker), "from-env-123")
+        self.inst.refresh_from_db()
+        self.assertNotIn("from-env-123", self.inst.admin_token_encrypted)
+        self.assertEqual(self.inst.admin_token, "from-env-123")
+        self.inst.admin_token = ""
+        self.inst.kind = "ssh_container"
+        with self.assertRaises(qa.AdminTokenError) as ctx:
+            qa.admin_token(self.inst, docker)
+        self.assertFalse(ctx.exception.can_regenerate)
+
+    def test_client_talks_http_with_bearer_token(self):
+        """Real HTTP against a local server standing in for the proxy: method, path, token, body; 401/403."""
+        import http.server
+        import threading
+        from heappe_ui.view import qscheduler_admin as qa
+        seen = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def _reply(self):
+                body = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode()
+                seen.append((self.command, self.path, self.headers.get("Authorization"), body))
+                code = {"/notifiers/denied": 401, "/notifiers/off": 403}.get(self.path, 201)
+                out = b'{"ok": true}'
+                self.send_response(code)
+                self.send_header("Content-Length", str(len(out)))
+                self.end_headers()
+                self.wfile.write(out)
+            do_POST = do_DELETE = do_GET = _reply
+
+            def log_message(self, *a):
+                pass
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.inst.admin_token = "adm1n-token"
+        self.inst.save()
+        try:
+            with mock.patch.object(qa, "ensure_proxy", return_value=server.server_port):
+                client = qa.AdminClient(self.inst)
+                body = {"name": "heappe-dev.Sim", "url": "http://h/cb?a=1", "token": "it's \"quoted\""}
+                self.assertEqual(client.request("POST", "/notifiers", body), (201, '{"ok": true}'))
+                with self.assertRaises(qa.AdminTokenError) as ctx:
+                    client.request("DELETE", "/notifiers/denied")
+                self.assertEqual(ctx.exception.reason, "rejected")
+                self.assertNotIn("adm1n-token", str(ctx.exception))
+                with self.assertRaises(qa.AdminTokenError) as ctx:
+                    client.request("DELETE", "/notifiers/off")
+                self.assertEqual(ctx.exception.reason, "not_set")
+        finally:
+            server.shutdown()
+            server.server_close()
+        self.assertEqual(seen[0][:3], ("POST", "/notifiers", "Bearer adm1n-token"))
+        self.assertEqual(json.loads(seen[0][3]), body)
+
+    def test_token_error_found_through_wrapping_and_reported_by_operation(self):
+        from heappe_ui.view import qscheduler_admin as qa
+        from heappe_ui.view import qscheduler_core as core
+        err = qa.AdminTokenError(self.inst, "missing")
+        try:
+            try:
+                raise err
+            except RuntimeError as e:
+                raise RuntimeError(f"Update failed and was rolled back: {e}")
+        except RuntimeError as wrapped:
+            self.assertIs(qa.find_admin_token_error(wrapped), err)
+
+        def worker(log, result):
+            raise RuntimeError("wrapped") from err
+        with mock.patch("threading.Thread") as th:
+            core.start_operation("x", worker)
+            th.call_args.kwargs["target"]()
+        status = core.operation_status()
+        self.assertFalse(status["success"])
+        self.assertEqual(status["result"]["admin_token_error"]["reason"], "missing")
+        self.assertEqual(status["result"]["admin_token_error"]["instance_id"], self.inst.pk)
+
+    def _api(self, data):
+        from django.contrib.auth.models import User
+        if not getattr(self, "_logged", False):
+            self.client.force_login(User.objects.create_user(username="tok_admin", password="p"))
+            session = self.client.session
+            session["chosen_instance"] = "dev"
+            session.save()
+            self._logged = True
+        resp = self.client.post(f"/qscheduler/{self.inst.pk}/admin-token/", data=json.dumps(data),
+                                content_type="application/json")
+        return resp.status_code, resp.json()
+
+    def test_admin_token_api_show_set_regenerate(self):
+        from heappe_ui.view import qscheduler_admin as qa
+        from heappe_ui.view import qscheduler_core as core
+        self.inst.admin_token = "stored-token-1"
+        self.inst.save()
+        code, data = self._api({"action": "show"})
+        self.assertEqual((code, data["token"]), (200, "stored-token-1"))
+
+        self.assertEqual(self._api({"action": "set", "token": "short"})[0], 400)
+        with mock.patch.object(qa.AdminClient, "request", side_effect=qa.AdminTokenError(self.inst, "rejected")):
+            code, data = self._api({"action": "set", "token": "wrong-token-123"})
+        self.assertEqual(code, 400)
+        self.inst.refresh_from_db()
+        self.assertEqual(self.inst.admin_token, "stored-token-1")         # not stored
+        with mock.patch.object(qa.AdminClient, "request", return_value=(200, "[]")):
+            code, data = self._api({"action": "set", "token": "other-panel-token"})
+        self.assertEqual(code, 200)
+        self.inst.refresh_from_db()
+        self.assertEqual(self.inst.admin_token, "other-panel-token")
+
+        with mock.patch.object(core, "start_operation", return_value=(True, "started")) as m:
+            self.assertEqual(self._api({"action": "regenerate"})[0], 200)
+        self.assertEqual(m.call_args.args[2], self.inst.pk)
+
+    def test_regenerate_worker_recreates_with_new_token(self):
+        from heappe_ui.view import qscheduler_deploy as d
+        docker = mock.Mock(where="")
+        docker.inspect.return_value = {"Id": "abc", "Name": "/qs-1",
+                                       "Config": {"Image": "qs:v1", "Cmd": ["serve", "--port", "4300"],
+                                                  "Env": ["DATABASE_URL=x", "ADMIN_TOKEN=old"]},
+                                       "HostConfig": {}, "NetworkSettings": {"Networks": {}}}
+        target = mock.Mock(docker=docker)
+        target.uses_admin_api.return_value = True
+        target.admin_request.return_value = (200, "[]")
+        with mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target), \
+                mock.patch("heappe_ui.view.qscheduler_core.new_admin_token", return_value="brand-new-token"):
+            d.regenerate_admin_token_worker(lambda *_: None, {}, self.inst.pk, "u1")
+        create = next(c.args[0] for c in docker.run.call_args_list if c.args[0][0] == "create")
+        self.assertIn("ADMIN_TOKEN=brand-new-token", create)
+        self.assertNotIn("ADMIN_TOKEN=old", create)
+        self.inst.refresh_from_db()
+        self.assertEqual(self.inst.admin_token, "brand-new-token")
+        target.admin_request.assert_called_once_with("GET", "/notifiers")
+
+    def test_register_stores_entered_token(self):
+        from heappe_ui.view.qscheduler_deploy import parse_register_options
+        opts, errors = parse_register_options({"kind": "local", "container_name": "qs-ext", "admin_token": "bad token"})
+        self.assertTrue(any("Admin token" in e for e in errors))
+        opts, errors = parse_register_options({"kind": "local", "container_name": "qs-ext", "admin_token": "tok-12345"})
+        self.assertEqual((errors, opts["admin_token"]), ([], "tok-12345"))

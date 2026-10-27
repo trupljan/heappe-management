@@ -63,6 +63,7 @@
                             {% if inst.ssh %} &middot; SSH <code>{{ inst.ssh }}</code>{% endif %}
                             {% if inst.container_name %} &middot; container <code>{{ inst.container_name }}</code>{% endif %}
                             &middot; <span class="qs-live-version">version ?</span>
+                            <span class="qs-live-admin"></span>
                             {% if inst.source == 'git' %} &middot; source <code>{{ inst.repo }}#{{ inst.ref }}</code>{% elif inst.image %} &middot; image <code>{{ inst.image }}</code>{% endif %}
                         </div>
                         {% if inst.archived %}
@@ -83,6 +84,7 @@
                             <li><button type="button" class="dropdown-item small text-danger qs-recovery-action" data-action="cascade" data-id="{{ inst.id }}"><i class="bi bi-trash me-2"></i>Delete with entities...</button></li>
                             {% else %}
                             {% if inst.can_update %}<li><button type="button" class="dropdown-item small qs-action" data-action="update" data-id="{{ inst.id }}"><i class="bi bi-arrow-repeat me-2 text-info"></i>Update</button></li>{% endif %}
+                            <li><button type="button" class="dropdown-item small qs-admin-token" data-id="{{ inst.id }}" data-name="{{ inst.name }}" data-regen="{% if inst.can_update %}1{% endif %}"><i class="bi bi-key me-2 text-warning"></i>Admin token...</button></li>
                             <li><button type="button" class="dropdown-item small qs-action" data-action="restart" data-id="{{ inst.id }}"><i class="bi bi-bootstrap-reboot me-2 text-primary"></i>{% if inst.manual_restart %}Confirm manual restart{% else %}Restart{% endif %}</button></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><button type="button" class="dropdown-item small text-danger qs-action" data-action="undeploy" data-id="{{ inst.id }}">
@@ -290,7 +292,7 @@
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="kind" id="qs-reg-kind-ssh_host" value="ssh_host">
                         <label class="form-check-label small fw-semibold" for="qs-reg-kind-ssh_host">Remote: SSH to the VM running the container</label>
-                        <div class="form-text mt-0" style="font-size: 0.72rem;">Commands run as <code>docker exec &lt;container&gt; qscheduler ...</code>; restarts with <code>docker restart</code>.</div>
+                        <div class="form-text mt-0" style="font-size: 0.72rem;">QScheduler 0.2.1+: admin API inside the container (its <code>ADMIN_TOKEN</code>); older: <code>docker exec &lt;container&gt; qscheduler ...</code> and <code>docker restart</code>.</div>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="kind" id="qs-reg-kind-ssh_container" value="ssh_container">
@@ -347,7 +349,7 @@
                         <input type="text" class="form-control form-control-sm font-monospace" id="qs-reg-restart_command" name="restart_command">
                     </div>
                     <div class="col-12 qs-reg-sshcontainer-only d-none form-text" style="font-size: 0.72rem;">
-                        New machines and notifiers need a service restart. The default sends SIGTERM to PID 1 (graceful shutdown) and relies on
+                        Before QScheduler 0.2.1, new machines and notifiers need a service restart (0.2.1+ is managed over its admin API, no restart). The default sends SIGTERM to PID 1 (graceful shutdown) and relies on
                         the container's restart policy. Leave it empty to restart manually (the instance is then marked "restart pending").
                     </div>
                     <div class="col-md-6">
@@ -361,6 +363,12 @@
                     <div class="col-md-3">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-name">Name</label>
                         <input type="text" class="form-control form-control-sm" id="qs-reg-name" name="name" placeholder="auto">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-admin_token">Admin token</label>
+                        <input type="password" class="form-control form-control-sm font-monospace" id="qs-reg-admin_token" name="admin_token" placeholder="ADMIN_TOKEN of the service (QScheduler 0.2.1+)" autocomplete="off">
+                        <div class="form-text" style="font-size: 0.72rem;">QScheduler 0.2.1+ is managed only over its admin API. Leave empty to take it from the container environment;
+                            when another HEAppE Management already manages this QScheduler, copy it from there (Actions &rarr; Admin token... &rarr; Show).</div>
                     </div>
                 </div>
                 <div id="qs-reg-error" class="alert alert-danger border-0 rounded-3 small mb-0 d-none"></div>
@@ -470,7 +478,7 @@
                     <div class="col-12 qs-asg-notify-only qs-asg-edit-only">
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="qs-asg-rotate_tokens" name="rotate_tokens">
-                            <label class="form-check-label small" for="qs-asg-rotate_tokens">Generate new tokens for all clusters of this HEAppE (QScheduler restarts)</label>
+                            <label class="form-check-label small" for="qs-asg-rotate_tokens">Generate new tokens for all clusters of this HEAppE (QScheduler &lt; 0.2.1 restarts)</label>
                         </div>
                     </div>
                 </div>
@@ -569,7 +577,29 @@ document.addEventListener('DOMContentLoaded', function () {
             health.className = 'badge border ' + (ok ? 'bg-success-subtle text-success-emphasis border-success-subtle' : 'bg-danger-subtle text-danger-emphasis border-danger-subtle');
             health.textContent = ok ? 'healthy' : (d.health ? 'HTTP ' + d.health : 'unreachable');
             card.querySelector('.qs-live-version').textContent = d.version || 'version ?';
-            if (d.error) { const e = card.querySelector('.qs-live-error'); e.textContent = d.error; e.classList.remove('d-none'); }
+            const adm = card.querySelector('.qs-live-admin');
+            if (d.admin && d.admin.api === false) {
+                adm.innerHTML = '&middot; managed with the CLI (before 0.2.1)';
+            } else if (d.admin && d.admin.api) {
+                const p = d.admin.proxy;
+                adm.innerHTML = '&middot; admin API ' + (p && p.running ? 'via proxy <code>' + U.esc(p.address) + '</code>'
+                    : '<span class="text-muted">(admin proxy is created with the first HEAppE assignment)</span>')
+                    + (d.admin.token_stored ? '' : ' <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">no admin token</span>');
+            }
+            if (d.error) {
+                const e = card.querySelector('.qs-live-error');
+                e.textContent = d.error;
+                e.classList.remove('d-none');
+                const te = d.admin_token_error;
+                if (te) {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'btn btn-sm btn-warning fw-semibold py-0 px-2 ms-2';
+                    b.innerHTML = '<i class="bi bi-key me-1"></i>Fix admin token...';
+                    b.addEventListener('click', () => U.adminToken(te.instance_id, te.instance_name, te.can_regenerate, te.message));
+                    e.appendChild(b);
+                }
+            }
             const m = card.querySelector('.qs-live-machines');
             m.innerHTML = d.machines === null || d.machines === undefined ? 'cannot be listed'
                 : (d.machines.length ? d.machines.map(x => '<span class="badge bg-light text-dark border me-1">' + U.esc(x.name) + ' <span class="text-muted">' + U.esc(x.backend) + '</span></span>').join('') : 'none');
@@ -807,7 +837,7 @@ document.addEventListener('DOMContentLoaded', function () {
         data.heappe_instance_id = asgForm.heappe_instance_id.value;
         submitOperation(document.getElementById('qsAssignBtn'), 'qs-asg-error', 'qsAssignModal', url('assign', current.id), data, {
             title: (editing ? 'Updating assignment' : 'Assigning HEAppE') + ' on ' + current.name,
-            hint: 'Configuring network access; when notification settings change, the notifiers of existing clusters are recreated (QScheduler restarts)...',
+            hint: 'Configuring network access; when notification settings change, the notifiers of existing clusters are recreated (QScheduler < 0.2.1 restarts)...',
             successTitle: 'Assignment saved',
             details: (r, esc) => 'HEAppE: ' + esc(r.heappe_instance) + '<br>Notifications: ' + (r.notifications ? 'on' : 'off') +
                 '<br>Updated clusters: ' + esc((r.updated_clusters || []).join(', ') || 'none'),
@@ -866,6 +896,9 @@ document.addEventListener('DOMContentLoaded', function () {
     window.qsPage = { byId, url, modal, showErr, hideErr, formData, submitOperation, sourceToggle, refPicker, loadLocalDocker, askConfirm };
 
     // ---- per-instance actions ----
+    document.querySelectorAll('.qs-admin-token').forEach(b => b.addEventListener('click', () =>
+        U.adminToken(b.dataset.id, b.dataset.name, !!b.dataset.regen, '')));
+
     document.querySelectorAll('.qs-action').forEach(b => b.addEventListener('click', () => {
         current = byId[b.dataset.id];
         const action = b.dataset.action;

@@ -175,7 +175,7 @@ def add_machine_worker(log, result, instance_name, opts, uid):
                 raise RuntimeError(f"Machine '{machine}' already exists in '{inst.name}' (it may be used by another HEAppE). "
                                    f"Choose 'Use existing machine' to share it, or another name.")
             log(f"Registering machine '{machine}' ({opts['backend']} backend)...")
-            res = target.cli(core.machine_args(dict(opts, action='add')), log, check=False)
+            res = target.add_machine(opts, log)
             if res.returncode != 0:
                 if re.search(r"already exists", res.output, re.I):
                     raise RuntimeError(f"Machine '{machine}' already exists in '{inst.name}'. Choose 'Use existing machine'.")
@@ -198,7 +198,7 @@ def add_machine_worker(log, result, instance_name, opts, uid):
             cli_changed |= core.replace_notifiers(target, {notifier[0]: (asg.callback_url, notifier[1])}, (), current, log)
             result['notifier'] = notifier[0]
         if cli_changed:
-            loaded = core.apply_cli_change(inst, target, log)   # one restart for machine + notifier
+            loaded = core.apply_changes(inst, target, log)   # one restart for machine + notifier
     finally:
         target.close()
 
@@ -223,7 +223,7 @@ def add_machine_worker(log, result, instance_name, opts, uid):
             log(f"Cluster creation failed: removing notifier '{notifier[0]}' again.")
             cleanup = core.target_for(inst)
             try:
-                cleanup.cli(["notifier", "remove", notifier[0]], log, check=False)
+                cleanup.remove_notifier(notifier[0], log, check=False)
             finally:
                 cleanup.close()
         raise
@@ -349,7 +349,7 @@ def remove_machine_worker(log, result, instance_name, opts):
         try:
             changed = False
             if opts['remove_from_qscheduler']:
-                res = target.cli(core.machine_remove_args(machine, opts['force']), log, check=False)
+                res = target.remove_machine(machine, opts['force'], log)
                 if res.returncode != 0:
                     if re.search(r"not found", res.output, re.I):
                         log(f"Machine '{machine}' is not registered in '{inst.name}' (already removed).")
@@ -370,7 +370,7 @@ def remove_machine_worker(log, result, instance_name, opts):
                 else:
                     log(f"Notifier '{notifier}' is not registered in '{inst.name}'.")
             if changed:
-                core.apply_cli_change(inst, target, log)
+                core.apply_changes(inst, target, log)
         finally:
             target.close()
     elif notifier:

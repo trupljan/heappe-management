@@ -176,7 +176,7 @@ def recreate_notifier_worker(log, result, instance_name, cluster_id):
         current = {n['name']: n for n in target.list_notifiers(log)}
         remove = {r for r in remove if r in current}
         if core.replace_notifiers(target, add, remove, current, log):
-            core.apply_cli_change(inst, target, log)
+            core.apply_changes(inst, target, log)
     finally:
         target.close()
     core.update_cluster_notifications(controller, session_code, cluster, notifier, log)
@@ -245,7 +245,7 @@ def recover_machine_worker(log, result, instance_name, cluster_id, opts):
         if opts['mode'] == 'new':
             if old_machine in names:
                 raise RuntimeError(f"Machine '{old_machine}' already exists in '{inst.name}'; nothing to recover.")
-            res = target.cli(core.machine_args(dict(opts, machine_name=old_machine, action='add')), log, check=False)
+            res = target.add_machine(dict(opts, machine_name=old_machine), log)
             if res.returncode != 0:
                 raise RuntimeError(f"Machine registration failed:\n{res.output[-3000:]}")
             backend, options = core.machine_definition(opts)
@@ -262,7 +262,7 @@ def recover_machine_worker(log, result, instance_name, cluster_id, opts):
         remove = {r for r in remove if r in current}
         changed |= core.replace_notifiers(target, add, remove, current, log)
         if changed:
-            core.apply_cli_change(inst, target, log)
+            core.apply_changes(inst, target, log)
     finally:
         target.close()
 
@@ -301,7 +301,7 @@ def _remove_old_notifier(controller, session_code, old_inst, cluster, log):
         target = core.target_for(old_inst)
         current = {n['name']: n for n in target.list_notifiers(log)}
         if old in current and core.replace_notifiers(target, {}, {old}, current, log):
-            core.apply_cli_change(old_inst, target, log)
+            core.apply_changes(old_inst, target, log)
     except Exception as e:
         log(f"WARNING: could not remove notifier '{old}' from '{old_inst.name}' ({str(e).splitlines()[0][:200]}); "
             f"remove it there once it is reachable.")
@@ -345,7 +345,7 @@ def move_cluster_worker(log, result, instance_name, cluster_id, opts):
             if old_machine in names:
                 raise RuntimeError(f"Machine '{old_machine}' already exists in '{inst.name}'. Choose 'Use an existing "
                                    f"machine' to share it.")
-            res = target.cli(core.machine_args(dict(opts, machine_name=old_machine, action='add')), log, check=False)
+            res = target.add_machine(dict(opts, machine_name=old_machine), log)
             if res.returncode != 0:
                 raise RuntimeError(f"Machine registration failed:\n{res.output[-3000:]}")
             backend, options = core.machine_definition(opts)
@@ -364,7 +364,7 @@ def move_cluster_worker(log, result, instance_name, cluster_id, opts):
         remove = {r for r in remove if r in current}
         changed |= core.replace_notifiers(target, add, remove, current, log)
         if changed:
-            core.apply_cli_change(inst, target, log)
+            core.apply_changes(inst, target, log)
     finally:
         target.close()
 

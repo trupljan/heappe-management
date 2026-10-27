@@ -3,11 +3,16 @@ QScheduler page: QScheduler instances and their HEAppE assignments.
 
 Instances
   * Deploy    - build the image from git (branch / tag) or use an image present on the Docker host, start a
-                private PostgreSQL (or use an existing DB) and `qscheduler serve`. No machine is registered here:
+                private PostgreSQL (or use an existing DB) and `qscheduler serve` (with a generated ADMIN_TOKEN for the
+                admin API of QScheduler >= 0.2.1). No machine is registered here:
                 machines are added per HEAppE on the Clusters page.
   * Register  - an existing QScheduler: local container, remote container over SSH to its VM, or over SSH
                 directly into the container.
-  * Update    - rebuild from git / switch image and recreate the container (Docker-based instances).
+  * Update    - rebuild from git / switch image and recreate the container (Docker-based instances). A container
+                without ADMIN_TOKEN gets one, so QScheduler >= 0.2.1 is managed over its admin API.
+  * Admin token - QScheduler >= 0.2.1 is managed only over its admin API, through the admin proxy (see
+                qscheduler_admin); the token is stored encrypted on the record. It can be shown (to use it in another
+                HEAppE Management), set by hand, or regenerated (Docker-based instances; recreates the container).
   * Undeploy / unregister - only when no HEAppE instance is assigned.
 
 Assignments (HEAppE instance <-> QScheduler instance)
@@ -33,12 +38,14 @@ from .qscheduler_core import (DockerCli, DockerTarget, ContainerShellTarget, Ssh
                               DEFAULT_POSTGRES_IMAGE, DEFAULT_PORT, DEFAULT_RESTART_COMMAND,
                               LABEL_INSTANCE, LABEL_REPO, LABEL_BRANCH, IMAGE_BUILD_TIMEOUT,
                               NAME_RE, HOST_RE, GIT_REF_RE, IMAGE_RE)
+from . import qscheduler_admin as qadmin
 from .extra_hosts import extra_hosts_as_list, format_extra_host, qscheduler_container_extra_hosts
 
 DOCKER_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL, Q.KIND_SSH_HOST)
 NAME_PREFIX_MAX = 54          # + "-<8 hex>" = 63, the maximum instance name
 ARCHIVED_MESSAGE = "QScheduler instance '{name}' is archived: restore it or delete it with its clusters."
 LOCAL_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL)
+ADMIN_TOKEN_RE = re.compile(r"^[!-~]{8,512}$")
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +159,7 @@ def parse_register_options(data: dict) -> tuple:
         'docker_command': r.s('docker_command', 'docker'),
         'database_url': r.s('database_url'),
         'restart_command': r.s('restart_command', DEFAULT_RESTART_COMMAND if r.data.get('restart_command') is None else ""),
+        'admin_token': (r.data.get('admin_token') or "").strip(),
     }
     if opts['kind'] not in (Q.KIND_LOCAL, Q.KIND_SSH_HOST, Q.KIND_SSH_CONTAINER):
         r.errors.append("Choose how the existing QScheduler is reached.")
@@ -183,6 +191,8 @@ def parse_register_options(data: dict) -> tuple:
             opts['service_host'] = opts['container_name']
     if opts['service_host'] and not HOST_RE.match(opts['service_host']):
         r.errors.append("Service host (as seen from HEAppE) is invalid.")
+    if opts['admin_token'] and not ADMIN_TOKEN_RE.match(opts['admin_token']):
+        r.errors.append("Admin token must be 8-512 printable characters without spaces.")
     return opts, r.errors
 
 
@@ -218,11 +228,12 @@ def _network_is_internal(net, docker=None):
     return (docker or DockerCli()).network_is_internal(net)
 
 
-def recreate_args_from_inspect(info, image, extra_labels=None, docker=None, extra_hosts=None):
+def recreate_args_from_inspect(info, image, extra_labels=None, docker=None, extra_hosts=None, extra_env=None):
     """
     Rebuilds `docker create` arguments for a QScheduler service container from `docker inspect`
     output: env, labels, restart policy, published ports, extra hosts, command; adds the Docker healthcheck.
     extra_hosts: list of "host:ip" replacing the container's extra hosts (None keeps them).
+    extra_env: {name: value} added to / replacing the container's environment.
     Returns (create_args, [(network, [aliases])...], port); the first network is used at create time.
     """
     cfg = info.get("Config", {}) or {}
@@ -236,9 +247,12 @@ def recreate_args_from_inspect(info, image, extra_labels=None, docker=None, extr
     policy = (host.get("RestartPolicy") or {}).get("Name") or "unless-stopped"
     if policy != "no":
         args += ["--restart", policy]
+    extra_env = extra_env or {}
     for e in cfg.get("Env") or []:
-        if not e.startswith("PATH="):
+        if not e.startswith("PATH=") and e.split("=", 1)[0] not in extra_env:
             args += ["-e", e]
+    for k, v in extra_env.items():
+        args += ["-e", f"{k}={v}"]
     for k, v in sorted(labels.items()):
         args += ["--label", f"{k}={v}"]
     for cport, binds in sorted((host.get("PortBindings") or {}).items()):
@@ -342,7 +356,7 @@ def deploy_service(docker, opts, log):
     """
     Build/check the image, create the database (db_mode 'new') or use an existing one (db_mode 'existing':
     database_url + optional db_network) and start the QScheduler service container. On failure the created
-    resources are listed for cleanup. Returns {'database_url', 'version'}.
+    resources are listed for cleanup. Returns {'database_url', 'version', 'admin_token'}.
     """
     name = opts['name']
     pg_name, db_net, volume = f"{name}-pgsql", f"{name}_db_net", f"{name}-pgdata"
@@ -367,6 +381,7 @@ def deploy_service(docker, opts, log):
             db_networks = [opts['db_network']] if opts['db_network'] else []
             log(f"Using existing database{(' on network ' + opts['db_network']) if opts['db_network'] else ''}.")
 
+        admin_token = core.new_admin_token()
         # Default bridge first (egress, e.g. to IQM); HEAppE networks are joined per assignment.
         run_cmd = ["create", "--name", name, "--restart", "unless-stopped",
                    "--label", f"com.docker.compose.project={name}",
@@ -374,7 +389,9 @@ def deploy_service(docker, opts, log):
                    "--label", f"{LABEL_INSTANCE}={name}",
                    "--label", f"{LABEL_REPO}={opts['repo'] if opts['source'] == 'git' else ''}",
                    "--label", f"{LABEL_BRANCH}={opts['ref'] if opts['source'] == 'git' else ''}",
-                   "-e", f"DATABASE_URL={database_url}", "--network", "bridge"]
+                   "-e", f"DATABASE_URL={database_url}",
+                   # admin API (QScheduler >= 0.2.1); older versions ignore it
+                   "-e", f"ADMIN_TOKEN={admin_token}", "--network", "bridge"]
         if opts['host_port']:
             run_cmd += ["-p", f"127.0.0.1:{opts['host_port']}:{opts['port']}"]
         for h, ip in extra_hosts_as_list(opts.get('extra_hosts')):
@@ -388,7 +405,7 @@ def deploy_service(docker, opts, log):
         docker.run(["start", name], log)
         target = DockerTarget(docker, name, opts['port'])
         target.wait_healthy(log)
-        return {'database_url': database_url, 'version': target.version()}
+        return {'database_url': database_url, 'version': target.version(), 'admin_token': admin_token}
     except Exception:
         if created:
             order = {'container': 0, 'volume': 1, 'network': 2}
@@ -425,6 +442,8 @@ def deploy_worker(log, result, opts):
                             source=opts['source'], repo=opts['repo'] if opts['source'] == 'git' else "",
                             ref=opts['ref'] if opts['source'] == 'git' else "", image=opts['image'],
                             database_url=info['database_url'])
+    inst.admin_token = info.get('admin_token', "")
+    inst.save(update_fields=["admin_token_encrypted", "updated_at"])
     result['id'] = inst.id
     log(f"SUCCESS: QScheduler instance '{name}' is running ({result.get('version') or 'version unknown'}).")
     if opts['assign_heappe_id']:
@@ -479,8 +498,13 @@ def register_worker(log, result, opts):
         if target.health() != 200:
             raise RuntimeError(f"QScheduler does not answer GET /health with 200 on port {port}.")
         version = target.version()
-        notifiers = target.list_notifiers(log)
-        log(f"QScheduler {version or '(version unknown)'} healthy; {len(notifiers)} notifier(s) registered.")
+        if core.supports_admin_api(version):
+            # Admin API only, through the admin proxy that is created with the first HEAppE assignment.
+            log(f"QScheduler {version} healthy; machines and notifiers are managed over its admin API "
+                f"(admin proxy, created when a HEAppE instance is assigned).")
+        else:
+            notifiers = target.list_notifiers(log)
+            log(f"QScheduler {version or '(version unknown)'} healthy; {len(notifiers)} notifier(s) registered.")
     finally:
         target.close()
 
@@ -494,6 +518,13 @@ def register_worker(log, result, opts):
         ssh_host_key=ssh.host_key if ssh else "", docker_command=opts['docker_command'],
         database_url=opts['database_url'], restart_command=opts['restart_command'],
         source="external", image=image)
+    token = opts['admin_token'] or (qadmin.container_admin_token(info) if kind != Q.KIND_SSH_CONTAINER else "")
+    if token:
+        inst.admin_token = token
+        inst.save(update_fields=["admin_token_encrypted", "updated_at"])
+        log("Admin token stored (" + ("entered" if opts['admin_token'] else "taken over from the container environment") + ").")
+    elif core.supports_admin_api(version):
+        log("WARNING: no admin token known for this QScheduler: set it with 'Admin token...' before adding machines.")
     result.update({'id': inst.id, 'name': inst.name, 'version': version})
     log(f"SUCCESS: QScheduler instance '{inst.name}' registered (HEAppE reaches it at {inst.service_host}:{inst.port}).")
 
@@ -516,7 +547,12 @@ def update_worker(log, result, inst_id, opts, uid):
         if opts['source'] == 'git':
             labels.update({LABEL_REPO: opts['repo'], LABEL_BRANCH: opts['ref']})
         extra_hosts = qscheduler_container_extra_hosts((info.get("HostConfig") or {}).get("ExtraHosts"), inst.extra_hosts)
-        recreate_container(docker, target, info, opts['image'], labels, log, uid, "Update", extra_hosts)
+        extra_env = admin_token_env(info, log)
+        recreate_container(docker, target, info, opts['image'], labels, log, uid, "Update", extra_hosts, extra_env)
+        token = (extra_env or {}).get("ADMIN_TOKEN") or qadmin.container_admin_token(info)
+        if token and token != inst.admin_token:
+            inst.admin_token = token
+            log("Admin token of the container stored.")
         version = target.version()
     finally:
         target.close()
@@ -527,12 +563,25 @@ def update_worker(log, result, inst_id, opts, uid):
     inst.save()
     result.update({'name': inst.name, 'version': version, 'image': inst.image})
     log(f"SUCCESS: '{inst.name}' updated ({version or 'version unknown'}). Machines, notifiers and projects are kept in PostgreSQL.")
+    if not core.supports_admin_api(version):
+        log(f"Note: QScheduler {'.'.join(map(str, core.ADMIN_API_MIN_VERSION))}+ manages machines and notifiers over "
+            f"its admin API; this version uses the CLI (changes need a restart).")
 
 
-def recreate_container(docker, target, info, image, labels, log, uid, what, extra_hosts=None):
+def admin_token_env(info, log):
+    """{'ADMIN_TOKEN': <new token>} when the container has none (enables the admin API of QScheduler >= 0.2.1)."""
+    env = dict(e.split("=", 1) for e in ((info.get("Config") or {}).get("Env") or []) if "=" in e)
+    if env.get("ADMIN_TOKEN"):
+        return None
+    log("Setting a generated ADMIN_TOKEN: QScheduler >= 0.2.1 then manages machines and notifiers over its admin API "
+        "(no restarts).")
+    return {"ADMIN_TOKEN": core.new_admin_token()}
+
+
+def recreate_container(docker, target, info, image, labels, log, uid, what, extra_hosts=None, extra_env=None):
     """Recreate the QScheduler container from its inspect output; the previous one is restored on failure."""
     name = info.get("Name", "").lstrip("/")
-    create_args, networks, _port = recreate_args_from_inspect(info, image, labels, docker, extra_hosts)
+    create_args, networks, _port = recreate_args_from_inspect(info, image, labels, docker, extra_hosts, extra_env)
     backup = f"{name}-old-{uid}"
     docker.run(["stop", name], log)
     docker.run(["rename", name, backup], log)
@@ -576,6 +625,39 @@ def extra_hosts_worker(log, result, inst_id, uid):
     log(f"SUCCESS: extra hosts applied to '{inst.name}'.")
 
 
+def regenerate_admin_token_worker(log, result, inst_id, uid):
+    """New ADMIN_TOKEN: recreate the container (same image and settings) with it and store it."""
+    inst = Q.objects.get(pk=inst_id)
+    if inst.kind not in DOCKER_KINDS:
+        raise RuntimeError("The admin token can be regenerated only for Docker-based instances; set ADMIN_TOKEN in the "
+                           "service yourself and store it with 'Set token'.")
+    target = core.target_for(inst)
+    docker = target.docker
+    name = inst.container_name
+    log(f"=== QSCHEDULER: REGENERATE ADMIN TOKEN OF '{inst.name}'{docker.where} ===")
+    log("Other HEAppE Management instances managing this QScheduler lose admin access until they get the new token.")
+    try:
+        info = docker.inspect(name)
+        if not info:
+            raise RuntimeError(f"Container '{name}' not found{docker.where}.")
+        token = core.new_admin_token()
+        image = (info.get("Config") or {}).get("Image") or inst.image
+        recreate_container(docker, target, info, image, None, log, uid, "Regenerating the admin token",
+                           None, {"ADMIN_TOKEN": token})
+        inst.admin_token = token
+        inst.save(update_fields=["admin_token_encrypted", "updated_at"])
+        log("New admin token stored.")
+        if qadmin.desired_networks(inst) and target.uses_admin_api(log):
+            status, text = target.admin_request("GET", "/notifiers")
+            if status != 200:
+                raise RuntimeError(f"Admin API check failed: {core.api_error_text(status, text)}")
+            log("Admin API accepts the new token.")
+    finally:
+        target.close()
+    result['name'] = inst.name
+    log(f"SUCCESS: admin token of '{inst.name}' regenerated.")
+
+
 def restart_worker(log, result, inst_id):
     inst = Q.objects.get(pk=inst_id)
     target = core.target_for(inst)
@@ -602,6 +684,7 @@ def undeploy_worker(log, result, inst_id, remove_data):
     result['name'] = inst.name
     if inst.kind != Q.KIND_MANAGED:
         log(f"=== QSCHEDULER: UNREGISTER '{inst.name}' === (the QScheduler service itself is left untouched)")
+        qadmin.remove_proxy(inst, log)
         inst.delete()
         log(f"SUCCESS: '{result['name']}' removed from HEAppE Management.")
         return
@@ -623,6 +706,7 @@ def undeploy_worker(log, result, inst_id, remove_data):
         else:
             log(f"Kept database volume '{vol}' (remove with: docker volume rm {vol}).")
     log(f"Image '{image}' kept (may be used by other instances).")
+    qadmin.remove_proxy(inst, log)
     inst.delete()
     log(f"SUCCESS: QScheduler instance '{name}' undeployed.")
 
@@ -667,6 +751,8 @@ def assign_worker(log, result, inst_id, opts):
         heappe_container, heappe_net = core.resolve_heappe_service_network(cred.instance_name, log)
         network = asg.network if asg else ""
         network_changed = False
+        if heappe_net and inst.kind not in LOCAL_KINDS:
+            network = heappe_net          # the admin proxy joins it (remote QScheduler: tunnelled into it)
         if inst.kind in LOCAL_KINDS:
             if heappe_net:
                 if heappe_net not in target.docker.networks_of(inst.container_name):
@@ -677,6 +763,8 @@ def assign_worker(log, result, inst_id, opts):
             else:
                 log(f"WARNING: HEAppE API container of '{cred.instance_name}' not found on this Docker host; "
                     f"make sure HEAppE can reach {inst.service_host}:{inst.port}.")
+
+        target.admin_client.extra_networks = [network] if network else []
 
         # 2. Callback URL (shared by all notifiers of this HEAppE)
         callback_url = opts.get('callback_url') or (asg.callback_url if asg and asg.callback_url else "")
@@ -709,7 +797,7 @@ def assign_worker(log, result, inst_id, opts):
             current = {n['name']: n for n in target.list_notifiers(log)}
             remove = {n for n in remove if n in current}
             if core.replace_notifiers(target, add, remove, current, log):
-                core.apply_cli_change(inst, target, log)
+                core.apply_changes(inst, target, log)
         elif clusters:
             log("Notification settings unchanged; the clusters' notifiers are kept.")
         else:
@@ -771,7 +859,7 @@ def unassign_worker(log, result, asg_id, force):
             current = {n['name']: n for n in target.list_notifiers(log)}
             leftover = {n for n in current if n.startswith(asg.heappe_identifier + ".")}
             if leftover and core.replace_notifiers(target, {}, leftover, current, log):
-                core.apply_cli_change(inst, target, log)
+                core.apply_changes(inst, target, log)
         if inst.kind in LOCAL_KINDS and asg.network:
             shared = QSchedulerAssignment.objects.filter(qscheduler=inst, network=asg.network).exclude(pk=asg.pk).exists()
             if not shared and asg.network in target.docker.networks_of(inst.container_name):
@@ -779,6 +867,7 @@ def unassign_worker(log, result, asg_id, force):
     finally:
         target.close()
     asg.delete()
+    qadmin.sync_proxy(inst, log)
     result.update({'name': inst.name, 'heappe_instance': cred.instance_name})
     log(f"SUCCESS: HEAppE '{cred.instance_name}' unassigned from '{inst.name}'.")
 
@@ -822,7 +911,7 @@ def remove_notifier_worker(log, result, inst_id, name):
         if name not in current:
             raise RuntimeError(f"Notifier '{name}' is not registered in '{inst.name}' (already removed?).")
         core.replace_notifiers(target, {}, {name}, current, log)
-        result['restarted'] = core.apply_cli_change(inst, target, log)
+        result['restarted'] = core.apply_changes(inst, target, log)
     finally:
         target.close()
     log(f"SUCCESS: notifier '{name}' removed from '{inst.name}'.")
@@ -868,6 +957,7 @@ def instance_summary(inst):
         'archived': inst.is_archived,
         'archived_at': inst.archived_at.strftime("%Y-%m-%d %H:%M UTC") if inst.archived_at else "",
         'archived_reason': inst.archived_reason,
+        'admin_token_stored': bool(inst.admin_token_encrypted),
         'assignments': [{
             'id': a.id, 'heappe_instance_id': a.heappe_instance_id, 'heappe_instance': a.heappe_instance.instance_name,
             'notifications_enabled': a.notifications_enabled, 'heappe_identifier': a.heappe_identifier,
@@ -945,13 +1035,26 @@ def qscheduler_live_api(request: HttpRequest, inst_id: int) -> HttpResponse:
         out['health'] = target.health()
         if out['health'] == 200:
             out['version'] = target.version()
+        out['admin'] = {'api': core.supports_admin_api(out['version']) if out['version'] else None,
+                        'token_stored': bool(inst.admin_token_encrypted), 'proxy': None}
+        if out['admin']['api']:
+            try:
+                out['admin']['proxy'] = qadmin.proxy_status(inst)
+            except Exception:
+                pass
         try:
             notifiers = target.list_notifiers()
             prefixes = {a.heappe_identifier + "." for a in inst.assignments.exclude(heappe_identifier="")}
             out['notifiers'] = [dict(n, managed=any(n['name'].startswith(p) for p in prefixes)) for n in notifiers]   # see managed_notifier()
+            out['machines'] = target.list_machines()
+        except qadmin.AdminTokenError as e:
+            out['error'] = str(e)
+            out['admin_token_error'] = e.info()
+        except qadmin.AdminApiUnavailable as e:
+            if inst.assignments.exists():          # without an assignment there is no proxy yet: not an error
+                out['error'] = str(e).splitlines()[0][:400]
         except Exception as e:
-            out['error'] = str(e).splitlines()[0]
-        out['machines'] = target.list_machines()
+            out['error'] = str(e).splitlines()[0][:400]
     except Exception as e:
         out['error'] = str(e).splitlines()[0][:400]
     finally:
@@ -965,6 +1068,69 @@ def qscheduler_live_api(request: HttpRequest, inst_id: int) -> HttpResponse:
     # ("docker restart" also starts a stopped container; SSH into container: restart command or manual restart).
     out['restartable'] = out['health'] != 200 and out['presence'] == core.PRESENT
     return JsonResponse(out)
+
+
+@login_required
+@_post_only
+def qscheduler_admin_token_api(request: HttpRequest, inst_id: int) -> HttpResponse:
+    """
+    Admin token of an instance. action 'show': return it (to use it in another HEAppE Management); 'set': store a
+    token (checked against the service when the admin proxy is available); 'regenerate': new token, recreates the
+    container (background operation).
+    """
+    inst = _instance_or_404(inst_id)
+    if not inst:
+        return _error("QScheduler instance not found.", 404)
+    data = _json_body(request)
+    action = data.get('action')
+    if action == 'regenerate':
+        if inst.is_archived:
+            return _error(ARCHIVED_MESSAGE.format(name=inst.name))
+        if inst.kind not in DOCKER_KINDS:
+            return _error("The admin token can be regenerated only for Docker-based instances.")
+        return _started(*core.start_operation("regenerate admin token", regenerate_admin_token_worker, inst.id,
+                                              str(uuid.uuid4())[:8]))
+
+    if action == 'show':
+        target = None
+        try:
+            target = core.target_for(inst) if inst.kind in DOCKER_KINDS and not inst.admin_token else None
+            token = qadmin.admin_token(inst, getattr(target, 'docker', None))
+        except qadmin.AdminTokenError as e:
+            return JsonResponse({'status': 'error', 'message': str(e), 'admin_token_error': e.info()}, status=404)
+        except Exception as e:
+            return _error(f"Could not read the admin token: {str(e).splitlines()[0]}", 500)
+        finally:
+            if target:
+                target.close()
+        resp = JsonResponse({'status': 'success', 'token': token})
+        resp['Cache-Control'] = 'no-store'
+        return resp
+
+    if action == 'set':
+        token = str(data.get('token') or "").strip()
+        if not ADMIN_TOKEN_RE.match(token):
+            return _error("Admin token must be 8-512 printable characters without spaces.")
+        previous = inst.admin_token_encrypted
+        inst.admin_token = token
+        note = ""
+        if inst.is_archived or not qadmin.desired_networks(inst):
+            note = " Not checked: the admin proxy is created when a HEAppE instance is assigned."
+        else:
+            try:
+                status, text = qadmin.AdminClient(inst).request("GET", "/notifiers")
+                if status != 200:
+                    note = f" The check returned {core.api_error_text(status, text)}."
+            except qadmin.AdminTokenError as e:
+                inst.admin_token_encrypted = previous
+                return _error(f"Not stored: {e.MESSAGES[e.reason].format(name=inst.name)}" if e.reason != 'rejected'
+                              else "Not stored: the QScheduler service rejected this token (HTTP 401).")
+            except Exception as e:
+                note = f" Not checked: {str(e).splitlines()[0]}"
+        inst.save(update_fields=["admin_token_encrypted", "updated_at"])
+        return JsonResponse({'status': 'success', 'message': f"Admin token of '{inst.name}' stored.{note}"})
+
+    return _error(f"Invalid action: {action}")
 
 
 @login_required

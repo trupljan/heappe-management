@@ -57,6 +57,7 @@ urlpatterns = [
     path('qscheduler/<int:inst_id>/live/', views.qscheduler_live_api, name='qscheduler_live'),
     path('qscheduler/<int:inst_id>/update/', views.qscheduler_update_api, name='qscheduler_update'),
     path('qscheduler/<int:inst_id>/restart/', views.qscheduler_restart_api, name='qscheduler_restart'),
+    path('qscheduler/<int:inst_id>/admin-token/', views.qscheduler_admin_token_api, name='qscheduler_admin_token'),
     path('qscheduler/<int:inst_id>/undeploy/', views.qscheduler_undeploy_api, name='qscheduler_undeploy'),
     path('qscheduler/<int:inst_id>/assign/', views.qscheduler_assign_api, name='qscheduler_assign'),
     path('qscheduler/assignment/<int:asg_id>/unassign/', views.qscheduler_unassign_api, name='qscheduler_unassign'),

@@ -230,7 +230,7 @@
                                                     <div class="alert alert-light border small py-2 px-3 mb-0" style="font-size: 0.75rem;">
                                                         <i class="bi bi-link-45deg me-1"></i>The notifier URL (HEAppE TaskCallback endpoint QScheduler sends events to) is stored in QScheduler, not in this cluster.
                                                         To change it, open the <a href="{% url 'qscheduler_page' %}" class="fw-semibold">QScheduler</a> page, find this HEAppE instance under the QScheduler instance's assignments,
-                                                        click <i class="bi bi-pencil"></i> <strong>Edit</strong> and set <strong>Callback URL</strong>. Saving recreates the notifiers of all clusters of this HEAppE on that QScheduler with new tokens and restarts QScheduler.
+                                                        click <i class="bi bi-pencil"></i> <strong>Edit</strong> and set <strong>Callback URL</strong>. Saving recreates the notifiers of all clusters of this HEAppE on that QScheduler with new tokens (QScheduler &lt; 0.2.1 is restarted).
                                                     </div>
                                                 </div>
                                                 {% if is_v6_5_0_plus %}
@@ -1547,7 +1547,7 @@
             </div>
             <div class="modal-body p-4">
                 <p class="small text-secondary mb-3 qs-rec-recover-only">The cluster's queue uses a machine that does not exist in <strong id="qs-rec-instance"></strong>. Register it again, or move the cluster to an existing machine.
-                    Either way the cluster gets a notifier <code>&lt;identifier&gt;.&lt;machine&gt;</code> with a new token (if notifications are on) and QScheduler is restarted once.</p>
+                    Either way the cluster gets a notifier <code>&lt;identifier&gt;.&lt;machine&gt;</code> with a new token (if notifications are on); QScheduler &lt; 0.2.1 is restarted once.</p>
                 <div class="qs-rec-move-only d-none">
                     <p class="small text-secondary mb-2">The cluster is <strong>kept</strong> (queues, projects, allocations and job history) and pointed to another QScheduler instance assigned to this HEAppE:
                         its endpoint and file transfer methods are updated, it gets a machine there and a notifier <code>&lt;identifier&gt;.&lt;machine&gt;</code> with a new token (if notifications are on).
@@ -1676,7 +1676,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const rc = document.getElementById('qs-cs-recreate');
         if (rc) rc.addEventListener('click', () => {
             const text = n.enabled
-                ? 'Create notifier "' + n.expected + '" with a new token for this cluster (the old notifier of this cluster is removed if no other cluster uses it), store the token in Vault and restart QScheduler once?'
+                ? 'Create notifier "' + n.expected + '" with a new token for this cluster (the old notifier of this cluster is removed if no other cluster uses it), store the token in Vault (QScheduler < 0.2.1 is restarted once)?'
                 : 'Notifications are off for this HEAppE: disable callbacks on this cluster, remove its notifier from QScheduler and restart it if needed?';
             if (!confirm(text)) return;
             start(rc, box.dataset.recreateUrl, {}, n.enabled ? 'Recreating notifier' : 'Disabling callbacks');

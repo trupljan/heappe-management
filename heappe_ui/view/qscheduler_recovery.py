@@ -243,6 +243,8 @@ def cascade_delete_worker(log, result, inst_id, opts):
                 log(f"Kept database volume '{left['db_volume']}' (remove with: docker volume rm {left['db_volume']}).")
 
     # 4. Forget the instance (assignments and machine definitions go with it)
+    from . import qscheduler_admin
+    qscheduler_admin.remove_proxy(inst, log)
     inst.delete()
     if skipped:
         log(f"NOTE: clusters of {', '.join(skipped)} were not checked and still point to the deleted instance.")
@@ -405,6 +407,7 @@ def restore_worker(log, result, inst_id, opts):
     inst.ref = opts['ref'] if opts['source'] == 'git' else ""
     inst.image = opts['image']
     inst.database_url = info['database_url']
+    inst.admin_token = info.get('admin_token', "")   # new container, new ADMIN_TOKEN
     inst.ssh_host = inst.ssh_user = inst.ssh_private_key = inst.ssh_key_passphrase = inst.ssh_host_key = ""
     inst.ssh_port, inst.docker_command, inst.restart_command = 22, "docker", ""
     inst.restart_pending = False
@@ -426,7 +429,7 @@ def restore_worker(log, result, inst_id, opts):
             broken.add(machine)
             result['problems'].append(f"machine '{machine}' is not in the reused database and has no definition")
             continue
-        res = target.cli(core.machine_args(dict(mopts, action='add')), log, check=False)
+        res = target.add_machine(mopts, log)
         if res.returncode != 0:
             broken.add(machine)
             result['problems'].append(f"registering machine '{machine}' failed: {res.output.strip().splitlines()[-1] if res.output.strip() else 'no output'}")
@@ -469,7 +472,7 @@ def restore_worker(log, result, inst_id, opts):
         current = {n['name']: n for n in target.list_notifiers(log)}
         changed |= core.replace_notifiers(target, add, set(), current, log)
     if changed:
-        core.apply_cli_change(inst, target, log)      # one restart for machines + notifiers
+        core.apply_changes(inst, target, log)      # one restart for machines + notifiers
 
     # 6. HEAppE clusters: new endpoint, new notifier and token (Vault)
     location = (name, port) if (name, port) != (old_host, old_port) else None

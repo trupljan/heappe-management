@@ -1,4 +1,31 @@
+import base64
+import hashlib
+
+from django.conf import settings
 from django.db import models
+
+
+def _fernet():
+    from cryptography.fernet import Fernet
+    key = hashlib.sha256(b"heappe-management:secret-field:" + settings.SECRET_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(key))
+
+
+def encrypt_secret(value: str) -> str:
+    """Encrypts a secret stored in the database (key derived from Django SECRET_KEY)."""
+    return _fernet().encrypt(value.encode()).decode()
+
+
+def decrypt_secret(value: str) -> str:
+    """Decrypts encrypt_secret() output; "" when empty or not decryptable (e.g. SECRET_KEY changed)."""
+    if not value:
+        return ""
+    from cryptography.fernet import InvalidToken
+    try:
+        return _fernet().decrypt(value.encode()).decode()
+    except (InvalidToken, ValueError):
+        return ""
+
 
 class InstanceCredentials(models.Model):
     instance_name = models.CharField(max_length=255, unique=True)
@@ -77,6 +104,9 @@ class QSchedulerInstance(models.Model):
     image = models.CharField(max_length=255, blank=True, default="")
 
     restart_pending = models.BooleanField(default=False)
+    # ADMIN_TOKEN of the service (bearer token of the admin API, QScheduler >= 0.2.1), encrypted with a key derived
+    # from SECRET_KEY. Use the admin_token property.
+    admin_token_encrypted = models.TextField(blank=True, default="")
     # Custom extra hosts ("host:ip") applied with --add-host when the container is (re)created; None = never
     # managed from the UI (a recreate keeps whatever the container has).
     extra_hosts = models.JSONField(null=True, blank=True, default=None)
@@ -100,6 +130,14 @@ class QSchedulerInstance(models.Model):
     @property
     def is_archived(self):
         return self.archived_at is not None
+
+    @property
+    def admin_token(self):
+        return decrypt_secret(self.admin_token_encrypted)
+
+    @admin_token.setter
+    def admin_token(self, value):
+        self.admin_token_encrypted = encrypt_secret(value) if value else ""
 
 
 class QSchedulerAssignment(models.Model):

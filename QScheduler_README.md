@@ -476,7 +476,8 @@ to a shell inside the QScheduler container. Wherever such an instance is involve
 
 | Task | How it is done |
 |---|---|
-| QScheduler commands (machines, notifiers) | `qscheduler ...` in the container, with `DATABASE_URL` from the registration form or from the environment of PID 1 (`/proc/1/environ`). |
+| Machines and notifiers, QScheduler 0.2.1+ | Admin API over HTTP through the admin proxy (see [Admin API and admin token](#admin-api-and-admin-token)), not over SSH. |
+| Machines and notifiers, older versions | `qscheduler ...` in the container, with `DATABASE_URL` from the registration form or from the environment of PID 1 (`/proc/1/environ`). |
 | Health and version | `curl` (or `bash` `/dev/tcp`) to `127.0.0.1:<port>` inside the container. |
 | Restart | The configured restart command, by default `kill -TERM 1`: SIGTERM to the service, which shuts down gracefully. The container's restart policy must then start it again. HEAppE Management reconnects over SSH and waits until `/health` returns `200`. |
 | Machine list | `psql` inside the container, if installed. |
@@ -519,7 +520,12 @@ Prefer **SSH to the VM running the container** whenever the VM is accessible.
 
 ## When QScheduler is restarted
 
-QScheduler loads machines and notifiers only at startup, so these actions restart it:
+**QScheduler 0.2.1 and newer** is managed only over its admin API (see
+[Admin API and admin token](#admin-api-and-admin-token)): machines and notifiers are added and removed in the running
+service, and **none of the actions below restarts QScheduler** (only *Update*, *Restart* and *Regenerate token* do).
+There is no CLI fallback for these versions: a missing or rejected admin token stops the action.
+
+Older versions (CLI) load machines and notifiers only at startup, so these actions restart them:
 
 | Action | Restart |
 |---|---|
@@ -533,6 +539,40 @@ QScheduler loads machines and notifiers only at startup, so these actions restar
 
 A restart is graceful: pending state is written to the database and running backend jobs are re-attached. Requests
 arriving during the restart fail, and HEAppE retries status queries later.
+
+---
+
+## Admin API and admin token
+
+QScheduler 0.2.1+ protects its admin endpoints (`/machines`, `/machine/{name}`, `/notifiers`, `/notifiers/{name}`)
+with the `ADMIN_TOKEN` of the service (Bearer token; unset → `403`, wrong → `401`). HEAppE Management calls them only
+over HTTP, through an **admin proxy**; it runs no `qscheduler` CLI and no command inside the container for them.
+
+**Admin proxy.** One `nginx` container per QScheduler instance, `<name>-admin-proxy`, on the Docker host of HEAppE
+Management:
+
+- it joins the HEAppE network of every HEAppE instance assigned to the QScheduler and forwards to
+  `<Host as seen from HEAppE>:<port>`; a remote QScheduler is reached through the tunnel that connects its Docker
+  network to the local HEAppE network,
+- it forwards only the admin endpoints; every other path returns `404`,
+- it is published on `127.0.0.1` only (random port, shown on the instance card), i.e. for HEAppE Management,
+- it is created with the first assignment, follows later assignments, is recreated when the endpoint changes (e.g.
+  after *Restore*) and is removed with the last assignment, *Undeploy* / *Unregister* or *Delete with entities*.
+
+Without an assignment there is no proxy, so machines and notifiers of an unassigned QScheduler 0.2.1+ are not listed.
+The image is `nginx:1.27-alpine` (setting or environment variable `QSCHEDULER_ADMIN_PROXY_IMAGE`).
+
+**Admin token.** Stored encrypted on the instance record (key derived from Django `SECRET_KEY`).
+
+- *Deploy* and *Restore* generate it; *Update* adds one to a container that has none.
+- *Register existing*: enter it in **Admin token**, or leave it empty to take it from the container environment
+  (not possible over SSH into the container). A Docker-based instance without a stored token also takes it from the
+  container environment on first use.
+- **Actions → Admin token...**: *Show* (to use it in another HEAppE Management that manages the same QScheduler),
+  *Set token* (checked against the service when the proxy exists), *Regenerate* (Docker-based instances: recreates the
+  container with a new token; **other HEAppE Management instances lose admin access until they get the new token**).
+- When an action fails because the token is missing or rejected, the progress dialog and the instance card offer
+  **Fix admin token...**.
 
 ---
 

@@ -4,12 +4,15 @@ page (adding / removing quantum machines).
 
 Model:
   * QSchedulerInstance  - one QScheduler service (REST API + PostgreSQL). Shared by several HEAppEs.
-  * QSchedulerAssignment - a HEAppE instance allowed to use a QScheduler: network access plus an
-    optional QScheduler notifier (`qscheduler notifier add <name> --url --token`).
+  * QSchedulerAssignment - a HEAppE instance allowed to use a QScheduler: network access plus optional
+    QScheduler notifiers (one per cluster).
   * HEAppE cluster == one QScheduler machine, per HEAppE. A machine can back clusters of several HEAppEs.
 
 QScheduler (>= notifier release) facts this relies on:
-  * machines and notifiers are written to the DB by the CLI and loaded at service start -> restart needed,
+  * >= 0.2.1: machines and notifiers are managed only over the admin API (/machines, /machine/{name}, /notifiers,
+    Bearer ADMIN_TOKEN of the service), reached over HTTP through the admin proxy (qscheduler_admin), and apply at
+    once. No CLI fallback: a missing or rejected token stops the operation (AdminTokenError),
+  * older: they are written to the DB by the CLI and loaded at service start -> restart needed,
   * tasks/sessions choose a notifier with `notify=<name>`; HEAppE >= 6.6.0 sends cluster
     CustomConfiguration["QSchedulerNotifier"] (fallback: its InstanceIdentifierPath) when EnableCallback=true,
     and checks the callback token against QSchedulerNotifyToken.
@@ -30,6 +33,7 @@ import subprocess
 import threading
 import time
 from datetime import datetime
+from urllib.parse import quote
 
 from django.conf import settings
 
@@ -70,6 +74,9 @@ HOST_RE = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9_.:-]{0,253})$")
 GIT_REF_RE = re.compile(r"^[A-Za-z0-9._/-]{1,100}$")
 IMAGE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-/:@]{0,254}$")
 NOTIFIER_MAX_LEN = 512
+# From this version machines and notifiers are managed over the admin API (Bearer ADMIN_TOKEN) and changes apply
+# at once; older versions only have the CLI, whose changes are loaded at service start (restart needed).
+ADMIN_API_MIN_VERSION = (0, 2, 1)
 
 SECRET_FLAGS = ("--token",)
 
@@ -93,6 +100,8 @@ def redact_args(args: list) -> list:
             a = re.sub(r"://([^:/@]+):[^@]*@", r"://\1:********@", a)
         if a.startswith("POSTGRES_PASSWORD="):
             a = "POSTGRES_PASSWORD=********"
+        if a.startswith("ADMIN_TOKEN="):
+            a = "ADMIN_TOKEN=********"
         out.append(a)
     return out
 
@@ -180,6 +189,66 @@ def notifier_add_args(name, url, token=None) -> list:
     if token:
         args += ["--token", token]
     return args
+
+
+# ---------------------------------------------------------------------------
+# Admin API (QScheduler >= 0.2.1): machines and notifiers over REST, applied without a restart
+# ---------------------------------------------------------------------------
+
+def parse_version(text):
+    """(major, minor, patch) from a version string such as 'qscheduler v0.2.1', or None."""
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", text or "")
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def supports_admin_api(version_text):
+    v = parse_version(version_text)
+    return v is not None and v >= ADMIN_API_MIN_VERSION
+
+
+_DURATION_MS = {"ms": 1, "s": 1000, "m": 60_000, "h": 3_600_000, "d": 86_400_000}
+
+
+def duration_ms(text) -> int:
+    """'500ms' / '2s' / '5m' / '2h' / '1d' (the CLI duration format) -> milliseconds."""
+    m = re.match(r"^(\d+)(ms|s|m|h|d)$", str(text).strip())
+    if not m:
+        raise ValueError(f"Invalid duration '{text}' (use e.g. 500ms, 2s, 5m, 2h, 1d).")
+    return int(m.group(1)) * _DURATION_MS[m.group(2)]
+
+
+def machine_request(opts: dict) -> dict:
+    """Body of POST /machines: the same settings as machine_args(), durations in milliseconds."""
+    body = {"name": opts['machine_name'],
+            "queue_size": int(opts['queue_size']),
+            "limit_check_interval_ms": duration_ms(opts['limit_check_interval']),
+            "max_session_time_ms": duration_ms(opts['max_session_time']),
+            "default_task_time_limit_ms": duration_ms(opts['default_task_time_limit']),
+            "max_clock_skew_ms": duration_ms(opts['max_clock_skew'])}
+    if opts['backend'] == 'iqm':
+        body["backend"] = {"type": "iqm", "url": opts['iqm_url'], "token": opts['iqm_token'],
+                           "machine_name": opts['iqm_device'],
+                           "poll_interval_ms": duration_ms(opts['iqm_poll_interval'])}
+    else:
+        body["backend"] = {"type": "test"}
+    return body
+
+
+def http_body(response):
+    parts = re.split(r"\r?\n\r?\n", response or "", maxsplit=1)
+    return parts[1] if len(parts) > 1 else ""
+
+
+def api_error_text(status, body):
+    """Short error from an admin API response (JSON {"error"/"message": ...} or plain text)."""
+    text = (body or "").strip()
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            text = str(data.get("error") or data.get("message") or text)
+    except ValueError:
+        pass
+    return f"HTTP {status}{': ' + text[:1000] if text else ''}"
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +403,17 @@ class DockerCli:
 # ---------------------------------------------------------------------------
 
 class QsTarget:
+    """
+    Machines and notifiers are managed over the admin API when the service supports it (>= 0.2.1), only through
+    the admin proxy (admin_client, set by target_for); older versions use the qscheduler CLI. `reload_needed` is
+    set after a CLI change: the service loads those only at start (see apply_changes).
+    """
     can_update = False
+    reload_needed = False
+    admin_client = None      # qscheduler_admin.AdminClient
+    _admin = None            # None = not checked yet
+    _admin_note = ""
+    _admin_note_logged = False
 
     def cli(self, args, log, check=True, timeout=DOCKER_TIMEOUT) -> CommandResult:
         raise NotImplementedError
@@ -348,18 +427,141 @@ class QsTarget:
     def http_get(self, path, timeout=30) -> CommandResult:
         raise NotImplementedError
 
-    def list_machines(self, log=None):
+    def _list_machines_db(self, log=None):
         return None
 
     def close(self):
         pass
 
+    # --- admin API -----------------------------------------------------------
+
+    def admin_request(self, method, path, body=None, timeout=60):
+        """(status, body text) of an admin API call through the admin proxy. Errors never include the token."""
+        from .qscheduler_admin import AdminApiUnavailable, AdminTokenError
+        if self.admin_client is None:
+            raise AdminApiUnavailable("The admin API is reached only through the admin proxy of a registered instance.")
+        try:
+            return self.admin_client.request(method, path, body, timeout)
+        except (AdminApiUnavailable, AdminTokenError):
+            raise
+        except Exception as e:
+            raise RuntimeError(f"QScheduler admin API {method} {path} could not be called "
+                               f"({'timed out' if 'timed out' in str(e) else type(e).__name__}).")
+
+    def _admin_json(self, method, path, ok=(200,)):
+        status, text = self.admin_request(method, path)
+        if status not in ok:
+            raise RuntimeError(f"QScheduler admin API {method} {path} failed: {api_error_text(status, text)}")
+        return json.loads(text) if text.strip() else None
+
+    def uses_admin_api(self, log=None) -> bool:
+        """True when this QScheduler is >= 0.2.1: then only the admin API is used (no CLI fallback)."""
+        if self._admin is None:
+            version = self.version()
+            self._admin = supports_admin_api(version)
+            if self._admin:
+                self._admin_note = f"{version}: machines and notifiers are managed over the admin API (admin proxy, no restart)."
+            else:
+                self._admin_note = (f"QScheduler {version or '(version unknown)'} has no admin API (needs "
+                                    f"{'.'.join(map(str, ADMIN_API_MIN_VERSION))}): machines and notifiers are "
+                                    f"managed with the CLI and loaded after a service restart.")
+        if log and not self._admin_note_logged:
+            log(self._admin_note)
+            self._admin_note_logged = True
+        if self._admin and self.admin_client is not None and log:
+            self.admin_client.log = log
+        return self._admin
+
+    def _api_result(self, status, text, ok, messages):
+        """CommandResult of an admin API write (callers handle it like a CLI result)."""
+        if status in ok:
+            return CommandResult(0, text, "")
+        prefix = messages.get(status, "")
+        return CommandResult(1, "", f"{prefix + ' - ' if prefix else ''}{api_error_text(status, text)}")
+
+    def _cli_write(self, args, log):
+        res = self.cli(args, log, check=False)
+        if res.returncode == 0:
+            self.reload_needed = True
+        return res
+
+    # --- machines and notifiers (admin API or CLI) ---------------------------
+
+    def list_machines(self, log=None):
+        """[{'name', 'backend'}] or None when the machines cannot be listed (admin token problems are raised)."""
+        from .qscheduler_admin import AdminTokenError
+        try:
+            if self.uses_admin_api(log):
+                return [{'name': m['name'], 'backend': (m.get('backend') or {}).get('type', '')}
+                        for m in self._admin_json("GET", "/machines") or []]
+        except AdminTokenError:
+            raise
+        except Exception as e:
+            if log:
+                log(f"Note: could not list machines: {str(e).splitlines()[0]}")
+            return None
+        return self._list_machines_db(log)
+
     def list_notifiers(self, log=None):
+        if self.uses_admin_api(log):
+            return [{'name': n['name'], 'has_token': bool(n.get('has_token')), 'url': n.get('url', '')}
+                    for n in self._admin_json("GET", "/notifiers") or []]
         res = self.cli(["notifier", "list"], log or (lambda *_: None), check=False)
         if res.returncode != 0:
             raise RuntimeError(f"'qscheduler notifier list' failed: {res.output[-500:] or 'no output'}. "
                                f"Is this QScheduler version older than the notifier release?")
         return parse_notifier_list(res.stdout)
+
+    def add_machine(self, opts, log) -> CommandResult:
+        """Registers machine opts['machine_name']; returncode != 0 on failure ('already exists' when it does)."""
+        if not self.uses_admin_api(log):
+            return self._cli_write(machine_args(dict(opts, action='add')), log)
+        name = opts['machine_name']
+        log(f"Admin API: POST /machines '{name}' ({opts['backend']} backend)")
+        status, text = self.admin_request("POST", "/machines", machine_request(opts))
+        return self._api_result(status, text, (200, 201), {409: f"Machine '{name}' already exists",
+                                                           422: "Invalid machine configuration"})
+
+    def remove_machine(self, name, force, log) -> CommandResult:
+        """Removes a machine; returncode != 0 on failure ('not found' when it does not exist)."""
+        if not self.uses_admin_api(log):
+            return self._cli_write(machine_remove_args(name, force), log)
+        path = f"/machine/{quote(name, safe='')}{'?force=true' if force else ''}"
+        log(f"Admin API: DELETE {path}")
+        status, text = self.admin_request("DELETE", path)
+        res = self._api_result(status, text, (200, 204), {404: f"Machine '{name}' not found",
+                                                          409: f"Machine '{name}' has tasks or sessions"})
+        if res.returncode == 0:
+            try:
+                info = json.loads(text) if text.strip() else {}
+                res.stdout = (f"Machine '{name}' removed ({info.get('tasks', 0)} task(s), "
+                              f"{info.get('sessions', 0)} session(s) deleted).")
+            except ValueError:
+                res.stdout = f"Machine '{name}' removed."
+        return res
+
+    def add_notifier(self, name, url, token, log):
+        if not self.uses_admin_api(log):
+            self.cli(notifier_add_args(name, url, token), log)      # raises on failure (token redacted)
+            self.reload_needed = True
+            return
+        log(f"Admin API: POST /notifiers '{name}'")
+        status, text = self.admin_request("POST", "/notifiers", {"name": name, "url": url, "token": token or None})
+        if status not in (200, 201):
+            raise RuntimeError(f"Registering notifier '{name}' failed: {api_error_text(status, text)}")
+
+    def remove_notifier(self, name, log, check=True) -> bool:
+        """True when removed."""
+        if not self.uses_admin_api(log):
+            res = self._cli_write(["notifier", "remove", name], log)
+            if check and res.returncode != 0:
+                raise RuntimeError(f"qscheduler notifier remove {name} failed: {res.output[-3000:] or 'no output'}")
+            return res.returncode == 0
+        log(f"Admin API: DELETE /notifiers/{name}")
+        status, text = self.admin_request("DELETE", f"/notifiers/{quote(name, safe='')}")
+        if status not in (200, 204) and check:
+            raise RuntimeError(f"Removing notifier '{name}' failed: {api_error_text(status, text)}")
+        return status in (200, 204)
 
     def version(self):
         res = self.http_get("/version")
@@ -444,8 +646,8 @@ class DockerTarget(QsTarget):
         env = dict(e.split("=", 1) for e in (info.get("Config", {}).get("Env") or []) if "=" in e)
         return env.get("DATABASE_URL")
 
-    def list_machines(self, log=None):
-        """There is no `machine list` command: read the machines table with a one-off psql container."""
+    def _list_machines_db(self, log=None):
+        """Before the admin API there is no `machine list` command: read the machines table with a one-off psql container."""
         try:
             db_url = self.database_url()
             if not db_url or not self.docker.exists("image", DEFAULT_POSTGRES_IMAGE):
@@ -529,7 +731,7 @@ class ContainerShellTarget(QsTarget):
             time.sleep(3)
         raise RuntimeError(f"QScheduler did not become healthy within {timeout}s (last: {last or 'no response'}).")
 
-    def list_machines(self, log=None):
+    def _list_machines_db(self, log=None):
         try:
             res = self.ssh.run(self._env_prefix() + "psql \"$DATABASE_URL\" -tAc " + shlex.quote(_psql_machines_sql()),
                                timeout=60)
@@ -550,19 +752,30 @@ def ssh_session_for(inst) -> SshSession:
 
 def target_for(inst) -> QsTarget:
     from heappe_ui.models import QSchedulerInstance as Q
+    from .qscheduler_admin import AdminClient
     if inst.kind in (Q.KIND_MANAGED, Q.KIND_LOCAL):
-        return DockerTarget(DockerCli(), inst.container_name, inst.port)
-    if inst.kind == Q.KIND_SSH_HOST:
-        return DockerTarget(DockerCli(ssh_session_for(inst), inst.docker_command), inst.container_name, inst.port)
-    if inst.kind == Q.KIND_SSH_CONTAINER:
-        return ContainerShellTarget(ssh_session_for(inst), inst.port, inst.database_url, inst.restart_command)
-    raise RuntimeError(f"Unknown QScheduler instance kind '{inst.kind}'.")
+        target = DockerTarget(DockerCli(), inst.container_name, inst.port)
+    elif inst.kind == Q.KIND_SSH_HOST:
+        target = DockerTarget(DockerCli(ssh_session_for(inst), inst.docker_command), inst.container_name, inst.port)
+    elif inst.kind == Q.KIND_SSH_CONTAINER:
+        target = ContainerShellTarget(ssh_session_for(inst), inst.port, inst.database_url, inst.restart_command)
+    else:
+        raise RuntimeError(f"Unknown QScheduler instance kind '{inst.kind}'.")
+    target.admin_client = AdminClient(inst, getattr(target, "docker", None))
+    return target
 
 
-def apply_cli_change(inst, target, log):
-    """Machines/notifiers are loaded at service start: restart (or flag the instance when that is impossible)."""
+def apply_changes(inst, target, log):
+    """
+    After machine / notifier changes: nothing to do when they went through the admin API (applied at once). CLI
+    changes are loaded at service start: restart (or flag the instance when that is impossible). True when applied.
+    """
+    if not target.reload_needed:
+        log("Changes applied through the QScheduler admin API (no restart needed).")
+        return True
     try:
         target.restart(log)
+        target.reload_needed = False
         if inst.restart_pending:
             inst.restart_pending = False
             inst.save(update_fields=["restart_pending", "updated_at"])
@@ -745,6 +958,11 @@ def cluster_notifier_name(heappe_identifier, machine):
     return f"{heappe_identifier}.{machine}"[:NOTIFIER_MAX_LEN]
 
 
+def new_admin_token():
+    """ADMIN_TOKEN of a QScheduler service (bearer token of its admin API). Kept only in the container environment."""
+    return secrets.token_urlsafe(32)
+
+
 def new_notify_token():
     return secrets.token_urlsafe(32)
 
@@ -843,16 +1061,16 @@ def cluster_notifier(cluster: dict):
 def replace_notifiers(target, add: dict, remove, current: dict, log):
     """
     Removes notifiers `remove` and (re)creates `add` ({name: (url, token)}) in QScheduler. A notifier cannot be
-    updated in place, so an existing one is removed first. Returns True when anything changed (restart needed).
+    updated in place, so an existing one is removed first. Returns True when anything changed (then call apply_changes).
     """
     changed = False
     for name in list(remove) + [n for n in add if n in current]:
         if name in current:
-            target.cli(["notifier", "remove", name], log)
+            target.remove_notifier(name, log)
             current.pop(name)
             changed = True
     for name, (url, token) in add.items():
-        target.cli(notifier_add_args(name, url, token), log)
+        target.add_notifier(name, url, token, log)
         log(f"Notifier '{name}' -> {url}")
         changed = True
     return changed
@@ -1034,8 +1252,12 @@ def start_operation(kind, fn, *args):
             with _op_lock:
                 _op_state.update({'is_running': False, 'success': True, 'result': result})
         except Exception as ex:
+            from .qscheduler_admin import find_admin_token_error
             err = str(ex) or ex.__class__.__name__
             log(f"EXCEPTION: {kind} failed: {err}")
+            token_error = find_admin_token_error(ex)
+            if token_error:       # the UI offers to set or regenerate the admin token
+                result['admin_token_error'] = token_error.info()
             with _op_lock:
                 _op_state.update({'is_running': False, 'success': False, 'result': result,
                                   'error': err.splitlines()[0][:500]})

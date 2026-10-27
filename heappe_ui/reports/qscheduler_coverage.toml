@@ -30,6 +30,7 @@ deploy = "heappe_ui/view/qscheduler_deploy.py"
 machines = "heappe_ui/view/qscheduler_machines.py"
 recovery = "heappe_ui/view/qscheduler_recovery.py"
 health = "heappe_ui/view/qscheduler_cluster_health.py"
+admin = "heappe_ui/view/qscheduler_admin.py"
 
 [file_descriptions]
 core = "Docker/SSH runners, targets, HEAppE and git helpers"
@@ -37,6 +38,7 @@ deploy = "QScheduler page, instances, assignments"
 machines = "Clusters page: add/remove machine"
 recovery = "missing instances: archive, cascade deletion, restore"
 health = "cluster detail: QScheduler panel"
+admin = "admin API proxy, client and admin token"
 
 [tests]
 module = "heappe_ui.tests"
@@ -345,8 +347,29 @@ verified = "`DATABASE_URL` is exported before the command (given value, or read 
 not_tested = "Health check, restart + reconnect, machine listing via `psql`."
 
 [[sections.features]]
+name = "Admin API (QScheduler >= 0.2.1)"
+code = ["core:parse_version", "core:supports_admin_api", "core:duration_ms", "core:machine_request",
+        "core:http_body", "core:api_error_text", "core:new_admin_token",
+        "core:QsTarget.admin_request", "core:QsTarget._admin_json", "core:QsTarget.uses_admin_api",
+        "core:QsTarget._api_result", "core:QsTarget._cli_write", "core:QsTarget.list_machines",
+        "core:QsTarget.list_notifiers", "core:QsTarget.add_machine", "core:QsTarget.remove_machine",
+        "core:QsTarget.add_notifier", "core:QsTarget.remove_notifier", "deploy:admin_token_env"]
+verified = "Version gate (0.2.1+), machine body with durations in ms (test and IQM), admin API writes without restart, error wording matching the CLI (already exists / not found / has tasks or sessions), machine and notifier listing, CLI with one restart only for older versions, no CLI or database fallback when the admin token is missing or rejected, no admin call without the admin client, errors without request details, ADMIN_TOKEN redaction and its addition on Update."
+not_tested = "Against a running QScheduler 0.2.1 container."
+
+[[sections.features]]
+name = "Admin proxy and admin token"
+code = ["admin:proxy_image", "admin:proxy_name", "admin:AdminApiUnavailable", "admin:AdminTokenError",
+        "admin:find_admin_token_error", "admin:proxy_config", "admin:proxy_run_args", "admin:desired_networks",
+        "admin:_host_port", "admin:ensure_proxy", "admin:remove_proxy", "admin:sync_proxy", "admin:proxy_status",
+        "admin:container_admin_token", "admin:admin_token", "admin:http_request", "admin:AdminClient",
+        "deploy:qscheduler_admin_token_api", "deploy:regenerate_admin_token_worker"]
+verified = "Proxy forwards only /machines, /machine/{name}, /notifiers, /notifiers/{name} (404 otherwise), published on 127.0.0.1 only, in the assignment's HEAppE network; created when missing, recreated when the upstream changes, joins/leaves networks with assignments, refused without an assignment, removed with the last one. Token encrypted on the record, adopted from the container environment, not adoptable over SSH into the container. Client against a local HTTP server: method, path, bearer token, JSON body; 401 -> rejected, 403 -> not set, token never in errors. Token errors found through wrapped exceptions and reported in the operation result. Token API: show, set (rejected token not stored), regenerate (operation); regenerate worker recreates with the new token and checks it; register validates an entered token."
+not_tested = "A real nginx proxy container (checked by hand against nginx:1.27-alpine); proxy_status."
+
+[[sections.features]]
 name = "SSH to VM / local Docker"
-code = ["core:DockerTarget", "core:DockerCli", "core:QsTarget", "core:target_for", "core:apply_cli_change"]
+code = ["core:DockerTarget", "core:DockerCli", "core:QsTarget", "core:target_for", "core:apply_changes"]
 verified = "–"
 not_tested = "All (exec, restart, health wait, machine listing)."
 

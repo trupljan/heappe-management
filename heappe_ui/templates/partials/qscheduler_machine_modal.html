@@ -100,7 +100,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="form-text" style="font-size: 0.72rem;">The QScheduler instance is restarted to load a new machine; running work is persisted and re-attached.</div>
+                        <div class="form-text" style="font-size: 0.72rem;">QScheduler 0.2.1+ registers the machine over its admin API at once; older versions are restarted to load it (running work is persisted and re-attached).</div>
                     </div>
                 </div>
 
@@ -170,7 +170,7 @@
                     <input class="form-check-input" type="checkbox" id="qs-rm-remove_from_qscheduler" name="remove_from_qscheduler">
                     <label class="form-check-label small" for="qs-rm-remove_from_qscheduler">Also remove the machine from QScheduler (<code>machine remove</code>)</label>
                 </div>
-                <div class="form-text ms-4 mb-2" style="font-size: 0.72rem;">The machine may be shared: clusters of other HEAppE instances using it stop working. The QScheduler instance is restarted.</div>
+                <div class="form-text ms-4 mb-2" style="font-size: 0.72rem;">The machine may be shared: clusters of other HEAppE instances using it stop working. QScheduler &lt; 0.2.1 is restarted.</div>
                 <div class="form-check form-switch ms-4">
                     <input class="form-check-input" type="checkbox" id="qs-rm-force" name="force" disabled>
                     <label class="form-check-label small text-danger" for="qs-rm-force">Force (<code>--force</code>): also delete its tasks and sessions</label>
@@ -394,7 +394,7 @@ document.addEventListener('DOMContentLoaded', function () {
             addModal.hide();
             U.track({
                 title: 'Adding quantum machine',
-                hint: 'Registering the machine (the QScheduler instance restarts) and creating the HEAppE cluster...',
+                hint: 'Registering the machine (QScheduler < 0.2.1 restarts) and creating the HEAppE cluster...',
                 successTitle: 'Quantum machine available',
                 details: (r, esc) => 'Machine: ' + esc(r.machine_name) + ' (' + esc(r.machine_mode === 'new' ? r.backend : 'shared') + ') @ ' + esc(r.qscheduler) +
                     '<br>Cluster ID: ' + esc(r.cluster_id) + ' &middot; Project ID: ' + esc(r.project_id) +
