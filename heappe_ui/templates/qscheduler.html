@@ -35,6 +35,17 @@
                 <a href="{% url 'cluster_list' %}">Clusters</a> page.
             </p>
 
+            <div class="border border-light-subtle rounded-3 p-3 mb-3 bg-light" id="qs-shared-db-card">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                        <div class="fw-bold small text-primary"><i class="bi bi-database me-1"></i>Shared database</div>
+                        <div class="small text-muted mt-1" id="qs-shared-db-summary"><span class="spinner-border spinner-border-sm" style="width: .7rem; height: .7rem;"></span> loading...</div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap" id="qs-shared-db-actions"></div>
+                </div>
+                <div class="mt-2 d-none" id="qs-shared-db-schemas"></div>
+            </div>
+
             {% if not instances %}
             <div class="text-center py-5">
                 <i class="bi bi-cpu text-muted" style="font-size: 3rem;"></i>
@@ -65,6 +76,7 @@
                             &middot; <span class="qs-live-version">version ?</span>
                             <span class="qs-live-admin"></span>
                             {% if inst.source == 'git' %} &middot; source <code>{{ inst.repo }}#{{ inst.ref }}</code>{% elif inst.image %} &middot; image <code>{{ inst.image }}</code>{% endif %}
+                            &middot; database: {{ inst.db_kind_label|lower }}{% if inst.db_schema %} <code>{{ inst.db_schema }}</code>{% endif %}
                         </div>
                         {% if inst.archived %}
                         <div class="small text-dark-emphasis mt-1"><i class="bi bi-info-circle me-1"></i>{{ inst.archived_reason }}. Not managed: HEAppE clusters are kept unchanged.
@@ -84,6 +96,8 @@
                             <li><button type="button" class="dropdown-item small text-danger qs-recovery-action" data-action="cascade" data-id="{{ inst.id }}"><i class="bi bi-trash me-2"></i>Delete with entities...</button></li>
                             {% else %}
                             {% if inst.can_update %}<li><button type="button" class="dropdown-item small qs-action" data-action="update" data-id="{{ inst.id }}"><i class="bi bi-arrow-repeat me-2 text-info"></i>Update</button></li>{% endif %}
+                            {% if inst.can_migrate_to_shared and shared_db_deployed %}<li><button type="button" class="dropdown-item small qs-action" data-action="migrate_shared" data-id="{{ inst.id }}"><i class="bi bi-database-up me-2 text-primary"></i>Migrate to shared database...</button></li>{% endif %}
+                            {% if inst.can_backup %}<li><button type="button" class="dropdown-item small qs-backups" data-id="{{ inst.id }}" data-name="{{ inst.name }}"><i class="bi bi-archive me-2 text-secondary"></i>Backups...</button></li>{% endif %}
                             <li><button type="button" class="dropdown-item small qs-admin-token" data-id="{{ inst.id }}" data-name="{{ inst.name }}" data-regen="{% if inst.can_update %}1{% endif %}"><i class="bi bi-key me-2 text-warning"></i>Admin token...</button></li>
                             <li><button type="button" class="dropdown-item small qs-action" data-action="restart" data-id="{{ inst.id }}"><i class="bi bi-bootstrap-reboot me-2 text-primary"></i>{% if inst.manual_restart %}Confirm manual restart{% else %}Restart{% endif %}</button></li>
                             <li><hr class="dropdown-divider"></li>
@@ -227,8 +241,12 @@
                     <div class="col-12">
                         <label class="form-label small text-muted fw-semibold mb-1 d-block">Database</label>
                         <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="db_mode" id="qs-dep-db-new" value="new" checked>
-                            <label class="form-check-label small" for="qs-dep-db-new">Deploy new PostgreSQL</label>
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-dep-db-shared" value="shared" {% if shared_db_deployed %}checked{% else %}disabled{% endif %}>
+                            <label class="form-check-label small" for="qs-dep-db-shared">Shared database (recommended){% if not shared_db_deployed %} <span class="text-muted">&ndash; deploy it first</span>{% endif %}</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-dep-db-new" value="new" {% if not shared_db_deployed %}checked{% endif %}>
+                            <label class="form-check-label small" for="qs-dep-db-new">Dedicated PostgreSQL container (experiments)</label>
                         </div>
                         <div class="form-check form-check-inline">
                             <input class="form-check-input" type="radio" name="db_mode" id="qs-dep-db-existing" value="existing">
@@ -238,7 +256,10 @@
                     <div class="col-md-4 qs-dep-db-new-only">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-network_prefix">Database network size</label>
                         <select class="form-select form-select-sm" id="qs-dep-network_prefix" name="network_prefix"><option value="24">/24 (254 addresses)</option><option value="25">/25 (126 addresses)</option><option value="26">/26 (62 addresses)</option><option value="27">/27 (30 addresses)</option><option value="28">/28 (14 addresses)</option><option value="29">/29 (6 addresses, default)</option></select>
-                        <div class="form-text" style="font-size: 0.72rem;">Subnet of the internal <code>&lt;name&gt;_db_net</code>, taken from <code>QSCHEDULER_NETWORK_POOL</code>. Two containers use it.</div>
+                        <div class="form-text" style="font-size: 0.72rem;">Subnet of the internal <code>&lt;name&gt;_db_net</code>, taken from <code>QSCHEDULER_NETWORK_POOL</code>. Two containers use it (QScheduler and its or the shared PostgreSQL).</div>
+                    </div>
+                    <div class="col-md-8 qs-dep-db-shared-only{% if not shared_db_deployed %} d-none{% endif %}">
+                        <div class="form-text small mt-4"><i class="bi bi-info-circle me-1"></i>Creates role and schema <code>qs_&lt;name&gt;</code> in the shared database; only this instance can use it.</div>
                     </div>
                     <div class="col-md-8 qs-db-existing-only d-none">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-database_url">DATABASE_URL <span class="text-danger">*</span></label>
@@ -517,6 +538,32 @@
     </div>
 </div>
 
+<!-- Backups of an instance -->
+<div class="modal fade" id="qsBackupsModal" tabindex="-1" aria-labelledby="qsBackupsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-light py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsBackupsLabel"><i class="bi bi-archive me-2 text-primary"></i>Backups &ndash; <span class="font-monospace" id="qs-bk-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="small text-muted mb-2">Database dumps (<code>pg_dump</code> custom format, checked with <code>pg_restore --list</code>) in <code id="qs-bk-dir"></code> on the host.
+                    The in-place update creates one automatically and restores it on rollback.</p>
+                <div id="qs-bk-msg" class="alert border-0 rounded-3 small d-none"></div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light"><tr><th class="small text-secondary">File</th><th class="small text-secondary">Created</th><th class="small text-secondary text-end">Size</th><th></th></tr></thead>
+                        <tbody id="qs-bk-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4">
+                <button type="button" class="btn btn-primary btn-sm fw-bold" id="qs-bk-now"><i class="bi bi-plus-circle me-1"></i>Backup now</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% include 'partials/qscheduler_progress_modal.html' %}
 {% include 'partials/qscheduler_recovery_modals.html' %}
 
@@ -534,11 +581,118 @@ document.addEventListener('DOMContentLoaded', function () {
         undeploy: "{% url 'qscheduler_undeploy' 0 %}", assign: "{% url 'qscheduler_assign' 0 %}",
         unassign: "{% url 'qscheduler_unassign' 0 %}", heappeInfo: "{% url 'qscheduler_heappe_info' 0 %}",
         notifierRemove: "{% url 'qscheduler_notifier_remove' 0 %}",
+        migrateShared: "{% url 'qscheduler_migrate_to_shared' 0 %}",
     };
     const url = (key, id) => urls[key].replace('/0/', '/' + id + '/');
     const modal = id => bootstrap.Modal.getOrCreateInstance(document.getElementById(id));
     const showErr = (id, msg) => { const el = document.getElementById(id); el.textContent = msg; el.classList.remove('d-none'); };
     const hideErr = id => document.getElementById(id).classList.add('d-none');
+
+    // ---- shared database ----
+    const sharedUrl = "{% url 'qscheduler_shared_db' %}";
+    const size = b => b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GiB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MiB' : Math.max(1, Math.round(b / 1024)) + ' KiB';
+    function sharedOp(data, title, hint) {
+        return U.postJson(sharedUrl, data).then(d => {
+            if (d.status !== 'success') { showErr('qs-confirm-error', d.message || 'Request failed.'); return; }
+            modal('qsConfirmModal').hide();
+            U.track({ title, hint, successTitle: 'Done', details: (r, esc) => esc(r.name || r.schema || '') });
+        });
+    }
+    function sharedButton(cls, icon, text, onClick) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-sm fw-semibold ' + cls;
+        b.innerHTML = '<i class="bi bi-' + icon + ' me-1"></i>' + text;
+        b.addEventListener('click', onClick);
+        return b;
+    }
+    function loadShared() {
+        const summary = document.getElementById('qs-shared-db-summary');
+        const actions = document.getElementById('qs-shared-db-actions');
+        const schemasEl = document.getElementById('qs-shared-db-schemas');
+        U.getJson(sharedUrl).then(d => {
+            actions.innerHTML = '';
+            if (d.status !== 'success') { summary.textContent = d.message || 'Status unknown.'; return; }
+            if (!d.deployed) {
+                summary.innerHTML = 'Not deployed. One PostgreSQL for all QScheduler instances on this host, each with its own role and schema (recommended); '
+                    + 'a dedicated PostgreSQL container per instance stays available for experiments.';
+                actions.appendChild(sharedButton('btn-primary', 'database-add', 'Deploy shared database', () =>
+                    askConfirm('Deploy shared database',
+                        'Starts <code>qscheduler-shared-pgsql</code> (<code>' + U.esc(d.image) + '</code>) with its own volume and internal network, no published port. '
+                        + 'Backups are written to the host directory set by <code>QSCHEDULER_BACKUP_DIR</code>.',
+                        'Deploy', null, btn => sharedOp({ action: 'deploy' }, 'Deploying the shared database', 'Starting PostgreSQL...'), false)));
+                return;
+            }
+            const state = d.running ? '<span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">running</span>'
+                                    : '<span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">' + (d.exists ? 'stopped' : 'container missing') + '</span>';
+            summary.innerHTML = state + ' <code>' + U.esc(d.name) + '</code> &middot; image <code>' + U.esc(d.image) + '</code>'
+                + (d.version ? ' &middot; PostgreSQL ' + U.esc(d.version) : '') + ' &middot; backups in <code>' + U.esc(d.backup_dir) + '</code>'
+                + (d.error ? '<div class="text-danger mt-1">' + U.esc(d.error) + '</div>' : '');
+            actions.appendChild(sharedButton('btn-outline-secondary', 'arrow-repeat', 'Update image', () =>
+                askConfirm('Update the shared database image',
+                    'New image of the <strong>same PostgreSQL major version</strong> (the container is recreated on the same volume; QScheduler instances lose the database for a few seconds).'
+                    + '<input type="text" class="form-control form-control-sm font-monospace mt-2" id="qs-shared-image" value="' + U.esc(d.image) + '">',
+                    'Update', null, () => sharedOp({ action: 'update', image: document.getElementById('qs-shared-image').value.trim() },
+                                                   'Updating the shared database', 'Recreating PostgreSQL...'), false)));
+            actions.appendChild(sharedButton('btn-outline-danger', 'trash', 'Remove', () =>
+                askConfirm('Remove the shared database', 'Possible only when no QScheduler instance uses it.', 'Remove',
+                    'Also delete the volume ' + d.volume, (btn, removeData) => sharedOp({ action: 'remove', remove_data: removeData },
+                                                                                        'Removing the shared database', 'Removing...'))));
+            if ((d.schemas || []).length) {
+                schemasEl.classList.remove('d-none');
+                schemasEl.innerHTML = '<table class="table table-sm small mb-0 bg-white"><thead><tr><th>Schema</th><th>Instance</th><th class="text-end">Size</th><th class="text-end">Connections</th><th></th></tr></thead><tbody>'
+                    + d.schemas.map(x => '<tr><td><code>' + U.esc(x.schema) + '</code></td><td>' + (x.instance ? U.esc(x.instance) : '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">unused</span>')
+                        + '</td><td class="text-end">' + size(x.size) + '</td><td class="text-end">' + x.connections + '</td><td class="text-end">'
+                        + (x.instance ? '' : '<button type="button" class="btn btn-link btn-sm text-danger p-0 qs-drop-schema" data-schema="' + U.esc(x.schema) + '"><i class="bi bi-trash"></i> drop</button>') + '</td></tr>').join('')
+                    + '</tbody></table>';
+                schemasEl.querySelectorAll('.qs-drop-schema').forEach(b => b.addEventListener('click', () =>
+                    askConfirm('Drop schema ' + b.dataset.schema, 'Drops the schema and its role with all data (no registered instance uses it).', 'Drop', null,
+                        () => sharedOp({ action: 'drop_schema', schema: b.dataset.schema }, 'Dropping schema ' + b.dataset.schema, 'Dropping...'))));
+            }
+        }).catch(() => { summary.textContent = 'Status unknown.'; });
+    }
+    loadShared();
+
+    // ---- backups ----
+    const backupsUrl = id => "{% url 'qscheduler_backups' 0 %}".replace('/0/', '/' + id + '/');
+    let bkInst = null;
+    function bkMsg(ok, text) {
+        const el = document.getElementById('qs-bk-msg');
+        el.className = 'alert border-0 rounded-3 small ' + (ok ? 'alert-success' : 'alert-danger');
+        el.textContent = text;
+    }
+    function bkRender(d) {
+        document.getElementById('qs-bk-dir').textContent = d.directory || '';
+        const rows = document.getElementById('qs-bk-rows');
+        rows.innerHTML = (d.backups || []).length ? d.backups.map(b => '<tr><td class="font-monospace small">' + U.esc(b.file) + '</td><td class="small">' + U.esc(b.created)
+            + '</td><td class="small text-end">' + size(b.size) + '</td><td class="text-end"><button type="button" class="btn btn-link btn-sm text-danger p-0 qs-bk-del" data-file="' + U.esc(b.file) + '"><i class="bi bi-trash"></i></button></td></tr>').join('')
+            : '<tr><td colspan="4" class="small text-muted">No backups yet.</td></tr>';
+        rows.querySelectorAll('.qs-bk-del').forEach(b => b.addEventListener('click', () => {
+            if (!confirm('Delete backup ' + b.dataset.file + '?')) return;
+            U.postJson(backupsUrl(bkInst.id), { action: 'delete', file: b.dataset.file }).then(r => {
+                bkMsg(r.status === 'success', r.message || 'Delete failed.');
+                if (r.status === 'success') bkRender(Object.assign(d, { backups: r.backups }));
+            });
+        }));
+    }
+    document.querySelectorAll('.qs-backups').forEach(b => b.addEventListener('click', () => {
+        bkInst = { id: b.dataset.id, name: b.dataset.name };
+        document.getElementById('qs-bk-name').textContent = bkInst.name;
+        document.getElementById('qs-bk-msg').classList.add('d-none');
+        document.getElementById('qs-bk-rows').innerHTML = '<tr><td colspan="4" class="small text-muted">loading...</td></tr>';
+        modal('qsBackupsModal').show();
+        U.getJson(backupsUrl(bkInst.id)).then(bkRender);
+    }));
+    document.getElementById('qs-bk-now').addEventListener('click', ev => {
+        const done = U.setButtonLoading(ev.currentTarget, 'Starting');
+        U.postJson(backupsUrl(bkInst.id), { action: 'backup' }).then(d => {
+            done();
+            if (d.status !== 'success') { bkMsg(false, d.message || 'Could not start.'); return; }
+            modal('qsBackupsModal').hide();
+            U.track({ title: 'Backup of ' + bkInst.name, hint: 'pg_dump of the instance database...', successTitle: 'Backup created',
+                      details: (r, esc) => 'File: ' + esc(r.file), reloadOnClose: false });
+        });
+    });
 
     // ---- live status of each instance (SSH instances can be slow: loaded after the page) ----
     instances.forEach(inst => {
@@ -719,11 +873,13 @@ document.addEventListener('DOMContentLoaded', function () {
     const depForm = document.getElementById('qsDeployForm');
     const depRefs = refPicker(depForm);
     depForm.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', () => sourceToggle(depForm)));
-    depForm.querySelectorAll('input[name="db_mode"]').forEach(r => r.addEventListener('change', () => {
-        const ex = depForm.querySelector('input[name="db_mode"]:checked').value === 'existing';
-        depForm.querySelectorAll('.qs-db-existing-only').forEach(el => el.classList.toggle('d-none', !ex));
-        depForm.querySelectorAll('.qs-dep-db-new-only').forEach(el => el.classList.toggle('d-none', ex));
-    }));
+    function depDbToggle() {
+        const mode = depForm.querySelector('input[name="db_mode"]:checked').value;
+        depForm.querySelectorAll('.qs-db-existing-only').forEach(el => el.classList.toggle('d-none', mode !== 'existing'));
+        depForm.querySelectorAll('.qs-dep-db-new-only').forEach(el => el.classList.toggle('d-none', mode === 'existing'));
+        depForm.querySelectorAll('.qs-dep-db-shared-only').forEach(el => el.classList.toggle('d-none', mode !== 'shared'));
+    }
+    depForm.querySelectorAll('input[name="db_mode"]').forEach(r => r.addEventListener('change', depDbToggle));
     depForm.name.addEventListener('input', () => {
         document.getElementById('qs-dep-name-example').textContent = depForm.name.value.trim().replace(/[-_.]+$/, '') || 'qscheduler';
     });
@@ -734,6 +890,7 @@ document.addEventListener('DOMContentLoaded', function () {
         depForm.rebuild_image.checked = false; depForm.no_cache.checked = false;
         depForm.name.value = ''; document.getElementById('qs-dep-name-example').textContent = 'qscheduler';
         depForm.network_prefix.value = String(defaults.network_prefix || 29);
+        depDbToggle();
         const sel = depForm.assign_heappe_id;
         sel.innerHTML = '<option value="">- none -</option>' + heappes.map(h => '<option value="' + h.id + '"' +
             (h.instance_name === chosen ? ' selected' : '') + '>' + U.esc(h.instance_name) + '</option>').join('');
@@ -846,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ---- confirm dialog ----
     let confirmAction = null;
-    function askConfirm(title, bodyHtml, btnText, option, action, danger) {
+    function askConfirm(title, bodyHtml, btnText, option, action, danger, optionChecked) {
         document.getElementById('qs-confirm-title').textContent = title;
         document.getElementById('qs-confirm-body').innerHTML = bodyHtml;
         const header = document.getElementById('qs-confirm-header');
@@ -856,7 +1013,7 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.textContent = btnText;
         const wrap = document.getElementById('qs-confirm-option-wrap');
         wrap.classList.toggle('d-none', !option);
-        document.getElementById('qs-confirm-option').checked = false;
+        document.getElementById('qs-confirm-option').checked = !!optionChecked;
         if (option) document.getElementById('qs-confirm-option-label').textContent = option;
         hideErr('qs-confirm-error');
         confirmAction = action;
@@ -926,6 +1083,18 @@ document.addEventListener('DOMContentLoaded', function () {
                           : 'QScheduler stops gracefully (pending state is written to the database) and starts again; running backend jobs are re-attached.'),
                 manual ? 'Check service' : 'Restart', null, (btn) => submitOperation(btn, 'qs-confirm-error', 'qsConfirmModal', url('restart', current.id), {}, {
                     title: 'Restarting ' + current.name, successTitle: 'QScheduler restarted', details: (r, esc) => 'Instance: ' + esc(r.name) }), false);
+        } else if (action === 'migrate_shared') {
+            askConfirm('Migrate ' + current.name + ' to the shared database',
+                'Copies the data from <code>' + U.esc(current.container_name) + '-pgsql</code> into role and schema <code>qs_&hellip;</code> of the shared database and restarts QScheduler on it.'
+                + '<ul class="small mt-2 mb-0"><li>QScheduler is <strong>stopped during the copy</strong> (requests fail meanwhile; running backend work is re-attached afterwards, as after a restart).</li>'
+                + '<li>A backup of the old database is written first; the row counts of every table are compared before switching.</li>'
+                + '<li>On failure QScheduler starts again on the old database.</li>'
+                + '<li>The old PostgreSQL container and volume are kept (stopped) unless you tick the option below.</li></ul>',
+                'Migrate', 'Remove the old PostgreSQL container and volume after a successful migration',
+                (btn, removeOld) => submitOperation(btn, 'qs-confirm-error', 'qsConfirmModal', url('migrateShared', current.id), { remove_old: removeOld }, {
+                    title: 'Migrating ' + current.name + ' to the shared database', hint: 'Stopping QScheduler, copying the database, switching...',
+                    successTitle: 'Migrated to the shared database',
+                    details: (r, esc) => 'Schema: ' + esc(r.schema) + '<br>Backup of the old database: ' + esc(r.backup) }), false);
         } else if (action === 'undeploy') {
             const managed = current.kind === 'managed';
             if (current.assignments.length) {
@@ -934,12 +1103,17 @@ document.addEventListener('DOMContentLoaded', function () {
                     'OK', null, () => modal('qsConfirmModal').hide(), false);
                 return;
             }
+            const shared = managed && current.db_kind === 'shared';
             askConfirm((managed ? 'Undeploy ' : 'Unregister ') + current.name,
-                managed ? 'Removes the QScheduler container, its PostgreSQL container and DB network. The image is kept.'
+                managed ? (shared ? 'Removes the QScheduler container and its DB network, and disconnects the shared database. The image is kept.'
+                                  : 'Removes the QScheduler container, its PostgreSQL container and DB network. The image is kept.')
                         : 'Removes the instance from HEAppE Management only; the QScheduler service is left running.',
-                managed ? 'Undeploy' : 'Unregister', managed ? 'Also delete the database volume (machines, notifiers, projects, task history)' : null,
+                managed ? 'Undeploy' : 'Unregister',
+                managed ? (shared ? 'Also drop its schema and role in the shared database (machines, notifiers, projects, task history)'
+                                  : 'Also delete the database volume (machines, notifiers, projects, task history)') : null,
                 (btn, removeData) => submitOperation(btn, 'qs-confirm-error', 'qsConfirmModal', url('undeploy', current.id), { remove_data: removeData }, {
-                    title: (managed ? 'Undeploying ' : 'Unregistering ') + current.name, successTitle: 'Done', details: (r, esc) => 'Removed: ' + esc(r.name) }));
+                    title: (managed ? 'Undeploying ' : 'Unregistering ') + current.name, successTitle: 'Done', details: (r, esc) => 'Removed: ' + esc(r.name) }),
+                undefined, shared);
         } else if (action === 'assign' || action === 'edit_assignment') {
             editing = action === 'edit_assignment' ? current.assignments.find(a => String(a.id) === b.dataset.asg) : null;
             hideErr('qs-asg-error');

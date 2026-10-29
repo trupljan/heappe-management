@@ -72,11 +72,11 @@
                     <div class="qs-cas-managed-only">
                         <div class="form-check mt-2">
                             <input class="form-check-input" type="checkbox" id="qs-cas-remove_db_container" name="remove_db_container" checked>
-                            <label class="form-check-label small" for="qs-cas-remove_db_container">Leftover PostgreSQL container and database network on this Docker host</label>
+                            <label class="form-check-label small" for="qs-cas-remove_db_container">Leftover PostgreSQL container (or link to the shared database) and database network on this Docker host</label>
                         </div>
                         <div class="form-check ms-3">
                             <input class="form-check-input" type="checkbox" id="qs-cas-remove_db_volume" name="remove_db_volume">
-                            <label class="form-check-label small text-danger" for="qs-cas-remove_db_volume">Database volume (machines, notifiers, task history)</label>
+                            <label class="form-check-label small text-danger" for="qs-cas-remove_db_volume">Database volume or shared-database schema (machines, notifiers, task history)</label>
                         </div>
                     </div>
                     <div class="form-check mt-2 d-none" id="qs-cas-skip-wrap">
@@ -166,8 +166,12 @@
                     <div class="col-12">
                         <label class="form-label small text-muted fw-semibold mb-1 d-block">Database</label>
                         <div class="form-check">
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-rst-db-shared" value="shared">
+                            <label class="form-check-label small" for="qs-rst-db-shared">Shared database (new schema) <span class="text-muted" id="qs-rst-shared-info"></span></label>
+                        </div>
+                        <div class="form-check">
                             <input class="form-check-input" type="radio" name="db_mode" id="qs-rst-db-new" value="new" checked>
-                            <label class="form-check-label small" for="qs-rst-db-new">Deploy new PostgreSQL <span class="text-danger d-none" id="qs-rst-new-warning"></span></label>
+                            <label class="form-check-label small" for="qs-rst-db-new">Deploy new dedicated PostgreSQL <span class="text-danger d-none" id="qs-rst-new-warning"></span></label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="db_mode" id="qs-rst-db-reuse" value="reuse">
@@ -396,7 +400,10 @@ document.addEventListener('DOMContentLoaded', function () {
             const warn = document.getElementById('qs-rst-new-warning');
             warn.textContent = left.length ? '(removes the old ' + left.join(', ') + ')' : '';
             warn.classList.toggle('d-none', !left.length);
-            document.getElementById(d.reusable_database ? 'qs-rst-db-reuse' : 'qs-rst-db-new').checked = true;
+            const sharedRadio = document.getElementById('qs-rst-db-shared');
+            sharedRadio.disabled = !d.shared_db_deployed;
+            document.getElementById('qs-rst-shared-info').textContent = d.shared_db_deployed ? '' : '(deploy the shared database first)';
+            document.getElementById(d.reusable_database ? 'qs-rst-db-reuse' : (d.shared_db_deployed ? 'qs-rst-db-shared' : 'qs-rst-db-new')).checked = true;
             const tbody = document.getElementById('qs-rst-machines');
             d.machines.forEach(m => tbody.appendChild(machineRow(m, d.machine_defaults)));
             if (!d.machines.length) tbody.innerHTML = '<tr><td colspan="8" class="text-muted">No cluster uses a machine of this instance.</td></tr>';

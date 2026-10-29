@@ -39,6 +39,7 @@ from .qscheduler_core import (DockerCli, DockerTarget, ContainerShellTarget, Ssh
                               LABEL_INSTANCE, LABEL_REPO, LABEL_BRANCH, IMAGE_BUILD_TIMEOUT,
                               NAME_RE, HOST_RE, GIT_REF_RE, IMAGE_RE)
 from . import qscheduler_admin as qadmin
+from . import qscheduler_shared_db as shared_db
 from .extra_hosts import extra_hosts_as_list, format_extra_host, qscheduler_container_extra_hosts
 
 DOCKER_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL, Q.KIND_SSH_HOST)
@@ -132,8 +133,8 @@ def parse_deploy_options(data: dict, uid: str) -> tuple:
         r.errors.append(f"Name may contain only letters, digits, '_', '.', '-' and must start with a letter or digit "
                         f"(max {NAME_PREFIX_MAX} chars; '-<random id>' is appended).")
     _validate_source(r, opts)
-    if opts['db_mode'] not in ('new', 'existing'):
-        r.errors.append("Database mode must be 'new' or 'existing'.")
+    if opts['db_mode'] not in ('new', 'shared', 'existing'):
+        r.errors.append("Database mode must be 'new' (dedicated container), 'shared' or 'existing'.")
     if opts['db_mode'] == 'existing' and not opts['database_url'].startswith(("postgres://", "postgresql://")):
         r.errors.append("Existing database requires a postgres:// DATABASE_URL.")
     if opts['db_network'] and not NAME_RE.match(opts['db_network']):
@@ -354,9 +355,10 @@ def _build_or_check_image(docker, source, repo, ref, image, rebuild, log, no_cac
 
 def deploy_service(docker, opts, log):
     """
-    Build/check the image, create the database (db_mode 'new') or use an existing one (db_mode 'existing':
-    database_url + optional db_network) and start the QScheduler service container. On failure the created
-    resources are listed for cleanup. Returns {'database_url', 'version', 'admin_token'}.
+    Build/check the image, create the database - db_mode 'new': dedicated PostgreSQL container; 'shared': role and
+    schema in the shared database; 'existing': database_url + optional db_network - and start the QScheduler service
+    container. On failure the created resources are listed for cleanup.
+    Returns {'database_url', 'version', 'admin_token', 'db_kind', 'db_schema', 'shared_database'}.
     """
     name = opts['name']
     pg_name, db_net, volume = f"{name}-pgsql", f"{name}_db_net", f"{name}-pgdata"
@@ -376,7 +378,22 @@ def deploy_service(docker, opts, log):
             _wait_for_postgres(docker, pg_name, log)
             database_url = f"postgres://qscheduler:{db_password}@{pg_name}:5432/qscheduler"
             db_networks = [db_net]
+            db_kind, db_schema, shared = Q.DB_DEDICATED, "", None
+        elif opts['db_mode'] == 'shared':
+            shared = shared_db.require_running(docker)
+            core.create_internal_network(docker, db_net, {LABEL_INSTANCE: name}, log, prefix=opts.get('network_prefix'))
+            created.append(("network", db_net))
+            db_schema, db_password = shared_db.create_instance_schema(docker, shared, name, log)
+            created.append(("schema", db_schema))
+            shared_db.connect_network(docker, shared, db_net, log)
+            created.append(("shared_link", db_net))
+            database_url = f"postgres://{db_schema}:{db_password}@{shared.name}:5432/{shared.database}"
+            db_networks = [db_net]
+            db_kind = Q.DB_SHARED
         else:
+            db_kind, db_schema, shared = opts.get('reuse_kind') or Q.DB_EXTERNAL, opts.get('reuse_schema') or "", None
+            if db_kind == Q.DB_SHARED:
+                shared = shared_db.shared_database()
             database_url = opts['database_url']
             db_networks = [opts['db_network']] if opts['db_network'] else []
             log(f"Using existing database{(' on network ' + opts['db_network']) if opts['db_network'] else ''}.")
@@ -405,12 +422,22 @@ def deploy_service(docker, opts, log):
         docker.run(["start", name], log)
         target = DockerTarget(docker, name, opts['port'])
         target.wait_healthy(log)
-        return {'database_url': database_url, 'version': target.version(), 'admin_token': admin_token}
+        return {'database_url': database_url, 'version': target.version(), 'admin_token': admin_token,
+                'db_kind': db_kind, 'db_schema': db_schema, 'shared_database': shared}
     except Exception:
         if created:
-            order = {'container': 0, 'volume': 1, 'network': 2}
-            cmds = "".join(f"  docker {'rm -f' if k == 'container' else k + ' rm'} {n}\n"
-                           for k, n in sorted(created, key=lambda x: order.get(x[0], 9)))
+            order = {'container': 0, 'shared_link': 1, 'schema': 2, 'volume': 3, 'network': 4}
+
+            def cleanup_cmd(kind, n):
+                if kind == 'container':
+                    return f"docker rm -f {n}"
+                if kind == 'shared_link':
+                    return f"docker network disconnect {n} {shared_db.SHARED_NAME}"
+                if kind == 'schema':
+                    return (f"docker exec {shared_db.SHARED_NAME} psql -U postgres -d {shared_db.SHARED_DATABASE} "
+                            f"-c 'DROP SCHEMA {n} CASCADE; DROP OWNED BY {n}; DROP ROLE {n};'")
+                return f"docker {kind} rm {n}"
+            cmds = "".join(f"  {cleanup_cmd(k, n)}\n" for k, n in sorted(created, key=lambda x: order.get(x[0], 9)))
             log("Resources created before the failure (left in place for inspection). To remove them:\n" + cmds)
         raise
 
@@ -441,7 +468,8 @@ def deploy_worker(log, result, opts):
     inst = Q.objects.create(name=name, kind=Q.KIND_MANAGED, container_name=name, service_host=name, port=opts['port'],
                             source=opts['source'], repo=opts['repo'] if opts['source'] == 'git' else "",
                             ref=opts['ref'] if opts['source'] == 'git' else "", image=opts['image'],
-                            database_url=info['database_url'])
+                            database_url=info['database_url'], db_kind=info.get('db_kind') or Q.DB_EXTERNAL,
+                            db_schema=info.get('db_schema') or "", shared_database=info.get('shared_database'))
     inst.admin_token = info.get('admin_token', "")
     inst.save(update_fields=["admin_token_encrypted", "updated_at"])
     result['id'] = inst.id
@@ -696,6 +724,12 @@ def undeploy_worker(log, result, inst_id, remove_data):
     docker.run(["rm", "-f", name], log, check=False)
     if docker.exists("container", pg):
         docker.run(["rm", "-f", pg], log)
+    if inst.db_kind == Q.DB_SHARED and inst.shared_database:
+        shared_db.disconnect_network(docker, inst.shared_database, net, log)
+        if remove_data:
+            shared_db.drop_instance_schema(docker, inst.db_schema, log)
+        else:
+            log(f"Kept schema and role '{inst.db_schema}' in the shared database (drop it on the shared database card).")
     if docker.json(["network", "inspect", net]):
         res = docker.run(["network", "rm", net], log, check=False)
         if res.returncode != 0:
@@ -958,6 +992,9 @@ def instance_summary(inst):
         'archived_at': inst.archived_at.strftime("%Y-%m-%d %H:%M UTC") if inst.archived_at else "",
         'archived_reason': inst.archived_reason,
         'admin_token_stored': bool(inst.admin_token_encrypted),
+        'db_kind': inst.db_kind, 'db_kind_label': inst.get_db_kind_display(), 'db_schema': inst.db_schema,
+        'can_backup': shared_db.can_backup(inst),
+        'can_migrate_to_shared': inst.kind == Q.KIND_MANAGED and inst.db_kind == Q.DB_DEDICATED,
         'assignments': [{
             'id': a.id, 'heappe_instance_id': a.heappe_instance_id, 'heappe_instance': a.heappe_instance.instance_name,
             'notifications_enabled': a.notifications_enabled, 'heappe_identifier': a.heappe_identifier,
@@ -989,6 +1026,8 @@ def qscheduler_page(request: HttpRequest) -> HttpResponse:
                      'network_prefix': _default_prefix()},
         'network_prefixes': list(core.NETWORK_PREFIX_CHOICES),
         'chosen_instance': request.session.get("chosen_instance"),
+        'shared_db_deployed': shared_db.shared_database() is not None,
+        'shared_db_image': shared_db.shared_image(),
     })
 
 
@@ -1134,6 +1173,104 @@ def qscheduler_admin_token_api(request: HttpRequest, inst_id: int) -> HttpRespon
 
 
 @login_required
+def qscheduler_shared_db_api(request: HttpRequest) -> HttpResponse:
+    """
+    GET: status of the shared database. POST action 'deploy' (image), 'update' (image, same major version),
+    'remove' (remove_data), 'drop_schema' (schema not used by any instance) - background operations.
+    """
+    if request.method == "GET":
+        try:
+            return JsonResponse({'status': 'success', **shared_db.shared_status()})
+        except Exception as e:
+            return _error(f"Could not read the shared database status: {str(e).splitlines()[0]}", 500)
+    if request.method != "POST":
+        return _error('Only GET and POST are allowed', 405)
+    data = _json_body(request)
+    r = _Reader(data)
+    action = r.s('action')
+    if action in ('deploy', 'update'):
+        image = r.s('image', shared_db.shared_image())
+        if not IMAGE_RE.match(image):
+            return _error("Image name is invalid.")
+        if action == 'deploy':
+            if shared_db.shared_database():
+                return _error("A shared database is already deployed.")
+            return _started(*core.start_operation("deploy shared database", shared_db.deploy_shared_worker,
+                                                  {'image': image}))
+        if not shared_db.shared_database():
+            return _error("No shared database is deployed.")
+        return _started(*core.start_operation("update shared database", shared_db.update_shared_worker,
+                                              {'image': image}, str(uuid.uuid4())[:8]))
+    if action == 'remove':
+        db = shared_db.shared_database()
+        if not db:
+            return _error("No shared database is deployed.")
+        users = list(Q.objects.filter(shared_database=db).values_list("name", flat=True))
+        if users:
+            return _error(f"Instances still use the shared database: {', '.join(users)}. Undeploy them first.")
+        return _started(*core.start_operation("remove shared database", shared_db.remove_shared_worker,
+                                              r.b('remove_data')))
+    if action == 'drop_schema':
+        schema = r.s('schema')
+        if not shared_db.IDENT_RE.match(schema) or not schema.startswith("qs_"):
+            return _error("Invalid schema name.")
+        if Q.objects.filter(db_schema=schema, db_kind=Q.DB_SHARED).exists():
+            return _error(f"Schema '{schema}' belongs to a registered instance; undeploy it instead.")
+        return _started(*core.start_operation("drop unused schema", shared_db.drop_orphan_schema_worker, schema))
+    return _error(f"Invalid action: {action}")
+
+
+@login_required
+@_post_only
+def qscheduler_migrate_to_shared_api(request: HttpRequest, inst_id: int) -> HttpResponse:
+    """Move the database of a deployed instance from its dedicated PostgreSQL into the shared database."""
+    inst = _instance_or_404(inst_id)
+    if not inst:
+        return _error("QScheduler instance not found.", 404)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
+    if inst.kind != Q.KIND_MANAGED or inst.db_kind != Q.DB_DEDICATED:
+        return _error("Only instances deployed by HEAppE Management with a dedicated PostgreSQL container can be "
+                      "migrated to the shared database.")
+    if not shared_db.shared_database():
+        return _error("No shared database is deployed: deploy it first.")
+    opts = {'remove_old': _Reader(_json_body(request)).b('remove_old')}
+    return _started(*core.start_operation("migrate to shared database", shared_db.migrate_to_shared_worker, inst.id,
+                                          opts, str(uuid.uuid4())[:8]))
+
+
+@login_required
+def qscheduler_backups_api(request: HttpRequest, inst_id: int) -> HttpResponse:
+    """GET: backups of an instance. POST action 'backup' (background operation) or 'delete' (file)."""
+    inst = _instance_or_404(inst_id)
+    if not inst:
+        return _error("QScheduler instance not found.", 404)
+    if request.method == "GET":
+        return JsonResponse({'status': 'success', 'can_backup': shared_db.can_backup(inst),
+                             'directory': shared_db.backup_dir_of(inst), 'backups': shared_db.list_backups(inst)})
+    if request.method != "POST":
+        return _error('Only GET and POST are allowed', 405)
+    data = _json_body(request)
+    action = data.get('action')
+    if action == 'backup':
+        if not shared_db.can_backup(inst):
+            return _error("Backups are available for instances deployed by HEAppE Management (shared or dedicated "
+                          "database).")
+        if inst.is_archived:
+            return _error(ARCHIVED_MESSAGE.format(name=inst.name))
+        return _started(*core.start_operation("backup", shared_db.backup_worker, inst.id))
+    if action == 'delete':
+        try:
+            shared_db.delete_backup(inst, str(data.get('file') or ""))
+        except ValueError as e:
+            return _error(str(e))
+        except FileNotFoundError:
+            return _error("Backup not found.", 404)
+        return JsonResponse({'status': 'success', 'message': "Backup deleted.", 'backups': shared_db.list_backups(inst)})
+    return _error(f"Invalid action: {action}")
+
+
+@login_required
 def qscheduler_heappe_info_api(request: HttpRequest, heappe_id: int) -> HttpResponse:
     """Version / identifier / callback defaults of a HEAppE instance for the assignment form."""
     cred = InstanceCredentials.objects.filter(pk=heappe_id).first()
@@ -1172,6 +1309,8 @@ def qscheduler_deploy_api(request: HttpRequest) -> HttpResponse:
         return _error(f"A QScheduler instance named '{opts['name']}' already exists.")
     if DockerCli().exists("container", opts['name']):
         return _error(f"Container '{opts['name']}' already exists on the Docker host.")
+    if opts['db_mode'] == 'shared' and not shared_db.shared_database():
+        return _error("No shared database is deployed: deploy it first or choose another database option.")
     if opts['assign_heappe_id']:
         err = _heappe_version_error(opts['assign_heappe_id'])
         if err:

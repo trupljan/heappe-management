@@ -26,6 +26,7 @@ adding quantum machines as HEAppE clusters.
 - [Security notes](#security-notes)
 - [Troubleshooting](#troubleshooting)
 - [Action reference](#action-reference)
+- Recovery from error states: [QScheduler_Recovery_README.md](QScheduler_Recovery_README.md)
 
 ---
 
@@ -109,7 +110,7 @@ step; machines are added from the Clusters page.
 | Service | Name | A prefix of your choice (letters, digits, `_`, `.`, `-`, max 54 characters); a random id is **always appended**: `mydev` becomes e.g. `mydev-5190156f`, empty gives `qscheduler-5190156f`. The result is the instance name, the container name and the host name HEAppE uses; the database container, network and volume are named after it. |
 | | Service port | Port of the REST API inside the container (default `4300`). |
 | | Publish on host | Optional. Publishes the port on `127.0.0.1` only. |
-| | Database | *Deploy new PostgreSQL*: creates the container `<name>-pgsql`, the internal network `<name>_db_net` (subnet size chosen in *Database network size*, default `/29`, see [Networks](#networks)) and the volume `<name>-pgdata`. *Use existing database*: enter `DATABASE_URL` (`postgres://...`) and optionally the Docker network on which the database is reachable. |
+| | Database | *Shared database (recommended)*: creates the role and schema `qs_<name>` in the [shared database](#shared-database) and the internal network `<name>_db_net`, which the shared database joins; available once the shared database is deployed. *Dedicated PostgreSQL container (experiments)*: creates the container `<name>-pgsql`, the internal network `<name>_db_net` (subnet size chosen in *Database network size*, default `/29`, see [Networks](#networks)) and the volume `<name>-pgdata`. *Use existing database*: enter `DATABASE_URL` (`postgres://...`) and optionally the Docker network on which the database is reachable. |
 | Assignment | Assign HEAppE instance | Optional. Assigns a HEAppE instance right after the deployment (see [Assigning HEAppE instances](#assigning-heappe-instances)). |
 | | Enable notifications | Turns notifications on for that HEAppE instance; notifiers are created later, one per cluster. The HEAppE instance must run 6.6.0 or newer, otherwise the deployment is refused before it starts. |
 
@@ -218,79 +219,16 @@ Refused while any HEAppE instance is assigned. [Unassign](#unassign) them first.
 
 - **Undeploy** (instances deployed by HEAppE Management): removes the QScheduler container, its PostgreSQL container
   and database network. The database volume is removed only when *Also delete the database volume* is ticked. The
-  image is kept.
+  image is kept. With the shared database: the shared database is disconnected from the instance's network, and its
+  schema and role are dropped when *Also drop its schema and role* is ticked (the default).
 - **Unregister** (registered instances): removes the instance from HEAppE Management only. The QScheduler service
   keeps running.
 
-### Instance removed without HEAppE Management
+### Instance not responding, missing or unreachable
 
-When the container **still exists** but QScheduler does not answer (stopped, crashed or hanging), the card shows
-*not responding* and a **Try restart** button. It runs the normal restart: `docker restart` (which also starts a
-stopped container) or the restart command of an "SSH into container" instance (*Confirm manual restart* when it has
-none), then waits for `/health`. If the service does not come back, the operation log shows the container's last log
-lines.
-
-When the QScheduler service disappears behind HEAppE Management's back (container removed by hand, VM reinstalled),
-the instance card shows:
-
-- **Missing**: the container no longer exists (deployed, local and "SSH to VM" instances).
-- **Unreachable**: it cannot be told whether the container exists (Docker or SSH unavailable; for an "SSH into
-  container" instance the SSH login fails, which looks the same as a removed container). Check the host before
-  deleting anything.
-
-HEAppE Management never resolves this on its own. **Resolve...** (on the card or in *Actions*) offers three choices:
-
-| Choice | What happens | Undo |
-|---|---|---|
-| **Archive** | The record, its assignments and all HEAppE clusters are kept **unchanged** (jobs on them fail until QScheduler is back). The card shows *Archived* with the reason; restart, update, assign, unassign and undeploy are disabled, no machine can be added, and *Remove quantum machine* deletes only the HEAppE cluster without contacting QScheduler. | *Restore*, or *Unarchive* when the service answers again (e.g. it was only down). |
-| **Restore** | Deploys QScheduler again and reassigns everything (see below). | – |
-| **Delete with entities** | Deletes what belonged to the instance, as selected (see below), and forgets it. | No. |
-
-An archived instance offers **Restore...**, **Delete with entities...** and, once its service answers again,
-**Unarchive**.
-
-#### Delete with entities
-
-A preview lists, per assigned HEAppE instance, its clusters on the instance and the projects and queue groups used
-**only** by those clusters. Select what to delete and type the instance name to confirm:
-
-| Option | Default | Deletes |
-|---|---|---|
-| HEAppE clusters | on | The clusters on this instance (with their queues and file transfer methods). Their `QSchedulerNotifyToken` is removed from Vault first. Off: the clusters are kept and only the instance is forgotten. |
-| Projects used only by these clusters | off | Those projects (needs *HEAppE clusters*). |
-| Queue groups used only by these clusters | off | Those queue groups with their accounting formulas (if not shared) and project allocations (needs *HEAppE clusters*). |
-| Leftover PostgreSQL container and network | on | Deployed instances only. |
-| Database volume | off | Deployed instances only (needs the previous option). |
-| Skip unreachable HEAppE instances | off | Shown when an assigned HEAppE cannot be reached. Without it nothing is deleted; with it, its clusters stay and point to the deleted instance. |
-
-All HEAppE instances are read before anything is deleted. When a deletion fails, the instance is kept so that it
-can be retried; projects, allocations and credentials not selected are kept.
-
-#### Restore
-
-Restore deploys QScheduler on the HEAppE Management Docker host the same way as *Deploy New* (instances that were
-registered, local or remote, become deployed instances):
-
-- **Image**: the previous branch / tag / image is preselected; any other branch, tag or local image can be chosen.
-- **Service**: container name and port (default: the previous ones). When they differ from the old endpoint, the
-  clusters and their file transfer methods are pointed to the new one.
-- **Database**:
-  - *Deploy new PostgreSQL*: a fresh database; old leftovers of the same name (PostgreSQL container, network,
-    volume) are removed.
-  - *Reuse the old database* (deployed instances under their original name): the old PostgreSQL container if it
-    still exists, or the kept volume with the stored password. Machines that still exist in it are kept.
-  - *Use existing database*: a `DATABASE_URL`.
-- **Machines used by the clusters**: one row per machine, prefilled from the definition stored when it was added
-  (backend, queue size, limits, IQM URL and device). The **IQM token is never stored** and must be entered again.
-  With a reused database, *exists in reused DB* skips a machine.
-- **HEAppE clusters to reassign**: the clusters of every assigned HEAppE instance on the old endpoint.
-
-After the service is healthy, Restore registers the missing machines, creates **one notifier per cluster with a new
-token** (for HEAppE instances with notifications on), restarts QScheduler once, and updates every cluster with its
-new notifier and token (stored in Vault) and, if changed, the new endpoint. The record is then no longer archived.
-If a machine cannot be registered, its clusters are reported and the others are restored. An unreachable HEAppE
-instance stops the restore before anything changes, unless *Skip unreachable HEAppE instances* is ticked; its
-clusters can be reassigned later with *Edit assignment → Generate new tokens*.
+When the QScheduler service stops answering or disappears behind HEAppE Management's back, the instance card shows
+*not responding*, *Missing* or *Unreachable* and offers **Try restart** or **Resolve...** (Archive, Restore, Delete
+with entities). See [QScheduler recovery](QScheduler_Recovery_README.md#instance-not-responding).
 
 ---
 
@@ -405,32 +343,11 @@ panel at the top of it (checked when the page opens; the arrow checks again):
 - **Attached to**: the QScheduler instance the cluster points to (`QSchedulerHost` / `MasterNodeName` + port), with a
   link to the QScheduler page, and the cluster's machine. Endpoints that are not a registered instance, archived
   instances and instances this HEAppE is not assigned to are reported and nothing else is checked.
-- **Notifications**: with notifications on for this HEAppE, the cluster must have callbacks enabled,
-  `QSchedulerNotifier` = `<HEAppE identifier>.<machine>`, a `QSchedulerNotifyToken` (Vault), and that notifier must be
-  registered in QScheduler with the assignment's callback URL. QScheduler does not expose notifier tokens, so the token
-  value itself cannot be compared. With notifications off, callbacks must be disabled. Otherwise the problems are
-  listed with **Recreate notifier** (notifications on: a new notifier with a new token, the cluster's old notifier is
-  removed if no other cluster uses it, one QScheduler restart, the token stored in Vault) or **Disable callbacks**
-  (notifications off).
-- **Machine**: whether the cluster's machine (the queue of its node type) exists in QScheduler. When it does not, jobs
-  on the cluster fail and **Recover machine...** offers:
-  - *Register a new machine with this name* (backend `test` or `iqm`, queue size, IQM URL, device, token, poll
-    interval), or
-  - *Use an existing machine*: the cluster's queue is switched to it (refused when another cluster of this HEAppE on
-    the same QScheduler uses it).
+- **Notifications**: whether the cluster's notifier and callbacks match the assignment.
+- **Machine**: whether the cluster's machine (the queue of its node type) exists in QScheduler.
 
-  Either way the cluster gets the notifier `<identifier>.<machine>` with a new token (notifications on) and
-  QScheduler restarts once.
-
-- **Move to another QScheduler...**: offered when the cluster's QScheduler instance is not registered in HEAppE
-  Management, is archived, or cannot be reached. The cluster is **not deleted**: its queues, projects, allocations,
-  credentials and job history stay. Choose another instance this HEAppE is assigned to (it must be healthy) and
-  either *use an existing machine* there (the cluster's queue is switched to it if the name differs) or *register a
-  new machine* with the cluster's machine name. The cluster and its file transfer methods are pointed to the new
-  endpoint, it gets the notifier `<identifier>.<machine>` there with a new token (Vault), and the new QScheduler
-  restarts once. The old notifier is removed from the old instance only if that one still answers. Tasks that were
-  running on the old instance are not moved. Refused when another cluster of this HEAppE already uses the machine on
-  the target instance.
+When a check fails, the panel offers **Recreate notifier** / **Disable callbacks**, **Recover machine...** or **Move to
+another QScheduler...**. See [Cluster checks](QScheduler_Recovery_README.md#cluster-checks-on-the-cluster-detail-page).
 
 The panel needs HEAppE 6.6.0+ for its actions. Its *Webhook & Callback
 Notifications* section contains the cluster's notifier settings instead of the generic webhook fields:
@@ -542,6 +459,61 @@ arriving during the restart fail, and HEAppE retries status queries later.
 
 ---
 
+## Shared database
+
+One PostgreSQL server for all QScheduler instances on the HEAppE Management Docker host. Each instance gets its own
+role and schema; a dedicated PostgreSQL container per instance stays available for experiments.
+
+**Deploy shared database** (card at the top of the QScheduler page):
+
+- container `qscheduler-shared-pgsql` (`postgres:16`, setting or environment variable `QSCHEDULER_SHARED_DB_IMAGE`),
+  volume `qscheduler-shared-pgdata`, database `qscheduler`, internal network `qscheduler-shared-db_net`;
+- no published port; the backup directory is mounted at `/backups`;
+- the admin password is generated and stored encrypted; `public` schema and database access are revoked from all
+  roles.
+
+**Per instance**: role and schema `qs_<instance name>` (lowercase, other characters replaced by `_`), the role's
+`search_path` set to the schema and `CONNECT` on the database only. QScheduler's migrations then create its tables in
+that schema. The shared database joins the instance's internal `<name>_db_net`, so each instance reaches it only
+through its own network, and roles cannot read other schemas. Verified with QScheduler 0.2.1 and PostgreSQL 16.
+
+The card shows the state, the PostgreSQL version and the schemas with size, instance and open connections:
+
+- **Update image**: only within the same PostgreSQL major version. The container is recreated on the same volume, and
+  instances lose the database for a few seconds.
+- **Remove**: only when no instance uses the shared database; optionally deletes the volume.
+- **drop**: removes a schema that no instance uses, e.g. one left by *Restore* under another name.
+
+**Instance → Actions → Migrate to shared database...** (deployed instances with a dedicated PostgreSQL container, once
+the shared database exists):
+
+1. QScheduler is stopped for a consistent copy. Requests fail meanwhile; running backend work is re-attached
+   afterwards, as after a restart.
+2. A backup of the old database is written (it stays in the instance's backups).
+3. The dump is restored as the new role into a temporary database. There its `public` schema is renamed to
+   `qs_<name>`, then it is copied into the shared database. The row counts of every table are compared with the
+   old database.
+4. The QScheduler container is recreated with the new `DATABASE_URL`; everything else (token, networks, extra hosts)
+   is kept.
+
+On any failure the schema, role and temporary database are dropped and QScheduler starts again on the old database.
+The old PostgreSQL container and volume are kept (stopped) unless *Remove the old PostgreSQL container and volume* is
+ticked.
+
+## Backups
+
+**Instance → Actions → Backups...** (instances deployed by HEAppE Management, shared or dedicated database) lists the
+dumps of the instance and offers **Backup now** and delete.
+
+- **Location**: `<QSCHEDULER_BACKUP_DIR>/<instance>/<UTC time>_<QScheduler version>.dump`. `QSCHEDULER_BACKUP_DIR` is
+  a setting or environment variable, default `/opt/heappe-deployment/qscheduler-backups`, on the host.
+- **Format**: `pg_dump` custom format. Each dump is checked with `pg_restore --list`; a dump without tables is
+  refused and removed.
+- **How**:
+  - shared database: `pg_dump -n <schema>` in the shared container;
+  - dedicated database: `pg_dump` in `<name>-pgsql`, copied to the host with `docker cp`.
+- **Restore** (`pg_restore --clean --if-exists`) is used by the in-place update's rollback (coming next).
+
 ## Admin API and admin token
 
 QScheduler 0.2.1+ protects its admin endpoints (`/machines`, `/machine/{name}`, `/notifiers`, `/notifiers/{name}`)
@@ -572,7 +544,7 @@ The image is `nginx:1.27-alpine` (setting or environment variable `QSCHEDULER_AD
   *Set token* (checked against the service when the proxy exists), *Regenerate* (Docker-based instances: recreates the
   container with a new token; **other HEAppE Management instances lose admin access until they get the new token**).
 - When an action fails because the token is missing or rejected, the progress dialog and the instance card offer
-  **Fix admin token...**.
+  **Fix admin token...** (see [QScheduler recovery](QScheduler_Recovery_README.md#admin-token-missing-or-rejected)).
 
 ---
 
@@ -625,6 +597,9 @@ instances it is assigned to and the default `bridge` network (egress, e.g. to IQ
 
 ## Troubleshooting
 
+Error states with a fix in the UI (not responding, missing or unreachable instances, broken clusters, admin token,
+restart pending) are described in [QScheduler_Recovery_README.md](QScheduler_Recovery_README.md).
+
 | Symptom | Cause / fix |
 |---|---|
 | *No QScheduler instance is assigned to HEAppE instance …* on the Clusters page | Assign the HEAppE instance on the QScheduler page. |
@@ -634,7 +609,7 @@ instances it is assigned to and the default `bridge` network (egress, e.g. to IQ
 | *The assignment has notifications on but no callback URL* | Edit the assignment and enter the callback URL. |
 | *SSH host key of … changed since registration* | The server was reinstalled or the address points elsewhere. Verify the host, then unregister and register the instance again. |
 | *'qscheduler notifier list' failed* during registration | The QScheduler version is older than the notifier release. Update it first. |
-| Instance shows *restart pending* | A change was written but the service was not restarted (SSH into container without a restart command). Restart the container, then use **Actions → Confirm manual restart**. |
+| Instance shows *restart pending* | A change was written but the service was not restarted (SSH into container without a restart command). Restart the container, then use **Actions → Confirm manual restart** (see [Restart pending](QScheduler_Recovery_README.md#restart-pending)). |
 | Machines: *cannot be listed* | The `postgres:16` image is missing on the instance's Docker host, or `psql` is missing in the container. Only the list is affected. |
 | *Assignment saved, but updating the HEAppE clusters failed* | The HEAppE API was unavailable. Open the assignment and save it again. |
 | Jobs stay in *Submitted* with notifications on | QScheduler cannot reach the callback URL. Check the callback URL from the QScheduler host, or edit the assignment and turn notifications off (HEAppE then polls). |
@@ -648,6 +623,9 @@ instances it is assigned to and the default `bridge` network (egress, e.g. to IQ
 |---|---|---|---|
 | QScheduler page | Deploy New | – | New QScheduler + PostgreSQL on the HEAppE Management Docker host, optional assignment. |
 | QScheduler page | Register Existing | – | Adds a running QScheduler (local container, SSH to VM, SSH into container). |
+| QScheduler page → Shared database | Deploy / Update image / Remove / drop schema | – | Shared PostgreSQL for all instances on this host (see [Shared database](#shared-database)). |
+| Instance → Actions | Migrate to shared database... | deployed with a dedicated database | Copies the data into a new schema of the shared database (checked row counts) and switches QScheduler to it; old container kept stopped or removed. |
+| Instance → Actions | Backups... | deployed (shared or dedicated database) | List, create and delete database dumps (see [Backups](#backups)). |
 | Instance → Actions | Update | deployed, local, SSH to VM | New image (git build or existing image), container recreated, rollback on failure. |
 | Instance → Actions | Restart | all | Graceful restart. SSH into container without a restart command: *Confirm manual restart* (health check only). |
 | Instance → Actions | Undeploy | deployed | Removes containers and network, optionally the database volume. Requires no assignments. |

@@ -57,6 +57,33 @@ class InstanceCredentials(models.Model):
         ]
 
 
+class QSchedulerDatabase(models.Model):
+    """
+    Shared PostgreSQL server for QScheduler instances on the Docker host of HEAppE Management. Every instance using it
+    has its own role and schema (role search_path = schema); the container joins each instance's internal DB network.
+    """
+    name = models.CharField(max_length=63, unique=True)                 # container name
+    image = models.CharField(max_length=255)
+    volume = models.CharField(max_length=255)
+    database = models.CharField(max_length=63, default="qscheduler")
+    home_network = models.CharField(max_length=255)
+    backup_dir = models.CharField(max_length=1024)                      # host directory mounted at /backups
+    admin_password_encrypted = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def admin_password(self):
+        return decrypt_secret(self.admin_password_encrypted)
+
+    @admin_password.setter
+    def admin_password(self, value):
+        self.admin_password_encrypted = encrypt_secret(value) if value else ""
+
+
 class QSchedulerInstance(models.Model):
     """
     A QScheduler service known to HEAppE Management. It is shared: several HEAppE instances can be
@@ -102,6 +129,18 @@ class QSchedulerInstance(models.Model):
     repo = models.CharField(max_length=512, blank=True, default="")
     ref = models.CharField(max_length=128, blank=True, default="")
     image = models.CharField(max_length=255, blank=True, default="")
+
+    # Database: dedicated (own PostgreSQL container <name>-pgsql), shared (role + schema db_schema in shared_database),
+    # external (DATABASE_URL entered / registered instance).
+    DB_DEDICATED = "dedicated"
+    DB_SHARED = "shared"
+    DB_EXTERNAL = "external"
+    DB_KIND_CHOICES = [(DB_DEDICATED, "Dedicated PostgreSQL container"), (DB_SHARED, "Shared database"),
+                       (DB_EXTERNAL, "External database")]
+    db_kind = models.CharField(max_length=16, choices=DB_KIND_CHOICES, default=DB_EXTERNAL)
+    db_schema = models.CharField(max_length=63, blank=True, default="")      # shared: role and schema name
+    shared_database = models.ForeignKey(QSchedulerDatabase, null=True, blank=True, on_delete=models.PROTECT,
+                                        related_name="instances")
 
     restart_pending = models.BooleanField(default=False)
     # ADMIN_TOKEN of the service (bearer token of the admin API, QScheduler >= 0.2.1), encrypted with a key derived

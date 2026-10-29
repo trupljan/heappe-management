@@ -174,7 +174,32 @@
                             {% csrf_token %}
                             <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                             <input type="hidden" name="action" value="restart_all">
-                            <button type="submit" class="btn btn-info text-white w-100 px-4"><i class="bi bi-arrow-clockwise"></i> Restart All</button>
+                            <div class="btn-group w-100">
+                                <button type="submit" class="btn btn-info text-white px-4"
+                                        title="Restarts every service container. One-shot init jobs (heappe-init, otel-collector-init) are not run again: they only run on 'docker compose up' (Start All, Switch Branch &amp; Build).">
+                                    <i class="bi bi-arrow-clockwise"></i> Restart All
+                                </button>
+                                <button type="button" class="btn btn-info text-white dropdown-toggle dropdown-toggle-split"
+                                        data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="More restart options">
+                                    <span class="visually-hidden">More restart options</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm py-1" style="min-width: 17rem; max-width: 22rem;">
+                                    <li class="d-flex align-items-center pe-1">
+                                        <button type="button" class="dropdown-item text-nowrap restart-all-plain">
+                                            <i class="bi bi-arrow-repeat me-2"></i>docker compose restart
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-link text-secondary p-1 restart-plain-info"
+                                                title="What does it do?" aria-expanded="false" aria-controls="restart-plain-detail">
+                                            <i class="bi bi-info-circle"></i>
+                                        </button>
+                                    </li>
+                                    <li id="restart-plain-detail" class="small text-muted px-3 pb-2 pt-1 border-top" style="display:none; white-space: normal; line-height: 1.4;">
+                                        Restarts every container of the instance, including the exited one-shot init jobs
+                                        (<code>heappe-init</code>, <code>otel-collector-init</code>). It can report a failure
+                                        when an init job's network was removed meanwhile, even though all services are up.
+                                    </li>
+                                </ul>
+                            </div>
                         </form>
                         <form id="down-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
                             {% csrf_token %}
@@ -206,332 +231,47 @@
                     </div>
                 </div>
             </div>
+
+            <!-- HEAppE could not reach SQL Server while starting (filled by showHeappeDbIssue) -->
+            <div id="heappe-db-issue-banner" style="display:none;" class="alert alert-warning border-0 shadow-sm mb-4" role="alert">
+                <div class="d-flex align-items-start gap-3 flex-wrap">
+                    <i class="bi bi-database-exclamation fs-4 text-warning-emphasis flex-shrink-0"></i>
+                    <div class="flex-grow-1" style="min-width: 240px;">
+                        <strong class="text-warning-emphasis">HEAppE started before SQL Server was ready</strong>
+                        <div class="small mt-1">
+                            <span class="font-monospace" data-field="container_name"></span> could not connect to the
+                            database while starting and does not retry by itself. This happens after <em>Restart All</em>,
+                            a Docker restart or unpausing the containers.
+                            <span data-when="ready">SQL Server is healthy now, so restarting only HEAppE fixes it; the other containers and the data stay as they are.</span>
+                            <span data-when="not-ready">SQL Server (<span class="font-monospace" data-field="mssql_name"></span>) is not healthy yet; restart HEAppE once it is.</span>
+                        </div>
+                        <details class="small mt-1">
+                            <summary class="text-muted">Error from the HEAppE log</summary>
+                            <code class="d-block text-break mt-1" data-field="error"></code>
+                        </details>
+                    </div>
+                    <form class="container-control-form flex-shrink-0" data-when="ready">
+                        {% csrf_token %}
+                        <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                        <input type="hidden" name="action" value="restart">
+                        <input type="hidden" name="container_id" value="">
+                        <button type="submit" class="btn btn-warning"><i class="bi bi-arrow-clockwise me-1"></i>Restart HEAppE</button>
+                    </form>
+                </div>
+            </div>
+            {{ heappe_db_issue|json_script:"heappe-db-issue-data" }}
             {% endif %}
 
-            <!-- API Services -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-2"><i class="bi bi-cpu text-primary"></i>API Services</h5>
+            <!-- Container cards, grouped by compose service (see CONTAINER_SERVICES in view/deploy.py) -->
+            {% for section in container_sections %}
+            <h5 class="fw-bold mb-1 text-secondary d-flex align-items-center gap-2 {% if forloop.first %}mt-2{% else %}mt-4{% endif %}"><i class="bi {{ section.icon }}"></i>{{ section.title }}</h5>
+            {% if section.note %}<p class="small text-muted mb-3">{{ section.note }}</p>{% else %}<div class="mb-3"></div>{% endif %}
             <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
-                {% for item in containers %}
-                {% if 'heappe' in item.container.name.lower or 'datastaging' in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col">
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-dark open-fm-tab-btn" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
-                                {% if 'heappe' in container.name.lower %}
-                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings.json" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center" title="Configure (appsettings.json)"><i class="bi bi-gear"></i></a>
-                                {% elif 'datastaging' in container.name.lower %}
-                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings-data.json" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center" title="Configure (appsettings-data.json)"><i class="bi bi-gear"></i></a>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
+                {% for item in section.items %}
+                    {% include "partials/container_card.html" with container=item.container info=item.info %}
                 {% endfor %}
             </div>
-
-            <!-- Database Services -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-database text-info"></i>Database Services</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
-                {% for item in containers %}
-                {% if 'mssql' in item.container.name.lower or 'db' in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col">
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
-                {% endfor %}
-            </div>
-
-            <!-- Infrastructure & Security (Vault, SSH Agent) -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-shield-lock text-info"></i>Infrastructure &amp; Security (Vault, SSH Agent)</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
-                {% for item in containers %}
-                {% if 'heappe' not in item.container.name.lower and 'datastaging' not in item.container.name.lower and 'mssql' not in item.container.name.lower and 'db' not in item.container.name.lower and 'otel' not in item.container.name.lower and 'jaeger' not in item.container.name.lower and 'slurm' not in item.container.name.lower and 'qscheduler' not in item.container.name.lower %}
-                {% if 'sshagent' not in item.container.name.lower and 'ssh-agent' not in item.container.name.lower or instance_name|add:"_" in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                                {% if 'vault' in container.name.lower and 'vaultagent' not in container.name.lower and 'init' not in container.name.lower and 'unseal' not in container.name.lower %}
-                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="openUnsealVaultModal();" title="Unlock / Unseal Vault without restart"><i class="bi bi-unlock-fill"></i></button>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
-                {% endif %}
-                {% endfor %}
-            </div>
-
-            <!-- Telemetry & APM (Jaeger, OpenTelemetry) -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-activity text-info"></i>Telemetry &amp; APM (Jaeger, OpenTelemetry)</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-5">
-                {% for item in containers %}
-                {% if 'otel' in item.container.name.lower or 'jaeger' in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
-                {% endfor %}
-            </div>
-
-            <!-- Slurm Simulators & Test Services & QScheduler -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-server text-warning"></i>Slurm Simulators, QScheduler &amp; Test Services</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-5">
-                {% for item in containers %}
-                {% if 'slurm' in item.container.name.lower or 'qscheduler' in item.container.name.lower or 'sshagent' in item.container.name.lower or 'ssh-agent' in item.container.name.lower %}
-                {% if 'slurm' in item.container.name.lower or 'qscheduler' in item.container.name.lower or instance_name|add:"_" not in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col">
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                                <form id="delete-form-{{ container.id }}" class="container-control-form" onsubmit="return confirm('Are you sure you want to delete container {{ container.name }}?');">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="delete">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Container"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
-                {% endif %}
-                {% endfor %}
-            </div>
+            {% endfor %}
         </div>
 
         <!-- Configuration Explorer Tab Pane -->
@@ -2100,6 +1840,12 @@ $(document).ready(function() {
                 },
                 success: function(data) {
                     if (!data || !data.containers) return;
+                    if (data.heappe_db_issue) {
+                        clearInterval(startupPollInterval);
+                        $('#startup-banner').hide();
+                        showHeappeDbIssue(data.heappe_db_issue);
+                        return;
+                    }
 
                     // If we have restart_status from backend, update the status phase
                     if (data.restart_status && data.restart_status !== 'none') {
@@ -2110,7 +1856,7 @@ $(document).ready(function() {
                         } else if (status === 'done') {
                             $('#startup-phase').text('Waiting for HEAppE to come online…');
 
-                            const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                            const heappe = data.containers.find(c => c.service === 'heappe');
                             const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                             if (heappe) {
                                 $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
@@ -2131,7 +1877,7 @@ $(document).ready(function() {
                     }
 
                     // Fallback to container-only polling
-                    const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                    const heappe = data.containers.find(c => c.service === 'heappe');
                     const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                     if (heappe) {
                         $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
@@ -2148,12 +1894,64 @@ $(document).ready(function() {
         }, 3000);
     }
 
+    // --- HEAppE STARTED BEFORE SQL SERVER WAS READY ---
+    function showHeappeDbIssue(issue) {
+        const $b = $('#heappe-db-issue-banner');
+        if (!$b.length || !issue) return;
+        ['container_name', 'mssql_name', 'error'].forEach(f => $b.find(`[data-field="${f}"]`).text(issue[f] || ''));
+        $b.find('input[name="container_id"]').val(issue.container_id);
+        $b.find('[data-when="ready"]').toggle(!!issue.mssql_ready);
+        $b.find('[data-when="not-ready"]').toggle(!issue.mssql_ready);
+        $b.show();
+    }
+
+    (function watchHeappeStartup() {
+        const el = document.getElementById('heappe-db-issue-data');
+        const issue = el ? JSON.parse(el.textContent) : null;
+        if (issue) showHeappeDbIssue(issue);
+        // While HEAppE is starting or unhealthy (or waits for SQL Server), keep checking for a few minutes.
+        const health = '{{ heappe_health|escapejs }}';
+        if (!el || (health !== 'starting' && health !== 'unhealthy')) return;
+        let checks = 0;
+        const timer = setInterval(function() {
+            if (++checks > 30 || startupPollInterval) { clearInterval(timer); return; }
+            $.post(window.location.href, {
+                action: 'status_poll', InstanceName: instanceName,
+                csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').first().val()
+            }).done(function(data) {
+                if (data && data.heappe_db_issue) {
+                    showHeappeDbIssue(data.heappe_db_issue);
+                } else if (data && data.containers) {
+                    $('#heappe-db-issue-banner').hide();
+                }
+            });
+        }, 10000);
+    })();
+
+    // Restart All dropdown: the real `docker compose restart` (one-shot init jobs included)
+    $(document).on('click', '.restart-plain-info', function(e) {
+        e.stopPropagation();
+        const $detail = $('#restart-plain-detail');
+        $detail.toggle();
+        $(this).attr('aria-expanded', $detail.is(':visible'));
+    });
+
+    $(document).on('click', '.restart-all-plain', function() {
+        const $form = $(this).closest('form');
+        const toggle = $form.find('.dropdown-toggle-split')[0];
+        if (toggle && window.bootstrap) bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+        const $action = $form.find('input[name="action"]');
+        $action.val('restart_all_plain');
+        $form.trigger('submit');
+        $action.val('restart_all');
+    });
+
     $(document).on('submit', '.container-control-form, .global-control-form', function(e) {
         e.preventDefault();
         const form   = $(this);
         const action = form.find('input[name="action"]').val();
 
-        if (action === 'restart_all') {
+        if (action === 'restart_all' || action === 'restart_all_plain') {
             showLoading('Initiating Restart…', 'Sending restart command to server…');
             runRestartPhases();
             $.ajax({
@@ -2466,7 +2264,7 @@ $(document).ready(function() {
         // relatedTarget is null when modal re-shows after tab switch — keep last cid
         if (e.relatedTarget) {
             logsCurrentCid = $(e.relatedTarget).data('container-id');
-            const cname = $(e.relatedTarget).closest('.card').find('h6').first().text().trim();
+            const cname = $(e.relatedTarget).data('container-title') || $(e.relatedTarget).closest('.card').find('h6').first().text().trim();
             $('#logs-container-name').text(cname || logsCurrentCid.substring(0, 12));
             $logsContent.text('');
             logsAutoScroll = true;
@@ -2713,10 +2511,10 @@ $(document).ready(function() {
         $('.open-fm-tab-btn').each(function() {
             const cid = $(this).data('container-id');
             const name = $(this).data('container-name') || '';
-            const lowerName = name.toLowerCase();
+            const service = $(this).data('container-service') || '';
             
-            if (lowerName.includes('heappe') || lowerName.includes('datastaging')) {
-                const label = lowerName.includes('heappe') ? 'HEAppE API' : 'DataStaging API';
+            if (service === 'heappe' || service === 'datastagingapi') {
+                const label = service === 'heappe' ? 'HEAppE API' : 'DataStaging API';
                 const btnClass = cid === currentContainerId ? 'btn-primary' : 'btn-outline-primary';
                 const btn = $(`<button type="button" class="btn btn-sm ${btnClass} fm-switch-container-btn" data-container-id="${cid}" data-container-name="${name}">${label}</button>`);
                 switcher.append(btn);
@@ -2772,7 +2570,7 @@ $(document).ready(function() {
         if (!currentContainerId) {
             // Find container containing heappe in its name
             const heappeBtn = $('.open-fm-tab-btn').filter(function() {
-                return ($(this).data('container-name') || '').toLowerCase().includes('heappe');
+                return $(this).data('container-service') === 'heappe';
             }).first();
             
             if (heappeBtn.length) {
@@ -3064,6 +2862,14 @@ $(document).ready(function() {
 </script>
 
 <style>
+    /* Container cards */
+    .container-card-icon { width: 2.5rem; height: 2.5rem; font-size: 1.2rem; }
+    .container-card-title { font-size: 1.05rem; }
+    .container-card-details { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: .75rem; row-gap: .35rem; }
+    .container-card-details dt { font-weight: 600; color: var(--bs-secondary-color); }
+    .container-card-details dd { margin: 0; min-width: 0; }
+    .container-card-job { opacity: .85; }
+
     .spin-icon {
         display: inline-block;
         animation: spin-anim 2s linear infinite;

@@ -7,7 +7,9 @@ from heappe_ui.view.qscheduler_deploy import (qscheduler_page, qscheduler_local_
                                               qscheduler_deploy_api, qscheduler_register_api, qscheduler_heappe_info_api,
                                               qscheduler_live_api, qscheduler_update_api, qscheduler_restart_api,
                                               qscheduler_undeploy_api, qscheduler_assign_api, qscheduler_unassign_api,
-                                              qscheduler_notifier_remove_api, qscheduler_admin_token_api)
+                                              qscheduler_notifier_remove_api, qscheduler_admin_token_api,
+                                              qscheduler_shared_db_api, qscheduler_backups_api,
+                                              qscheduler_migrate_to_shared_api)
 from heappe_ui.view.qscheduler_recovery import (qscheduler_archive_api, qscheduler_unarchive_api,
                                                 qscheduler_cascade_preview_api, qscheduler_cascade_delete_api,
                                                 qscheduler_restore_info_api, qscheduler_restore_api)

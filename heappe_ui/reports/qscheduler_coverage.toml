@@ -31,6 +31,7 @@ machines = "heappe_ui/view/qscheduler_machines.py"
 recovery = "heappe_ui/view/qscheduler_recovery.py"
 health = "heappe_ui/view/qscheduler_cluster_health.py"
 admin = "heappe_ui/view/qscheduler_admin.py"
+shareddb = "heappe_ui/view/qscheduler_shared_db.py"
 
 [file_descriptions]
 core = "Docker/SSH runners, targets, HEAppE and git helpers"
@@ -39,6 +40,7 @@ machines = "Clusters page: add/remove machine"
 recovery = "missing instances: archive, cascade deletion, restore"
 health = "cluster detail: QScheduler panel"
 admin = "admin API proxy, client and admin token"
+shareddb = "shared PostgreSQL, instance schemas, backups"
 
 [tests]
 module = "heappe_ui.tests"
@@ -107,6 +109,33 @@ name = "Update – recreate container"
 code = ["deploy:recreate_args_from_inspect", "deploy:_network_is_internal", "deploy:update_worker"]
 verified = "`recreate_args_from_inspect`: env (without `PATH`), labels, restart policy, published port, aliases, egress network first, healthcheck, image + command."
 not_tested = "`update_worker`: build, stop/rename, rollback on failure, record update."
+
+[[sections.features]]
+name = "Shared database"
+code = ["shareddb:shared_image", "shareddb:shared_database", "shareddb:ident", "shareddb:schema_name_for",
+        "shareddb:psql", "shareddb:create_schema_sql", "shareddb:drop_schema_sql", "shareddb:shared_run_args",
+        "shareddb:wait_ready", "shareddb:server_major", "shareddb:image_major", "shareddb:deploy_shared_worker",
+        "shareddb:update_shared_worker", "shareddb:remove_shared_worker", "shareddb:shared_status",
+        "shareddb:require_running", "shareddb:schema_exists", "shareddb:role_exists",
+        "shareddb:create_instance_schema", "shareddb:drop_instance_schema", "shareddb:connect_network",
+        "shareddb:disconnect_network", "shareddb:drop_orphan_schema_worker", "deploy:qscheduler_shared_db_api"]
+verified = "Role/schema naming (sanitised, max 63), identifier validation, CREATE ROLE/SCHEMA/search_path/CONNECT and DROP SQL, SQL passed on stdin (password never on the command line), deploy of an instance into the shared database (schema, network link, DATABASE_URL) and the cleanup commands on failure, undeploy drops or keeps the schema, deploy worker with mocked Docker (backup mount, no published port, hardening SQL, encrypted admin password), status parsing (schemas, instances, connections), removal refused while used, refused major-version update, API guards (deploy twice, remove with instances, drop of a used schema). End to end against Docker (QS_DOCKER_TESTS=1, QScheduler 0.2.1 from the tag, PostgreSQL 16): deploy, instance tables in its schema only, status, undeploy drops schema and role, removal."
+not_tested = "Image update with rollback; the end-to-end tests are skipped unless QS_DOCKER_TESTS=1."
+
+[[sections.features]]
+name = "Migrate to the shared database"
+code = ["shareddb:table_counts", "shareddb:migrate_sql_steps", "shareddb:migrate_to_shared_worker",
+        "deploy:qscheduler_migrate_to_shared_api"]
+verified = "SQL steps (role, temporary database owned by the role, public schema renamed to the role's schema, search_path and CONNECT, temporary database dropped); on a row-count mismatch nothing is switched, the schema, role and temporary database are dropped and QScheduler starts on the old database; API guards (dedicated only, shared database required). End to end (QS_DOCKER_TESTS=1, QScheduler 0.2.1): identical row counts per table, tables owned by the role, nothing left in public or temporary databases, old container kept stopped, ADMIN_TOKEN kept, service healthy, new rows land in the schema, backup of the old database listed."
+not_tested = "Failure during the container switch (rolled back by recreate_container); the end-to-end test is skipped unless QS_DOCKER_TESTS=1."
+
+[[sections.features]]
+name = "Database backups"
+code = ["shareddb:backup_root", "shareddb:backup_dir_of", "shareddb:can_backup", "shareddb:backup_file_name",
+        "shareddb:list_backups", "shareddb:delete_backup", "shareddb:_dump_tables", "shareddb:backup_instance",
+        "shareddb:restore_instance", "shareddb:backup_worker", "deploy:qscheduler_backups_api"]
+verified = "File names (UTC timestamp + QScheduler version), listing ignores other files, delete refuses path traversal and foreign names, backups only for managed shared/dedicated databases, mocked shared (pg_dump -n) and dedicated (pg_dump, docker cp, temp file removed) commands, a dump without tables is refused and removed. End to end (QS_DOCKER_TESTS=1): shared (pg_dump -n into the mounted host directory) and dedicated (pg_dump + docker cp) backup, data change, restore, data back."
+not_tested = "Backups API view; the end-to-end tests are skipped unless QS_DOCKER_TESTS=1."
 
 [[sections.features]]
 name = "Extra hosts (Containers & Services tab)"

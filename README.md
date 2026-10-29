@@ -6,6 +6,8 @@ Django web application for administration and management of HEAppE middleware.
 
 QScheduler (quantum task scheduler) deployment and quantum machines: see [QScheduler_README.md](QScheduler_README.md).
 
+Recognised error states and the fixes the admin panel offers: HEAppE instances in [Recovery_README.md](Recovery_README.md), QScheduler in [QScheduler_Recovery_README.md](QScheduler_Recovery_README.md).
+
 ## Quickstart (Local Development)
 
 ### Requirements

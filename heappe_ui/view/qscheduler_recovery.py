@@ -21,6 +21,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from heappe_ui.models import QSchedulerInstance as Q, QSchedulerMachine
 
 from . import qscheduler_core as core
+from . import qscheduler_shared_db as shared_db
 from .qscheduler_core import DockerCli, DockerTarget, LABEL_INSTANCE, NAME_RE
 from .qscheduler_deploy import (_Reader, _validate_source, _network_prefix, _error, _json_body, _post_only, _started, _instance_or_404,
                                 _wait_for_postgres, deploy_service, postgres_run_args, LOCAL_KINDS)
@@ -34,10 +35,19 @@ def _connect(cred, log):
     return controller, session_code
 
 
-def _leftovers(docker, name):
-    """Docker resources of a managed instance named `name` that still exist: {kind: name}."""
+def _leftovers(docker, name, inst=None):
+    """
+    Docker resources of a managed instance named `name` that still exist: {kind: name}; with `inst` using the shared
+    database also its schema ('db_schema').
+    """
     pg, net, vol = f"{name}-pgsql", f"{name}_db_net", f"{name}-pgdata"
     out = {}
+    if inst is not None and inst.db_kind == Q.DB_SHARED and inst.db_schema:
+        try:
+            if shared_db.shared_database() and shared_db.schema_exists(docker, inst.db_schema):
+                out['db_schema'] = inst.db_schema
+        except Exception:
+            pass
     if docker.exists("container", name):
         out['service'] = name
     if docker.exists("container", pg):
@@ -229,9 +239,16 @@ def cascade_delete_worker(log, result, inst_id, opts):
     # 3. Leftover Docker resources of a managed instance
     if inst.kind == Q.KIND_MANAGED and opts['remove_db_container']:
         docker = DockerCli()
-        left = _leftovers(docker, inst.container_name)
+        left = _leftovers(docker, inst.container_name, inst)
         if 'db_container' in left:
             docker.run(["rm", "-f", left['db_container']], log)
+        if inst.db_kind == Q.DB_SHARED and inst.shared_database and 'db_network' in left:
+            shared_db.disconnect_network(docker, inst.shared_database, left['db_network'], log)
+        if 'db_schema' in left:
+            if opts['remove_db_volume']:
+                shared_db.drop_instance_schema(docker, left['db_schema'], log)
+            else:
+                log(f"Kept schema '{left['db_schema']}' in the shared database (drop it on the shared database card).")
         if 'db_network' in left:
             res = docker.run(["network", "rm", left['db_network']], log, check=False)
             if res.returncode != 0:
@@ -280,8 +297,8 @@ def parse_restore_options(data: dict, inst) -> tuple:
     if not NAME_RE.match(opts['name']):
         r.errors.append("Name may contain only letters, digits, '_', '.', '-' (max 63 chars).")
     _validate_source(r, opts)
-    if opts['db_mode'] not in ('new', 'reuse', 'existing'):
-        r.errors.append("Database mode must be 'new', 'reuse' or 'existing'.")
+    if opts['db_mode'] not in ('new', 'shared', 'reuse', 'existing'):
+        r.errors.append("Database mode must be 'new', 'shared', 'reuse' or 'existing'.")
     if opts['db_mode'] == 'reuse' and (inst.kind != Q.KIND_MANAGED or opts['name'] != inst.name):
         r.errors.append("The database can be reused only for an instance deployed by HEAppE Management, under its "
                         "original name.")
@@ -311,7 +328,9 @@ def reusable_database(docker, inst):
     """Description of the database a restore can reuse, or None (managed instances only)."""
     if inst.kind != Q.KIND_MANAGED:
         return None
-    left = _leftovers(docker, inst.container_name)
+    left = _leftovers(docker, inst.container_name, inst)
+    if 'db_schema' in left and inst.database_url:
+        return f"schema '{left['db_schema']}' in the shared database (kept)"
     if 'db_container' in left:
         return f"PostgreSQL container '{left['db_container']}' (still exists)"
     if 'db_volume' in left and inst.database_url:
@@ -320,9 +339,19 @@ def reusable_database(docker, inst):
 
 
 def _prepare_reused_database(docker, inst, log, prefix=None):
-    """Start / recreate the old PostgreSQL of a managed instance. Returns (database_url, db_network)."""
+    """Start / recreate the old PostgreSQL of a managed instance (or rejoin its shared schema). Returns (database_url,
+    db_network)."""
     name = inst.container_name
     pg, net, vol = f"{name}-pgsql", f"{name}_db_net", f"{name}-pgdata"
+    if inst.db_kind == Q.DB_SHARED:
+        db = shared_db.require_running(docker)
+        if not inst.database_url or not shared_db.schema_exists(docker, inst.db_schema):
+            raise RuntimeError(f"Schema '{inst.db_schema}' is no longer in the shared database; deploy a new database.")
+        if not docker.json(["network", "inspect", net]):
+            core.create_internal_network(docker, net, {LABEL_INSTANCE: name}, log, prefix=prefix)
+        shared_db.connect_network(docker, db, net, log)
+        log(f"Reusing schema '{inst.db_schema}' in the shared database.")
+        return inst.database_url, net
     info = docker.inspect(pg)
     if info:
         env = dict(e.split("=", 1) for e in (info.get("Config") or {}).get("Env") or [] if "=" in e)
@@ -346,8 +375,8 @@ def _prepare_reused_database(docker, inst, log, prefix=None):
     return f"postgres://qscheduler:{password}@{pg}:5432/qscheduler", net
 
 
-def _remove_leftovers(docker, name, log):
-    left = _leftovers(docker, name)
+def _remove_leftovers(docker, name, log, inst=None):
+    left = _leftovers(docker, name, inst if inst is not None and inst.container_name == name else None)
     if 'service' in left:
         raise RuntimeError(f"Container '{name}' exists on this Docker host. Choose another name.")
     for kind in ('db_container',):
@@ -358,6 +387,8 @@ def _remove_leftovers(docker, name, log):
     if 'db_volume' in left:
         docker.run(["volume", "rm", left['db_volume']], log)
         log(f"Removed the old database volume '{left['db_volume']}' (new database requested).")
+    if 'db_schema' in left:
+        shared_db.drop_instance_schema(docker, left['db_schema'], log)
 
 
 def restore_worker(log, result, inst_id, opts):
@@ -395,9 +426,16 @@ def restore_worker(log, result, inst_id, opts):
     deploy_opts['extra_hosts'] = inst.extra_hosts or []
     if opts['db_mode'] == 'reuse':
         url, net = _prepare_reused_database(docker, inst, log, prefix=opts.get('network_prefix'))
-        deploy_opts.update(db_mode='existing', database_url=url, db_network=net)
-    elif opts['db_mode'] == 'new':
-        _remove_leftovers(docker, name, log)
+        deploy_opts.update(db_mode='existing', database_url=url, db_network=net,
+                           reuse_kind=inst.db_kind if inst.db_kind in (Q.DB_SHARED, Q.DB_DEDICATED) else Q.DB_DEDICATED,
+                           reuse_schema=inst.db_schema)
+    elif opts['db_mode'] in ('new', 'shared'):
+        _remove_leftovers(docker, name, log, inst)
+        if inst.db_kind == Q.DB_SHARED and inst.db_schema and name != inst.container_name:
+            log(f"NOTE: schema '{inst.db_schema}' of the old instance is kept in the shared database; drop it on the "
+                f"shared database card when it is no longer needed.")
+    elif opts['db_mode'] == 'existing':
+        deploy_opts.update(reuse_kind=Q.DB_EXTERNAL)
     info = deploy_service(docker, deploy_opts, log)
 
     # 3. The record now describes the new deployment (assignments are kept)
@@ -408,6 +446,9 @@ def restore_worker(log, result, inst_id, opts):
     inst.image = opts['image']
     inst.database_url = info['database_url']
     inst.admin_token = info.get('admin_token', "")   # new container, new ADMIN_TOKEN
+    inst.db_kind = info.get('db_kind') or Q.DB_EXTERNAL
+    inst.db_schema = info.get('db_schema') or ""
+    inst.shared_database = info.get('shared_database')
     inst.ssh_host = inst.ssh_user = inst.ssh_private_key = inst.ssh_key_passphrase = inst.ssh_host_key = ""
     inst.ssh_port, inst.docker_command, inst.restart_command = 22, "docker", ""
     inst.restart_pending = False
@@ -610,7 +651,7 @@ def qscheduler_restore_info_api(request: HttpRequest, inst_id: int) -> HttpRespo
     try:
         docker = DockerCli()
         reuse = reusable_database(docker, inst)
-        leftovers = _leftovers(docker, inst.container_name) if inst.kind == Q.KIND_MANAGED else {}
+        leftovers = _leftovers(docker, inst.container_name, inst) if inst.kind == Q.KIND_MANAGED else {}
     except Exception as e:
         reuse, leftovers = None, {}
     git = inst.source == 'git' and bool(inst.repo)
@@ -620,6 +661,7 @@ def qscheduler_restore_info_api(request: HttpRequest, inst_id: int) -> HttpRespo
                      'repo': inst.repo or core.DEFAULT_QSCHEDULER_REPO, 'ref': inst.ref or core.DEFAULT_QSCHEDULER_REF,
                      'image': inst.image or core.DEFAULT_QSCHEDULER_IMAGE},
         'reusable_database': reuse, 'leftovers': leftovers,
+        'shared_db_deployed': shared_db.shared_database() is not None, 'db_kind': inst.db_kind,
         'machines': [machines[k] for k in sorted(machines)], 'machine_defaults': core.MACHINE_DEFAULTS,
         'network_prefix': core.network_pool()[1], 'network_prefixes': list(core.NETWORK_PREFIX_CHOICES),
         'heappes': heappes,
@@ -639,4 +681,6 @@ def qscheduler_restore_api(request: HttpRequest, inst_id: int) -> HttpResponse:
         _ensure_not_running(inst)
     except RuntimeError as e:
         return _error(str(e))
+    if opts['db_mode'] == 'shared' and not shared_db.shared_database():
+        return _error("No shared database is deployed: deploy it first or choose another database option.")
     return _started(*core.start_operation("restore", restore_worker, inst.id, opts))

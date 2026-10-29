@@ -318,11 +318,14 @@ class SshSession:
         self.client = client
         return self
 
-    def run(self, command: str, timeout=DOCKER_TIMEOUT) -> CommandResult:
+    def run(self, command: str, timeout=DOCKER_TIMEOUT, input=None) -> CommandResult:
         if self.client is None:
             self.connect()
         try:
-            _, stdout, stderr = self.client.exec_command(command, timeout=timeout)
+            stdin, stdout, stderr = self.client.exec_command(command, timeout=timeout)
+            if input is not None:
+                stdin.write(input)
+                stdin.channel.shutdown_write()
             out = stdout.read().decode("utf-8", "replace")
             err = stderr.read().decode("utf-8", "replace")
             rc = stdout.channel.recv_exit_status()
@@ -350,16 +353,17 @@ class DockerCli:
     def where(self):
         return f" (on {self.ssh.host})" if self.ssh else ""
 
-    def run(self, args, log=None, check=True, timeout=DOCKER_TIMEOUT, quiet=False) -> CommandResult:
+    def run(self, args, log=None, check=True, timeout=DOCKER_TIMEOUT, quiet=False, input=None) -> CommandResult:
+        """input: text for stdin (e.g. SQL with secrets: never on the command line, never logged)."""
         shown = " ".join(self.docker_command + redact_args(args))
         if log and not quiet:
             log(f"$ {shown}{self.where}")
         if self.ssh:
-            res = self.ssh.run(shlex.join(self.docker_command + [str(a) for a in args]), timeout=timeout)
+            res = self.ssh.run(shlex.join(self.docker_command + [str(a) for a in args]), timeout=timeout, input=input)
         else:
             try:
                 proc = subprocess.run(self.docker_command + [str(a) for a in args],
-                                      capture_output=True, text=True, timeout=timeout)
+                                      capture_output=True, text=True, timeout=timeout, input=input)
             except subprocess.TimeoutExpired:
                 raise RuntimeError(f"Command timed out after {timeout}s: {shown}")
             except FileNotFoundError:

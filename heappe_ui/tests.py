@@ -2481,6 +2481,7 @@ class DatabaseBackupRetentionTests(TestCase):
 import tempfile
 import shutil
 import os
+import unittest
 import json
 from heappe_ui.DeployService import HEAppEDeployService, HEAppEConfig
 
@@ -7626,3 +7627,713 @@ class QSchedulerAdminProxyTests(TestCase):
         self.assertTrue(any("Admin token" in e for e in errors))
         opts, errors = parse_register_options({"kind": "local", "container_name": "qs-ext", "admin_token": "tok-12345"})
         self.assertEqual((errors, opts["admin_token"]), ([], "tok-12345"))
+
+
+@unittest.skipUnless(os.environ.get("QS_DOCKER_TESTS"), "real Docker test: set QS_DOCKER_TESTS=1 (and QS_TEST_IMAGE)")
+class QSchedulerSharedDbDockerTests(TestCase):
+    """End to end against Docker: shared database, instance schema, backup/restore, undeploy, removal."""
+
+    def setUp(self):
+        import tempfile
+        from django.test import override_settings
+        self.image = os.environ.get("QS_TEST_IMAGE", "qscheduler:v0.2.1-tag")
+        self.backups = tempfile.mkdtemp(prefix="qs-e2e-backups-")
+        self.settings_override = override_settings(QSCHEDULER_BACKUP_DIR=self.backups)
+        self.settings_override.enable()
+        self.addCleanup(self.settings_override.disable)
+        self.logs = []
+        self.log = lambda m: self.logs.append(m)
+        self.addCleanup(self._cleanup)
+
+    def _cleanup(self):
+        import shutil
+        import subprocess
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        for c in subprocess.run(["docker", "ps", "-aq", "--filter", "name=qse2e-"], capture_output=True, text=True).stdout.split():
+            subprocess.run(["docker", "rm", "-f", c], capture_output=True)
+        subprocess.run(["docker", "rm", "-f", sdb.SHARED_NAME], capture_output=True)
+        for n in subprocess.run(["docker", "network", "ls", "-q", "--filter", "name=qse2e-"], capture_output=True, text=True).stdout.split():
+            subprocess.run(["docker", "network", "rm", n], capture_output=True)
+        subprocess.run(["docker", "network", "rm", sdb.SHARED_NETWORK], capture_output=True)
+        subprocess.run(["docker", "volume", "rm", sdb.SHARED_VOLUME], capture_output=True)
+        shutil.rmtree(self.backups, ignore_errors=True)
+
+    def test_shared_database_lifecycle(self):
+        from heappe_ui.models import QSchedulerInstance
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        docker = core.DockerCli()
+
+        # 1. shared database
+        result = {}
+        sdb.deploy_shared_worker(self.log, result, {'image': "postgres:16"})
+        status = sdb.shared_status()
+        self.assertTrue(status['running'], status)
+        self.assertTrue(status['version'].startswith("16"))
+
+        # 2. instance in a schema
+        opts, errors = d.parse_deploy_options({"name": "qse2e", "source": "image", "image": self.image,
+                                               "db_mode": "shared"}, "e2e00001")
+        self.assertEqual(errors, [])
+        result = {}
+        d.deploy_worker(self.log, result, opts)
+        inst = QSchedulerInstance.objects.get(pk=result['id'])
+        self.assertEqual((inst.db_kind, inst.db_schema), ("shared", "qs_qse2e_e2e00001"))
+        self.assertIn("@qscheduler-shared-pgsql:5432/qscheduler", inst.database_url)
+        tables = sdb.psql(docker, "SELECT count(*) FROM pg_tables WHERE schemaname = 'qs_qse2e_e2e00001';").strip()
+        self.assertGreaterEqual(int(tables), 7)
+        self.assertEqual(sdb.psql(docker, "SELECT count(*) FROM pg_tables WHERE schemaname = 'public';").strip(), "0")
+        self.assertIn("qse2e-e2e00001_db_net", docker.networks_of(sdb.SHARED_NAME))
+        self.assertEqual([s['instance'] for s in sdb.shared_status()['schemas']], [inst.name])
+
+        # machine through the service's own CLI (writes into the role's schema)
+        target = core.target_for(inst)
+        target.cli(core.machine_args({"action": "add", "machine_name": "Sim", "backend": "test", "queue_size": 4,
+                                      "limit_check_interval": "2s", "max_session_time": "2h",
+                                      "default_task_time_limit": "1h", "max_clock_skew": "4s"}), self.log)
+        count = lambda: sdb.psql(docker, "SELECT count(*) FROM qs_qse2e_e2e00001.machines;").strip()
+        self.assertEqual(count(), "1")
+
+        # 3. backup, change, restore
+        result = {}
+        sdb.backup_worker(self.log, result, inst.id)
+        backups = sdb.list_backups(inst)
+        self.assertEqual([b['file'] for b in backups], [result['file']])
+        self.assertRegex(result['file'], r"_v0\.2\.1\.dump$")
+        sdb.psql(docker, "DELETE FROM qs_qse2e_e2e00001.machines;")
+        self.assertEqual(count(), "0")
+        docker.run(["stop", inst.container_name], self.log)
+        sdb.restore_instance(inst, result['file'], self.log)
+        docker.run(["start", inst.container_name], self.log)
+        target.wait_healthy(self.log)
+        self.assertEqual(count(), "1")
+        target.close()
+
+        # 4. undeploy drops schema and role, removes the network
+        result = {}
+        d.undeploy_worker(self.log, result, inst.id, True)
+        self.assertFalse(sdb.schema_exists(docker, "qs_qse2e_e2e00001"))
+        self.assertFalse(sdb.role_exists(docker, "qs_qse2e_e2e00001"))
+        self.assertNotIn("qse2e-e2e00001_db_net", docker.networks_of(sdb.SHARED_NAME))
+        self.assertIsNone(docker.json(["network", "inspect", "qse2e-e2e00001_db_net"]))
+
+        # 5. remove the shared database
+        sdb.remove_shared_worker(self.log, {}, True)
+        self.assertFalse(docker.exists("container", sdb.SHARED_NAME))
+        self.assertIsNone(sdb.shared_database())
+
+    def test_dedicated_database_backup_and_restore(self):
+        from heappe_ui.models import QSchedulerInstance
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        docker = core.DockerCli()
+        opts, errors = d.parse_deploy_options({"name": "qse2e", "source": "image", "image": self.image,
+                                               "db_mode": "new"}, "e2e00002")
+        self.assertEqual(errors, [])
+        result = {}
+        d.deploy_worker(self.log, result, opts)
+        inst = QSchedulerInstance.objects.get(pk=result['id'])
+        self.assertEqual(inst.db_kind, "dedicated")
+        pg = f"{inst.container_name}-pgsql"
+        sql = lambda q: sdb.psql(docker, q, container=pg, user="qscheduler").strip()
+        target = core.target_for(inst)
+        target.cli(core.machine_args({"action": "add", "machine_name": "Sim", "backend": "test", "queue_size": 4,
+                                      "limit_check_interval": "2s", "max_session_time": "2h",
+                                      "default_task_time_limit": "1h", "max_clock_skew": "4s"}), self.log)
+        result = {}
+        sdb.backup_worker(self.log, result, inst.id)
+        self.assertTrue(os.path.isfile(os.path.join(sdb.backup_dir_of(inst), result['file'])))
+        sql("DELETE FROM machines;")
+        docker.run(["stop", inst.container_name], self.log)
+        sdb.restore_instance(inst, result['file'], self.log)
+        docker.run(["start", inst.container_name], self.log)
+        target.wait_healthy(self.log)
+        target.close()
+        self.assertEqual(sql("SELECT count(*) FROM machines;"), "1")
+        sdb.delete_backup(inst, result['file'])
+        self.assertEqual(sdb.list_backups(inst), [])
+        d.undeploy_worker(self.log, {}, inst.id, True)
+        self.assertFalse(docker.exists("container", pg))
+
+
+class QSchedulerSharedDbTests(TestCase):
+    """Shared database: naming, SQL, deploy/undeploy integration, backups, API guards (Docker mocked)."""
+
+    def setUp(self):
+        import tempfile
+        from django.test import override_settings
+        from heappe_ui.models import QSchedulerDatabase
+        self.backups = tempfile.mkdtemp(prefix="qs-unit-backups-")
+        o = override_settings(QSCHEDULER_BACKUP_DIR=self.backups)
+        o.enable()
+        self.addCleanup(o.disable)
+        self.QSchedulerDatabase = QSchedulerDatabase
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.backups, ignore_errors=True)
+
+    def _db(self):
+        db = self.QSchedulerDatabase(name="qscheduler-shared-pgsql", image="postgres:16", volume="v", database="qscheduler",
+                                     home_network="qscheduler-shared-db_net", backup_dir=self.backups)
+        db.admin_password = "adminpw"
+        db.save()
+        return db
+
+    def _inst(self, **kw):
+        from heappe_ui.models import QSchedulerInstance
+        args = dict(name="qs-1", kind="managed", container_name="qs-1", service_host="qs-1", port=4300)
+        args.update(kw)
+        return QSchedulerInstance.objects.create(**args)
+
+    def test_names_and_sql(self):
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        self.assertEqual(sdb.schema_name_for("My-QS.dev-5190156f"), "qs_my_qs_dev_5190156f")
+        self.assertEqual(len(sdb.schema_name_for("a" * 80)), 63)
+        with self.assertRaises(ValueError):
+            sdb.ident('qs_x"; DROP TABLE x; --')
+        sql = sdb.create_schema_sql("qs_a", "abcdef0123456789")
+        self.assertIn('CREATE ROLE "qs_a" LOGIN PASSWORD \'abcdef0123456789\';', sql)
+        self.assertIn('CREATE SCHEMA "qs_a" AUTHORIZATION "qs_a";', sql)
+        self.assertIn('ALTER ROLE "qs_a" SET search_path = "qs_a";', sql)
+        self.assertIn('GRANT CONNECT ON DATABASE "qscheduler" TO "qs_a";', sql)
+        with self.assertRaises(ValueError):
+            sdb.create_schema_sql("qs_a", "bad'password-0000")
+        drop = sdb.drop_schema_sql("qs_a")
+        self.assertIn('DROP SCHEMA IF EXISTS "qs_a" CASCADE;', drop)
+        self.assertIn("DROP ROLE", drop)
+
+    def test_psql_sends_sql_on_stdin_quietly(self):
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        from heappe_ui.view.qscheduler_core import CommandResult
+        docker = mock.Mock()
+        docker.run.return_value = CommandResult(0, "1\n", "")
+        sdb.psql(docker, "CREATE ROLE x PASSWORD 'secret';", lambda *_: None)
+        args, kwargs = docker.run.call_args
+        self.assertNotIn("secret", " ".join(args[0]))
+        self.assertEqual(kwargs["input"], "CREATE ROLE x PASSWORD 'secret';")
+        self.assertTrue(kwargs["quiet"])
+        docker.run.return_value = CommandResult(1, "", "ERROR: boom")
+        with self.assertRaises(RuntimeError):
+            sdb.psql(docker, "SELECT 1")
+
+    def test_deploy_service_shared_branch(self):
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        db = self._db()
+        opts, errors = d.parse_deploy_options({"name": "qs", "source": "image", "image": "qs:v1", "db_mode": "shared"}, "u1")
+        self.assertEqual(errors, [])
+        docker = mock.Mock()
+        target = mock.Mock()
+        target.version.return_value = "qscheduler v0.2.1"
+        with mock.patch.object(d, "_build_or_check_image"), \
+                mock.patch.object(sdb, "require_running", return_value=db), \
+                mock.patch.object(sdb, "create_instance_schema", return_value=("qs_qs_u1", "pw" * 10)) as create, \
+                mock.patch.object(sdb, "connect_network") as connect, \
+                mock.patch("heappe_ui.view.qscheduler_core.create_internal_network"), \
+                mock.patch.object(d, "DockerTarget", return_value=target):
+            info = d.deploy_service(docker, opts, lambda *_: None)
+        create.assert_called_once()
+        connect.assert_called_once_with(docker, db, "qs-u1_db_net", mock.ANY)
+        self.assertEqual((info['db_kind'], info['db_schema'], info['shared_database']), ("shared", "qs_qs_u1", db))
+        self.assertEqual(info['database_url'], f"postgres://qs_qs_u1:{'pw' * 10}@qscheduler-shared-pgsql:5432/qscheduler")
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.assertIn(["network", "connect", "--alias", "qs-u1", "qs-u1_db_net", "qs-u1"], cmds)
+
+    def test_deploy_service_shared_failure_lists_cleanup(self):
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        db = self._db()
+        opts, _ = d.parse_deploy_options({"name": "qs", "source": "image", "image": "qs:v1", "db_mode": "shared"}, "u1")
+        docker = mock.Mock()
+        docker.run.side_effect = RuntimeError("create failed")
+        logs = []
+        with mock.patch.object(d, "_build_or_check_image"), \
+                mock.patch.object(sdb, "require_running", return_value=db), \
+                mock.patch.object(sdb, "create_instance_schema", return_value=("qs_qs_u1", "pw" * 10)), \
+                mock.patch.object(sdb, "connect_network"), \
+                mock.patch("heappe_ui.view.qscheduler_core.create_internal_network"):
+            with self.assertRaises(RuntimeError):
+                d.deploy_service(docker, opts, logs.append)
+        text = "\n".join(logs)
+        self.assertIn("docker network disconnect qs-u1_db_net qscheduler-shared-pgsql", text)
+        self.assertIn("DROP SCHEMA qs_qs_u1 CASCADE", text)
+        self.assertLess(text.index("network disconnect"), text.index("docker network rm qs-u1_db_net"))
+
+    def test_undeploy_shared_drops_or_keeps_schema(self):
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        db = self._db()
+        for remove_data in (True, False):
+            inst = self._inst(db_kind="shared", db_schema="qs_qs_1", shared_database=db)
+            docker = mock.Mock()
+            docker.inspect.return_value = None
+            docker.exists.return_value = False
+            docker.json.return_value = None
+            with mock.patch.object(d, "DockerCli", return_value=docker), \
+                    mock.patch.object(sdb, "disconnect_network") as disc, \
+                    mock.patch.object(sdb, "drop_instance_schema") as drop, \
+                    mock.patch.object(d.qadmin, "remove_proxy"):
+                d.undeploy_worker(lambda *_: None, {}, inst.id, remove_data)
+            disc.assert_called_once_with(docker, db, "qs-1_db_net", mock.ANY)
+            self.assertEqual(drop.called, remove_data)
+
+    def test_backup_files_listing_and_delete(self):
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        from datetime import datetime, timezone
+        inst = self._inst(db_kind="dedicated")
+        self.assertTrue(sdb.can_backup(inst))
+        self.assertFalse(sdb.can_backup(self._inst(name="ext", container_name="ext", kind="local")))
+        name = sdb.backup_file_name("qscheduler v0.2.1", datetime(2026, 10, 27, 20, 5, 1, tzinfo=timezone.utc))
+        self.assertEqual(name, "20261027T200501Z_v0.2.1.dump")
+        self.assertEqual(sdb.backup_file_name(None, datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)), "20260102T030405Z.dump")
+        d = sdb.backup_dir_of(inst)
+        os.makedirs(d)
+        for f in (name, "notes.txt", "20260102T030405Z.dump"):
+            open(os.path.join(d, f), "w").write("x")
+        self.assertEqual([b['file'] for b in sdb.list_backups(inst)], [name, "20260102T030405Z.dump"])
+        for bad in ("../x.dump", "/etc/passwd", "notes.txt"):
+            with self.assertRaises(ValueError):
+                sdb.delete_backup(inst, bad)
+        sdb.delete_backup(inst, name)
+        self.assertEqual(len(sdb.list_backups(inst)), 1)
+        with self.assertRaises(RuntimeError):
+            sdb.backup_instance(self._inst(name="ext2", container_name="ext2", kind="local"), lambda *_: None)
+
+    def test_update_refuses_major_version_change(self):
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        self._db()
+        docker = mock.Mock()
+        docker.inspect.return_value = {"NetworkSettings": {"Networks": {}}}
+        with mock.patch.object(sdb, "DockerCli", return_value=docker), \
+                mock.patch.object(sdb, "server_major", return_value=16), \
+                mock.patch.object(sdb, "image_major", return_value=17):
+            with self.assertRaises(RuntimeError) as ctx:
+                sdb.update_shared_worker(lambda *_: None, {}, {'image': "postgres:17"}, "u1")
+        self.assertIn("major", str(ctx.exception))
+        self.assertNotIn(["stop", "qscheduler-shared-pgsql"], [c.args[0] for c in docker.run.call_args_list])
+
+    def test_shared_db_api_guards(self):
+        from django.contrib.auth.models import User
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        self.client.force_login(User.objects.create_user(username="sdb_admin", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        post = lambda data: self.client.post("/qscheduler/shared-database/", data=json.dumps(data), content_type="application/json")
+        with mock.patch.object(sdb, "shared_status", return_value={'deployed': False, 'image': "postgres:16"}):
+            self.assertFalse(self.client.get("/qscheduler/shared-database/").json()['deployed'])
+        with mock.patch.object(core, "start_operation", return_value=(True, "ok")) as op:
+            self.assertEqual(post({"action": "deploy"}).status_code, 200)
+            self.assertEqual(op.call_args.args[2], {'image': "postgres:16"})
+        db = self._db()
+        self.assertEqual(post({"action": "deploy"}).status_code, 400)                 # already deployed
+        self._inst(db_kind="shared", db_schema="qs_qs_1", shared_database=db)
+        self.assertIn("still use", post({"action": "remove"}).json()['message'])
+        self.assertEqual(post({"action": "drop_schema", "schema": "qs_qs_1"}).status_code, 400)   # used
+        self.assertEqual(post({"action": "drop_schema", "schema": "public"}).status_code, 400)
+        with mock.patch.object(core, "start_operation", return_value=(True, "ok")):
+            self.assertEqual(post({"action": "drop_schema", "schema": "qs_orphan"}).status_code, 200)
+
+    def test_deploy_api_requires_shared_database(self):
+        from django.contrib.auth.models import User
+        self.client.force_login(User.objects.create_user(username="sdb_admin2", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        with mock.patch("heappe_ui.view.qscheduler_deploy.DockerCli") as dc:
+            dc.return_value.exists.return_value = False
+            resp = self.client.post("/qscheduler/deploy/", data=json.dumps({"db_mode": "shared", "source": "image",
+                                                                             "image": "qs:v1"}),
+                                    content_type="application/json")
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("No shared database", resp.json()['message'])
+
+    def test_restore_reuses_shared_schema(self):
+        from heappe_ui.view import qscheduler_recovery as rec
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        db = self._db()
+        inst = self._inst(db_kind="shared", db_schema="qs_qs_1", shared_database=db,
+                          database_url="postgres://qs_qs_1:pw@qscheduler-shared-pgsql:5432/qscheduler")
+        docker = mock.Mock()
+        docker.exists.return_value = False
+        docker.json.return_value = None
+        with mock.patch.object(sdb, "schema_exists", return_value=True):
+            self.assertIn("schema 'qs_qs_1'", rec.reusable_database(docker, inst))
+            with mock.patch.object(sdb, "require_running", return_value=db), \
+                    mock.patch.object(sdb, "connect_network") as connect, \
+                    mock.patch("heappe_ui.view.qscheduler_core.create_internal_network") as net:
+                url, network = rec._prepare_reused_database(docker, inst, lambda *_: None)
+        self.assertEqual((url, network), (inst.database_url, "qs-1_db_net"))
+        net.assert_called_once()
+        connect.assert_called_once_with(docker, db, "qs-1_db_net", mock.ANY)
+
+    def test_workers_with_mocked_docker(self):
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        from heappe_ui.view.qscheduler_core import CommandResult
+
+        class FakeDocker:
+            def __init__(self, outputs=None):
+                self.calls, self.outputs = [], outputs or {}
+
+            def run(self, args, log=None, check=True, timeout=0, quiet=False, input=None):
+                self.calls.append((list(args), input))
+                for key, out in self.outputs.items():
+                    if key in " ".join(args) or (input and key in input):
+                        return CommandResult(0, out, "")
+                return CommandResult(0, "", "")
+
+            def exists(self, kind, name):
+                return False
+
+            def json(self, args):
+                return None
+
+            def inspect(self, name):
+                return {"State": {"Status": "running"}, "NetworkSettings": {"Networks": {}}}
+
+        # deploy: network, volume, run with backup mount, hardening SQL; record saved with encrypted password
+        docker = FakeDocker()
+        with mock.patch.object(sdb, "DockerCli", return_value=docker), \
+                mock.patch("heappe_ui.view.qscheduler_core.create_internal_network") as net:
+            sdb.deploy_shared_worker(lambda *_: None, {}, {'image': "postgres:16"})
+        net.assert_called_once()
+        run = next(a for a, _ in docker.calls if a[0] == "run")
+        self.assertIn(f"{self.backups}:/backups", run)
+        self.assertIn("--network", run)
+        self.assertNotIn("-p", run)
+        self.assertTrue(any(i and "REVOKE ALL ON SCHEMA public" in i for _, i in docker.calls))
+        db = sdb.shared_database()
+        self.assertTrue(db.admin_password)
+        self.assertNotIn(db.admin_password, db.admin_password_encrypted)
+
+        # status parses schemas and maps instances
+        inst = self._inst(db_kind="shared", db_schema="qs_qs_1", shared_database=db)
+        docker = FakeDocker({"SHOW server_version": "16.4\n", "pg_namespace n": "qs_old|8192|0\nqs_qs_1|65536|2\n"})
+        with mock.patch.object(sdb, "DockerCli", return_value=docker):
+            st = sdb.shared_status()
+        self.assertEqual(st['version'], "16.4")
+        self.assertEqual([(s['schema'], s['instance'], s['connections']) for s in st['schemas']],
+                         [("qs_old", None, 0), ("qs_qs_1", "qs-1", 2)])
+
+        # shared backup: pg_dump -n into the mount, checked with pg_restore --list
+        listing = "; Archive\n215; 1259 16390 TABLE qs_qs_1 machines qs_qs_1\n3401; 0 16390 TABLE DATA qs_qs_1 machines\n"
+
+        class DumpDocker(FakeDocker):
+            def run(self, args, log=None, check=True, timeout=0, quiet=False, input=None):
+                if "pg_dump" in args:
+                    path = args[args.index("-f") + 1].replace("/backups", self_backups, 1)
+                    os.makedirs(os.path.dirname(path), exist_ok=True)
+                    open(path, "w").write("dump")
+                return super().run(args, log, check, timeout, quiet, input)
+        self_backups = self.backups
+        docker = DumpDocker({"pg_restore --list": listing})
+        with mock.patch.object(sdb, "DockerCli", return_value=docker):
+            path = sdb.backup_instance(inst, lambda *_: None, "qscheduler v0.2.1")
+        dump = next(a for a, _ in docker.calls if "pg_dump" in a)
+        self.assertEqual(dump[dump.index("-n") + 1], "qs_qs_1")
+        self.assertTrue(path.endswith("_v0.2.1.dump") and os.path.isfile(path))
+
+        # a dump without tables is refused and removed
+        docker = DumpDocker({"pg_restore --list": "; empty\n"})
+        with mock.patch.object(sdb, "DockerCli", return_value=docker):
+            with self.assertRaises(RuntimeError):
+                sdb.backup_instance(inst, lambda *_: None)
+        self.assertEqual(len(sdb.list_backups(inst)), 1)
+
+        # dedicated backup: pg_dump in <name>-pgsql, docker cp out, temp file removed
+        ded = self._inst(name="qs-2", container_name="qs-2", db_kind="dedicated")
+
+        class CpDocker(FakeDocker):
+            def run(self, args, log=None, check=True, timeout=0, quiet=False, input=None):
+                if args[0] == "cp":
+                    open(args[2], "w").write("dump")
+                return super().run(args, log, check, timeout, quiet, input)
+        docker = CpDocker({"pg_restore --list": listing})
+        with mock.patch.object(sdb, "DockerCli", return_value=docker):
+            sdb.backup_instance(ded, lambda *_: None)
+        names = [a[:3] for a, _ in docker.calls]
+        self.assertIn(["exec", "qs-2-pgsql", "pg_dump"], names)
+        self.assertEqual([a[0] for a, _ in docker.calls].count("cp"), 1)
+        self.assertEqual(docker.calls[-1][0][:4], ["exec", "qs-2-pgsql", "rm", "-f"])
+
+        # remove: refused while used, then removes container, network, volume
+        with self.assertRaises(RuntimeError):
+            sdb.remove_shared_worker(lambda *_: None, {}, True)
+        inst.delete()
+        ded.delete()
+        docker = FakeDocker()
+        docker.json = lambda args: {"x": 1}
+        with mock.patch.object(sdb, "DockerCli", return_value=docker):
+            sdb.remove_shared_worker(lambda *_: None, {}, True)
+        cmds = [a for a, _ in docker.calls]
+        self.assertIn(["volume", "rm", "qscheduler-shared-pgdata"], cmds)
+        self.assertIsNone(sdb.shared_database())
+
+
+@unittest.skipUnless(os.environ.get("QS_DOCKER_TESTS"), "real Docker test: set QS_DOCKER_TESTS=1 (and QS_TEST_IMAGE)")
+class QSchedulerMigrateToSharedDockerTests(QSchedulerSharedDbDockerTests):
+    """End to end: dedicated PostgreSQL -> schema in the shared database."""
+
+    def test_shared_database_lifecycle(self):        # covered by the parent class
+        pass
+
+    def test_dedicated_database_backup_and_restore(self):
+        pass
+
+    def test_migrate_dedicated_to_shared(self):
+        from heappe_ui.models import QSchedulerInstance
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        docker = core.DockerCli()
+        sdb.deploy_shared_worker(self.log, {}, {'image': "postgres:16"})
+        opts, _ = d.parse_deploy_options({"name": "qse2e", "source": "image", "image": self.image, "db_mode": "new"},
+                                         "e2e00003")
+        result = {}
+        d.deploy_worker(self.log, result, opts)
+        inst = QSchedulerInstance.objects.get(pk=result['id'])
+        pg = f"{inst.container_name}-pgsql"
+        machine = lambda n: core.machine_args({"action": "add", "machine_name": n, "backend": "test", "queue_size": 4,
+                                               "limit_check_interval": "2s", "max_session_time": "2h",
+                                               "default_task_time_limit": "1h", "max_clock_skew": "4s"})
+        target = core.target_for(inst)
+        target.cli(machine("Sim"), self.log)
+        target.cli(["project", "add", "p1", "--limit", "1h"], self.log, check=False)
+        target.close()
+        before = sdb.table_counts(docker, pg, "qscheduler", "qscheduler", "public")
+
+        result = {}
+        sdb.migrate_to_shared_worker(self.log, result, inst.id, {'remove_old': False}, "mig00001")
+        inst.refresh_from_db()
+        role = "qs_qse2e_e2e00003"
+        self.assertEqual((inst.db_kind, inst.db_schema, result['schema']), ("shared", role, role))
+        self.assertIn(f"postgres://{role}:", inst.database_url)
+        self.assertEqual(sdb.table_counts(docker, sdb.SHARED_NAME, "postgres", "qscheduler", role), before)
+        self.assertEqual(sdb.psql(docker, f"SELECT tableowner FROM pg_tables WHERE schemaname = '{role}' GROUP BY 1;").strip(), role)
+        self.assertEqual(sdb.psql(docker, "SELECT count(*) FROM pg_database WHERE datname LIKE 'qsmig_%';").strip(), "0")
+        self.assertEqual((docker.inspect(pg) or {}).get("State", {}).get("Status"), "exited")      # kept, stopped
+        env = dict(e.split("=", 1) for e in docker.inspect(inst.container_name)["Config"]["Env"] if "=" in e)
+        self.assertIn("@qscheduler-shared-pgsql:5432/qscheduler", env["DATABASE_URL"])
+        self.assertTrue(env.get("ADMIN_TOKEN"))                                                     # kept
+
+        # the service works on the new schema: data visible, sequences continue, new rows land there
+        target = core.target_for(inst)
+        self.assertEqual(target.health(), 200)
+        target.cli(machine("Sim2"), self.log)
+        target.close()
+        self.assertEqual(sdb.psql(docker, f"SELECT count(*) FROM {role}.machines;").strip(), "2")
+        self.assertEqual(sdb.psql(docker, "SELECT count(*) FROM pg_tables WHERE schemaname = 'public';").strip(), "0")
+
+        # the backup of the old database stays
+        self.assertEqual([b['file'] for b in sdb.list_backups(inst)], [result['backup']])
+        d.undeploy_worker(self.log, {}, inst.id, True)
+        self.assertFalse(docker.exists("container", pg))
+
+
+class QSchedulerMigrateToSharedTests(TestCase):
+    """Migration dedicated -> shared database: SQL, guards, cleanup on failure (Docker mocked)."""
+
+    def setUp(self):
+        import tempfile
+        from django.test import override_settings
+        from heappe_ui.models import QSchedulerDatabase, QSchedulerInstance
+        self.backups = tempfile.mkdtemp(prefix="qs-mig-")
+        o = override_settings(QSCHEDULER_BACKUP_DIR=self.backups)
+        o.enable()
+        self.addCleanup(o.disable)
+        self.db = QSchedulerDatabase.objects.create(name="qscheduler-shared-pgsql", image="postgres:16", volume="v",
+                                                    database="qscheduler", home_network="n", backup_dir=self.backups)
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300, db_kind="dedicated",
+                                                      database_url="postgres://qscheduler:pw@qs-1-pgsql:5432/qscheduler")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.backups, ignore_errors=True)
+
+    def test_sql_steps(self):
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        steps = sdb.migrate_sql_steps("qs_qs_1", "a" * 48, "qsmig_u1")
+        self.assertIn("CREATE ROLE \"qs_qs_1\" LOGIN PASSWORD", steps['role'][1])
+        self.assertIn('CREATE DATABASE "qsmig_u1" OWNER "qs_qs_1";', steps['tmp_db'][1])
+        self.assertEqual(steps['rename'][0], "qsmig_u1")
+        self.assertIn('ALTER SCHEMA public RENAME TO "qs_qs_1";', steps['rename'][1])
+        self.assertIn('ALTER ROLE "qs_qs_1" SET search_path = "qs_qs_1";', steps['grants'][1])
+        self.assertIn('DROP DATABASE IF EXISTS "qsmig_u1";', steps['drop_tmp'][1])
+
+    def test_failure_cleans_up_and_restarts_on_old_database(self):
+        from heappe_ui.view import qscheduler_shared_db as sdb
+        docker = mock.Mock()
+        docker.inspect.return_value = {"Config": {"Image": "qs:v1"}}
+        docker.exists.return_value = True
+        docker.run.return_value = mock.Mock(returncode=0)
+        sql = []
+        counts = iter([{"machines": 2}, {"machines": 1}])           # copy lost a row
+        with mock.patch.object(sdb, "DockerCli", return_value=docker), \
+                mock.patch.object(sdb, "require_running", return_value=self.db), \
+                mock.patch.object(sdb, "role_exists", return_value=False), \
+                mock.patch.object(sdb, "schema_exists", return_value=False), \
+                mock.patch.object(sdb, "table_counts", side_effect=lambda *a: next(counts)), \
+                mock.patch.object(sdb, "backup_instance", return_value=os.path.join(self.backups, "qs-1", "x.dump")), \
+                mock.patch.object(sdb, "psql", side_effect=lambda d, q, *a, **k: sql.append(q) or ""), \
+                mock.patch.object(sdb, "disconnect_network") as disc, \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for"), \
+                mock.patch("heappe_ui.view.qscheduler_deploy.recreate_container") as recreate:
+            with self.assertRaises(RuntimeError) as ctx:
+                sdb.migrate_to_shared_worker(lambda *_: None, {}, self.inst.id, {}, "u1")
+        self.assertIn("differs", str(ctx.exception))
+        recreate.assert_not_called()                                 # never switched
+        self.assertTrue(any('DROP SCHEMA IF EXISTS "qs_qs_1"' in q for q in sql))
+        self.assertTrue(any('DROP DATABASE IF EXISTS "qsmig_u1"' in q for q in sql))
+        disc.assert_called_once()
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.assertEqual(cmds[-1], ["start", "qs-1"])
+        self.inst.refresh_from_db()
+        self.assertEqual(self.inst.db_kind, "dedicated")
+
+    def test_api_guards(self):
+        from django.contrib.auth.models import User
+        from heappe_ui.view import qscheduler_core as core
+        self.client.force_login(User.objects.create_user(username="mig_admin", password="p"))
+        session = self.client.session
+        session["chosen_instance"] = "dev"
+        session.save()
+        url = f"/qscheduler/{self.inst.id}/migrate-to-shared/"
+        with mock.patch.object(core, "start_operation", return_value=(True, "ok")) as op:
+            self.assertEqual(self.client.post(url, data='{"remove_old": true}', content_type="application/json").status_code, 200)
+        self.assertEqual(op.call_args.args[3], {'remove_old': True})
+        self.inst.db_kind = "shared"
+        self.inst.save()
+        self.assertEqual(self.client.post(url, data="{}", content_type="application/json").status_code, 400)
+        self.inst.db_kind = "dedicated"
+        self.inst.save()
+        self.db.delete()
+        resp = self.client.post(url, data="{}", content_type="application/json")
+        self.assertIn("No shared database", resp.json()['message'])
+
+
+class HeappeDbStartupIssueTests(TestCase):
+    """HEAppE that started before SQL Server was ready is recognised, so the UI can propose restarting it."""
+
+    class FakeContainer:
+        def __init__(self, service, status='running', health='healthy', logs=b''):
+            self.labels = {'com.docker.compose.service': service}
+            self.status = status
+            self.id = f"id-{service}"
+            self.name = f"inst_{service}"
+            self.attrs = {'State': {'StartedAt': '2026-10-27T20:43:53.561Z', 'Health': {'Status': health}}}
+            self._logs = logs
+            self.logs_kwargs = None
+
+        def logs(self, **kwargs):
+            self.logs_kwargs = kwargs
+            return self._logs
+
+    PRELOGIN = (b"Starting migration and seeding into the new database.\n"
+                b" ---> Microsoft.Data.SqlClient.SqlException (0x80131904): A connection was successfully established "
+                b"with the server, but then an error occurred during the pre-login handshake.\n")
+
+    def detect(self, *containers):
+        from heappe_ui.view.deploy import detect_heappe_db_startup_issue
+        return detect_heappe_db_startup_issue(list(containers))
+
+    def test_unhealthy_heappe_with_prelogin_error_and_healthy_sql(self):
+        heappe = self.FakeContainer('heappe', health='unhealthy', logs=self.PRELOGIN)
+        issue = self.detect(heappe, self.FakeContainer('mssql'))
+        self.assertEqual(issue['container_id'], 'id-heappe')
+        self.assertTrue(issue['mssql_ready'])
+        self.assertIn('pre-login handshake', issue['error'])
+        self.assertEqual(heappe.logs_kwargs['since'].isoformat(), '2026-10-27T20:43:53')   # only since last start
+
+    def test_sql_not_healthy_yet(self):
+        issue = self.detect(self.FakeContainer('heappe', health='unhealthy', logs=self.PRELOGIN),
+                            self.FakeContainer('mssql', health='starting'))
+        self.assertFalse(issue['mssql_ready'])
+
+    def test_no_issue(self):
+        cases = [
+            (self.FakeContainer('heappe', health='healthy', logs=self.PRELOGIN), self.FakeContainer('mssql')),
+            (self.FakeContainer('heappe', health='starting', logs=self.PRELOGIN), self.FakeContainer('mssql')),
+            (self.FakeContainer('heappe', status='exited', health='unhealthy', logs=self.PRELOGIN),
+             self.FakeContainer('mssql')),
+            (self.FakeContainer('heappe', health='unhealthy', logs=b"DbContextException: MigrationMismatch\n"),
+             self.FakeContainer('mssql')),
+            (self.FakeContainer('mssql'),),
+        ]
+        for containers in cases:
+            self.assertIsNone(self.detect(*containers))
+
+
+import subprocess
+
+
+class RestartAllCommandTests(TestCase):
+    """Restart All skips one-shot init jobs, whose stale containers fail to restart when their network is gone."""
+
+    def run_cmd(self, listed):
+        from heappe_ui.view import deploy
+        base = ["docker", "compose", "--profile", "db", "-p", "inst"]
+        with mock.patch.object(deploy, "execute_docker_compose", return_value=listed) as ex:
+            cmd = deploy.restart_all_command(base, "/x")
+        self.assertEqual(ex.call_args[0][0], base + ["config", "--services"])
+        return cmd[len(base):]
+
+    def test_skips_one_shot_services(self):
+        listed = subprocess.CompletedProcess([], 0, stdout="mssql\nheappe-init\nheappe\nvault\notel-collector-init\n")
+        self.assertEqual(self.run_cmd(listed), ["restart", "mssql", "heappe", "vault"])
+
+    def test_plain_restart_from_dropdown(self):
+        from heappe_ui.view import deploy
+        base = ["docker", "compose", "-p", "inst"]
+        ok = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+        with mock.patch.object(deploy, "execute_docker_compose", return_value=ok) as ex:
+            deploy.run_bg_restart_all("/x", "inst", base, None, None, plain=True)
+        self.assertEqual([c[0][0] for c in ex.call_args_list], [base + ["restart"]])
+        self.assertEqual(deploy.RESTART_STATES["inst"]["status"], "done")
+
+    def test_falls_back_to_plain_restart(self):
+        self.assertEqual(self.run_cmd(subprocess.CompletedProcess([], 1, stdout="", stderr="boom")), ["restart"])
+
+
+class ContainerCardTests(TestCase):
+    """Container cards are named and grouped by compose service, not by container name."""
+
+    class C:
+        def __init__(self, service, status='running', health='', exit_code=0, ports=None, name=None):
+            self.labels = {'com.docker.compose.service': service} if service else {}
+            self.status = status
+            self.name = name or f"qscheduler_autodeploy_{service}"
+            self.attrs = {'State': {'Health': {'Status': health} if health else None, 'ExitCode': exit_code,
+                                    'StartedAt': '2026-10-29T08:14:54.1Z', 'FinishedAt': '0001-01-01T00:00:00Z'},
+                          'NetworkSettings': {'Ports': ports or {}}, 'HostConfig': {'RestartPolicy': {'Name': 'no'}}}
+
+    def test_describe(self):
+        from heappe_ui.view.deploy import describe_container
+        ports = {'80/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '5000'}, {'HostIp': '::', 'HostPort': '5000'}],
+                 '443/tcp': None}
+        info = describe_container(self.C('heappe', health='healthy', ports=ports), 'qscheduler_autodeploy')
+        self.assertEqual((info['title'], info['section'], info['badge']), ("HEAppE API", 'api', "Healthy"))
+        self.assertEqual(info['ports'], ["5000 → 80/tcp", "443/tcp (internal)"])          # IPv4 + IPv6 shown once
+        self.assertEqual(info['config_file'], 'appsettings.json')
+
+        job = describe_container(self.C('heappe-init', status='exited', exit_code=0))
+        self.assertEqual((job['section'], job['badge'], job['tone']), ('jobs', "Completed", 'secondary'))
+        self.assertEqual(describe_container(self.C('heappe-init', status='exited', exit_code=128))['badge'], "Failed")
+        self.assertEqual(describe_container(self.C('mssql', status='exited', exit_code=1))['badge'], "Exited")
+        self.assertEqual(describe_container(self.C('heappe', health='unhealthy'))['tone'], 'danger')
+
+        other = describe_container(self.C('', name='qscheduler_autodeploy_slurm1'), 'qscheduler_autodeploy')
+        self.assertEqual((other['title'], other['section'], other['can_delete']), ('slurm1', 'other', True))
+
+    def test_sections_ignore_instance_name(self):
+        """An instance named like a section keyword (e.g. 'qscheduler_...') keeps every card in its own section."""
+        from heappe_ui.view.deploy import build_container_sections
+        cs = [self.C(s) for s in ('vault', 'heappe-init', 'mssql', 'heappe', 'datastagingapi')]
+        sections = build_container_sections(cs, 'qscheduler_autodeploy')
+        self.assertEqual([(s['key'], [i['info']['service'] for i in s['items']]) for s in sections],
+                         [('api', ['heappe', 'datastagingapi']), ('db', ['mssql']), ('infra', ['vault']),
+                          ('jobs', ['heappe-init'])])
