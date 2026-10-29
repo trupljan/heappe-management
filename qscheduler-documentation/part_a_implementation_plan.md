@@ -5,9 +5,9 @@
 | Step | Area | State |
 |---|---|---|
 | 1 | Shared database and backups | done |
-| 2 | QScheduler network, static IP, migration | next |
-| 3 | Aliases | planned |
-| 4 | In-place update | planned |
+| 2 | QScheduler network, static IP, migration | done |
+| 3 | Aliases | done (set per instance at deploy or with *Aliases...*; remote: extra hosts entered by hand) |
+| 4 | In-place update | next |
 | 5 | Redirect | planned |
 
 Undeploy drops the schema by default. The QScheduler network subnet is proposed automatically; the user confirms it
@@ -23,7 +23,7 @@ remote HEAppE is part (c).
 | Database | One shared PostgreSQL per Docker host, deployed by an explicit action. Each QScheduler instance gets its own role and schema (`search_path`). A dedicated PostgreSQL container per instance stays available for experiments. |
 | Isolation | One QScheduler network per QScheduler instance; only the HEAppE instances assigned to it join it. |
 | Addressing | Static IP of the QScheduler container in its QScheduler network; subnet entered by hand or allocated from the pool. |
-| Names | Docker network aliases (no DNS server). One cluster per alias per site; aliases in a configured zone, e.g. `*.machine.qscheduler.it4i.cz`. |
+| Names | Docker network aliases (no DNS server). One cluster per alias per site; aliases are any valid host name (e.g. `vlq.machine.qscheduler.it4i.cz`; providers use their own domains), optionally restricted with `QSCHEDULER_ALIAS_ZONE`. |
 | Updates | In place (same container name, IP, aliases, token): drain, backup, replace, verify, resume; rollback restores the backup. |
 | Redirect | Two steps: drain the machine, then switch the alias to another (assigned) instance and machine; "Switch back" kept. |
 | Backups | Host directory, default `/opt/heappe-deployment/qscheduler-backups/<instance>/<timestamp>.dump`. |
@@ -98,9 +98,12 @@ and projects.
 
 ## 3. QScheduler network and static IP
 
-- Per instance: `<name>_qs_net`, bridge, `--internal` (QScheduler's egress stays on the default bridge), subnet entered
-  by hand or the next free /28 from `QSCHEDULER_NETWORK_POOL`. A /28 leaves 13 addresses: QScheduler (`.2`, static),
-  admin proxy, part-(b) reverse proxy, and the `heappe` container of each assigned HEAppE (up to 10 HEAppE instances).
+- Per instance: `<name>_qs_net`, bridge, `--internal` (QScheduler's egress stays on the default bridge), subnet proposed
+  from `QSCHEDULER_NETWORK_POOL` or entered, default /27: lower half static (QScheduler `.2`, later the part-(b)
+  reverse proxy), upper half `--ip-range` for dynamic addresses (admin proxy, `heappe` containers), so nothing takes
+  `.2` while QScheduler is recreated.
+  *As built:* the admin proxy is created on `bridge` (an internal-only container cannot publish a port) and joins
+  `<name>_qs_net`.
   `datastagingapi` does not join: it rejects QScheduler jobs and clusters (`CheckJobNotQScheduler`).
 - **Assign**: the `heappe` container of the HEAppE instance joins `<name>_qs_net`
   - live with `docker network connect` (no downtime), and
@@ -127,11 +130,14 @@ no downtime.
 ## 4. Aliases
 
 ### Model
+*As built:* aliases belong to the QScheduler instance (`QSchedulerInstance.aliases`), set when deploying or with
+*Aliases...*; a cluster uses one as its host name (one cluster per alias). The redirect (step 5) needs the per-cluster
+record below to move one alias between instances:
 `QSchedulerClusterAlias`: `heappe_instance`, `cluster_id`, `alias`, `qscheduler`, `machine`,
 `previous_qscheduler`, `previous_machine`, `state` (`active`, `draining`), `updated_at`.
 
 ### Rules
-- Must be inside `QSCHEDULER_ALIAS_ZONE` (default `machine.qscheduler.it4i.cz`), valid DNS labels, ≤ 253 chars.
+- Valid DNS labels, ≤ 253 chars; inside `QSCHEDULER_ALIAS_ZONE` only when it is set (unset by default).
 - Unique per site (all aliases on this Docker host).
 
 ### Setting an alias

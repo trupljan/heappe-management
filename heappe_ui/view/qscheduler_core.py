@@ -928,7 +928,7 @@ def id_of(resp):
 
 
 def qscheduler_clusters(controller, session_code, inst):
-    """HEAppE QScheduler clusters (of one HEAppE instance) that point to this QScheduler instance."""
+    """HEAppE QScheduler clusters (of one HEAppE instance) that point to this QScheduler instance (service host or alias)."""
     out = []
     for c in controller.heappe_management_clusters_get(SessionCode=session_code) or []:
         d = as_dict(c)
@@ -937,7 +937,7 @@ def qscheduler_clusters(controller, session_code, inst):
         cfg = d.get('custom_configuration') or {}
         host = cfg.get("QSchedulerHost") or d.get('master_node_name')
         port = str(cfg.get("QSchedulerPort") or d.get('port') or "")
-        if host == inst.service_host and port == str(inst.port):
+        if host in inst.hosts and port == str(inst.port):
             out.append(d)
     return out
 
@@ -983,10 +983,18 @@ def notification_config(notifier=None):
     return {"EnableCallback": "false", NOTIFY_TOKEN_KEY: ""}, [NOTIFIER_KEY], {NOTIFY_TOKEN_KEY: True}
 
 
-def build_cluster_custom_configuration(inst, notifier=None, use_sessions=True):
-    """CustomConfiguration + vault toggles for a new QScheduler cluster on `inst` (notifier: (name, token) or None)."""
+def cluster_host(cluster: dict):
+    """Host name a HEAppE QScheduler cluster uses (QSchedulerHost, else MasterNodeName)."""
+    return (cluster.get('custom_configuration') or {}).get("QSchedulerHost") or cluster.get('master_node_name')
+
+
+def build_cluster_custom_configuration(inst, notifier=None, use_sessions=True, host=None):
+    """
+    CustomConfiguration + vault toggles for a new QScheduler cluster on `inst` (notifier: (name, token) or None;
+    host: service host or one of the instance's aliases).
+    """
     config = {
-        "QSchedulerHost": inst.service_host,
+        "QSchedulerHost": host or inst.service_host,
         "QSchedulerPort": str(inst.port),
         "QSchedulerUseSessions": "true" if use_sessions else "false",
     }

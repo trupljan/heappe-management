@@ -4,9 +4,10 @@ admin proxy. No qscheduler CLI and no command inside the QScheduler container is
 
 Admin proxy
   * One nginx container per QScheduler instance, "<name>-admin-proxy", on the local Docker host (where HEAppE and
-    HEAppE Management run). It joins the HEAppE networks of the instance's assignments, so it reaches the service
-    as <service_host>:<port> there - for a remote QScheduler through the tunnel that connects its Docker network to
-    the local HEAppE network.
+    HEAppE Management run). It joins the instance's QScheduler network (local instances) or the HEAppE networks of
+    its assignments (remote QScheduler, reached through the tunnel that connects its Docker network to the local
+    HEAppE network), so it reaches the service as <service_host>:<port>. It is created on Docker's default bridge:
+    a container only on internal networks cannot publish a port.
   * It forwards only the admin endpoints (/machines, /machine/{name}, /notifiers, /notifiers/{name}); everything
     else gets 404. It is published on 127.0.0.1 only (random host port), i.e. for HEAppE Management on this host.
   * ensure_proxy() creates or repairs it (networks, upstream after a restore) whenever an admin call needs it;
@@ -112,20 +113,23 @@ def proxy_config(host, port):
 """
 
 
-def proxy_run_args(inst, network):
+def proxy_run_args(inst):
     upstream = f"{inst.service_host}:{inst.port}"
     return ["run", "-d", "--name", proxy_name(inst), "--restart", "unless-stopped",
             "--label", f"{LABEL_PROXY_FOR}={inst.name}", "--label", f"{LABEL_UPSTREAM}={upstream}",
-            "--network", network, "-p", f"127.0.0.1::{PROXY_PORT}",
+            "--network", "bridge", "-p", f"127.0.0.1::{PROXY_PORT}",
             "-e", f"QS_PROXY_CONF={proxy_config(inst.service_host, inst.port)}",
             proxy_image(), "sh", "-c",
             'printf "%s" "$QS_PROXY_CONF" > /etc/nginx/conf.d/default.conf && exec nginx -g "daemon off;"']
 
 
 def desired_networks(inst, extra=()):
-    """HEAppE networks of the instance's assignments (plus `extra`, e.g. of an assignment being created)."""
+    """
+    Networks the proxy joins: the QScheduler network of the instance, the networks of its assignments (remote
+    QScheduler: HEAppE networks) and `extra` (e.g. of an assignment being created).
+    """
     nets = []
-    for net in [a.network for a in inst.assignments.all()] + list(extra or []):
+    for net in [inst.qs_network] + [a.network for a in inst.assignments.all()] + list(extra or []):
         if net and net not in nets:
             nets.append(net)
     return nets
@@ -144,8 +148,9 @@ def ensure_proxy(inst, log=None, extra_networks=(), docker=None):
     nets = desired_networks(inst, extra_networks)
     if not nets:
         raise AdminApiUnavailable(
-            f"The admin API of QScheduler '{inst.name}' is reached through an admin proxy in the network of an "
-            f"assigned HEAppE instance: assign a HEAppE instance first.")
+            f"The admin API of QScheduler '{inst.name}' is reached through an admin proxy in its QScheduler network or "
+            f"in the network of an assigned HEAppE instance: assign a HEAppE instance first (or migrate the instance "
+            f"to a QScheduler network).")
     docker = docker or DockerCli()
     name = proxy_name(inst)
     upstream = f"{inst.service_host}:{inst.port}"
@@ -153,19 +158,21 @@ def ensure_proxy(inst, log=None, extra_networks=(), docker=None):
         info = docker.inspect(name)
         if info:
             cfg = info.get("Config") or {}
-            if (cfg.get("Labels") or {}).get(LABEL_UPSTREAM) != upstream or cfg.get("Image") != proxy_image():
-                log(f"Admin proxy '{name}' is outdated (upstream or image changed); recreating it.")
+            on_bridge = "bridge" in ((info.get("NetworkSettings") or {}).get("Networks") or {})
+            if (cfg.get("Labels") or {}).get(LABEL_UPSTREAM) != upstream or cfg.get("Image") != proxy_image() \
+                    or not on_bridge:
+                log(f"Admin proxy '{name}' is outdated (upstream, image or network layout changed); recreating it.")
                 docker.run(["rm", "-f", name], log)
                 info = None
         if not info:
             log(f"Starting admin proxy '{name}' ({proxy_image()}) -> {upstream}, published on 127.0.0.1 only.")
-            docker.run(proxy_run_args(inst, nets[0]), log)
+            docker.run(proxy_run_args(inst), log)
             info = docker.inspect(name) or {}
         current = set((info.get("NetworkSettings") or {}).get("Networks") or {})
         for net in nets:
             if net not in current:
                 docker.run(["network", "connect", net, name], log)
-        for net in current - set(nets):
+        for net in current - set(nets) - {"bridge"}:
             docker.run(["network", "disconnect", net, name], log, check=False)
         if (info.get("State") or {}).get("Status") != "running":
             docker.run(["start", name], log)

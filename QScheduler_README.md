@@ -24,6 +24,7 @@ adding quantum machines as HEAppE clusters.
 - [SSH directly into the QScheduler container](#ssh-directly-into-the-qscheduler-container)
 - [When QScheduler is restarted](#when-qscheduler-is-restarted)
 - [Security notes](#security-notes)
+- [QScheduler network and aliases](#qscheduler-network-and-aliases)
 - [Troubleshooting](#troubleshooting)
 - [Action reference](#action-reference)
 - Recovery from error states: [QScheduler_Recovery_README.md](QScheduler_Recovery_README.md)
@@ -110,7 +111,9 @@ step; machines are added from the Clusters page.
 | Service | Name | A prefix of your choice (letters, digits, `_`, `.`, `-`, max 54 characters); a random id is **always appended**: `mydev` becomes e.g. `mydev-5190156f`, empty gives `qscheduler-5190156f`. The result is the instance name, the container name and the host name HEAppE uses; the database container, network and volume are named after it. |
 | | Service port | Port of the REST API inside the container (default `4300`). |
 | | Publish on host | Optional. Publishes the port on `127.0.0.1` only. |
-| | Database | *Shared database (recommended)*: creates the role and schema `qs_<name>` in the [shared database](#shared-database) and the internal network `<name>_db_net`, which the shared database joins; available once the shared database is deployed. *Dedicated PostgreSQL container (experiments)*: creates the container `<name>-pgsql`, the internal network `<name>_db_net` (subnet size chosen in *Database network size*, default `/29`, see [Networks](#networks)) and the volume `<name>-pgdata`. *Use existing database*: enter `DATABASE_URL` (`postgres://...`) and optionally the Docker network on which the database is reachable. |
+| | Database | *Shared database (recommended)*: creates the role and schema `qs_<name>` in the [shared database](#shared-database) and the internal network `<name>_db_net`, which the shared database joins; available once the shared database is deployed. *Dedicated PostgreSQL container (experiments)*: creates the container `<name>-pgsql`, the internal network `<name>_db_net` (subnet size chosen in *Database network size*, default `/29`, see [Database networks](#database-networks)) and the volume `<name>-pgdata`. *Use existing database*: enter `DATABASE_URL` (`postgres://...`) and optionally the Docker network on which the database is reachable. |
+| QScheduler network and aliases | Subnet, Size | Subnet of the instance's own internal network `<name>_qs_net` (default `/27`). A free subnet of `QSCHEDULER_NETWORK_POOL` is proposed when the dialog opens or the size changes (magic-wand button: propose again); enter another one if it collides with your LAN or VPN. An entered subnet is checked at once: when it overlaps an existing Docker network, a free one of the same size is offered. See [QScheduler network and aliases](#qscheduler-network-and-aliases). |
+| | Aliases | Optional, comma separated host names, e.g. `vlq.machine.qscheduler.it4i.cz` (any valid DNS name of your site; restricted to a zone only when `QSCHEDULER_ALIAS_ZONE` is set). HEAppE clusters can use them instead of the container name. |
 | Assignment | Assign HEAppE instance | Optional. Assigns a HEAppE instance right after the deployment (see [Assigning HEAppE instances](#assigning-heappe-instances)). |
 | | Enable notifications | Turns notifications on for that HEAppE instance; notifiers are created later, one per cluster. The HEAppE instance must run 6.6.0 or newer, otherwise the deployment is refused before it starts. |
 
@@ -240,9 +243,11 @@ instance and disables *Save* for older ones.
 
 What an assignment does:
 
-1. **Network** (QScheduler on the HEAppE Management Docker host): the QScheduler container joins the Docker network
-   of the HEAppE API container. The HEAppE API is restarted briefly when the network is joined for the first time.
-   A remote QScheduler must already be reachable from HEAppE at *Host as seen from HEAppE* and the service port.
+1. **Network** (QScheduler on the HEAppE Management Docker host): the `heappe` container joins the instance's
+   [QScheduler network](#qscheduler-network-and-aliases), live and in its `docker-compose.override.yml`; HEAppE is not
+   restarted. Instances not migrated yet: the QScheduler container joins the Docker network of the HEAppE API container
+   instead, and the HEAppE API is restarted briefly the first time. A remote QScheduler must already be reachable from
+   HEAppE at *Host as seen from HEAppE* and the service port.
 2. **Reachability check**: when the HEAppE API container runs on this host, `GET /health` is requested from inside
    it.
 3. **Notifications** on or off and the **callback URL** (see below). No notifier is created at this point.
@@ -548,7 +553,68 @@ The image is `nginx:1.27-alpine` (setting or environment variable `QSCHEDULER_AD
 
 ---
 
-## Networks
+## QScheduler network and aliases
+
+Every QScheduler instance on the HEAppE Management Docker host (deployed or an existing local container) has its own
+internal network `<name>_qs_net`:
+
+| Address | Used by |
+|---|---|
+| `.1` | gateway |
+| `.2` | **QScheduler, static**: kept by *Update*, *Regenerate token*, *Migrate to shared database*, extra hosts and Docker restarts |
+| lower half | reserved for static addresses |
+| upper half (`--ip-range`) | dynamic addresses: the HEAppE containers and the admin proxy, so none of them can take `.2` while QScheduler is recreated |
+
+- The **`heappe` container of every assigned HEAppE instance joins it**: live (`docker network connect`, no HEAppE
+  restart) and in that instance's `docker-compose.override.yml`, so a compose recreate (Extra Hosts, OpenTelemetry,
+  regenerate configs) keeps it. *Unassign* removes it from both. `datastagingapi` does not join: it rejects QScheduler
+  jobs.
+- QScheduler no longer joins the HEAppE networks; it keeps the default `bridge` for egress (e.g. to IQM) and its
+  database network.
+- HEAppE reaches QScheduler by container name or alias, resolved by Docker's DNS on that network. The instance card
+  shows the network, subnet and static address.
+- The **admin proxy** joins this network (and Docker's `bridge`, which it needs to publish its port on `127.0.0.1`), so
+  machines and notifiers can be managed before any HEAppE instance is assigned.
+- *Undeploy*, *Unregister* and *Delete with entities* remove the network; *Restore* reuses it when it still exists
+  (same subnet and address), otherwise it creates one with the subnet entered in the restore dialog.
+
+**Aliases** are host names such as `vlq.machine.qscheduler.it4i.cz`: any valid DNS name (each provider can use its own
+domain), unique on this host (not used as alias, service host or container name by another instance). Setting
+`QSCHEDULER_ALIAS_ZONE` restricts them to one zone.
+
+- set when deploying, changed later with **Actions → Aliases...**;
+- local instances: Docker network aliases on `<name>_qs_net`. Docker cannot change the aliases of a connected
+  container, so a change reconnects QScheduler to the network, which interrupts it for well under a second for the
+  HEAppE instances on it. The aliases are checked from every assigned HEAppE container afterwards. An alias that a
+  HEAppE cluster still uses cannot be removed;
+- remote instances: only stored. Add each alias with the QScheduler's IP as an extra host of the HEAppE instance
+  (*Containers & Services → Extra Hosts*); this is manual for now and will be automated with the tunnel to the remote
+  site. The same applies when the HEAppE instance itself is not on this host (the assignment row says so);
+- **Add quantum machine → Host name** picks the container name or an alias as the cluster's `MasterNodeName` (also
+  `QSchedulerHost` and the file transfer method's host). One cluster per alias. *Restore* keeps the alias of such
+  clusters.
+- The Extra Hosts tab of a HEAppE instance lists the aliases of its QScheduler instances and how each is resolved:
+  *Docker DNS*, *not applied* (instance without a QScheduler network) or *manual · to be automated* with the extra host
+  found, or an **Add extra host** button that adds the row to HEAppE API.
+
+**Migrate to QScheduler network...** (*Actions*, or the link on the card) moves an existing local instance that has
+none yet, without downtime:
+
+1. creates `<name>_qs_net` (subnet proposed or entered) and connects QScheduler with its static address and aliases;
+2. the `heappe` container of every assigned HEAppE instance joins it (live and in its override file) and must reach
+   QScheduler there (`GET /health`);
+3. only then QScheduler leaves the HEAppE networks it had joined for the assignments, and the admin proxy is recreated
+   on the new network.
+
+The clusters keep their host name (the container name resolves on the new network too). If step 1 or 2 fails,
+everything is rolled back and the old networks are untouched.
+
+| Variable | Default | Description |
+|---|---|---|
+| `QSCHEDULER_ALIAS_ZONE` | *(unset)* | Optional DNS zone the aliases must be in, e.g. `machine.qscheduler.it4i.cz`. Unset: any valid host name. |
+| `QSCHEDULER_NETWORK_POOL` | `10.213.0.0/16` | Private range the subnets are proposed from (shared with the database networks). |
+
+## Database networks
 
 Internal database networks (`<name>_db_net`, also when Restore recreates one) get an explicit small subnet instead of
 one from Docker's default address pools, which hand out `/16` or `/20` subnets and fail with *all predefined address
@@ -577,8 +643,9 @@ LAN or VPN:
 | `QSCHEDULER_NETWORK_POOL` | `10.213.0.0/16` | Private range the subnets are taken from. |
 | `QSCHEDULER_NETWORK_PREFIX` | `29` | Default of *Database network size* (`/24`–`/29`). |
 
-Only the database networks are created by HEAppE Management; QScheduler joins the existing networks of the HEAppE
-instances it is assigned to and the default `bridge` network (egress, e.g. to IQM).
+HEAppE Management creates the database networks and the [QScheduler networks](#qscheduler-network-and-aliases).
+QScheduler also joins the default `bridge` network (egress, e.g. to IQM). Instances not migrated to a QScheduler network
+yet still join the networks of the HEAppE instances assigned to them.
 
 ## Security notes
 
@@ -625,6 +692,8 @@ restart pending) are described in [QScheduler_Recovery_README.md](QScheduler_Rec
 | QScheduler page | Register Existing | – | Adds a running QScheduler (local container, SSH to VM, SSH into container). |
 | QScheduler page → Shared database | Deploy / Update image / Remove / drop schema | – | Shared PostgreSQL for all instances on this host (see [Shared database](#shared-database)). |
 | Instance → Actions | Migrate to shared database... | deployed with a dedicated database | Copies the data into a new schema of the shared database (checked row counts) and switches QScheduler to it; old container kept stopped or removed. |
+| Instance → Actions | Migrate to QScheduler network... | local instances without a QScheduler network | Own internal network with a static address; HEAppE containers join it, then QScheduler leaves the HEAppE networks (no downtime, rolled back on failure). |
+| Instance → Actions | Aliases... | not archived (local: with a QScheduler network) | Sets the instance's aliases; local instances are reconnected to their QScheduler network. |
 | Instance → Actions | Backups... | deployed (shared or dedicated database) | List, create and delete database dumps (see [Backups](#backups)). |
 | Instance → Actions | Update | deployed, local, SSH to VM | New image (git build or existing image), container recreated, rollback on failure. |
 | Instance → Actions | Restart | all | Graceful restart. SSH into container without a restart command: *Confirm manual restart* (health check only). |

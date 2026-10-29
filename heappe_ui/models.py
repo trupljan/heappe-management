@@ -149,6 +149,14 @@ class QSchedulerInstance(models.Model):
     # Custom extra hosts ("host:ip") applied with --add-host when the container is (re)created; None = never
     # managed from the UI (a recreate keeps whatever the container has).
     extra_hosts = models.JSONField(null=True, blank=True, default=None)
+    # QScheduler network (local Docker instances): "<name>_qs_net", internal, own subnet. QScheduler has the static
+    # address qs_ip there; the heappe container of each assigned HEAppE instance joins it.
+    qs_network = models.CharField(max_length=255, blank=True, default="")
+    qs_subnet = models.CharField(max_length=64, blank=True, default="")
+    qs_ip = models.CharField(max_length=64, blank=True, default="")
+    # Host names under which HEAppE reaches the service besides service_host (e.g. vlq.machine.qscheduler.it4i.cz):
+    # Docker network aliases on qs_network (local instances), extra hosts entered by hand for remote ones.
+    aliases = models.JSONField(default=list, blank=True)
     # Archived: the QScheduler service disappeared (e.g. removed manually); the record, its assignments and the
     # HEAppE clusters are kept until the instance is restored or deleted with its clusters.
     archived_at = models.DateTimeField(null=True, blank=True)
@@ -169,6 +177,12 @@ class QSchedulerInstance(models.Model):
     @property
     def is_archived(self):
         return self.archived_at is not None
+
+    @property
+    def hosts(self):
+        """Host names a HEAppE cluster may use for this instance: service_host, then the aliases."""
+        out = [self.service_host] if self.service_host else []
+        return out + [a for a in (self.aliases or []) if a and a not in out]
 
     @property
     def admin_token(self):

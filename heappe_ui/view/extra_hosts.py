@@ -155,6 +155,62 @@ def write_override_extra_hosts(override_path, service, hosts):
     os.replace(tmp_path, override_path)
 
 
+def override_networks(override_path, service):
+    """External networks the override file adds to `service` (e.g. QScheduler networks)."""
+    data = _load_yaml_file(override_path)
+    svc = (data.get("services") or {}).get(service) or {}
+    nets = svc.get("networks") or {}
+    return list(nets) if isinstance(nets, (dict, list)) else []
+
+
+def set_override_network(override_path, service, network, present):
+    """
+    Add (present=True) or remove an external Docker network of `service` in the override file, keeping the rest of
+    the file intact. Compose merges it with the service's networks in docker-compose.yml, so a recreate of the
+    container (Extra Hosts, OpenTelemetry, regenerate configs) keeps the network.
+    """
+    import yaml
+    data = _load_yaml_file(override_path)
+    services = data.get("services") if isinstance(data.get("services"), dict) else {}
+    svc = services.get(service) if isinstance(services.get(service), dict) else {}
+    nets = svc.get("networks")
+    nets = {n: None for n in nets} if isinstance(nets, list) else dict(nets or {})
+    top = data.get("networks") if isinstance(data.get("networks"), dict) else {}
+
+    if present:
+        nets.setdefault(network, {})
+        top[network] = {"external": True}
+    else:
+        nets.pop(network, None)
+    if nets:
+        svc["networks"] = {n: (v or {}) for n, v in nets.items()}
+    else:
+        svc.pop("networks", None)
+    if svc:
+        services[service] = svc
+    else:
+        services.pop(service, None)
+    if not present:
+        used = any(network in ((s or {}).get("networks") or {}) for s in services.values() if isinstance(s, dict))
+        if not used:
+            top.pop(network, None)
+
+    for key, value in (("services", services), ("networks", top)):
+        if value:
+            data[key] = value
+        else:
+            data.pop(key, None)
+    if not data:
+        if os.path.exists(override_path):
+            os.remove(override_path)
+        return
+    tmp_path = override_path + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        f.write("# Managed by HEAppE Management UI (Containers & Services > Extra Hosts, QScheduler networks).\n")
+        yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
+    os.replace(tmp_path, override_path)
+
+
 def _compose_running_hosts(instance_name, service):
     """Extra hosts of the running compose service container, or None if unknown."""
     try:
@@ -303,6 +359,42 @@ def _qscheduler_instances(instance_name):
                                  archived_at__isnull=True).exclude(container_name="").distinct().order_by("name"))
 
 
+def qscheduler_aliases(instance_name):
+    """
+    Aliases of the QScheduler instances assigned to the HEAppE instance, and how HEAppE resolves each (read-only
+    on the Extra Hosts tab):
+      dns     - local instance: Docker network alias on its QScheduler network (nothing to add here)
+      pending - local instance without a QScheduler network yet (migrate it first)
+      manual  - remote instance: an extra host of the heappe service with the QScheduler's IP, entered by hand
+                (to be automated); 'ip' is the entry found, if any
+    """
+    from heappe_ui.models import QSchedulerAssignment
+    custom = {}
+    try:
+        _base, entries = ComposeTarget(instance_name, "heappe", "HEAppE API").state()
+        custom = {h.lower(): ip for h, ip in entries}
+    except Exception:
+        pass
+    rows = []
+    for asg in (QSchedulerAssignment.objects.select_related("qscheduler")
+                .filter(heappe_instance__instance_name=instance_name).order_by("qscheduler__name")):
+        inst = asg.qscheduler
+        local = inst.kind in ("managed", "local")
+        for alias in inst.aliases or []:
+            if local and inst.qs_network:
+                row = {'mode': 'dns', 'detail': f"Docker network alias on {inst.qs_network} → {inst.qs_ip}"}
+            elif local:
+                row = {'mode': 'pending', 'detail': "Not applied: migrate the instance to a QScheduler network first "
+                                                    "(QScheduler page)."}
+            else:
+                ip = custom.get(alias.lower(), "")
+                row = {'mode': 'manual', 'ip': ip,
+                       'detail': (f"Extra host of HEAppE API: {ip}" if ip else
+                                  "Missing: add it as an extra host of HEAppE API with the IP of the QScheduler.")}
+            rows.append(dict(row, alias=alias, qscheduler=inst.name, qscheduler_id=inst.id, port=inst.port))
+    return rows
+
+
 def targets_for(instance_name):
     compose_dir = os.path.join(DEPLOYMENT_BASE_PATH, instance_name, "heappe-core")
     targets = []
@@ -387,7 +479,7 @@ def instance_extra_hosts_view(request, instance_name):
         return _err(f"No docker compose project or QScheduler found for instance: {instance_name}", 404)
 
     if request.method == "GET":
-        return _sections(targets)
+        return _sections(targets, extra={'qscheduler_aliases': qscheduler_aliases(instance_name)})
     if request.method != "POST":
         return _err("Method not allowed.", 405)
 
@@ -413,4 +505,5 @@ def instance_extra_hosts_view(request, instance_name):
     if message is None:
         return JsonResponse({'status': 'started', 'target': target.key,
                              'message': f"Applying extra hosts to {target.title}..."})
-    return _sections(targets_for(instance_name), message)
+    return _sections(targets_for(instance_name), message,
+                     extra={'qscheduler_aliases': qscheduler_aliases(instance_name)})

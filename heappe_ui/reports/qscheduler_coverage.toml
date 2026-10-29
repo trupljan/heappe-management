@@ -32,6 +32,7 @@ recovery = "heappe_ui/view/qscheduler_recovery.py"
 health = "heappe_ui/view/qscheduler_cluster_health.py"
 admin = "heappe_ui/view/qscheduler_admin.py"
 shareddb = "heappe_ui/view/qscheduler_shared_db.py"
+network = "heappe_ui/view/qscheduler_network.py"
 
 [file_descriptions]
 core = "Docker/SSH runners, targets, HEAppE and git helpers"
@@ -41,6 +42,7 @@ recovery = "missing instances: archive, cascade deletion, restore"
 health = "cluster detail: QScheduler panel"
 admin = "admin API proxy, client and admin token"
 shareddb = "shared PostgreSQL, instance schemas, backups"
+network = "QScheduler network, static IP, aliases, migration"
 
 [tests]
 module = "heappe_ui.tests"
@@ -121,6 +123,23 @@ code = ["shareddb:shared_image", "shareddb:shared_database", "shareddb:ident", "
         "shareddb:disconnect_network", "shareddb:drop_orphan_schema_worker", "deploy:qscheduler_shared_db_api"]
 verified = "Role/schema naming (sanitised, max 63), identifier validation, CREATE ROLE/SCHEMA/search_path/CONNECT and DROP SQL, SQL passed on stdin (password never on the command line), deploy of an instance into the shared database (schema, network link, DATABASE_URL) and the cleanup commands on failure, undeploy drops or keeps the schema, deploy worker with mocked Docker (backup mount, no published port, hardening SQL, encrypted admin password), status parsing (schemas, instances, connections), removal refused while used, refused major-version update, API guards (deploy twice, remove with instances, drop of a used schema). End to end against Docker (QS_DOCKER_TESTS=1, QScheduler 0.2.1 from the tag, PostgreSQL 16): deploy, instance tables in its schema only, status, undeploy drops schema and role, removal."
 not_tested = "Image update with rollback; the end-to-end tests are skipped unless QS_DOCKER_TESTS=1."
+
+[[sections.features]]
+name = "QScheduler network and static IP"
+code = ["network:SubnetUnavailable", "network:network_name", "network:layout", "network:parse_subnet",
+        "network:parse_prefix", "network:propose", "network:check_free", "network:create", "network:existing_layout",
+        "network:connect_qscheduler", "network:reconnect_qscheduler", "network:remove", "network:heappe_override_path",
+        "network:heappe_join", "network:heappe_leave", "network:migrate_network_worker",
+        "deploy:_qs_network_options", "deploy:qscheduler_network_proposal_api", "deploy:qscheduler_migrate_network_api"]
+verified = "Subnet layout (.1 gateway, .2 QScheduler, upper half dynamic), subnet input validation (CIDR, private IPv4, size), proposal skips used subnets, an overlap offers a free subnet of the same size, network create arguments, override file networks kept next to extra hosts and removed again, recreate keeps static IP and aliases, deploy creates the network and connects QScheduler with --ip, assign joins HEAppE (no restart, callback URL by container name), migration switches only after HEAppE reaches QScheduler and rolls back otherwise, HEAppE join / leave with the override file. End to end against Docker (QS_DOCKER_TESTS=1, QScheduler 0.2.1 from the tag): deploy with static address on an internal network, HEAppE stand-in reaches it by name and alias with a dynamic address, admin API through the proxy on the QScheduler network, update keeps the address, migration of an instance on the HEAppE network, undeploy removes networks and override entries."
+not_tested = "The proposal API view and the dialogs (JavaScript); restore with a renamed instance on real Docker."
+
+[[sections.features]]
+name = "QScheduler aliases"
+code = ["network:alias_zone", "network:validate_alias", "network:parse_aliases", "network:network_aliases",
+        "network:aliases_worker", "deploy:qscheduler_aliases_api", "core:cluster_host"]
+verified = "Alias validation (DNS labels, normalisation, any domain by default, zone only when set), uniqueness across instances, setting from settings, network aliases (service host first), instance hosts used to match clusters, reconnect with the static IP and all aliases, removal of an alias used by a cluster refused, Extra Hosts lists aliases as Docker DNS, not applied or manual (with the entry found). End to end against Docker: aliases resolve from the HEAppE stand-in after deploy, update and an alias change."
+not_tested = "Add quantum machine with an alias against a HEAppE server; remote instances (manual extra hosts) beyond the listing."
 
 [[sections.features]]
 name = "Migrate to the shared database"

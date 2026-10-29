@@ -1230,7 +1230,6 @@
                     return;
                 }
 
-                const currentLogs = data.logs || '';
                 if (currentLogs.includes('restart adminpanel') || currentLogs.includes('restarting')) {
                     if (phaseBadge) {
                         phaseBadge.className = 'badge bg-warning-subtle text-warning border border-warning-subtle';

@@ -75,6 +75,7 @@ def parse_machine_options(data: dict, uid: str) -> tuple:
         'iqm_device': s('iqm_device'),
         'iqm_poll_interval': s('iqm_poll_interval', '500ms'),
         'cluster_name': s('cluster_name'),
+        'host': s('host').lower(),          # "" = service host; or one of the instance's aliases
         'use_sessions': b('use_sessions', True),
         'create_project': b('create_project', True),
         'custom_name': b('custom_name', False),
@@ -141,11 +142,20 @@ def add_machine_worker(log, result, instance_name, opts, uid):
     log(f"=== QSCHEDULER: ADD {'NEW' if opts['machine_mode'] == 'new' else 'EXISTING'} MACHINE '{machine}' "
         f"on '{inst.name}' for HEAppE '{instance_name}' ===")
 
+    host = opts.get('host') or inst.service_host
+    if host not in inst.hosts:
+        raise RuntimeError(f"'{host}' is not the service host or an alias of '{inst.name}' "
+                           f"(aliases: {', '.join(inst.aliases or []) or 'none'}).")
+    result['host'] = host
+
     controller, session_code, _ = connect_heappe_management_api(instance_name, log)
     for c in core.qscheduler_clusters(controller, session_code, inst):
         if core.cluster_machine(c) == machine:
             raise RuntimeError(f"HEAppE cluster '{c.get('name')}' (ID {c.get('id')}) already uses machine '{machine}' "
                                f"on this QScheduler.")
+        if host != inst.service_host and core.cluster_host(c) == host:
+            raise RuntimeError(f"Alias '{host}' is already used by HEAppE cluster '{c.get('name')}' (ID {c.get('id')}): "
+                               f"one cluster per alias (it moves with the cluster on a redirect).")
 
     # Notifier of this cluster (own token, kept in HEAppE Vault)
     notifier = None
@@ -205,7 +215,7 @@ def add_machine_worker(log, result, instance_name, opts, uid):
     heappe_container = core.find_heappe_api_container(instance_name, log)
     if heappe_container and loaded:
         try:
-            core.check_from_heappe(heappe_container, inst.service_host, inst.port, f"/machine/{machine}/about", log, attempts=5)
+            core.check_from_heappe(heappe_container, host, inst.port, f"/machine/{machine}/about", log, attempts=5)
         except RuntimeError as e:
             if opts['machine_mode'] == 'existing':
                 raise RuntimeError(f"Machine '{machine}' is not served by '{inst.name}': {e}")
@@ -214,7 +224,7 @@ def add_machine_worker(log, result, instance_name, opts, uid):
         log(f"WARNING: '{inst.name}' must be restarted before the machine is available.")
 
     # HEAppE registration
-    custom_config, vault_toggles = core.build_cluster_custom_configuration(inst, notifier, opts['use_sessions'])
+    custom_config, vault_toggles = core.build_cluster_custom_configuration(inst, notifier, opts['use_sessions'], host)
     log("Creating QScheduler Cluster in HEAppE (protocol HTTP, direct REST calls)...")
     try:
         cluster_id = _create_cluster(controller, session_code, inst, machine, opts, custom_config, vault_toggles)
@@ -237,7 +247,7 @@ def _create_cluster(controller, session_code, inst, machine, opts, custom_config
     return core.id_of(controller.heappe_management_cluster_post(body={
         "Name": opts['cluster_name'],
         "Description": f"QScheduler machine {machine} ({inst.name})",
-        "MasterNodeName": inst.service_host,
+        "MasterNodeName": opts.get('host') or inst.service_host,
         "SchedulerType": SCHEDULER_TYPE_QSCHEDULER,
         "ConnectionProtocol": CONNECTION_PROTOCOL_HTTP,
         "TimeZone": "UTC",
@@ -258,7 +268,8 @@ def _register_cluster_resources(log, result, controller, session_code, inst, mac
     fmt = "%Y-%m-%dT%H:%M:%SZ"
 
     ftm_id = core.id_of(controller.heappe_management_file_transfer_method_post(body={
-        "ClusterId": cluster_id, "ServerHostname": inst.service_host, "Protocol": FILE_TRANSFER_PROTOCOL_HTTP,
+        "ClusterId": cluster_id, "ServerHostname": opts.get('host') or inst.service_host,
+        "Protocol": FILE_TRANSFER_PROTOCOL_HTTP,
         "Port": inst.port, "SessionCode": session_code}))
     log(f"File Transfer Method created (ID: {ftm_id}).")
 
@@ -400,6 +411,9 @@ def _instance_of_cluster(cluster):
     for inst in Q.objects.filter(service_host=host):
         if str(inst.port) == port:
             return inst
+    for inst in Q.objects.all():                          # clusters using an alias of the instance
+        if host in (inst.aliases or []) and str(inst.port) == port:
+            return inst
     return None
 
 
@@ -429,6 +443,7 @@ def qscheduler_machine_defaults_api(request: HttpRequest) -> HttpResponse:
     instances = [{'id': a.qscheduler.id, 'name': a.qscheduler.name, 'kind': a.qscheduler.get_kind_display(),
                   'kind_code': a.qscheduler.kind,
                   'endpoint': f"{a.qscheduler.service_host}:{a.qscheduler.port}",
+                  'service_host': a.qscheduler.service_host, 'aliases': a.qscheduler.aliases or [],
                   'notifications_enabled': a.notifications_enabled, 'callback_url': a.callback_url,
                   'restart_pending': a.qscheduler.restart_pending,
                   'archived': a.qscheduler.is_archived} for a in assignments]

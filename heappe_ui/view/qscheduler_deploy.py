@@ -40,6 +40,7 @@ from .qscheduler_core import (DockerCli, DockerTarget, ContainerShellTarget, Ssh
                               NAME_RE, HOST_RE, GIT_REF_RE, IMAGE_RE)
 from . import qscheduler_admin as qadmin
 from . import qscheduler_shared_db as shared_db
+from . import qscheduler_network as qnet
 from .extra_hosts import extra_hosts_as_list, format_extra_host, qscheduler_container_extra_hosts
 
 DOCKER_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL, Q.KIND_SSH_HOST)
@@ -94,6 +95,20 @@ def _network_prefix(r):
     return int(raw)
 
 
+def _qs_network_options(r, opts, inst=None):
+    """QScheduler network subnet (empty: proposed automatically), its size and the aliases of the instance."""
+    try:
+        subnet = qnet.parse_subnet(r.s('qs_subnet'))
+        opts['qs_subnet'] = str(subnet) if subnet else ""
+        opts['qs_prefix'] = subnet.prefixlen if subnet else qnet.parse_prefix(r.s('qs_prefix'))
+    except ValueError as e:
+        r.errors.append(str(e))
+        opts['qs_subnet'], opts['qs_prefix'] = "", qnet.DEFAULT_PREFIX
+    raw = r.data.get('aliases')
+    opts['aliases'], errors = qnet.parse_aliases(raw if raw is not None else "", inst)
+    r.errors += errors
+
+
 def _validate_source(r, opts):
     if opts['source'] not in ('git', 'image'):
         r.errors.append("Image source must be 'git' or 'image'.")
@@ -141,6 +156,7 @@ def parse_deploy_options(data: dict, uid: str) -> tuple:
         r.errors.append("DB network name is invalid.")
     if opts['assign_heappe_id'] and not opts['assign_heappe_id'].isdigit():
         r.errors.append("Invalid HEAppE instance.")
+    _qs_network_options(r, opts)
     return opts, r.errors
 
 
@@ -235,7 +251,8 @@ def recreate_args_from_inspect(info, image, extra_labels=None, docker=None, extr
     output: env, labels, restart policy, published ports, extra hosts, command; adds the Docker healthcheck.
     extra_hosts: list of "host:ip" replacing the container's extra hosts (None keeps them).
     extra_env: {name: value} added to / replacing the container's environment.
-    Returns (create_args, [(network, [aliases])...], port); the first network is used at create time.
+    Returns (create_args, [(network, [aliases], static ip or "")...], port); the first network is used at create
+    time. Static addresses (e.g. on the QScheduler network) and aliases are kept.
     """
     cfg = info.get("Config", {}) or {}
     host = info.get("HostConfig", {}) or {}
@@ -269,13 +286,16 @@ def recreate_args_from_inspect(info, image, extra_labels=None, docker=None, extr
         aliases = [a for a in ((ncfg or {}).get("Aliases") or []) if a not in (short_id, info.get("Id"))]
         if net not in ("bridge", "host", "none") and name not in aliases:
             aliases.append(name)
-        networks.append((net, aliases if net not in ("bridge", "host", "none") else []))
+        ip = ((ncfg or {}).get("IPAMConfig") or {}).get("IPv4Address") or ""
+        networks.append((net, aliases if net not in ("bridge", "host", "none") else [], ip))
     # egress-capable network first (internal DB networks after), as at deploy time
     networks.sort(key=lambda n: _network_is_internal(n[0], docker) if n[0] not in ("bridge", "host", "none") else False)
     if networks:
         args += ["--network", networks[0][0]]
         for a in networks[0][1]:
             args += ["--network-alias", a]
+        if networks[0][2]:
+            args += ["--ip", networks[0][2]]
     args += core.qscheduler_healthcheck_args(port)
     args += [image] + list(cmd)
     return args, networks, port
@@ -358,14 +378,27 @@ def deploy_service(docker, opts, log):
     Build/check the image, create the database - db_mode 'new': dedicated PostgreSQL container; 'shared': role and
     schema in the shared database; 'existing': database_url + optional db_network - and start the QScheduler service
     container. On failure the created resources are listed for cleanup.
-    Returns {'database_url', 'version', 'admin_token', 'db_kind', 'db_schema', 'shared_database'}.
+    QScheduler network "<name>_qs_net": subnet opts['qs_subnet'] or the first free one of size opts['qs_prefix']; an
+    existing network of that name (left by a removed instance of the same name) is reused. QScheduler gets the static
+    address .2 there and the aliases opts['aliases'].
+    Returns {'database_url', 'version', 'admin_token', 'db_kind', 'db_schema', 'shared_database', 'qs_network',
+    'qs_subnet', 'qs_ip'}.
     """
     name = opts['name']
     pg_name, db_net, volume = f"{name}-pgsql", f"{name}_db_net", f"{name}-pgdata"
+    qs_net = qnet.network_name(name)
     created = []
     try:
         _build_or_check_image(docker, opts['source'], opts['repo'], opts['ref'], opts['image'], opts['rebuild_image'], log,
                               no_cache=opts.get('no_cache', False))
+
+        lay = qnet.existing_layout(docker, qs_net)
+        if lay:
+            log(f"Reusing existing QScheduler network '{qs_net}' (subnet {lay['subnet']}, QScheduler at {lay['ip']}).")
+        else:
+            subnet = opts.get('qs_subnet') or qnet.propose(docker, opts.get('qs_prefix') or qnet.DEFAULT_PREFIX)['subnet']
+            lay = qnet.create(docker, qs_net, subnet, name, log)
+            created.append(("network", qs_net))
 
         if opts['db_mode'] == 'new':
             db_password = secrets.token_hex(16)
@@ -419,11 +452,16 @@ def deploy_service(docker, opts, log):
         created.append(("container", name))
         for net in db_networks:
             docker.run(["network", "connect", "--alias", name, net, name], log)
+        aliases = [a for a in opts.get('aliases') or [] if a != name]
+        qnet.connect_qscheduler(docker, qs_net, name, lay['ip'], aliases, log)
+        if aliases:
+            log(f"Aliases on '{qs_net}': {', '.join(aliases)}.")
         docker.run(["start", name], log)
         target = DockerTarget(docker, name, opts['port'])
         target.wait_healthy(log)
         return {'database_url': database_url, 'version': target.version(), 'admin_token': admin_token,
-                'db_kind': db_kind, 'db_schema': db_schema, 'shared_database': shared}
+                'db_kind': db_kind, 'db_schema': db_schema, 'shared_database': shared,
+                'qs_network': qs_net, 'qs_subnet': lay['subnet'], 'qs_ip': lay['ip']}
     except Exception:
         if created:
             order = {'container': 0, 'shared_link': 1, 'schema': 2, 'volume': 3, 'network': 4}
@@ -463,13 +501,16 @@ def deploy_worker(log, result, opts):
         f"{opts['repo'] + '#' + opts['ref'] if opts['source'] == 'git' else opts['image']}) ===")
     info = deploy_service(docker, opts, log)
     result['version'] = info['version']
+    result.update({k: info.get(k) for k in ('qs_network', 'qs_subnet', 'qs_ip')})
 
     # database_url is kept so that a restore can reuse the database after the container was removed manually
     inst = Q.objects.create(name=name, kind=Q.KIND_MANAGED, container_name=name, service_host=name, port=opts['port'],
                             source=opts['source'], repo=opts['repo'] if opts['source'] == 'git' else "",
                             ref=opts['ref'] if opts['source'] == 'git' else "", image=opts['image'],
                             database_url=info['database_url'], db_kind=info.get('db_kind') or Q.DB_EXTERNAL,
-                            db_schema=info.get('db_schema') or "", shared_database=info.get('shared_database'))
+                            db_schema=info.get('db_schema') or "", shared_database=info.get('shared_database'),
+                            qs_network=info.get('qs_network') or "", qs_subnet=info.get('qs_subnet') or "",
+                            qs_ip=info.get('qs_ip') or "", aliases=opts.get('aliases') or [])
     inst.admin_token = info.get('admin_token', "")
     inst.save(update_fields=["admin_token_encrypted", "updated_at"])
     result['id'] = inst.id
@@ -615,8 +656,8 @@ def recreate_container(docker, target, info, image, labels, log, uid, what, extr
     docker.run(["rename", name, backup], log)
     try:
         docker.run(create_args, log)
-        for net, aliases in networks[1:]:
-            alias_args = [arg for a in aliases for arg in ("--alias", a)]
+        for net, aliases, ip in networks[1:]:
+            alias_args = [arg for a in aliases for arg in ("--alias", a)] + (["--ip", ip] if ip else [])
             docker.run(["network", "connect"] + alias_args + [net, name], log)
         docker.run(["start", name], log)
         target.wait_healthy(log)
@@ -713,6 +754,10 @@ def undeploy_worker(log, result, inst_id, remove_data):
     if inst.kind != Q.KIND_MANAGED:
         log(f"=== QSCHEDULER: UNREGISTER '{inst.name}' === (the QScheduler service itself is left untouched)")
         qadmin.remove_proxy(inst, log)
+        if inst.kind == Q.KIND_LOCAL and inst.qs_network:
+            docker = DockerCli()
+            docker.run(["network", "disconnect", inst.qs_network, inst.container_name], log, check=False)
+            qnet.remove(docker, inst.qs_network, log)
         inst.delete()
         log(f"SUCCESS: '{result['name']}' removed from HEAppE Management.")
         return
@@ -741,6 +786,7 @@ def undeploy_worker(log, result, inst_id, remove_data):
             log(f"Kept database volume '{vol}' (remove with: docker volume rm {vol}).")
     log(f"Image '{image}' kept (may be used by other instances).")
     qadmin.remove_proxy(inst, log)
+    qnet.remove(docker, inst.qs_network or qnet.network_name(name), log)
     inst.delete()
     log(f"SUCCESS: QScheduler instance '{name}' undeployed.")
 
@@ -781,13 +827,18 @@ def assign_worker(log, result, inst_id, opts):
     target = core.target_for(inst)
     updates = []      # (cluster, notifier or None) to apply in HEAppE after QScheduler has the notifiers
     try:
-        # 1. Network: local Docker instances join the HEAppE API network
-        heappe_container, heappe_net = core.resolve_heappe_service_network(cred.instance_name, log)
+        # 1. Network: the HEAppE container joins the instance's QScheduler network (local instances that have one);
+        #    otherwise local instances join the HEAppE API network (instances not migrated yet)
         network = asg.network if asg else ""
         network_changed = False
+        if inst.kind in LOCAL_KINDS and inst.qs_network:
+            heappe_container, heappe_net = qnet.heappe_join(cred.instance_name, inst.qs_network, log), None
+            network = inst.qs_network
+        else:
+            heappe_container, heappe_net = core.resolve_heappe_service_network(cred.instance_name, log)
         if heappe_net and inst.kind not in LOCAL_KINDS:
             network = heappe_net          # the admin proxy joins it (remote QScheduler: tunnelled into it)
-        if inst.kind in LOCAL_KINDS:
+        if inst.kind in LOCAL_KINDS and not inst.qs_network:
             if heappe_net:
                 if heappe_net not in target.docker.networks_of(inst.container_name):
                     target.docker.run(["network", "connect", "--alias", inst.service_host, heappe_net, inst.container_name], log)
@@ -894,7 +945,9 @@ def unassign_worker(log, result, asg_id, force):
             leftover = {n for n in current if n.startswith(asg.heappe_identifier + ".")}
             if leftover and core.replace_notifiers(target, {}, leftover, current, log):
                 core.apply_changes(inst, target, log)
-        if inst.kind in LOCAL_KINDS and asg.network:
+        if inst.kind in LOCAL_KINDS and inst.qs_network and asg.network == inst.qs_network:
+            qnet.heappe_leave(cred.instance_name, inst.qs_network, log)
+        elif inst.kind in LOCAL_KINDS and asg.network:
             shared = QSchedulerAssignment.objects.filter(qscheduler=inst, network=asg.network).exclude(pk=asg.pk).exists()
             if not shared and asg.network in target.docker.networks_of(inst.container_name):
                 target.docker.run(["network", "disconnect", asg.network, inst.container_name], log, check=False)
@@ -995,10 +1048,16 @@ def instance_summary(inst):
         'db_kind': inst.db_kind, 'db_kind_label': inst.get_db_kind_display(), 'db_schema': inst.db_schema,
         'can_backup': shared_db.can_backup(inst),
         'can_migrate_to_shared': inst.kind == Q.KIND_MANAGED and inst.db_kind == Q.DB_DEDICATED,
+        'qs_network': inst.qs_network, 'qs_subnet': inst.qs_subnet, 'qs_ip': inst.qs_ip,
+        'aliases': list(inst.aliases or []),
+        'is_local': inst.kind in LOCAL_KINDS,
+        'can_migrate_network': inst.kind in LOCAL_KINDS and not inst.qs_network and not inst.is_archived,
+        'can_edit_aliases': not inst.is_archived and (inst.kind not in LOCAL_KINDS or bool(inst.qs_network)),
         'assignments': [{
             'id': a.id, 'heappe_instance_id': a.heappe_instance_id, 'heappe_instance': a.heappe_instance.instance_name,
             'notifications_enabled': a.notifications_enabled, 'heappe_identifier': a.heappe_identifier,
             'callback_url': a.callback_url, 'network': a.network,
+            'heappe_local': qnet.heappe_override_path(a.heappe_instance.instance_name) is not None,
         } for a in inst.assignments.select_related("heappe_instance").order_by("heappe_instance__instance_name")],
     }
 
@@ -1025,6 +1084,8 @@ def qscheduler_page(request: HttpRequest) -> HttpResponse:
                      'port': DEFAULT_PORT, 'restart_command': DEFAULT_RESTART_COMMAND,
                      'network_prefix': _default_prefix()},
         'network_prefixes': list(core.NETWORK_PREFIX_CHOICES),
+        'qs_network_prefixes': list(qnet.PREFIX_CHOICES), 'qs_network_default_prefix': qnet.DEFAULT_PREFIX,
+        'alias_zone': qnet.alias_zone(), 'alias_example': qnet.ALIAS_EXAMPLE,
         'chosen_instance': request.session.get("chosen_instance"),
         'shared_db_deployed': shared_db.shared_database() is not None,
         'shared_db_image': shared_db.shared_image(),
@@ -1237,6 +1298,60 @@ def qscheduler_migrate_to_shared_api(request: HttpRequest, inst_id: int) -> Http
     opts = {'remove_old': _Reader(_json_body(request)).b('remove_old')}
     return _started(*core.start_operation("migrate to shared database", shared_db.migrate_to_shared_worker, inst.id,
                                           opts, str(uuid.uuid4())[:8]))
+
+
+@login_required
+def qscheduler_network_proposal_api(request: HttpRequest) -> HttpResponse:
+    """GET ?prefix=27[&subnet=...]: a free QScheduler network subnet (or the check of the entered one) and its layout."""
+    try:
+        prefix = qnet.parse_prefix(request.GET.get('prefix'))
+        subnet = qnet.parse_subnet(request.GET.get('subnet'))
+        docker = DockerCli()
+        if subnet:
+            qnet.check_free(docker, subnet)
+            lay = qnet.layout(subnet)
+        else:
+            lay = qnet.propose(docker, prefix)
+    except qnet.SubnetUnavailable as e:
+        return JsonResponse({'status': 'error', 'message': str(e), 'proposal': e.proposal}, status=409)
+    except (ValueError, RuntimeError) as e:
+        return _error(str(e))
+    return JsonResponse({'status': 'success', **lay})
+
+
+@login_required
+@_post_only
+def qscheduler_migrate_network_api(request: HttpRequest, inst_id: int) -> HttpResponse:
+    """Move a local instance to its own QScheduler network (static address, no downtime)."""
+    inst = _instance_or_404(inst_id)
+    if not inst:
+        return _error("QScheduler instance not found.", 404)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
+    if inst.kind not in LOCAL_KINDS or inst.qs_network:
+        return _error("Only local instances without a QScheduler network can be migrated.")
+    r = _Reader(_json_body(request))
+    opts = {}
+    _qs_network_options(r, opts, inst)
+    if r.errors:
+        return _error(" ".join(r.errors))
+    return _started(*core.start_operation("migrate to QScheduler network", qnet.migrate_network_worker, inst.id, opts))
+
+
+@login_required
+@_post_only
+def qscheduler_aliases_api(request: HttpRequest, inst_id: int) -> HttpResponse:
+    """Set the aliases of an instance (reconnects a local QScheduler to its QScheduler network)."""
+    inst = _instance_or_404(inst_id)
+    if not inst:
+        return _error("QScheduler instance not found.", 404)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
+    data = _json_body(request)
+    aliases, errors = qnet.parse_aliases(data.get('aliases') if isinstance(data, dict) else "", inst)
+    if errors:
+        return _error(" ".join(errors))
+    return _started(*core.start_operation("aliases", qnet.aliases_worker, inst.id, aliases))
 
 
 @login_required

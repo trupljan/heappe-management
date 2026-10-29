@@ -78,6 +78,17 @@
                             {% if inst.source == 'git' %} &middot; source <code>{{ inst.repo }}#{{ inst.ref }}</code>{% elif inst.image %} &middot; image <code>{{ inst.image }}</code>{% endif %}
                             &middot; database: {{ inst.db_kind_label|lower }}{% if inst.db_schema %} <code>{{ inst.db_schema }}</code>{% endif %}
                         </div>
+                        {% if inst.qs_network %}
+                        <div class="small text-muted mt-1"><i class="bi bi-hdd-network me-1 text-primary"></i>QScheduler network <code>{{ inst.qs_network }}</code> <span class="font-monospace">{{ inst.qs_subnet }}</span>
+                            &middot; QScheduler at <code class="fw-semibold">{{ inst.qs_ip }}</code> <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">static</span>
+                            {% if inst.aliases %} &middot; aliases {% for a in inst.aliases %}<code>{{ a }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</div>
+                        {% elif inst.is_local and not inst.archived %}
+                        <div class="small text-warning-emphasis mt-1"><i class="bi bi-exclamation-triangle me-1"></i>No QScheduler network: QScheduler joins the HEAppE networks and has no static address or aliases.
+                            <button type="button" class="btn btn-link btn-sm p-0 align-baseline qs-action" data-action="migrate_network" data-id="{{ inst.id }}">Migrate to QScheduler network...</button></div>
+                        {% elif inst.aliases %}
+                        <div class="small text-muted mt-1"><i class="bi bi-signpost-split me-1"></i>Aliases {% for a in inst.aliases %}<code>{{ a }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis border">manual &middot; to be automated</span> HEAppE resolves them through extra hosts with the QScheduler's IP (Containers &amp; Services &gt; Extra Hosts).</div>
+                        {% endif %}
                         {% if inst.archived %}
                         <div class="small text-dark-emphasis mt-1"><i class="bi bi-info-circle me-1"></i>{{ inst.archived_reason }}. Not managed: HEAppE clusters are kept unchanged.
                             <strong>Restore</strong> deploys it again and reassigns the clusters; <strong>Delete with entities</strong> removes them.</div>
@@ -97,6 +108,8 @@
                             {% else %}
                             {% if inst.can_update %}<li><button type="button" class="dropdown-item small qs-action" data-action="update" data-id="{{ inst.id }}"><i class="bi bi-arrow-repeat me-2 text-info"></i>Update</button></li>{% endif %}
                             {% if inst.can_migrate_to_shared and shared_db_deployed %}<li><button type="button" class="dropdown-item small qs-action" data-action="migrate_shared" data-id="{{ inst.id }}"><i class="bi bi-database-up me-2 text-primary"></i>Migrate to shared database...</button></li>{% endif %}
+                            {% if inst.can_migrate_network %}<li><button type="button" class="dropdown-item small qs-action" data-action="migrate_network" data-id="{{ inst.id }}"><i class="bi bi-hdd-network me-2 text-primary"></i>Migrate to QScheduler network...</button></li>{% endif %}
+                            {% if inst.can_edit_aliases %}<li><button type="button" class="dropdown-item small qs-action" data-action="aliases" data-id="{{ inst.id }}"><i class="bi bi-signpost-split me-2 text-primary"></i>Aliases...</button></li>{% endif %}
                             {% if inst.can_backup %}<li><button type="button" class="dropdown-item small qs-backups" data-id="{{ inst.id }}" data-name="{{ inst.name }}"><i class="bi bi-archive me-2 text-secondary"></i>Backups...</button></li>{% endif %}
                             <li><button type="button" class="dropdown-item small qs-admin-token" data-id="{{ inst.id }}" data-name="{{ inst.name }}" data-regen="{% if inst.can_update %}1{% endif %}"><i class="bi bi-key me-2 text-warning"></i>Admin token...</button></li>
                             <li><button type="button" class="dropdown-item small qs-action" data-action="restart" data-id="{{ inst.id }}"><i class="bi bi-bootstrap-reboot me-2 text-primary"></i>{% if inst.manual_restart %}Confirm manual restart{% else %}Restart{% endif %}</button></li>
@@ -136,7 +149,8 @@
                                                     <span class="badge bg-light text-muted border">off</span> <span class="text-muted">HEAppE polls</span>
                                                 {% endif %}
                                             </td>
-                                            <td class="text-muted">{{ a.network|default:"-" }}</td>
+                                            <td class="text-muted">{{ a.network|default:"-" }}
+                                                {% if not a.heappe_local and inst.aliases %}<div class="text-warning-emphasis" style="max-width: 260px;"><i class="bi bi-info-circle me-1"></i>HEAppE is not on this host: add the aliases with the QScheduler's IP to its hosts yourself (to be automated).</div>{% endif %}</td>
                                             <td class="text-end text-nowrap">
                                                 {% if not inst.archived %}
                                                 <button type="button" class="btn btn-sm btn-link py-0 qs-action" data-action="edit_assignment" data-id="{{ inst.id }}" data-asg="{{ a.id }}" title="Edit"><i class="bi bi-pencil"></i></button>
@@ -268,6 +282,30 @@
                     <div class="col-md-4 qs-db-existing-only d-none">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-db_network">DB Docker network</label>
                         <input type="text" class="form-control form-control-sm" id="qs-dep-db_network" name="db_network" placeholder="optional">
+                    </div>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-hdd-network me-1"></i> QScheduler network and aliases</div>
+                <div class="row g-2 mb-2 bg-light p-3 rounded border border-light-subtle qs-net-fields">
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted fw-semibold mb-1">Subnet</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control font-monospace qs-net-subnet" name="qs_subnet" placeholder="proposed automatically" autocomplete="off" aria-label="QScheduler network subnet">
+                            <button type="button" class="btn btn-outline-secondary qs-net-propose" title="Propose a free subnet"><i class="bi bi-magic"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1">Size</label>
+                        <select class="form-select form-select-sm qs-net-prefix" name="qs_prefix" aria-label="QScheduler network size">{% for p in qs_network_prefixes %}<option value="{{ p }}"{% if p == qs_network_default_prefix %} selected{% endif %}>/{{ p }}{% if p == qs_network_default_prefix %} (default){% endif %}</option>{% endfor %}</select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end"><div class="form-text small m-0 qs-net-status"></div></div>
+                    <div class="col-12"><div class="form-text" style="font-size: 0.72rem;">Internal network <code>&lt;name&gt;_qs_net</code>: QScheduler gets the static address <code>.2</code>, the assigned HEAppE containers join it. The subnet is proposed from <code>QSCHEDULER_NETWORK_POOL</code>; change it if it collides with your LAN or VPN.</div></div>
+                </div>
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-12">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-aliases">Aliases</label>
+                        <input type="text" class="form-control form-control-sm font-monospace" id="qs-dep-aliases" name="aliases" placeholder="e.g. {{ alias_example }}" autocomplete="off">
+                        <div class="form-text" style="font-size: 0.72rem;">Optional, comma separated host names{% if alias_zone %} inside <code>{{ alias_zone }}</code>{% endif %}, e.g. <code>{{ alias_example }}</code>. Host names HEAppE clusters can use instead of the container name (Docker network aliases; one cluster per alias). They can be changed later (<em>Aliases...</em>).</div>
                     </div>
                 </div>
 
@@ -538,6 +576,59 @@
     </div>
 </div>
 
+<!-- Migrate to QScheduler network / aliases -->
+<div class="modal fade" id="qsNetModal" tabindex="-1" aria-labelledby="qsNetLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form class="modal-content border-0 shadow-lg rounded-3" id="qsNetForm" novalidate>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsNetLabel"><i class="bi bi-hdd-network me-2"></i><span id="qs-net-title"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="qs-net-mode-migrate">
+                    <p class="small text-secondary mb-2">Creates the internal network <code id="qs-net-name"></code> with its own subnet and connects QScheduler there with a static address (and its aliases). Then:</p>
+                    <ul class="small text-secondary mb-3">
+                        <li>the <code>heappe</code> container of every assigned HEAppE instance joins it (live, and in its <code>docker-compose.override.yml</code>) and must reach QScheduler there;</li>
+                        <li>only then QScheduler leaves the HEAppE networks. No downtime; the clusters keep their host name.</li>
+                        <li>On failure everything is rolled back and nothing else changes.</li>
+                    </ul>
+                    <div class="row g-2 mb-0 bg-light p-3 rounded border border-light-subtle qs-net-fields">
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted fw-semibold mb-1">Subnet</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control font-monospace qs-net-subnet" name="qs_subnet" placeholder="proposed automatically" autocomplete="off" aria-label="QScheduler network subnet">
+                            <button type="button" class="btn btn-outline-secondary qs-net-propose" title="Propose a free subnet"><i class="bi bi-magic"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1">Size</label>
+                        <select class="form-select form-select-sm qs-net-prefix" name="qs_prefix" aria-label="QScheduler network size">{% for p in qs_network_prefixes %}<option value="{{ p }}"{% if p == qs_network_default_prefix %} selected{% endif %}>/{{ p }}{% if p == qs_network_default_prefix %} (default){% endif %}</option>{% endfor %}</select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end"><div class="form-text small m-0 qs-net-status"></div></div>
+                    <div class="col-12"><div class="form-text" style="font-size: 0.72rem;">Internal network <code>&lt;name&gt;_qs_net</code>: QScheduler gets the static address <code>.2</code>, the assigned HEAppE containers join it. The subnet is proposed from <code>QSCHEDULER_NETWORK_POOL</code>; change it if it collides with your LAN or VPN.</div></div>
+                </div>
+                </div>
+                <div class="qs-net-mode-aliases">
+                    <p class="small text-secondary mb-2">Host names HEAppE clusters can use instead of the container name{% if alias_zone %}, inside <code>{{ alias_zone }}</code>{% endif %}; unique on this host, one cluster per alias.</p>
+                    <ul class="small text-secondary mb-3 qs-net-aliases-local">
+                        <li>Applied as Docker network aliases on <code id="qs-net-aliases-net"></code>: QScheduler is reconnected to it, which interrupts it for well under a second for the HEAppE instances on that network.</li>
+                        <li>An alias that a HEAppE cluster still uses cannot be removed.</li>
+                    </ul>
+                    <p class="small text-warning-emphasis mb-3 qs-net-aliases-remote"><i class="bi bi-info-circle me-1"></i>Remote instance: the aliases are only stored. Add each with the QScheduler's IP as an extra host of the HEAppE instance (Containers &amp; Services &gt; Extra Hosts); to be automated.</p>
+                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-net-aliases">Aliases</label>
+                    <textarea class="form-control form-control-sm font-monospace" id="qs-net-aliases" name="aliases" rows="3" placeholder="{{ alias_example }}"></textarea>
+                    <div class="form-text" style="font-size: 0.72rem;">One per line or comma separated; empty removes all.</div>
+                </div>
+                <div id="qs-net-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsNetBtn"></button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Backups of an instance -->
 <div class="modal fade" id="qsBackupsModal" tabindex="-1" aria-labelledby="qsBackupsLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -582,7 +673,9 @@ document.addEventListener('DOMContentLoaded', function () {
         unassign: "{% url 'qscheduler_unassign' 0 %}", heappeInfo: "{% url 'qscheduler_heappe_info' 0 %}",
         notifierRemove: "{% url 'qscheduler_notifier_remove' 0 %}",
         migrateShared: "{% url 'qscheduler_migrate_to_shared' 0 %}",
+        migrateNetwork: "{% url 'qscheduler_migrate_network' 0 %}", aliases: "{% url 'qscheduler_aliases' 0 %}",
     };
+    const proposalUrl = "{% url 'qscheduler_network_proposal' %}";
     const url = (key, id) => urls[key].replace('/0/', '/' + id + '/');
     const modal = id => bootstrap.Modal.getOrCreateInstance(document.getElementById(id));
     const showErr = (id, msg) => { const el = document.getElementById(id); el.textContent = msg; el.classList.remove('d-none'); };
@@ -869,8 +962,53 @@ document.addEventListener('DOMContentLoaded', function () {
         }).catch(err => { restore(); showErr(errId, err.message || 'Network error.'); });
     }
 
+    // ---- QScheduler network subnet: proposed automatically, the admin can enter another one ----
+    function netPicker(root) {
+        const subnet = root.querySelector('.qs-net-subnet');
+        const prefix = root.querySelector('.qs-net-prefix');
+        const status = root.querySelector('.qs-net-status');
+        let seq = 0;
+        function query(params) {
+            const n = ++seq;
+            status.className = 'form-text small m-0 qs-net-status text-muted';
+            status.textContent = params.subnet ? 'Checking...' : 'Finding a free subnet...';
+            return fetch(proposalUrl + '?' + new URLSearchParams(params), { credentials: 'same-origin' })
+                .then(r => r.json()).then(d => {
+                    if (n !== seq) return;
+                    if (d.status === 'success') {
+                        if (!params.subnet) subnet.value = d.subnet;
+                        status.className = 'form-text small m-0 qs-net-status text-success-emphasis';
+                        status.innerHTML = '<i class="bi bi-check-circle me-1"></i>QScheduler at <code>' + U.esc(d.ip) + '</code>, dynamic <code>' + U.esc(d.ip_range) + '</code>';
+                    } else {
+                        status.className = 'form-text small m-0 qs-net-status text-danger';
+                        status.innerHTML = U.esc(d.message || 'Not usable.') + (d.proposal
+                            ? ' <a href="#" class="qs-net-use" data-subnet="' + U.esc(d.proposal) + '">Use ' + U.esc(d.proposal) + '</a>' : '');
+                    }
+                }).catch(() => { if (n === seq) status.textContent = ''; });
+        }
+        const propose = () => query({ prefix: prefix.value });
+        prefix.addEventListener('change', propose);
+        root.querySelector('.qs-net-propose').addEventListener('click', propose);
+        subnet.addEventListener('change', () => subnet.value.trim() ? query({ subnet: subnet.value.trim() }) : propose());
+        status.addEventListener('click', e => {
+            const a = e.target.closest('.qs-net-use');
+            if (!a) return;
+            e.preventDefault();
+            subnet.value = a.dataset.subnet;
+            query({ subnet: a.dataset.subnet });
+        });
+        return {
+            reset(initial) {
+                prefix.value = String({{ qs_network_default_prefix }});
+                subnet.value = initial || '';
+                return initial ? query({ subnet: initial }) : propose();
+            },
+        };
+    }
+
     // ---- deploy ----
     const depForm = document.getElementById('qsDeployForm');
+    const depNet = netPicker(depForm.querySelector('.qs-net-fields'));
     const depRefs = refPicker(depForm);
     depForm.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', () => sourceToggle(depForm)));
     function depDbToggle() {
@@ -890,6 +1028,8 @@ document.addEventListener('DOMContentLoaded', function () {
         depForm.rebuild_image.checked = false; depForm.no_cache.checked = false;
         depForm.name.value = ''; document.getElementById('qs-dep-name-example').textContent = 'qscheduler';
         depForm.network_prefix.value = String(defaults.network_prefix || 29);
+        depForm.aliases.value = '';
+        depNet.reset();
         depDbToggle();
         const sel = depForm.assign_heappe_id;
         sel.innerHTML = '<option value="">- none -</option>' + heappes.map(h => '<option value="' + h.id + '"' +
@@ -907,6 +1047,7 @@ document.addEventListener('DOMContentLoaded', function () {
             title: 'Deploying QScheduler', hint: 'Building the image (several minutes on the first build), starting PostgreSQL and the service...',
             successTitle: 'QScheduler instance running',
             details: (r, esc) => 'Instance: ' + esc(r.name) + ':' + esc(r.port) + '<br>Version: ' + esc(r.version) +
+                (r.qs_ip ? '<br>QScheduler network: ' + esc(r.qs_network) + ' (QScheduler at ' + esc(r.qs_ip) + ')' : '') +
                 (r.heappe_instance ? '<br>Assigned: ' + esc(r.heappe_instance) + (r.notifier ? ' (notifier ' + esc(r.notifier) + ')' : '') : ''),
         });
     });
@@ -1049,8 +1190,50 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }));
 
+    // ---- migrate to QScheduler network / aliases ----
+    const netForm = document.getElementById('qsNetForm');
+    const netNet = netPicker(netForm.querySelector('.qs-net-fields'));
+    let netMode = null;
+    function openNet(mode) {
+        netMode = mode;
+        hideErr('qs-net-error');
+        netForm.querySelectorAll('.qs-net-mode-migrate').forEach(el => el.classList.toggle('d-none', mode !== 'migrate'));
+        netForm.querySelectorAll('.qs-net-mode-aliases').forEach(el => el.classList.toggle('d-none', mode !== 'aliases'));
+        if (mode === 'migrate') {
+            document.getElementById('qs-net-title').textContent = 'Migrate ' + current.name + ' to a QScheduler network';
+            document.getElementById('qs-net-name').textContent = current.name + '_qs_net';
+            document.getElementById('qsNetBtn').textContent = 'Migrate';
+            netNet.reset();
+        } else {
+            document.getElementById('qs-net-title').textContent = 'Aliases of ' + current.name;
+            document.getElementById('qs-net-aliases-net').textContent = current.qs_network || '';
+            netForm.querySelector('.qs-net-aliases-local').classList.toggle('d-none', !current.is_local);
+            netForm.querySelector('.qs-net-aliases-remote').classList.toggle('d-none', current.is_local);
+            netForm.aliases.value = (current.aliases || []).join('\n');
+            document.getElementById('qsNetBtn').textContent = 'Save aliases';
+        }
+        modal('qsNetModal').show();
+    }
+    netForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const btn = document.getElementById('qsNetBtn');
+        if (netMode === 'migrate') {
+            submitOperation(btn, 'qs-net-error', 'qsNetModal', url('migrateNetwork', current.id),
+                { qs_subnet: netForm.qs_subnet.value.trim(), qs_prefix: netForm.qs_prefix.value, aliases: current.aliases || [] }, {
+                    title: 'Migrating ' + current.name + ' to its QScheduler network',
+                    hint: 'Creating the network, connecting QScheduler and the HEAppE containers, checking, then leaving the HEAppE networks...',
+                    successTitle: 'QScheduler network in use',
+                    details: (r, esc) => 'Network: ' + esc(r.qs_network) + ' (' + esc(r.qs_subnet) + ')<br>QScheduler at ' + esc(r.qs_ip) });
+        } else {
+            submitOperation(btn, 'qs-net-error', 'qsNetModal', url('aliases', current.id), { aliases: netForm.aliases.value }, {
+                title: 'Setting the aliases of ' + current.name,
+                hint: current.is_local ? 'Reconnecting QScheduler to its QScheduler network and checking the aliases from HEAppE...' : 'Saving...',
+                successTitle: 'Aliases saved', details: (r, esc) => esc((r.aliases || []).join(', ') || 'none') });
+        }
+    });
+
     // Helpers for the recovery dialogs (partials/qscheduler_recovery_modals.html)
-    window.qsPage = { byId, url, modal, showErr, hideErr, formData, submitOperation, sourceToggle, refPicker, loadLocalDocker, askConfirm };
+    window.qsPage = { byId, url, modal, showErr, hideErr, formData, submitOperation, sourceToggle, refPicker, loadLocalDocker, askConfirm, netPicker };
 
     // ---- per-instance actions ----
     document.querySelectorAll('.qs-admin-token').forEach(b => b.addEventListener('click', () =>
@@ -1083,6 +1266,10 @@ document.addEventListener('DOMContentLoaded', function () {
                           : 'QScheduler stops gracefully (pending state is written to the database) and starts again; running backend jobs are re-attached.'),
                 manual ? 'Check service' : 'Restart', null, (btn) => submitOperation(btn, 'qs-confirm-error', 'qsConfirmModal', url('restart', current.id), {}, {
                     title: 'Restarting ' + current.name, successTitle: 'QScheduler restarted', details: (r, esc) => 'Instance: ' + esc(r.name) }), false);
+        } else if (action === 'migrate_network') {
+            openNet('migrate');
+        } else if (action === 'aliases') {
+            openNet('aliases');
         } else if (action === 'migrate_shared') {
             askConfirm('Migrate ' + current.name + ' to the shared database',
                 'Copies the data from <code>' + U.esc(current.container_name) + '-pgsql</code> into role and schema <code>qs_&hellip;</code> of the shared database and restarts QScheduler on it.'

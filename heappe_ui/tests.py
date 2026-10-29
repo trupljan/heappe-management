@@ -5184,7 +5184,7 @@ class QSchedulerHelperTests(TestCase):
 
     def test_qscheduler_clusters_match_host_and_port(self):
         from heappe_ui.view.qscheduler_core import qscheduler_clusters, cluster_machine
-        inst = mock.Mock(service_host="qs-1", port=4300)
+        inst = mock.Mock(service_host="qs-1", port=4300, hosts=["qs-1", "vlq.machine.qscheduler.it4i.cz"])
         mk = lambda **kw: mock.Mock(to_dict=mock.Mock(return_value=kw))
         controller = mock.Mock()
         controller.heappe_management_clusters_get.return_value = [
@@ -5193,9 +5193,11 @@ class QSchedulerHelperTests(TestCase):
             mk(id=2, scheduler_type=32, master_node_name="x", custom_configuration={"QSchedulerHost": "qs-1", "QSchedulerPort": "4300"}),
             mk(id=3, scheduler_type=32, master_node_name="qs-1", port=4301, custom_configuration={}),
             mk(id=4, scheduler_type=4, master_node_name="qs-1", port=4300),
+            mk(id=5, scheduler_type=32, master_node_name="vlq.machine.qscheduler.it4i.cz", port=4300,
+               custom_configuration={}),                                                 # alias of the instance
         ]
         found = qscheduler_clusters(controller, "sc", inst)
-        self.assertEqual([c["id"] for c in found], [1, 2])
+        self.assertEqual([c["id"] for c in found], [1, 2, 5])
         self.assertEqual(cluster_machine(found[0]), "Sim")
 
     def test_container_shell_target_exports_database_url(self):
@@ -7005,7 +7007,11 @@ class QSchedulerNetworkSubnetTests(TestCase):
         opts, _ = d.parse_deploy_options({"network_prefix": "28"}, "abcd1234")
         docker = mock.Mock(where="")
         with mock.patch.object(d, "_build_or_check_image"), \
-             mock.patch.object(d.core, "create_internal_network", side_effect=RuntimeError("stop")) as create:
+             mock.patch("heappe_ui.view.qscheduler_network.existing_layout", return_value=None), \
+                mock.patch("heappe_ui.view.qscheduler_network.create",
+                           side_effect=lambda dk, n, sub, i, lg: __import__("heappe_ui.view.qscheduler_network", fromlist=["layout"]).layout(sub)), \
+                mock.patch("heappe_ui.view.qscheduler_network.propose", return_value={'subnet': "10.213.8.0/27"}), \
+                mock.patch.object(d.core, "create_internal_network", side_effect=RuntimeError("stop")) as create:
             with self.assertRaisesRegex(RuntimeError, "stop"):
                 d.deploy_service(docker, opts, lambda *_: None)
         self.assertEqual((create.call_args.args[1], create.call_args.kwargs['prefix']), ("qscheduler-abcd1234_db_net", 28))
@@ -7451,9 +7457,9 @@ class QSchedulerAdminProxyTests(TestCase):
         self.assertIn("location ~ ^/(machines|notifiers)$", conf)
         self.assertIn("location ~ ^/(machine|notifiers)/[^/]+$", conf)
         self.assertIn("location / { return 404; }", conf)
-        args = proxy_run_args(self.inst, "dev_external_network")
+        args = proxy_run_args(self.inst)
         self.assertIn("127.0.0.1::8080", args)                 # published on localhost only
-        self.assertEqual(args[args.index("--network") + 1], "dev_external_network")
+        self.assertEqual(args[args.index("--network") + 1], "bridge")    # internal networks cannot publish
         self.assertIn("qscheduler.admin-upstream=qs-1:4300", args)
 
     def test_ensure_proxy_creates_repairs_and_follows_networks(self):
@@ -7481,6 +7487,12 @@ class QSchedulerAdminProxyTests(TestCase):
         self.asg.delete()
         with self.assertRaises(qa.AdminApiUnavailable):
             qa.ensure_proxy(self.inst, docker=self._docker()[0])
+        # with a QScheduler network the proxy joins it, no assignment needed
+        self.inst.qs_network = "qs-1_qs_net"
+        docker, _ = self._docker()
+        qa.ensure_proxy(self.inst, docker=docker)
+        self.assertIn(["network", "connect", "qs-1_qs_net", "qs-1-admin-proxy"], [c.args[0] for c in docker.run.call_args_list])
+        self.inst.qs_network = ""
         docker, _ = self._docker(proxy={"Config": {}})
         with mock.patch.object(qa, "DockerCli", return_value=docker):
             qa.sync_proxy(self.inst)
@@ -7833,6 +7845,10 @@ class QSchedulerSharedDbTests(TestCase):
                 mock.patch.object(sdb, "create_instance_schema", return_value=("qs_qs_u1", "pw" * 10)) as create, \
                 mock.patch.object(sdb, "connect_network") as connect, \
                 mock.patch("heappe_ui.view.qscheduler_core.create_internal_network"), \
+                mock.patch("heappe_ui.view.qscheduler_network.existing_layout", return_value=None), \
+                mock.patch("heappe_ui.view.qscheduler_network.create",
+                           side_effect=lambda dk, n, sub, i, lg: __import__("heappe_ui.view.qscheduler_network", fromlist=["layout"]).layout(sub)), \
+                mock.patch("heappe_ui.view.qscheduler_network.propose", return_value={'subnet': "10.213.8.0/27"}), \
                 mock.patch.object(d, "DockerTarget", return_value=target):
             info = d.deploy_service(docker, opts, lambda *_: None)
         create.assert_called_once()
@@ -7854,6 +7870,10 @@ class QSchedulerSharedDbTests(TestCase):
                 mock.patch.object(sdb, "require_running", return_value=db), \
                 mock.patch.object(sdb, "create_instance_schema", return_value=("qs_qs_u1", "pw" * 10)), \
                 mock.patch.object(sdb, "connect_network"), \
+                mock.patch("heappe_ui.view.qscheduler_network.existing_layout", return_value=None), \
+                mock.patch("heappe_ui.view.qscheduler_network.create",
+                           side_effect=lambda dk, n, sub, i, lg: __import__("heappe_ui.view.qscheduler_network", fromlist=["layout"]).layout(sub)), \
+                mock.patch("heappe_ui.view.qscheduler_network.propose", return_value={'subnet': "10.213.8.0/27"}), \
                 mock.patch("heappe_ui.view.qscheduler_core.create_internal_network"):
             with self.assertRaises(RuntimeError):
                 d.deploy_service(docker, opts, logs.append)
@@ -8337,3 +8357,418 @@ class ContainerCardTests(TestCase):
         self.assertEqual([(s['key'], [i['info']['service'] for i in s['items']]) for s in sections],
                          [('api', ['heappe', 'datastagingapi']), ('db', ['mssql']), ('infra', ['vault']),
                           ('jobs', ['heappe-init'])])
+
+
+class QSchedulerNetworkTests(TestCase):
+    """QScheduler network: subnet layout and proposal, aliases, override file, static IPs (Docker mocked)."""
+
+    def setUp(self):
+        from heappe_ui.models import QSchedulerInstance
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300)
+
+    def test_layout_and_subnet_input(self):
+        from heappe_ui.view import qscheduler_network as qn
+        self.assertEqual(qn.layout("10.213.4.0/27"), {'subnet': "10.213.4.0/27", 'gateway': "10.213.4.1",
+                                                      'ip': "10.213.4.2", 'ip_range': "10.213.4.16/28"})
+        self.assertIsNone(qn.parse_subnet(""))
+        self.assertEqual(str(qn.parse_subnet(" 10.213.8.0/28 ")), "10.213.8.0/28")
+        for bad, text in (("10.213.4.1/27", "host bits"), ("8.8.8.0/27", "private"), ("10.0.0.0/29", "size"),
+                          ("nonsense", "CIDR")):
+            with self.assertRaisesRegex(ValueError, text):
+                qn.parse_subnet(bad)
+        self.assertEqual(qn.parse_prefix(""), 27)
+        self.assertEqual(qn.parse_prefix("/26"), 26)
+        with self.assertRaises(ValueError):
+            qn.parse_prefix("29")
+
+    def test_proposal_skips_used_subnets_and_overlap_offers_a_free_one(self):
+        import ipaddress
+        from heappe_ui.view import qscheduler_network as qn
+        used = [ipaddress.ip_network("10.213.0.0/29"), ipaddress.ip_network("10.213.0.32/27")]
+        with mock.patch.object(qn.core, "used_subnets", return_value=used):
+            self.assertEqual(qn.propose(mock.Mock(), 27)['subnet'], "10.213.0.64/27")   # .0/27 overlaps the /29
+            with self.assertRaises(qn.SubnetUnavailable) as ctx:
+                qn.check_free(mock.Mock(), "10.213.0.32/27")
+        self.assertEqual(ctx.exception.proposal, "10.213.0.64/27")
+        self.assertIn("Free subnet of the same size: 10.213.0.64/27", str(ctx.exception))
+
+    def test_create_network_arguments(self):
+        from heappe_ui.view import qscheduler_network as qn
+        from heappe_ui.view.qscheduler_core import CommandResult
+        docker = mock.Mock()
+        docker.run.return_value = CommandResult(0, "id", "")
+        with mock.patch.object(qn.core, "used_subnets", return_value=[]):
+            lay = qn.create(docker, "qs-1_qs_net", "10.213.4.0/27", "qs-1", lambda *_: None)
+        args = docker.run.call_args.args[0]
+        self.assertEqual(lay['ip'], "10.213.4.2")
+        for a in ("--internal", "10.213.4.0/27", "10.213.4.1", "10.213.4.16/28", "qs-1_qs_net"):
+            self.assertIn(a, args)
+        docker.run.return_value = CommandResult(1, "", "Pool overlaps with other one on this address space")
+        with mock.patch.object(qn.core, "used_subnets", return_value=[]), \
+                mock.patch.object(qn, "propose", return_value={'subnet': "10.213.4.32/27"}):
+            with self.assertRaises(qn.SubnetUnavailable) as ctx:
+                qn.create(docker, "qs-1_qs_net", "10.213.4.0/27", "qs-1", lambda *_: None)
+        self.assertEqual(ctx.exception.proposal, "10.213.4.32/27")
+
+    def test_aliases(self):
+        from heappe_ui.models import QSchedulerInstance
+        from heappe_ui.view import qscheduler_network as qn
+        self.assertEqual(qn.validate_alias("VLQ.machine.qscheduler.it4i.cz."), "vlq.machine.qscheduler.it4i.cz")
+        self.assertEqual(qn.validate_alias("vlq.qpu.example.org"), "vlq.qpu.example.org")   # any provider's domain
+        for bad in ("bad_label.machine.qscheduler.it4i.cz", "-x.example.org", "a" * 64 + ".example.org", ""):
+            with self.assertRaises(ValueError):
+                qn.validate_alias(bad)
+        with self.settings(QSCHEDULER_ALIAS_ZONE="machine.qscheduler.it4i.cz"):
+            with self.assertRaisesRegex(ValueError, "not inside the alias zone"):
+                qn.validate_alias("vlq.example.org")
+        QSchedulerInstance.objects.create(name="qs-2", kind="managed", container_name="qs-2", service_host="qs-2",
+                                          aliases=["used.machine.qscheduler.it4i.cz"])
+        aliases, errors = qn.parse_aliases("a.machine.qscheduler.it4i.cz, a.machine.qscheduler.it4i.cz\n"
+                                           "used.machine.qscheduler.it4i.cz", self.inst)
+        self.assertEqual(aliases, ["a.machine.qscheduler.it4i.cz", "used.machine.qscheduler.it4i.cz"])
+        self.assertEqual(errors, ["Alias 'used.machine.qscheduler.it4i.cz' is already used by QScheduler instance 'qs-2'."])
+        with self.settings(QSCHEDULER_ALIAS_ZONE="qs.example.org"):
+            self.assertEqual(qn.parse_aliases(["x.qs.example.org"], self.inst), (["x.qs.example.org"], []))
+        self.inst.aliases, self.inst.service_host = ["a.machine.qscheduler.it4i.cz"], "qs-host"
+        self.assertEqual(qn.network_aliases(self.inst), ["qs-host", "a.machine.qscheduler.it4i.cz"])
+        self.assertEqual(self.inst.hosts, ["qs-host", "a.machine.qscheduler.it4i.cz"])
+
+    def test_override_network_keeps_the_rest_of_the_file(self):
+        import tempfile
+        import yaml
+        from heappe_ui.view import extra_hosts as eh
+        path = os.path.join(tempfile.mkdtemp(prefix="qs-ovr-"), "docker-compose.override.yml")
+        eh.write_override_extra_hosts(path, "heappe", [("login.local", "10.0.0.5")])
+        eh.set_override_network(path, "heappe", "qs-1_qs_net", True)
+        eh.set_override_network(path, "heappe", "qs-2_qs_net", True)
+        data = yaml.safe_load(open(path))
+        self.assertEqual(data['services']['heappe']['extra_hosts'], ["login.local:10.0.0.5"])
+        self.assertEqual(list(data['services']['heappe']['networks']), ["qs-1_qs_net", "qs-2_qs_net"])
+        self.assertEqual(data['networks']['qs-1_qs_net'], {'external': True})
+        self.assertEqual(eh.override_networks(path, "heappe"), ["qs-1_qs_net", "qs-2_qs_net"])
+        eh.set_override_network(path, "heappe", "qs-1_qs_net", False)
+        data = yaml.safe_load(open(path))
+        self.assertEqual(list(data['services']['heappe']['networks']), ["qs-2_qs_net"])
+        self.assertNotIn("qs-1_qs_net", data['networks'])
+        eh.set_override_network(path, "heappe", "qs-2_qs_net", False)
+        eh.write_override_extra_hosts(path, "heappe", [])
+        self.assertFalse(os.path.exists(path))                     # nothing left: file removed
+
+    def test_recreate_keeps_static_ip_and_aliases(self):
+        from heappe_ui.view import qscheduler_deploy as q
+        info = {"Id": "abcdef1234567890", "Name": "/qs-1",
+                "Config": {"Image": "qs", "Cmd": ["serve", "--port", "4300"], "Env": []},
+                "HostConfig": {"RestartPolicy": {"Name": "unless-stopped"}},
+                "NetworkSettings": {"Networks": {
+                    "bridge": {"Aliases": None},
+                    "qs-1_qs_net": {"Aliases": ["qs-1", "vlq.machine.qscheduler.it4i.cz"],
+                                    "IPAMConfig": {"IPv4Address": "10.213.4.2"}}}}}
+        internal = {"qs-1_qs_net": True}
+        with mock.patch.object(q, "_network_is_internal", side_effect=lambda n, d=None: internal.get(n, False)):
+            args, nets, _ = q.recreate_args_from_inspect(info, "qs:new")
+        self.assertEqual(nets[0][0], "bridge")
+        self.assertNotIn("--ip", args)                            # bridge: dynamic
+        self.assertEqual(nets[1], ("qs-1_qs_net", ["qs-1", "vlq.machine.qscheduler.it4i.cz"], "10.213.4.2"))
+        docker, target = mock.Mock(), mock.Mock()
+        with mock.patch.object(q, "_network_is_internal", side_effect=lambda n, d=None: internal.get(n, False)):
+            q.recreate_container(docker, target, info, "qs:new", None, lambda *_: None, "u1", "Update")
+        connect = [c.args[0] for c in docker.run.call_args_list if c.args[0][:2] == ["network", "connect"]][0]
+        self.assertEqual(connect, ["network", "connect", "--alias", "qs-1", "--alias", "vlq.machine.qscheduler.it4i.cz",
+                                   "--ip", "10.213.4.2", "qs-1_qs_net", "qs-1"])
+
+    def test_deploy_creates_network_and_connects_with_static_ip(self):
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_network as qn
+        opts, errors = d.parse_deploy_options({"name": "qs", "source": "image", "image": "qs:v1", "db_mode": "existing",
+                                               "database_url": "postgres://u:p@h/db", "qs_subnet": "10.213.4.0/27",
+                                               "aliases": "vlq.machine.qscheduler.it4i.cz"}, "u1")
+        self.assertEqual(errors, [])
+        from heappe_ui.view.qscheduler_core import CommandResult
+        docker, target = mock.Mock(), mock.Mock()
+        docker.json.return_value = None                            # network does not exist yet
+        docker.run.return_value = CommandResult(0, "", "")
+        target.version.return_value = "qscheduler 0.2.1"
+        with mock.patch.object(d, "_build_or_check_image"), mock.patch.object(d, "DockerTarget", return_value=target), \
+                mock.patch.object(qn.core, "used_subnets", return_value=[]):
+            info = d.deploy_service(docker, opts, lambda *_: None)
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.assertIn("--internal", next(c for c in cmds if c[:2] == ["network", "create"]))
+        self.assertIn(["network", "connect", "--ip", "10.213.4.2", "--alias", "vlq.machine.qscheduler.it4i.cz",
+                       "qs-u1_qs_net", "qs-u1"], cmds)
+        self.assertEqual((info['qs_network'], info['qs_subnet'], info['qs_ip']), ("qs-u1_qs_net", "10.213.4.0/27", "10.213.4.2"))
+        _, errors = d.parse_deploy_options({"qs_subnet": "10.213.4.3/27", "aliases": "bad_alias.example.org"}, "u2")
+        self.assertEqual(len(errors), 2)
+
+
+class QSchedulerNetworkWorkerTests(TestCase):
+    """Migrate to QScheduler network, aliases, assign / unassign, Extra Hosts aliases (Docker and HEAppE mocked)."""
+
+    def setUp(self):
+        from heappe_ui.models import InstanceCredentials, QSchedulerAssignment, QSchedulerInstance
+        self.cred = InstanceCredentials.objects.create(instance_name="dev", heappe_host="h", heappe_port=5000)
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300)
+        self.asg = QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.cred,
+                                                       network="dev_external_network")
+        self.logs = []
+
+    def _docker(self, qs_networks):
+        docker = mock.Mock()
+        docker.inspect.return_value = {"Name": "/qs-1"}
+        docker.networks_of.side_effect = lambda name: list(qs_networks)
+        docker.json.return_value = None
+        docker.run.return_value = mock.Mock(returncode=0, output="")
+        return docker
+
+    def _migrate(self, docker, check=None):
+        from heappe_ui.view import qscheduler_network as qn
+        with mock.patch.object(qn, "DockerCli", return_value=docker), \
+                mock.patch.object(qn.core, "used_subnets", return_value=[]), \
+                mock.patch.object(qn, "heappe_join", return_value="dev_heappe") as join, \
+                mock.patch.object(qn, "heappe_leave") as leave, \
+                mock.patch.object(qn.core, "check_from_heappe", side_effect=check), \
+                mock.patch("heappe_ui.view.qscheduler_admin.remove_proxy"), \
+                mock.patch("heappe_ui.view.qscheduler_admin.ensure_proxy"):
+            result = {}
+            try:
+                qn.migrate_network_worker(self.logs.append, result, self.inst.id, {'qs_subnet': "10.213.4.0/27"})
+            finally:
+                self.join, self.leave = join, leave
+        return result
+
+    def test_migrate_switches_after_heappe_reaches_qscheduler(self):
+        docker = self._docker(["bridge", "qs-1_db_net", "dev_external_network"])
+        result = self._migrate(docker)
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.assertIn(["network", "connect", "--ip", "10.213.4.2", "qs-1_qs_net", "qs-1"], cmds)
+        self.assertIn(["network", "disconnect", "dev_external_network", "qs-1"], cmds)
+        self.assertLess(cmds.index(["network", "connect", "--ip", "10.213.4.2", "qs-1_qs_net", "qs-1"]),
+                        cmds.index(["network", "disconnect", "dev_external_network", "qs-1"]))
+        self.assertNotIn(["network", "disconnect", "qs-1_db_net", "qs-1"], cmds)
+        self.join.assert_called_once_with("dev", "qs-1_qs_net", mock.ANY)
+        self.inst.refresh_from_db(); self.asg.refresh_from_db()
+        self.assertEqual((self.inst.qs_network, self.inst.qs_ip, self.asg.network), ("qs-1_qs_net", "10.213.4.2", "qs-1_qs_net"))
+        self.assertEqual(result['qs_subnet'], "10.213.4.0/27")
+
+    def test_migrate_rolls_back_when_heappe_cannot_reach_it(self):
+        docker = self._docker(["bridge", "dev_external_network"])
+        with self.assertRaisesRegex(RuntimeError, "rolled back"):
+            self._migrate(docker, check=RuntimeError("not reachable"))
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.leave.assert_called_once_with("dev", "qs-1_qs_net", mock.ANY)
+        self.assertIn(["network", "rm", "qs-1_qs_net"], cmds)
+        self.assertNotIn(["network", "disconnect", "dev_external_network", "qs-1"], cmds)
+        self.inst.refresh_from_db(); self.asg.refresh_from_db()
+        self.assertEqual((self.inst.qs_network, self.asg.network), ("", "dev_external_network"))
+
+    def test_aliases_reconnect_and_refuse_removing_used_alias(self):
+        from heappe_ui.view import qscheduler_network as qn
+        self.inst.qs_network, self.inst.qs_ip = "qs-1_qs_net", "10.213.4.2"
+        self.inst.aliases = ["old.machine.qscheduler.it4i.cz"]
+        self.inst.save()
+        cluster = {'id': 7, 'name': "VLQ", 'master_node_name': "old.machine.qscheduler.it4i.cz", 'custom_configuration': {}}
+        docker = self._docker([])
+        with mock.patch.object(qn, "DockerCli", return_value=docker), \
+                mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(mock.Mock(), "sc", None)), \
+                mock.patch.object(qn.core, "qscheduler_clusters", return_value=[cluster]), \
+                mock.patch.object(qn.core, "find_heappe_api_container", return_value="dev_heappe"), \
+                mock.patch.object(qn.core, "check_from_heappe") as check:
+            with self.assertRaisesRegex(RuntimeError, "still used by HEAppE 'dev' cluster"):
+                qn.aliases_worker(self.logs.append, {}, self.inst.id, ["new.machine.qscheduler.it4i.cz"])
+            docker.run.assert_not_called()
+            qn.aliases_worker(self.logs.append, {}, self.inst.id,
+                              ["old.machine.qscheduler.it4i.cz", "new.machine.qscheduler.it4i.cz"])
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.assertEqual(cmds, [["network", "disconnect", "qs-1_qs_net", "qs-1"],
+                                ["network", "connect", "--ip", "10.213.4.2", "--alias", "old.machine.qscheduler.it4i.cz",
+                                 "--alias", "new.machine.qscheduler.it4i.cz", "qs-1_qs_net", "qs-1"]])
+        self.assertEqual(check.call_count, 2)
+        self.inst.refresh_from_db()
+        self.assertEqual(self.inst.aliases, ["old.machine.qscheduler.it4i.cz", "new.machine.qscheduler.it4i.cz"])
+
+    def test_heappe_join_and_leave_use_the_override_file(self):
+        import tempfile
+        from heappe_ui.view import extra_hosts as eh
+        from heappe_ui.view import qscheduler_network as qn
+        base = tempfile.mkdtemp(prefix="qs-join-")
+        os.makedirs(os.path.join(base, "dev", "heappe-core"))
+        open(os.path.join(base, "dev", "heappe-core", "docker-compose.yml"), "w").write("services: {}\n")
+        docker = self._docker([])
+        with mock.patch.object(eh, "DEPLOYMENT_BASE_PATH", base), mock.patch.object(qn, "DockerCli", return_value=docker), \
+                mock.patch.object(qn.core, "find_heappe_api_container", return_value="dev_heappe"):
+            self.assertEqual(qn.heappe_join("dev", "qs-1_qs_net", self.logs.append), "dev_heappe")
+            override = os.path.join(base, "dev", "heappe-core", "docker-compose.override.yml")
+            self.assertEqual(eh.override_networks(override, "heappe"), ["qs-1_qs_net"])
+            docker.networks_of.side_effect = lambda name: ["qs-1_qs_net"]
+            qn.heappe_leave("dev", "qs-1_qs_net", self.logs.append)
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.assertEqual(cmds, [["network", "connect", "qs-1_qs_net", "dev_heappe"],
+                                ["network", "disconnect", "qs-1_qs_net", "dev_heappe"]])
+        self.assertFalse(os.path.exists(override))
+
+    def test_extra_hosts_lists_aliases_by_resolution(self):
+        from heappe_ui.models import QSchedulerAssignment, QSchedulerInstance
+        from heappe_ui.view import extra_hosts as eh
+        self.inst.qs_network, self.inst.qs_ip, self.inst.aliases = "qs-1_qs_net", "10.213.4.2", ["a.machine.qscheduler.it4i.cz"]
+        self.inst.save()
+        legacy = QSchedulerInstance.objects.create(name="qs-old", kind="local", container_name="qs-old", service_host="qs-old",
+                                                   aliases=["b.machine.qscheduler.it4i.cz"])
+        remote = QSchedulerInstance.objects.create(name="qs-r", kind="ssh_host", container_name="qs-r", service_host="r",
+                                                   aliases=["c.machine.qscheduler.it4i.cz", "d.machine.qscheduler.it4i.cz"])
+        for q in (legacy, remote):
+            QSchedulerAssignment.objects.create(qscheduler=q, heappe_instance=self.cred)
+        with mock.patch.object(eh.ComposeTarget, "state", return_value=([], [("c.machine.qscheduler.it4i.cz", "10.9.9.9")])):
+            rows = {r['alias']: r for r in eh.qscheduler_aliases("dev")}
+        self.assertEqual(rows["a.machine.qscheduler.it4i.cz"]['mode'], "dns")
+        self.assertIn("10.213.4.2", rows["a.machine.qscheduler.it4i.cz"]['detail'])
+        self.assertEqual(rows["b.machine.qscheduler.it4i.cz"]['mode'], "pending")
+        self.assertEqual((rows["c.machine.qscheduler.it4i.cz"]['mode'], rows["c.machine.qscheduler.it4i.cz"]['ip']), ("manual", "10.9.9.9"))
+        self.assertEqual(rows["d.machine.qscheduler.it4i.cz"]['ip'], "")
+
+    def test_assign_joins_heappe_to_the_qscheduler_network(self):
+        from heappe_ui.view import qscheduler_deploy as d
+        self.asg.delete()
+        self.inst.qs_network = "qs-1_qs_net"
+        self.inst.save()
+        target = mock.Mock()
+        target.list_notifiers.return_value = []
+        with mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(mock.Mock(), "sc", None)), \
+                mock.patch.object(d.core, "heappe_identity", return_value=("6.6.0", "dev")), \
+                mock.patch.object(d.core, "qscheduler_clusters", return_value=[]), \
+                mock.patch.object(d.core, "target_for", return_value=target), \
+                mock.patch.object(d.core, "resolve_heappe_service_network") as legacy, \
+                mock.patch.object(d.core, "restart_heappe") as restart, \
+                mock.patch.object(d.core, "check_from_heappe"), \
+                mock.patch.object(d.qnet, "heappe_join", return_value="dev_heappe") as join:
+            d.assign_worker(self.logs.append, {}, self.inst.id, {'heappe_instance_id': str(self.cred.id),
+                                                                  'notifications_enabled': True, 'callback_url': ""})
+        join.assert_called_once_with("dev", "qs-1_qs_net", mock.ANY)
+        legacy.assert_not_called()
+        restart.assert_not_called()                                # no HEAppE restart needed
+        from heappe_ui.models import QSchedulerAssignment
+        asg = QSchedulerAssignment.objects.get(qscheduler=self.inst)
+        self.assertEqual(asg.network, "qs-1_qs_net")
+        self.assertEqual(asg.callback_url, "http://dev_heappe:80/heappe/JobManagement/TaskCallback")
+
+
+@unittest.skipUnless(os.environ.get("QS_DOCKER_TESTS"), "real Docker test: set QS_DOCKER_TESTS=1 (and QS_TEST_IMAGE)")
+class QSchedulerNetworkDockerTests(TestCase):
+    """End to end against Docker: QScheduler network, static IP, aliases, admin proxy, update, migration, undeploy."""
+    ALIAS = "vlq.machine.qscheduler.it4i.cz"
+    ALIAS2 = "vlq2.machine.qscheduler.it4i.cz"
+
+    def setUp(self):
+        import subprocess
+        import tempfile
+        from heappe_ui.models import InstanceCredentials
+        self.image = os.environ.get("QS_TEST_IMAGE", "qscheduler:v0.2.1-tag")
+        self.logs = []
+        self.log = lambda m: self.logs.append(m)
+        self.addCleanup(self._cleanup)
+        # A stand-in for the HEAppE API container of instance "qse2n" (has curl, like the HEAppE image)
+        self.base = tempfile.mkdtemp(prefix="qs-e2n-")
+        os.makedirs(os.path.join(self.base, "qse2n", "heappe-core"))
+        open(os.path.join(self.base, "qse2n", "heappe-core", "docker-compose.yml"), "w").write("services: {}\n")
+        subprocess.run(["docker", "network", "create", "qse2n_external_network"], capture_output=True, check=True)
+        subprocess.run(["docker", "run", "-d", "--name", "qse2n_heappe", "--network", "qse2n_external_network",
+                        "--entrypoint", "sleep", "curlimages/curl:8.11.1", "3600"], capture_output=True, check=True)
+        self.cred = InstanceCredentials.objects.create(instance_name="qse2n", heappe_host="h", heappe_port=5000)
+
+    def _cleanup(self):
+        import shutil
+        import subprocess
+        for c in subprocess.run(["docker", "ps", "-aq", "--filter", "name=qse2n"], capture_output=True, text=True).stdout.split():
+            subprocess.run(["docker", "rm", "-f", c], capture_output=True)
+        for n in subprocess.run(["docker", "network", "ls", "-q", "--filter", "name=qse2n"], capture_output=True, text=True).stdout.split():
+            subprocess.run(["docker", "network", "rm", n], capture_output=True)
+        for v in subprocess.run(["docker", "volume", "ls", "-q", "--filter", "name=qse2n"], capture_output=True, text=True).stdout.split():
+            subprocess.run(["docker", "volume", "rm", v], capture_output=True)
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def _ip(self, docker, container, net):
+        n = ((docker.inspect(container) or {}).get("NetworkSettings") or {}).get("Networks") or {}
+        return (n.get(net) or {}).get("IPAddress")
+
+    def _deploy(self, d, uid, aliases):
+        opts, errors = d.parse_deploy_options({"name": "qse2n", "source": "image", "image": self.image, "db_mode": "new",
+                                               "aliases": aliases}, uid)
+        self.assertEqual(errors, [])
+        result = {}
+        d.deploy_worker(self.log, result, opts)
+        return result
+
+    def test_network_lifecycle(self):
+        from heappe_ui.models import QSchedulerAssignment, QSchedulerInstance
+        from heappe_ui.view import extra_hosts as eh
+        from heappe_ui.view import qscheduler_admin as qa
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_network as qn
+        docker = core.DockerCli()
+        with mock.patch.object(eh, "DEPLOYMENT_BASE_PATH", self.base):
+            # 1. deploy: own network, static .2, alias
+            r = self._deploy(d, "e2e00001", self.ALIAS)
+            inst = QSchedulerInstance.objects.get(pk=r['id'])
+            self.assertEqual(inst.qs_network, "qse2n-e2e00001_qs_net")
+            import ipaddress
+            self.assertEqual(inst.qs_ip, str(ipaddress.ip_network(inst.qs_subnet).network_address + 2))
+            self.assertEqual(self._ip(docker, inst.container_name, inst.qs_network), inst.qs_ip)
+            self.assertTrue(docker.network_is_internal(inst.qs_network))
+
+            # 2. HEAppE joins (live + override) and reaches QScheduler by container name and by alias
+            heappe = qn.heappe_join("qse2n", inst.qs_network, self.log)
+            self.assertEqual(heappe, "qse2n_heappe")
+            asg = QSchedulerAssignment.objects.create(qscheduler=inst, heappe_instance=self.cred, network=inst.qs_network)
+            override = os.path.join(self.base, "qse2n", "heappe-core", "docker-compose.override.yml")
+            self.assertEqual(eh.override_networks(override, "heappe"), [inst.qs_network])
+            core.check_from_heappe(heappe, inst.container_name, 4300, "/health", self.log)
+            core.check_from_heappe(heappe, self.ALIAS, 4300, "/health", self.log)
+            dyn = self._ip(docker, heappe, inst.qs_network)
+            self.assertNotEqual(dyn, inst.qs_ip)
+
+            # 3. admin API through the proxy on the QScheduler network
+            status, _ = qa.AdminClient(inst, docker).request("GET", "/machines")
+            self.assertEqual(status, 200)
+            self.assertIn("bridge", docker.networks_of(qa.proxy_name(inst)))
+
+            # 4. update (recreate): same static address, alias still answers
+            target = core.target_for(inst)
+            info = docker.inspect(inst.container_name)
+            d.recreate_container(docker, target, info, self.image, None, self.log, "e2eupd01", "Update")
+            self.assertEqual(self._ip(docker, inst.container_name, inst.qs_network), inst.qs_ip)
+            core.check_from_heappe(heappe, self.ALIAS, 4300, "/health", self.log)
+
+            # 5. aliases: add one (reconnect), both answer
+            with mock.patch("heappe_ui.view.clusters.connect_heappe_management_api",
+                            return_value=(mock.Mock(heappe_management_clusters_get=mock.Mock(return_value=[])), "sc", None)):
+                qn.aliases_worker(self.log, {}, inst.id, [self.ALIAS, self.ALIAS2])
+            core.check_from_heappe(heappe, self.ALIAS2, 4300, "/health", self.log)
+            self.assertEqual(self._ip(docker, inst.container_name, inst.qs_network), inst.qs_ip)
+
+            # 6. a second instance as before the QScheduler network existed: on the HEAppE network, no static IP
+            r2 = self._deploy(d, "e2e00002", "")
+            old = QSchedulerInstance.objects.get(pk=r2['id'])
+            docker.run(["network", "disconnect", old.qs_network, old.container_name], self.log)
+            docker.run(["network", "rm", old.qs_network], self.log)
+            docker.run(["network", "connect", "qse2n_external_network", old.container_name], self.log)
+            old.qs_network = old.qs_subnet = old.qs_ip = ""
+            old.save()
+            QSchedulerAssignment.objects.create(qscheduler=old, heappe_instance=self.cred, network="qse2n_external_network")
+            core.check_from_heappe(heappe, old.container_name, 4300, "/health", self.log)
+            qn.migrate_network_worker(self.log, {}, old.id, {})
+            old.refresh_from_db()
+            self.assertEqual(old.qs_network, "qse2n-e2e00002_qs_net")
+            self.assertEqual(self._ip(docker, old.container_name, old.qs_network), old.qs_ip)
+            self.assertNotIn("qse2n_external_network", docker.networks_of(old.container_name))
+            core.check_from_heappe(heappe, old.container_name, 4300, "/health", self.log)
+            self.assertEqual(sorted(eh.override_networks(override, "heappe")), sorted([inst.qs_network, old.qs_network]))
+
+            # 7. unassign + undeploy: HEAppE leaves, networks removed
+            for q in (inst, old):
+                qn.heappe_leave("qse2n", q.qs_network, self.log)
+                q.assignments.all().delete()
+                d.undeploy_worker(self.log, {}, q.id, True)
+                self.assertIsNone(docker.json(["network", "inspect", q.qs_network]))
+            self.assertFalse(os.path.exists(override))
+            self.assertEqual(docker.networks_of("qse2n_heappe"), ["qse2n_external_network"])

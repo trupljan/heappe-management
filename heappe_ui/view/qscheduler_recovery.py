@@ -23,7 +23,8 @@ from heappe_ui.models import QSchedulerInstance as Q, QSchedulerMachine
 from . import qscheduler_core as core
 from . import qscheduler_shared_db as shared_db
 from .qscheduler_core import DockerCli, DockerTarget, LABEL_INSTANCE, NAME_RE
-from .qscheduler_deploy import (_Reader, _validate_source, _network_prefix, _error, _json_body, _post_only, _started, _instance_or_404,
+from . import qscheduler_network as qnet
+from .qscheduler_deploy import (_Reader, _validate_source, _network_prefix, _qs_network_options, _error, _json_body, _post_only, _started, _instance_or_404,
                                 _wait_for_postgres, deploy_service, postgres_run_args, LOCAL_KINDS)
 
 ARCHIVE_REASON_MAX = 255
@@ -56,6 +57,9 @@ def _leftovers(docker, name, inst=None):
         out['db_network'] = net
     if docker.json(["volume", "inspect", vol]):
         out['db_volume'] = vol
+    qs_net = (inst.qs_network if inst is not None and inst.qs_network else "") or qnet.network_name(name)
+    if docker.json(["network", "inspect", qs_net]):
+        out['qs_network'] = qs_net
     return out
 
 
@@ -259,9 +263,17 @@ def cascade_delete_worker(log, result, inst_id, opts):
             else:
                 log(f"Kept database volume '{left['db_volume']}' (remove with: docker volume rm {left['db_volume']}).")
 
-    # 4. Forget the instance (assignments and machine definitions go with it)
+    # 4. Forget the instance (assignments and machine definitions go with it). The HEAppE containers leave its
+    #    QScheduler network (live and in their override files), then the network is removed.
     from . import qscheduler_admin
     qscheduler_admin.remove_proxy(inst, log)
+    if inst.qs_network:
+        for a in inst.assignments.select_related("heappe_instance"):
+            qnet.heappe_leave(a.heappe_instance.instance_name, inst.qs_network, log)
+        docker = DockerCli()
+        if inst.kind == Q.KIND_LOCAL and inst.container_name:
+            docker.run(["network", "disconnect", inst.qs_network, inst.container_name], log, check=False)
+        qnet.remove(docker, inst.qs_network, log)
     inst.delete()
     if skipped:
         log(f"NOTE: clusters of {', '.join(skipped)} were not checked and still point to the deleted instance.")
@@ -306,6 +318,9 @@ def parse_restore_options(data: dict, inst) -> tuple:
         r.errors.append("Existing database requires a postgres:// DATABASE_URL.")
     if opts['db_network'] and not NAME_RE.match(opts['db_network']):
         r.errors.append("DB network name is invalid.")
+    if r.data.get('aliases') is None:
+        r.data = dict(r.data, aliases=list(inst.aliases or []))     # keep the aliases of the instance
+    _qs_network_options(r, opts, inst)
 
     machines = data.get('machines') if isinstance(data, dict) else None
     for m in machines if isinstance(machines, list) else []:
@@ -449,6 +464,9 @@ def restore_worker(log, result, inst_id, opts):
     inst.db_kind = info.get('db_kind') or Q.DB_EXTERNAL
     inst.db_schema = info.get('db_schema') or ""
     inst.shared_database = info.get('shared_database')
+    old_qs_network = inst.qs_network
+    inst.qs_network, inst.qs_subnet, inst.qs_ip = info.get('qs_network') or "", info.get('qs_subnet') or "", info.get('qs_ip') or ""
+    inst.aliases = opts.get('aliases') or []
     inst.ssh_host = inst.ssh_user = inst.ssh_private_key = inst.ssh_key_passphrase = inst.ssh_host_key = ""
     inst.ssh_port, inst.docker_command, inst.restart_command = 22, "docker", ""
     inst.restart_pending = False
@@ -485,12 +503,20 @@ def restore_worker(log, result, inst_id, opts):
     add, updates, heappe_restarts = {}, [], set()
     for p in plan:
         asg, cname = p['asg'], p['cred'].instance_name
-        heappe_container, heappe_net = core.resolve_heappe_service_network(cname, log)
-        if heappe_net:
-            if heappe_net not in docker.networks_of(name):
-                docker.run(["network", "connect", "--alias", name, heappe_net, name], log)
-                heappe_restarts.add(heappe_container)
-            asg.network = heappe_net
+        # HEAppE joins the QScheduler network of the restored instance (and leaves the old one if it was renamed);
+        # without one (not expected after a deploy) QScheduler joins the HEAppE network as before
+        if old_qs_network and old_qs_network != inst.qs_network:
+            qnet.heappe_leave(cname, old_qs_network, log)
+        if inst.qs_network:
+            heappe_container = qnet.heappe_join(cname, inst.qs_network, log)
+            asg.network = inst.qs_network
+        else:
+            heappe_container, heappe_net = core.resolve_heappe_service_network(cname, log)
+            if heappe_net:
+                if heappe_net not in docker.networks_of(name):
+                    docker.run(["network", "connect", "--alias", name, heappe_net, name], log)
+                    heappe_restarts.add(heappe_container)
+                asg.network = heappe_net
         callback_url = asg.callback_url or (f"http://{heappe_container}:80/heappe/JobManagement/TaskCallback"
                                             if heappe_container else "")
         notify = asg.notifications_enabled and bool(callback_url)
@@ -515,17 +541,21 @@ def restore_worker(log, result, inst_id, opts):
     if changed:
         core.apply_changes(inst, target, log)      # one restart for machines + notifiers
 
-    # 6. HEAppE clusters: new endpoint, new notifier and token (Vault)
-    location = (name, port) if (name, port) != (old_host, old_port) else None
+    # 6. HEAppE clusters: new endpoint (clusters using an alias keep it), new notifier and token (Vault)
     for p, c, notifier in updates:
+        host = core.cluster_host(c)
+        new_host = host if host in inst.aliases else name
+        location = (new_host, port) if (new_host, port) != (host, old_port) else None
         try:
             core.update_cluster_notifications(p['controller'], p['session_code'], c, notifier, log, location=location)
             if location:
-                core.repoint_file_transfer_methods(p['controller'], p['session_code'], c, name, port, log)
+                core.repoint_file_transfer_methods(p['controller'], p['session_code'], c, new_host, port, log)
             result['updated_clusters'].append(f"{p['cred'].instance_name}: {c.get('name')}")
         except Exception as e:
             result['problems'].append(f"updating cluster '{c.get('name')}' of HEAppE '{p['cred'].instance_name}' "
                                       f"failed: {str(e).splitlines()[0][:200]}")
+    if old_qs_network and old_qs_network != inst.qs_network:
+        qnet.remove(docker, old_qs_network, log)
     for container in heappe_restarts:
         if container:
             core.restart_heappe(container, log)
@@ -664,6 +694,7 @@ def qscheduler_restore_info_api(request: HttpRequest, inst_id: int) -> HttpRespo
         'shared_db_deployed': shared_db.shared_database() is not None, 'db_kind': inst.db_kind,
         'machines': [machines[k] for k in sorted(machines)], 'machine_defaults': core.MACHINE_DEFAULTS,
         'network_prefix': core.network_pool()[1], 'network_prefixes': list(core.NETWORK_PREFIX_CHOICES),
+        'qs_subnet': inst.qs_subnet, 'qs_network_kept': leftovers.get('qs_network', ""), 'aliases': inst.aliases or [],
         'heappes': heappes,
     })
 

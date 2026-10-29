@@ -28,6 +28,11 @@
                         <select class="form-select form-select-sm" id="qs-add-qscheduler_id" name="qscheduler_id" aria-label="QScheduler instance"></select>
                         <div class="form-text" id="qs-add-instance-info" style="font-size: 0.72rem;"></div>
                     </div>
+                    <div class="col-md-8">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-host">Host name</label>
+                        <select class="form-select form-select-sm font-monospace" id="qs-add-host" name="host"></select>
+                        <div class="form-text" style="font-size: 0.72rem;">The cluster's <code>MasterNodeName</code>: the container name, or an alias of the instance (one cluster per alias; aliases are set on the QScheduler page).</div>
+                    </div>
                 </div>
 
                 <div class="fw-bold small text-primary mb-2"><i class="bi bi-motherboard me-1"></i> Quantum machine</div>
@@ -272,6 +277,10 @@ document.addEventListener('DOMContentLoaded', function () {
             (inst.notifications_enabled ? 'on (this cluster gets its own notifier and token, stored in Vault)' : 'off (HEAppE polls task state)') +
             (inst.restart_pending ? ' &middot; <span class="text-warning-emphasis">restart pending</span>' : '')) : '';
         addModalEl.querySelector('.qs-sshc-warning').classList.toggle('d-none', !(inst && inst.kind_code === 'ssh_container'));
+        const hostSel = addForm.host;
+        hostSel.innerHTML = inst ? [['', inst.service_host + ' (container name)']].concat((inst.aliases || []).map(a => [a, a + ' (alias)']))
+            .map(([v, t]) => '<option value="' + U.esc(v) + '">' + U.esc(t) + '</option>').join('') : '';
+        hostSel.disabled = !inst || !(inst.aliases || []).length;
         const dl = document.getElementById('qs-add-machines');
         const mInfo = document.getElementById('qs-add-machines-info');
         dl.innerHTML = '';
