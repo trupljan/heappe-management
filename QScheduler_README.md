@@ -21,13 +21,14 @@ adding quantum machines as HEAppE clusters.
 - [Clusters page: quantum machines](#clusters-page-quantum-machines)
   - [Add a quantum machine](#add-a-quantum-machine)
   - [Remove a quantum machine](#remove-a-quantum-machine)
-- [SSH directly into the QScheduler container](#ssh-directly-into-the-qscheduler-container)
+- [SSH directly into the QScheduler container (obsolete)](#ssh-directly-into-the-qscheduler-container-obsolete)
 - [When QScheduler is restarted](#when-qscheduler-is-restarted)
 - [Security notes](#security-notes)
 - [QScheduler network and aliases](#qscheduler-network-and-aliases)
 - [Troubleshooting](#troubleshooting)
 - [Action reference](#action-reference)
 - Recovery from error states: [QScheduler_Recovery_README.md](QScheduler_Recovery_README.md)
+- Diagram of containers, networks and volumes: [QScheduler_Deployment_Diagram.md](QScheduler_Deployment_Diagram.md)
 
 ---
 
@@ -139,8 +140,13 @@ and 200 tags are shown.
 | Mode | How commands are run | Typical use |
 |---|---|---|
 | **Container on this Docker host** | `docker exec <container> qscheduler ...` on the management host | A QScheduler started manually or by another tool on the same host. |
-| **Remote: SSH to the VM running the container** | SSH to the VM, then `docker exec <container> qscheduler ...` there | QScheduler in Docker on another machine. Full management. |
-| **Remote: SSH directly into the QScheduler container** | SSH into the container (it must run an SSH server), then `qscheduler ...` | Docker on the remote machine is not accessible. **Limited management**, see [below](#ssh-directly-into-the-qscheduler-container). |
+| **Remote: SSH to the VM running the container** *(obsolete)* | SSH to the VM, then `docker exec <container> qscheduler ...` there | QScheduler in Docker on another machine. |
+| **Remote: SSH directly into the QScheduler container** *(obsolete)* | SSH into the container (it must run an SSH server), then `qscheduler ...` | Docker on the remote machine is not accessible. **Limited management**, see [below](#ssh-directly-into-the-qscheduler-container-obsolete). |
+
+> **SSH management is obsolete.** Manage machines and notifiers through the
+> [admin API](#admin-api-and-admin-token) wherever possible (QScheduler 0.2.1+), for local and remote instances alike.
+> Use the SSH modes only for what the admin API cannot do: QScheduler older than 0.2.1, or Docker operations (*Update*,
+> *Restart*) on a remote host. Do not use them for new setups.
 
 Fields:
 
@@ -152,7 +158,7 @@ Fields:
 | Container | local, SSH to VM | Name of the QScheduler container. For the local mode the page suggests containers that run `qscheduler serve`. |
 | Docker command | SSH to VM | `docker`, or `sudo -n docker` when the SSH user needs passwordless sudo for Docker. |
 | DATABASE_URL | SSH into container | Optional. By default it is read from the environment of the service process (PID 1) in the container. |
-| Restart command | SSH into container | Default `kill -TERM 1`. Leave empty to restart manually. See [below](#ssh-directly-into-the-qscheduler-container). |
+| Restart command | SSH into container | Default `kill -TERM 1`. Leave empty to restart manually. See [below](#ssh-directly-into-the-qscheduler-container-obsolete). |
 | Host as seen from HEAppE | all | Host name or IP under which HEAppE reaches the QScheduler REST API. Default: the container name (local) or the SSH host (remote). |
 | Service port | all | Detected from the container command for Docker modes; otherwise `4300`. |
 | Name | all | Name shown in HEAppE Management. Default: container name or SSH host. |
@@ -388,7 +394,10 @@ Select one of the current HEAppE instance's QScheduler clusters.
 
 ---
 
-## SSH directly into the QScheduler container
+## SSH directly into the QScheduler container (obsolete)
+
+> **Obsolete.** Like *SSH to the VM*, this mode is kept only for existing setups. Manage machines and notifiers through
+> the [admin API](#admin-api-and-admin-token) instead.
 
 Use this mode only when the Docker host of a remote QScheduler cannot be accessed. HEAppE Management then talks only
 to a shell inside the QScheduler container. Wherever such an instance is involved, the page shows a yellow
@@ -436,7 +445,8 @@ to a shell inside the QScheduler container. Wherever such an instance is involve
 - **Machine listing** needs `psql` in the container. Without it, machines are not listed and an existing machine is
   checked only over the REST API.
 
-Prefer **SSH to the VM running the container** whenever the VM is accessible.
+Prefer the [admin API](#admin-api-and-admin-token) for machines and notifiers. If SSH is still needed, *SSH to the VM
+running the container* (also obsolete) gives more control than this mode.
 
 ---
 
@@ -528,15 +538,19 @@ over HTTP, through an **admin proxy**; it runs no `qscheduler` CLI and no comman
 **Admin proxy.** One `nginx` container per QScheduler instance, `<name>-admin-proxy`, on the Docker host of HEAppE
 Management:
 
-- it joins the HEAppE network of every HEAppE instance assigned to the QScheduler and forwards to
-  `<Host as seen from HEAppE>:<port>`; a remote QScheduler is reached through the tunnel that connects its Docker
-  network to the local HEAppE network,
+- it forwards to `<Host as seen from HEAppE>:<port>`:
+  - **local instances**: it joins the instance's [QScheduler network](#qscheduler-network-and-aliases), so it works
+    before any HEAppE instance is assigned,
+  - **remote instances**: it joins the HEAppE network of every assigned HEAppE instance and reaches QScheduler through
+    the tunnel that connects its Docker network to the local HEAppE network,
+- it is also on Docker's default `bridge`: a container only on internal networks cannot publish a port,
 - it forwards only the admin endpoints; every other path returns `404`,
 - it is published on `127.0.0.1` only (random port, shown on the instance card), i.e. for HEAppE Management,
-- it is created with the first assignment, follows later assignments, is recreated when the endpoint changes (e.g.
-  after *Restore*) and is removed with the last assignment, *Undeploy* / *Unregister* or *Delete with entities*.
+- it is created on the first admin call, follows assignment changes, is recreated when the endpoint, image or network
+  layout changes (e.g. after *Restore*), and is removed with *Undeploy* / *Unregister* or *Delete with entities*, and
+  for a remote instance also with its last assignment.
 
-Without an assignment there is no proxy, so machines and notifiers of an unassigned QScheduler 0.2.1+ are not listed.
+A remote QScheduler 0.2.1+ without an assignment has no proxy, so its machines and notifiers are not listed.
 The image is `nginx:1.27-alpine` (setting or environment variable `QSCHEDULER_ADMIN_PROXY_IMAGE`).
 
 **Admin token.** Stored encrypted on the instance record (key derived from Django `SECRET_KEY`).
@@ -651,8 +665,9 @@ yet still join the networks of the HEAppE instances assigned to them.
 
 - SSH private keys, key passphrases and database URLs are stored in the HEAppE Management database in plain text, the
   same way as other instance credentials. They are never sent back to the browser.
-- Use a dedicated SSH key per QScheduler instance with the minimum rights needed (Docker access on the VM, or the
-  service user in the container).
+- Avoid the obsolete SSH modes: the admin API needs only the admin token, while an SSH key gives shell access. If SSH
+  is still used, use a dedicated key per QScheduler instance with the minimum rights needed (Docker access on the VM,
+  or the service user in the container).
 - Each cluster's notifier token authenticates callbacks from QScheduler to HEAppE for that cluster only. Tokens are
   always stored in HEAppE Vault, never in the cluster configuration or in HEAppE Management. If a token may have
   leaked, edit the assignment and tick *Generate new tokens for all clusters of this HEAppE*.
@@ -689,7 +704,7 @@ restart pending) are described in [QScheduler_Recovery_README.md](QScheduler_Rec
 | Where | Action | Available for | Effect |
 |---|---|---|---|
 | QScheduler page | Deploy New | – | New QScheduler + PostgreSQL on the HEAppE Management Docker host, optional assignment. |
-| QScheduler page | Register Existing | – | Adds a running QScheduler (local container, SSH to VM, SSH into container). |
+| QScheduler page | Register Existing | – | Adds a running QScheduler (local container; SSH to VM and SSH into container are obsolete). |
 | QScheduler page → Shared database | Deploy / Update image / Remove / drop schema | – | Shared PostgreSQL for all instances on this host (see [Shared database](#shared-database)). |
 | Instance → Actions | Migrate to shared database... | deployed with a dedicated database | Copies the data into a new schema of the shared database (checked row counts) and switches QScheduler to it; old container kept stopped or removed. |
 | Instance → Actions | Migrate to QScheduler network... | local instances without a QScheduler network | Own internal network with a static address; HEAppE containers join it, then QScheduler leaves the HEAppE networks (no downtime, rolled back on failure). |
