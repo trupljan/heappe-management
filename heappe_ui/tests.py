@@ -3431,6 +3431,166 @@ class LogViewerJsonTests(TestCase):
             os.remove(tmp_path)
             user.delete()
 
+    @mock.patch('os.path.exists')
+    @mock.patch('os.path.isdir')
+    @mock.patch('os.listdir')
+    @mock.patch('os.path.getmtime')
+    def test_get_log_file_paths_all_history(self, mock_getmtime, mock_listdir, mock_isdir, mock_exists):
+        from heappe_ui.views import get_log_file_paths
+        mock_exists.return_value = True
+        mock_isdir.return_value = False
+        mock_listdir.side_effect = lambda d: [
+            '2026_07_12.log',
+            '2026_07_13.log.1',
+            '2026_07_13.log',
+            '2026_07_10.json',
+        ] if str(d).endswith('/API') else []
+        mock_getmtime.side_effect = lambda path: 10
+
+        # Query all history (date_str=None or 'ALL')
+        paths = get_log_file_paths('test_instance', date_str=None, service='API')
+        self.assertEqual(len(paths), 4)
+        file_names = [os.path.basename(p[0]) for p in paths]
+        # Should be chronologically sorted oldest to newest: 07-10, 07-12, 07-13.log.1, 07-13.log
+        self.assertEqual(file_names, [
+            '2026_07_10.json',
+            '2026_07_12.log',
+            '2026_07_13.log.1',
+            '2026_07_13.log'
+        ])
+
+    def test_get_log_entries_backwards_across_all_history_with_search(self):
+        from heappe_ui.views import get_log_entries_backwards
+
+        with tempfile.NamedTemporaryFile(suffix='.log', mode='w+', delete=False) as f_old, \
+             tempfile.NamedTemporaryFile(suffix='.log', mode='w+', delete=False) as f_mid, \
+             tempfile.NamedTemporaryFile(suffix='.log', mode='w+', delete=False) as f_new:
+
+            f_old.write("INFO 2026-07-10 10:00:00 Controller - TargetError in old file\n")
+            f_old.flush()
+
+            f_mid.write("INFO 2026-07-11 11:00:00 Controller - Normal message\n")
+            f_mid.flush()
+
+            f_new.write("INFO 2026-07-12 12:00:00 Controller - TargetError in new file\n")
+            f_new.flush()
+
+            old_path = f_old.name
+            mid_path = f_mid.name
+            new_path = f_new.name
+
+        try:
+            # Sorted oldest first
+            log_paths = [(old_path, 'API'), (mid_path, 'API'), (new_path, 'API')]
+            entries = list(get_log_entries_backwards(log_paths, max_entries=10, search_query='targeterror'))
+            self.assertEqual(len(entries), 2)
+            # Most recent first in get_log_entries_backwards
+            self.assertIn('TargetError in new file', entries[0]['content'])
+            self.assertIn('TargetError in old file', entries[1]['content'])
+        finally:
+            os.remove(old_path)
+            os.remove(mid_path)
+            os.remove(new_path)
+
+    def test_log_viewer_view_all_history_mode(self):
+        from django.contrib.auth.models import User
+        user = User.objects.create_user(username='test_all_history_user', password='password')
+        self.client.force_login(user)
+        session = self.client.session
+        session['chosen_instance'] = 'develop'
+        session.save()
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            tmp.write('{"timestamp":"2026-10-10T12:00:00.000Z","level":"INFO","logger":"L","message":"Historical log"}\n')
+            tmp.flush()
+            tmp_path = tmp.name
+
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]) as mock_paths:
+                resp = self.client.get('/logs/?all_history=1')
+                self.assertEqual(resp.status_code, 200)
+                self.assertTrue(resp.context['all_history'])
+                self.assertEqual(resp.context['selected_date'], '')
+                self.assertFalse(resp.context['limit_reached'])
+                # get_log_file_paths should be called with effective_date=None
+                mock_paths.assert_called_with('develop', None, service='API')
+        finally:
+            os.remove(tmp_path)
+            user.delete()
+
+    def test_log_viewer_view_limit_10000_and_limit_reached(self):
+        from django.contrib.auth.models import User
+        user = User.objects.create_user(username='test_limit_10000_user', password='password')
+        self.client.force_login(user)
+        session = self.client.session
+        session['chosen_instance'] = 'develop'
+        session.save()
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            for i in range(120):
+                tmp.write(f'{{"timestamp":"2026-10-15T12:00:00.000Z","level":"INFO","logger":"L","message":"Log {i}"}}\n')
+            tmp.flush()
+            tmp_path = tmp.name
+
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
+                # Test limit=100 with 120 lines -> limit_reached should be True
+                resp = self.client.get('/logs/?date=2026-10-15&limit=100')
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(resp.context['limit'], 100)
+                self.assertEqual(resp.context['logs_count'], 100)
+                self.assertTrue(resp.context['limit_reached'])
+
+                # Test limit=10000 is allowed
+                resp_10k = self.client.get('/logs/?date=2026-10-15&limit=10000')
+                self.assertEqual(resp_10k.status_code, 200)
+                self.assertEqual(resp_10k.context['limit'], 10000)
+                self.assertEqual(resp_10k.context['logs_count'], 120)
+                self.assertFalse(resp_10k.context['limit_reached'])
+        finally:
+            os.remove(tmp_path)
+            user.delete()
+
+    def test_log_viewer_view_override_limit_parameter(self):
+        from django.contrib.auth.models import User
+        user = User.objects.create_user(username='test_override_user', password='password')
+        self.client.force_login(user)
+        session = self.client.session
+        session['chosen_instance'] = 'develop'
+        session.save()
+
+        with tempfile.NamedTemporaryFile(suffix='.json', mode='w+', delete=False) as tmp:
+            # 1,200 log entries (exceeding default 1,000 limit)
+            for i in range(1200):
+                tmp.write(f'{{"timestamp":"2026-10-15T12:{i//60:02d}:{i%60:02d}.000Z","level":"INFO","logger":"L","message":"Msg_{i}"}}\n')
+            tmp.flush()
+            tmp_path = tmp.name
+
+        try:
+            with mock.patch('heappe_ui.views.get_log_file_paths', return_value=[(tmp_path, 'API')]):
+                # 1. Default request hits 1,000 limit and limit_reached is True
+                resp = self.client.get('/logs/?date=2026-10-15')
+                self.assertEqual(resp.status_code, 200)
+                self.assertEqual(resp.context['logs_count'], 1000)
+                self.assertTrue(resp.context['limit_reached'])
+                self.assertFalse(resp.context['override_limit'])
+
+                # 2. Request with override_limit=1 overrides the 1,000 limit and returns all 1,200 records
+                resp_override = self.client.get('/logs/?date=2026-10-15&override_limit=1')
+                self.assertEqual(resp_override.status_code, 200)
+                self.assertTrue(resp_override.context['override_limit'])
+                self.assertEqual(resp_override.context['logs_count'], 1200)
+                self.assertFalse(resp_override.context['limit_reached'])
+
+                # 3. Request with limit=override also activates override
+                resp_select = self.client.get('/logs/?date=2026-10-15&limit=override')
+                self.assertEqual(resp_select.status_code, 200)
+                self.assertTrue(resp_select.context['override_limit'])
+                self.assertEqual(resp_select.context['logs_count'], 1200)
+        finally:
+            os.remove(tmp_path)
+            user.delete()
+
 
 class VaultUnsealApiTests(TestCase):
     def setUp(self):

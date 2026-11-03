@@ -1800,13 +1800,21 @@ def log_file_sort_key(file_entry):
     except OSError:
         pass
 
+    date_match = re.search(r'(\d{4})[-_]?(\d{2})[-_]?(\d{2})', fname)
+    if date_match:
+        date_key = f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
+    elif mtime > 0:
+        date_key = datetime.utcfromtimestamp(mtime).strftime("%Y-%m-%d")
+    else:
+        date_key = ""
+
     rot_match = re.search(r'\.(?:log|json)\.(\d+)$', fname, re.IGNORECASE)
     seq_match = re.search(r'[_\-](\d+)\.(?:log|json)', fname, re.IGNORECASE)
 
     rot_num = int(rot_match.group(1)) if rot_match else 0
     seq_num = int(seq_match.group(1)) if seq_match else 0
 
-    return (mtime, -rot_num, seq_num, filepath)
+    return (date_key, mtime, -rot_num, seq_num, filepath)
 
 
 def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, search_query=None, time_from=None, time_to=None):
@@ -1823,7 +1831,11 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
 
     all_entries = []
 
+    # Small buffer to ensure proper interleaving across multiple services/files
     buffer_limit = max_entries + 100
+
+    search_query_lower = search_query.lower() if search_query else None
+    level_filter_upper = level_filter.upper() if level_filter else None
 
     for log_path, default_svc in reversed(normalized):
         if not log_path or not os.path.exists(log_path):
@@ -1831,18 +1843,21 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
             
         is_json = log_path.endswith('.json') or '.json.' in os.path.basename(log_path)
         
-        file_entries_count = 0
         if is_json:
             for line in get_lines_backwards(log_path):
                 line_stripped = line.strip()
                 if not line_stripped:
                     continue
+                # Fast pre-filtering to prevent expensive JSON parsing and memory allocations
+                if search_query_lower and search_query_lower not in line_stripped.lower():
+                    continue
+                if level_filter_upper and f'"{level_filter_upper}"' not in line_stripped.upper() and f' {level_filter_upper} ' not in line_stripped.upper():
+                    continue
                 parsed = parse_json_log_line(line_stripped, service=default_svc)
                 if parsed and matches_filters(parsed, level_filter, search_query, time_from, time_to):
                     all_entries.append(parsed)
-                    file_entries_count += 1
                     entries_count += 1
-                    if entries_count >= buffer_limit or file_entries_count >= max_entries:
+                    if entries_count >= buffer_limit:
                         break
         else:
             current_entry_lines = []
@@ -1855,22 +1870,29 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                     entry_text = "".join(reversed(current_entry_lines))
                     current_entry_lines = []
                     
+                    # Fast pre-filtering to prevent regex and string parsing allocations
+                    if search_query_lower and search_query_lower not in entry_text.lower():
+                        continue
+                    if level_filter_upper and level_filter_upper not in entry_text[:35].upper():
+                        continue
+
                     parsed = parse_log_line(entry_text, service=default_svc)
                     if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                         all_entries.append(parsed)
-                        file_entries_count += 1
                         entries_count += 1
-                        if entries_count >= buffer_limit or file_entries_count >= max_entries:
+                        if entries_count >= buffer_limit:
                             break
                 else:
                     current_entry_lines.append(line)
                     
-            if current_entry_lines:
+            if current_entry_lines and entries_count < buffer_limit:
                 entry_text = "".join(reversed(current_entry_lines))
-                parsed = parse_log_line(entry_text, service=default_svc)
-                if matches_filters(parsed, level_filter, search_query, time_from, time_to):
-                    all_entries.append(parsed)
-                    entries_count += 1
+                if not (search_query_lower and search_query_lower not in entry_text.lower()):
+                    if not (level_filter_upper and level_filter_upper not in entry_text[:35].upper()):
+                        parsed = parse_log_line(entry_text, service=default_svc)
+                        if matches_filters(parsed, level_filter, search_query, time_from, time_to):
+                            all_entries.append(parsed)
+                            entries_count += 1
 
         if entries_count >= buffer_limit:
             break
@@ -1891,22 +1913,26 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
         yield entry
 
 
-def get_log_file_paths(instance, date_str, service="API"):
+def get_log_file_paths(instance, date_str=None, service="API"):
     base_logs_dir = f"/opt/heappe-deployment/{instance}/app/logs"
-    date_formatted_us = date_str.replace("-", "_")
-    date_formatted_hy = date_str.replace("_", "-")
-    date_formatted_raw = date_str.replace("-", "").replace("_", "")
-
     if not os.path.exists(base_logs_dir):
         return []
 
     service_upper = (service or "API").upper()
     matching_files = []
 
-    date_pattern = re.compile(
-        rf"^(?:[a-zA-Z0-9_\-]*?[_\-])?(?:{re.escape(date_formatted_us)}|{re.escape(date_formatted_hy)}|{re.escape(date_formatted_raw)})(?:[_\-]\d+)?\.(?:log|json)(?:\.\d+)?$",
-        re.IGNORECASE
-    )
+    is_all_history = not date_str or str(date_str).strip().upper() in ["ALL", "ALL_HISTORY", "NONE"]
+
+    if not is_all_history:
+        date_formatted_us = date_str.replace("-", "_")
+        date_formatted_hy = date_str.replace("_", "-")
+        date_formatted_raw = date_str.replace("-", "").replace("_", "")
+        date_pattern = re.compile(
+            rf"^(?:[a-zA-Z0-9_\-]*?[_\-])?(?:{re.escape(date_formatted_us)}|{re.escape(date_formatted_hy)}|{re.escape(date_formatted_raw)})(?:[_\-]\d+)?\.(?:log|json)(?:\.\d+)?$",
+            re.IGNORECASE
+        )
+    else:
+        date_pattern = re.compile(r".*\.(?:log|json)(?:\.\d+)?$", re.IGNORECASE)
 
     def scan_dir(dir_path, svc_tag):
         if os.path.exists(dir_path):
@@ -1924,9 +1950,9 @@ def get_log_file_paths(instance, date_str, service="API"):
     service_map = {
         "API": (["API", "api", "HEAppE"], []),
         "DATASTAGING": (["DataStaging-API", "DataStaging", "DataStagingAPI", "datastaging", "datastagingapi", "DataStaging_API"], []),
-        "RATELIMIT-API": (["RateLimit-API", "ratelimit-api", "RateLimit_API"], []),
+        "RATELIMIT-API": (["RateLimit-API", "ratelimit-api", "RateLimit_API", "RateLimit", "ratelimit"], []),
         "RATELIMIT-DATASTAGING": (["RateLimit-DataStaging", "ratelimit-datastaging", "RateLimit_DataStaging"], []),
-        "VAULT": (["Vault", "vault"], []),
+        "VAULT": (["Vault", "vault"], ["vault-agent.log"]),
         "DEPLOY": ([], ["deploy.log"]),
         "UPDATE": ([], ["update.log"]),
     }
@@ -2010,7 +2036,25 @@ def adjust_to_utc(date_str, time_str, tz_offset_minutes):
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
     today = datetime.utcnow().strftime('%Y-%m-%d')
-    selected_date = request.GET.get('date', today) or today
+
+    all_history_param = request.GET.get('all_history', '').strip().lower()
+    date_param = request.GET.get('date', None)
+
+    # Determine whether All History mode is active
+    if all_history_param in ['1', 'true', 'on', 'yes'] or (date_param is not None and date_param.strip().lower() in ['', 'all', 'all_history']):
+        all_history = True
+        selected_date = ''
+        effective_date = None
+    elif date_param is not None:
+        all_history = False
+        selected_date = date_param.strip()
+        effective_date = selected_date
+    else:
+        # Default on initial visit without GET parameters
+        all_history = False
+        selected_date = today
+        effective_date = today
+
     time_from = request.GET.get('time_from', '').strip()
     time_to = request.GET.get('time_to', '').strip()
     search_query = request.GET.get('search', '').lower()
@@ -2019,25 +2063,38 @@ def log_viewer_view(request):
     tz_mode = request.GET.get('tz_mode', 'utc').lower()
     tz_offset_param = request.GET.get('tz_offset', '0')
 
-    limit_param = request.GET.get('limit', '1000')
-    try:
-        limit = int(limit_param)
-        if limit not in [100, 300, 500, 1000, 2500, 5000]:
-            limit = 1000
-    except (ValueError, TypeError):
-        limit = 1000
+    limit_param = request.GET.get('limit', '1000').strip()
+    override_limit_param = request.GET.get('override_limit', '').strip().lower()
+    override_limit = (
+        override_limit_param in ['1', 'true', 'on', 'yes'] or
+        limit_param.lower() in ['override', 'all', 'unlimited', 'none', '0']
+    )
 
-    effective_date = selected_date
+    if override_limit:
+        # Override limit allows full historical scan with a generous safety ceiling of 50,000 entries
+        limit = 50000
+    else:
+        try:
+            limit = int(limit_param)
+            if limit not in [100, 300, 500, 1000, 2500, 5000, 10000]:
+                limit = 1000
+        except (ValueError, TypeError):
+            limit = 1000
+
+    effective_date_utc = effective_date
     utc_time_from = time_from
     utc_time_to = time_to
 
     if tz_mode == 'local' and (time_from or time_to):
+        ref_date = effective_date or today
         if time_from:
-            effective_date, utc_time_from = adjust_to_utc(selected_date, time_from, tz_offset_param)
+            ref_utc_date, utc_time_from = adjust_to_utc(ref_date, time_from, tz_offset_param)
+            if effective_date:
+                effective_date_utc = ref_utc_date
         if time_to:
-            _, utc_time_to = adjust_to_utc(selected_date, time_to, tz_offset_param)
+            _, utc_time_to = adjust_to_utc(ref_date, time_to, tz_offset_param)
 
-    log_paths = get_log_file_paths(instance, effective_date, service=service_filter)
+    log_paths = get_log_file_paths(instance, effective_date_utc, service=service_filter)
     
     try:
         entries = list(get_log_entries_backwards(
@@ -2058,11 +2115,15 @@ def log_viewer_view(request):
         }]
 
     logs_json = json.dumps(entries)
+    limit_reached = len(entries) >= limit
 
     return render(request, 'file_log_viewer.html', {
         'logs_json': mark_safe(logs_json),
         'logs_count': len(entries),
         'selected_date': selected_date,
+        'all_history': all_history,
+        'limit_reached': limit_reached,
+        'override_limit': override_limit,
         'time_from': time_from,
         'time_to': time_to,
         'search_query': search_query,
@@ -2083,7 +2144,15 @@ MAX_CHUNK_READ_BYTES = 512 * 1024  # 512 KB per file read chunk
 def fetch_new_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
     today = datetime.utcnow().strftime('%Y-%m-%d')
-    selected_date = request.GET.get('date', today) or today
+    all_history_param = request.GET.get('all_history', '').strip().lower()
+    date_param = request.GET.get('date', None)
+
+    if all_history_param in ['1', 'true', 'on', 'yes'] or (date_param is not None and date_param.strip().lower() in ['', 'all', 'all_history']):
+        effective_date = today  # Live streaming always tails active/today logs
+    elif date_param is not None and date_param.strip():
+        effective_date = date_param.strip()
+    else:
+        effective_date = today
     service_filter = request.GET.get('service', 'API').upper()
     level_filter = request.GET.get('level', '').upper()
     search_query = request.GET.get('search', '').lower()
@@ -2092,15 +2161,14 @@ def fetch_new_logs(request):
     tz_mode = request.GET.get('tz_mode', 'utc').lower()
     tz_offset_param = request.GET.get('tz_offset', '0')
 
-    effective_date = selected_date
     utc_time_from = time_from
     utc_time_to = time_to
 
     if tz_mode == 'local' and (time_from or time_to):
         if time_from:
-            effective_date, utc_time_from = adjust_to_utc(selected_date, time_from, tz_offset_param)
+            effective_date, utc_time_from = adjust_to_utc(effective_date, time_from, tz_offset_param)
         if time_to:
-            _, utc_time_to = adjust_to_utc(selected_date, time_to, tz_offset_param)
+            _, utc_time_to = adjust_to_utc(effective_date, time_to, tz_offset_param)
 
     raw_offset = request.GET.get('offset', '0')
     is_dict_offset = False
