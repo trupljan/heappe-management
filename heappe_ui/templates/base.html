@@ -680,10 +680,12 @@
             </div>
             <div class="modal-body p-4">
                 <div id="update-init-view">
-                    <p class="mb-1 fw-bold small text-primary" id="update-changes-header">New changes detected:</p>
-                    <div id="commit-messages" class="changelog-box mb-3"></div>
+                    <p class="mb-1 fw-bold small text-secondary" id="update-changes-header">Checking for updates...</p>
+                    <div id="commit-messages" class="changelog-box mb-3">
+                        <div class="text-muted small py-2"><span class="spinner-border spinner-border-sm me-2"></span>Checking repository for new changes...</div>
+                    </div>
 
-                    <div class="alert alert-danger py-2.5 small mb-0">
+                    <div class="alert alert-danger py-2.5 small mb-0 d-none" id="update-downtime-alert">
                         <i class="bi bi-exclamation-triangle-fill me-2"></i>
                         <strong>Downtime Notice:</strong> The Admin Panel will **restart** during this update.
                         The management UI will be **unavailable for ~30–60 seconds**.
@@ -714,7 +716,7 @@
                     <i class="bi bi-arrow-clockwise me-1"></i>Recheck
                 </button>
                 <button type="button" class="btn btn-sm btn-secondary" onclick="snoozeAdminUpdate(24)" data-bs-dismiss="modal">Remind me tomorrow</button>
-                <button type="button" id="start-update-btn" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm">
+                <button type="button" id="start-update-btn" onclick="confirmAndDeploy()" class="btn btn-sm btn-primary px-4 fw-bold shadow-sm d-none">
                     Start Update Now
                 </button>
             </div>
@@ -877,67 +879,113 @@
     }
 
     let currentUpdateBranch = 'HEAD';
+    let updateCheckCompleted = false;
+
+    function applyUpdateState(data) {
+        updateCheckCompleted = true;
+        if (data.current_branch) {
+            currentUpdateBranch = data.current_branch;
+        }
+        const container = document.getElementById('commit-messages');
+        const noticeAlert = document.getElementById('update-downtime-alert');
+        const startUpdateBtn = document.getElementById('start-update-btn');
+        const changesHeader = document.getElementById('update-changes-header');
+        const versionBadge = document.getElementById('modal-version-badge');
+        const banner = document.getElementById('adminpanel-update-banner');
+        const recheckBtn = document.getElementById('recheck-btn');
+
+        if (data.error) {
+            if (changesHeader) changesHeader.textContent = 'Status:';
+            if (container) {
+                container.innerHTML = `<div class="text-danger small"><i class="bi bi-exclamation-triangle-fill me-1"></i>Update check error: ${data.error}</div>`;
+            }
+            if (noticeAlert) noticeAlert.classList.add('d-none');
+            if (startUpdateBtn) startUpdateBtn.classList.add('d-none');
+            if (recheckBtn) {
+                recheckBtn.classList.remove('d-none');
+                recheckBtn.disabled = false;
+            }
+            return;
+        }
+
+        if (data.update_available) {
+            if (versionBadge && data.current_version && data.latest_version) {
+                versionBadge.classList.remove('d-none');
+                versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
+            }
+
+            if (changesHeader) {
+                changesHeader.className = 'mb-1 fw-bold small text-primary';
+                changesHeader.textContent = 'New changes detected:';
+            }
+
+            if (container) {
+                if (data.changes && data.changes.length > 0) {
+                    container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
+                } else {
+                    container.innerHTML = `<div class="text-muted small">New version <strong>v${data.latest_version}</strong> is available on branch <code>${data.current_branch || 'HEAD'}</code>.</div>`;
+                }
+            }
+
+            if (noticeAlert) noticeAlert.classList.remove('d-none');
+            if (startUpdateBtn) startUpdateBtn.classList.remove('d-none');
+            if (recheckBtn) recheckBtn.classList.add('d-none');
+
+            const snoozedUntil = parseInt(localStorage.getItem('admin_update_snoozed') || '0');
+            if (Date.now() >= snoozedUntil && banner) {
+                const versionText = document.getElementById('adminpanel-update-version-text');
+                if (versionText && data.current_version && data.latest_version) {
+                    versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Current: <code>v${data.current_version}</code> &mdash; Latest: <code>v${data.latest_version}</code>`;
+                } else if (versionText && data.latest_version) {
+                    versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Latest: <code>v${data.latest_version}</code>`;
+                }
+                banner.classList.remove('d-none');
+                banner.classList.add('d-flex');
+            }
+        } else {
+            if (banner) {
+                banner.classList.remove('d-flex');
+                banner.classList.add('d-none');
+            }
+            if (changesHeader) {
+                changesHeader.className = 'mb-1 fw-bold small text-secondary';
+                changesHeader.textContent = 'Status:';
+            }
+            if (container) {
+                const verInfo = data.current_version ? ` (v${data.current_version})` : '';
+                container.innerHTML = `<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date${verInfo}.</div>`;
+            }
+            if (noticeAlert) noticeAlert.classList.add('d-none');
+            if (startUpdateBtn) startUpdateBtn.classList.add('d-none');
+            if (recheckBtn) {
+                recheckBtn.classList.remove('d-none');
+                recheckBtn.disabled = false;
+            }
+        }
+    }
 
     document.addEventListener('DOMContentLoaded', function() {
         {% if user.is_authenticated %}
         fetch('{% url "check_updates" %}?t=' + Date.now())
             .then(r => r.json())
-            .then(data => {
-                if (data.current_branch) {
-                    currentUpdateBranch = data.current_branch;
-                }
-                const container = document.getElementById('commit-messages');
-                const noticeAlert = document.querySelector('#update-init-view .alert');
-                const startUpdateBtn = document.getElementById('start-update-btn');
-                const changesHeader = document.getElementById('update-changes-header');
-                const versionBadge = document.getElementById('modal-version-badge');
-                const banner = document.getElementById('adminpanel-update-banner');
-
-                if (data.update_available) {
-                    if (versionBadge && data.current_version && data.latest_version) {
-                        versionBadge.classList.remove('d-none');
-                        versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
-                    }
-
-                    if (container) {
-                        if (data.changes && data.changes.length > 0) {
-                            container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
-                        } else {
-                            container.innerHTML = `<div class="text-muted small">New version <strong>v${data.latest_version}</strong> is available.</div>`;
-                        }
-                    }
-
-                    const snoozedUntil = parseInt(localStorage.getItem('admin_update_snoozed') || '0');
-                    if (Date.now() >= snoozedUntil) {
-                        const versionText = document.getElementById('adminpanel-update-version-text');
-                        if (banner) {
-                            if (versionText && data.current_version && data.latest_version) {
-                                versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Current: <code>v${data.current_version}</code> &mdash; Latest: <code>v${data.latest_version}</code>`;
-                            } else if (versionText && data.latest_version) {
-                                versionText.innerHTML = `<i class="bi bi-clock-history me-1"></i>Latest: <code>v${data.latest_version}</code>`;
-                            }
-                            banner.classList.remove('d-none');
-                            banner.classList.add('d-flex');
-                        }
-                    }
-                } else {
-                    if (banner) {
-                        banner.classList.remove('d-flex');
-                        banner.classList.add('d-none');
-                    }
-                    if (changesHeader) changesHeader.textContent = 'Status:';
-                    if (container) {
-                        const verInfo = data.current_version ? ` (v${data.current_version})` : '';
-                        container.innerHTML = `<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date${verInfo}.</div>`;
-                    }
-                    if (noticeAlert) noticeAlert.classList.add('d-none');
-                    if (startUpdateBtn) startUpdateBtn.classList.add('d-none');
-                    const recheckBtn = document.getElementById('recheck-btn');
-                    if (recheckBtn) recheckBtn.classList.remove('d-none');
-                }
-            })
+            .then(data => applyUpdateState(data))
             .catch(err => {
                 console.warn('Update check failed:', err);
+                const container = document.getElementById('commit-messages');
+                const changesHeader = document.getElementById('update-changes-header');
+                const recheckBtn = document.getElementById('recheck-btn');
+                const noticeAlert = document.getElementById('update-downtime-alert');
+                const startUpdateBtn = document.getElementById('start-update-btn');
+                if (changesHeader) changesHeader.textContent = 'Status:';
+                if (container) {
+                    container.innerHTML = `<div class="text-danger small"><i class="bi bi-exclamation-triangle-fill me-1"></i>Failed to check updates: ${err.message || 'connection error'}</div>`;
+                }
+                if (noticeAlert) noticeAlert.classList.add('d-none');
+                if (startUpdateBtn) startUpdateBtn.classList.add('d-none');
+                if (recheckBtn) {
+                    recheckBtn.classList.remove('d-none');
+                    recheckBtn.disabled = false;
+                }
             });
         {% endif %}
     });
@@ -945,56 +993,22 @@
     function recheckUpdates() {
         const container = document.getElementById('commit-messages');
         const recheckBtn = document.getElementById('recheck-btn');
-        if (container) container.innerHTML = '<div class="text-muted small"><span class="spinner-border spinner-border-sm me-2"></span>Checking for updates...</div>';
+        const changesHeader = document.getElementById('update-changes-header');
+        if (changesHeader) changesHeader.textContent = 'Checking for updates...';
+        if (container) container.innerHTML = '<div class="text-muted small py-2"><span class="spinner-border spinner-border-sm me-2"></span>Checking repository for new changes...</div>';
         if (recheckBtn) recheckBtn.disabled = true;
 
         fetch('{% url "check_updates" %}?force=1&t=' + Date.now())
             .then(r => r.json())
-            .then(data => {
-                if (data.current_branch) {
-                    currentUpdateBranch = data.current_branch;
-                }
-                const noticeAlert = document.querySelector('#update-init-view .alert');
-                const startUpdateBtn = document.getElementById('start-update-btn');
-                const changesHeader = document.getElementById('update-changes-header');
-                const versionBadge = document.getElementById('modal-version-badge');
-                const banner = document.getElementById('adminpanel-update-banner');
-
-                if (data.update_available) {
-                    if (versionBadge && data.current_version && data.latest_version) {
-                        versionBadge.classList.remove('d-none');
-                        versionBadge.innerHTML = `<span class="badge bg-secondary me-1">v${data.current_version}</span><i class="bi bi-arrow-right text-muted mx-1"></i><span class="badge bg-success">v${data.latest_version}</span>`;
-                    }
-                    if (changesHeader) changesHeader.textContent = 'New changes detected:';
-                    if (container) {
-                        if (data.changes && data.changes.length > 0) {
-                            container.innerHTML = `<ul class="list-unstyled mb-0">${data.changes.map(m => `<li class="border-bottom py-1 small">· ${m}</li>`).join('')}</ul>`;
-                        } else {
-                            container.innerHTML = `<div class="text-muted small">New version <strong>v${data.latest_version}</strong> is available.</div>`;
-                        }
-                    }
-                    if (noticeAlert) noticeAlert.classList.remove('d-none');
-                    if (startUpdateBtn) startUpdateBtn.classList.remove('d-none');
-                    if (recheckBtn) recheckBtn.classList.add('d-none');
-                    if (banner) {
-                        banner.classList.remove('d-none');
-                        banner.classList.add('d-flex');
-                    }
-                } else {
-                    if (banner) {
-                        banner.classList.remove('d-flex');
-                        banner.classList.add('d-none');
-                    }
-                    if (changesHeader) changesHeader.textContent = 'Status:';
-                    if (container) {
-                        const verInfo = data.current_version ? ` (v${data.current_version})` : '';
-                        container.innerHTML = `<div class="text-success small fw-semibold"><i class="bi bi-check-circle-fill me-1"></i>Your system is up to date${verInfo}.</div>`;
-                    }
-                    if (recheckBtn) recheckBtn.disabled = false;
-                }
-            })
+            .then(data => applyUpdateState(data))
             .catch(err => {
-                if (container) container.innerHTML = '<div class="text-danger small">Check failed. Please try again.</div>';
+                if (container) container.innerHTML = `<div class="text-danger small py-2"><i class="bi bi-exclamation-triangle-fill me-1"></i>Check failed: ${err.message || 'connection error'}</div>`;
+                const noticeAlert = document.getElementById('update-downtime-alert');
+                const startUpdateBtn = document.getElementById('start-update-btn');
+                if (noticeAlert) noticeAlert.classList.add('d-none');
+                if (startUpdateBtn) startUpdateBtn.classList.add('d-none');
+            })
+            .finally(() => {
                 if (recheckBtn) recheckBtn.disabled = false;
             });
     }
@@ -1026,7 +1040,12 @@
             if (logsEl) scrollLogToBottom(logsEl);
         };
         updateModalEl.addEventListener('shown.bs.modal', handleModalScroll);
-        updateModalEl.addEventListener('show.bs.modal', handleModalScroll);
+        updateModalEl.addEventListener('show.bs.modal', function() {
+            handleModalScroll();
+            if (!updateCheckCompleted) {
+                recheckUpdates();
+            }
+        });
     }
 
     function confirmAndDeploy() {
