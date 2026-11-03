@@ -829,7 +829,7 @@
                                     </div>
 
                                     <div class="small text-muted mb-2 font-monospace" style="font-size: 0.72rem;">
-                                        <code>&lt;core/efp/..&gt;_&lt;environment&gt;_&lt;provider&gt;_&lt;instance_name&gt;</code>
+                                        <code>&lt;scope&gt;_&lt;environment&gt;_&lt;provider&gt;_&lt;instance_name&gt;</code>
                                     </div>
 
                                     <!-- Formula Fields Container -->
@@ -840,7 +840,8 @@
                                                 <select class="form-select form-select-sm ident-f-scope font-monospace" style="font-size: 0.78rem;">
                                                     <option value="core" selected>core</option>
                                                     <option value="efp">efp</option>
-                                                    <option value="lexis">lexis</option>
+                                                    <option value="service">service</option>
+                                                    <option value="batch">batch</option>
                                                     <option value="__custom__">custom...</option>
                                                 </select>
                                                 <input type="text" class="form-control form-control-sm ident-f-scope-custom mt-1 font-monospace d-none" placeholder="e.g. core" style="font-size: 0.78rem;">
@@ -852,21 +853,20 @@
                                                     <option value="test">test</option>
                                                     <option value="stage">stage</option>
                                                     <option value="prod">prod</option>
-                                                    <option value="inference">inference</option>
                                                     <option value="__custom__">custom...</option>
                                                 </select>
                                                 <input type="text" class="form-control form-control-sm ident-f-env-custom mt-1 font-monospace d-none" placeholder="e.g. dev" style="font-size: 0.78rem;">
                                             </div>
                                             <div class="col-6 col-sm-3">
-                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Provider / HE</label>
+                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Provider / Platform</label>
                                                 <select class="form-select form-select-sm ident-f-provider font-monospace" style="font-size: 0.78rem;">
-                                                    <option value="it4i" selected>it4i</option>
-                                                    <option value="bsc">bsc</option>
-                                                    <option value="cineca">cineca</option>
-                                                    <option value="lumi">lumi</option>
+                                                    <option value="default" selected>default</option>
+                                                    <option value="primary">primary</option>
+                                                    <option value="cloud">cloud</option>
+                                                    <option value="onprem">onprem</option>
                                                     <option value="__custom__">custom...</option>
                                                 </select>
-                                                <input type="text" class="form-control form-control-sm ident-f-provider-custom mt-1 font-monospace d-none" placeholder="e.g. it4i" style="font-size: 0.78rem;">
+                                                <input type="text" class="form-control form-control-sm ident-f-provider-custom mt-1 font-monospace d-none" placeholder="e.g. default" style="font-size: 0.78rem;">
                                             </div>
                                             <div class="col-6 col-sm-3">
                                                 <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Instance Name</label>
@@ -877,10 +877,10 @@
                                         <!-- Quick Examples -->
                                         <div class="d-flex align-items-center gap-1.5 flex-wrap mb-2">
                                             <span class="text-secondary small" style="font-size: 0.7rem;"><i class="bi bi-lightning-charge me-0.5 text-warning"></i>Examples:</span>
-                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">core_dev_it4i_develop</button>
-                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="inference" style="font-size: 0.68rem;">core_dev_it4i_inference</button>
-                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">efp_dev_it4i_develop</button>
-                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="prod" data-provider="it4i" data-instance="prod" style="font-size: 0.68rem;">efp_prod_it4i_prod</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="default" data-instance="develop" style="font-size: 0.68rem;">core_dev_default_develop</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="primary" data-instance="main" style="font-size: 0.68rem;">core_dev_primary_main</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="prod" data-provider="cloud" data-instance="cluster" style="font-size: 0.68rem;">core_prod_cloud_cluster</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="prod" data-provider="onprem" data-instance="prod" style="font-size: 0.68rem;">efp_prod_onprem_prod</button>
                                         </div>
                                     </div>
 
@@ -891,28 +891,11 @@
                                         </label>
                                         <div class="input-group">
                                             <span class="input-group-text bg-white text-primary border-end-0"><i class="bi bi-tag-fill"></i></span>
-                                            <input type="text" name="InstanceName" class="form-control font-monospace fw-bold ident-final-input" value="core_dev_it4i_develop" placeholder="core_dev_it4i_develop" pattern="^[a-z0-9_]+$" required style="font-size: 0.85rem;">
+                                            <input type="text" name="InstanceName" class="form-control font-monospace fw-bold ident-final-input" value="core_dev_default_develop" placeholder="core_dev_default_develop" pattern="^[a-z0-9_]+$" required style="font-size: 0.85rem;">
                                             <button type="button" class="btn btn-outline-secondary ident-copy-btn" title="Copy to clipboard"><i class="bi bi-clipboard"></i></button>
                                         </div>
-                                        <input type="hidden" name="InstanceIdentifier" class="ident-hidden-identifier" value="core_dev_it4i_develop">
+                                        <input type="hidden" name="InstanceIdentifier" class="ident-hidden-identifier" value="core_dev_default_develop">
                                         <div class="form-text text-muted" style="font-size: 0.7rem;">Only lowercase letters, numbers, and underscores are allowed.</div>
-                                    </div>
-
-                                    <!-- Accordion/Collapse: NEXUS & AAI Registration Process -->
-                                    <div class="mt-2.5 pt-2 border-top border-primary border-opacity-10">
-                                        <a class="small text-decoration-none d-flex align-items-center justify-content-between text-secondary" data-bs-toggle="collapse" href="#nexusProcessCollapse_panel" role="button" aria-expanded="false" style="font-size: 0.72rem;">
-                                            <span><i class="bi bi-info-circle me-1 text-primary"></i>NEXUS &amp; AAI Registration Workflow (5 steps)</span>
-                                            <i class="bi bi-chevron-down"></i>
-                                        </a>
-                                        <div class="collapse mt-2" id="nexusProcessCollapse_panel">
-                                            <ol class="small text-secondary mb-1 ps-3" style="font-size: 0.72rem; line-height: 1.55;">
-                                                <li><strong>[HEAppE]</strong> Vytvoření identifikátoru dle formule výše</li>
-                                                <li><strong>[HEAppE &rarr; AAI]</strong> Předat identifikátor AAI týmu</li>
-                                                <li><strong>[HEAppE &rarr; UserOrg]</strong> Předat identifikátor a Base URL UserOrg týmu</li>
-                                                <li><strong>[Keycloak]</strong> Vytvoření <code>Client_id</code> pro identifikátor a doplnění do NEXUS mapy</li>
-                                                <li><strong>[NEXUS API]</strong> Přidání mapování identifikátoru / URL do NEXUS API Proxy</li>
-                                            </ol>
-                                        </div>
                                     </div>
                                 </div>
                                 <div class="mb-3">
@@ -1004,7 +987,7 @@
                             </div>
 
                             <div class="small text-muted mb-2 font-monospace" style="font-size: 0.72rem;">
-                                <code>&lt;core/efp/..&gt;_&lt;environment&gt;_&lt;provider&gt;_&lt;instance_name&gt;</code>
+                                <code>&lt;scope&gt;_&lt;environment&gt;_&lt;provider&gt;_&lt;instance_name&gt;</code>
                             </div>
 
                             <!-- Formula Fields Container -->
@@ -1015,7 +998,8 @@
                                         <select class="form-select form-select-sm ident-f-scope font-monospace" style="font-size: 0.78rem;">
                                             <option value="core" selected>core</option>
                                             <option value="efp">efp</option>
-                                            <option value="lexis">lexis</option>
+                                            <option value="service">service</option>
+                                            <option value="batch">batch</option>
                                             <option value="__custom__">custom...</option>
                                         </select>
                                         <input type="text" class="form-control form-control-sm ident-f-scope-custom mt-1 font-monospace d-none" placeholder="e.g. core" style="font-size: 0.78rem;">
@@ -1027,21 +1011,20 @@
                                             <option value="test">test</option>
                                             <option value="stage">stage</option>
                                             <option value="prod">prod</option>
-                                            <option value="inference">inference</option>
                                             <option value="__custom__">custom...</option>
                                         </select>
                                         <input type="text" class="form-control form-control-sm ident-f-env-custom mt-1 font-monospace d-none" placeholder="e.g. dev" style="font-size: 0.78rem;">
                                     </div>
                                     <div class="col-6 col-sm-3">
-                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Provider / HE</label>
+                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Provider / Platform</label>
                                         <select class="form-select form-select-sm ident-f-provider font-monospace" style="font-size: 0.78rem;">
-                                            <option value="it4i" selected>it4i</option>
-                                            <option value="bsc">bsc</option>
-                                            <option value="cineca">cineca</option>
-                                            <option value="lumi">lumi</option>
+                                            <option value="default" selected>default</option>
+                                            <option value="primary">primary</option>
+                                            <option value="cloud">cloud</option>
+                                            <option value="onprem">onprem</option>
                                             <option value="__custom__">custom...</option>
                                         </select>
-                                        <input type="text" class="form-control form-control-sm ident-f-provider-custom mt-1 font-monospace d-none" placeholder="e.g. it4i" style="font-size: 0.78rem;">
+                                        <input type="text" class="form-control form-control-sm ident-f-provider-custom mt-1 font-monospace d-none" placeholder="e.g. default" style="font-size: 0.78rem;">
                                     </div>
                                     <div class="col-6 col-sm-3">
                                         <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Instance Name</label>
@@ -1052,10 +1035,10 @@
                                 <!-- Quick Examples -->
                                 <div class="d-flex align-items-center gap-1.5 flex-wrap mb-2">
                                     <span class="text-secondary small" style="font-size: 0.7rem;"><i class="bi bi-lightning-charge me-0.5 text-warning"></i>Examples:</span>
-                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">core_dev_it4i_develop</button>
-                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="inference" style="font-size: 0.68rem;">core_dev_it4i_inference</button>
-                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">efp_dev_it4i_develop</button>
-                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="prod" data-provider="it4i" data-instance="prod" style="font-size: 0.68rem;">efp_prod_it4i_prod</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="default" data-instance="develop" style="font-size: 0.68rem;">core_dev_default_develop</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="primary" data-instance="main" style="font-size: 0.68rem;">core_dev_primary_main</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="prod" data-provider="cloud" data-instance="cluster" style="font-size: 0.68rem;">core_prod_cloud_cluster</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="prod" data-provider="onprem" data-instance="prod" style="font-size: 0.68rem;">efp_prod_onprem_prod</button>
                                 </div>
                             </div>
 
@@ -1066,28 +1049,11 @@
                                 </label>
                                 <div class="input-group">
                                     <span class="input-group-text bg-white text-primary border-end-0"><i class="bi bi-tag-fill"></i></span>
-                                    <input type="text" name="InstanceName" class="form-control font-monospace fw-bold ident-final-input" value="core_dev_it4i_develop" placeholder="core_dev_it4i_develop" pattern="^[a-z0-9_]+$" required style="font-size: 0.85rem;">
+                                    <input type="text" name="InstanceName" class="form-control font-monospace fw-bold ident-final-input" value="core_dev_default_develop" placeholder="core_dev_default_develop" pattern="^[a-z0-9_]+$" required style="font-size: 0.85rem;">
                                     <button type="button" class="btn btn-outline-secondary ident-copy-btn" title="Copy to clipboard"><i class="bi bi-clipboard"></i></button>
                                 </div>
-                                <input type="hidden" name="InstanceIdentifier" class="ident-hidden-identifier" value="core_dev_it4i_develop">
+                                <input type="hidden" name="InstanceIdentifier" class="ident-hidden-identifier" value="core_dev_default_develop">
                                 <div class="form-text text-muted" style="font-size: 0.7rem;">Only lowercase letters, numbers, and underscores are allowed.</div>
-                            </div>
-
-                            <!-- Accordion/Collapse: NEXUS & AAI Registration Process -->
-                            <div class="mt-2.5 pt-2 border-top border-primary border-opacity-10">
-                                <a class="small text-decoration-none d-flex align-items-center justify-content-between text-secondary" data-bs-toggle="collapse" href="#nexusProcessCollapse_standalone" role="button" aria-expanded="false" style="font-size: 0.72rem;">
-                                    <span><i class="bi bi-info-circle me-1 text-primary"></i>NEXUS &amp; AAI Registration Workflow (5 steps)</span>
-                                    <i class="bi bi-chevron-down"></i>
-                                </a>
-                                <div class="collapse mt-2" id="nexusProcessCollapse_standalone">
-                                    <ol class="small text-secondary mb-1 ps-3" style="font-size: 0.72rem; line-height: 1.55;">
-                                        <li><strong>[HEAppE]</strong> Vytvoření identifikátoru dle formule výše</li>
-                                        <li><strong>[HEAppE &rarr; AAI]</strong> Předat identifikátor AAI týmu</li>
-                                        <li><strong>[HEAppE &rarr; UserOrg]</strong> Předat identifikátor a Base URL UserOrg týmu</li>
-                                        <li><strong>[Keycloak]</strong> Vytvoření <code>Client_id</code> pro identifikátor a doplnění do NEXUS mapy</li>
-                                        <li><strong>[NEXUS API]</strong> Přidání mapování identifikátoru / URL do NEXUS API Proxy</li>
-                                    </ol>
-                                </div>
                             </div>
                         </div>
                         <div class="mb-3">
@@ -2066,7 +2032,7 @@ $(document).ready(function() {
             const parts = [
                 cleanPart(scopeVal) || 'core',
                 cleanPart(envVal) || 'dev',
-                cleanPart(providerVal) || 'it4i',
+                cleanPart(providerVal) || 'default',
                 cleanPart(instanceVal) || 'develop'
             ];
             const assembled = parts.join('_');

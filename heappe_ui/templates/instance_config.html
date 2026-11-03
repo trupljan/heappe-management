@@ -325,16 +325,16 @@
                             <!-- TAB 3: Downstream Integrations -->
                             <div class="tab-pane fade" id="tab-pane-integrations" role="tabpanel">
                                 <div class="row g-3">
-                                    <!-- HEAppE Identifier & NEXUS Routing Card -->
+                                    <!-- HEAppE Identifier Card -->
                                     <div class="col-12">
                                         <div class="card border shadow-sm border-primary">
                                             <div class="card-header bg-white fw-bold py-2 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
                                                 <div>
-                                                    <i class="bi bi-fingerprint me-1 text-primary"></i>HEAppE Instance Identifier &amp; NEXUS Routing
+                                                    <i class="bi bi-fingerprint me-1 text-primary"></i>HEAppE Instance Identifier
                                                     <span class="badge bg-light text-primary border border-primary-subtle font-monospace ms-1">ScriptsSettings.InstanceIdentifierPath</span>
                                                 </div>
                                                 <div class="d-flex align-items-center gap-1.5">
-                                                    <span class="badge bg-secondary-subtle text-secondary border font-monospace small" id="cfg-ident-preview-badge">core_dev_it4i_develop</span>
+                                                    <span class="badge bg-secondary-subtle text-secondary border font-monospace small" id="cfg-ident-preview-badge">core_dev_default_develop</span>
                                                 </div>
                                             </div>
                                             <div class="card-body p-3">
@@ -349,9 +349,9 @@
                                                     </div>
                                                     <div class="d-flex align-items-center gap-1">
                                                         <span class="small text-muted me-1">Quick Presets:</span>
-                                                        <button type="button" class="btn btn-xs btn-outline-secondary cfg-ident-preset py-0 px-2" style="font-size: 0.72rem;" data-scope="core" data-env="dev" data-provider="it4i" data-instance="develop">core_dev_it4i_develop</button>
-                                                        <button type="button" class="btn btn-xs btn-outline-secondary cfg-ident-preset py-0 px-2" style="font-size: 0.72rem;" data-scope="core" data-env="dev" data-provider="it4i" data-instance="inference">core_dev_it4i_inference</button>
-                                                        <button type="button" class="btn btn-xs btn-outline-secondary cfg-ident-preset py-0 px-2" style="font-size: 0.72rem;" data-scope="efp" data-env="prod" data-provider="it4i" data-instance="cluster">efp_prod_it4i_cluster</button>
+                                                        <button type="button" class="btn btn-xs btn-outline-secondary cfg-ident-preset py-0 px-2" style="font-size: 0.72rem;" data-scope="core" data-env="dev" data-provider="default" data-instance="develop">core_dev_default_develop</button>
+                                                        <button type="button" class="btn btn-xs btn-outline-secondary cfg-ident-preset py-0 px-2" style="font-size: 0.72rem;" data-scope="core" data-env="dev" data-provider="primary" data-instance="main">core_dev_primary_main</button>
+                                                        <button type="button" class="btn btn-xs btn-outline-secondary cfg-ident-preset py-0 px-2" style="font-size: 0.72rem;" data-scope="efp" data-env="prod" data-provider="cloud" data-instance="cluster">efp_prod_cloud_cluster</button>
                                                     </div>
                                                 </div>
 
@@ -367,16 +367,16 @@
                                                             <input type="text" class="form-control form-control-sm font-monospace cfg-f-input" id="b-cfg-f-env" placeholder="dev / stage / prod" value="dev">
                                                         </div>
                                                         <div class="col-md-3">
-                                                            <label class="form-label small fw-semibold text-secondary mb-1">3. Provider / HE Name</label>
-                                                            <input type="text" class="form-control form-control-sm font-monospace cfg-f-input" id="b-cfg-f-provider" placeholder="it4i / cesnet" value="it4i">
+                                                            <label class="form-label small fw-semibold text-secondary mb-1">3. Provider / Platform</label>
+                                                            <input type="text" class="form-control form-control-sm font-monospace cfg-f-input" id="b-cfg-f-provider" placeholder="default / primary" value="default">
                                                         </div>
                                                         <div class="col-md-3">
                                                             <label class="form-label small fw-semibold text-secondary mb-1">4. Instance Name</label>
-                                                            <input type="text" class="form-control form-control-sm font-monospace cfg-f-input" id="b-cfg-f-instance" placeholder="develop / inference" value="develop">
+                                                            <input type="text" class="form-control form-control-sm font-monospace cfg-f-input" id="b-cfg-f-instance" placeholder="develop / main" value="develop">
                                                         </div>
                                                     </div>
                                                     <div class="text-muted small mb-3" style="font-size: 0.75rem;">
-                                                        <i class="bi bi-info-circle me-1"></i>Formula: <code>&lt;core/efp/..&gt;_&lt;environment&gt;_&lt;he_name/provider_name&gt;_&lt;HEAppE_instance_name&gt;</code>
+                                                        <i class="bi bi-info-circle me-1"></i>Formula: <code>&lt;scope&gt;_&lt;environment&gt;_&lt;provider&gt;_&lt;instance_name&gt;</code>
                                                     </div>
                                                 </div>
 
@@ -387,58 +387,10 @@
                                                     </label>
                                                     <div class="input-group input-group-sm">
                                                         <span class="input-group-text bg-light"><i class="bi bi-key-fill text-primary"></i></span>
-                                                        <input type="text" class="form-control font-monospace fw-bold text-primary" id="b-heappe-instance-identifier" placeholder="core_dev_it4i_develop" readonly>
+                                                        <input type="text" class="form-control font-monospace fw-bold text-primary" id="b-heappe-instance-identifier" placeholder="core_dev_default_develop" readonly>
                                                         <button class="btn btn-outline-secondary" type="button" id="btn-copy-cfg-ident" title="Copy to clipboard">
                                                             <i class="bi bi-clipboard"></i> Copy
                                                         </button>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Collapsible NEXUS 5-step process guide -->
-                                                <div class="border rounded-2 p-2 bg-light bg-opacity-50">
-                                                    <a class="text-decoration-none d-flex justify-content-between align-items-center text-dark fw-semibold small" data-bs-toggle="collapse" href="#cfgNexusGuideCollapse" role="button" aria-expanded="false" aria-controls="cfgNexusGuideCollapse">
-                                                        <span><i class="bi bi-shield-check text-success me-1"></i>NEXUS / AAI Integration &amp; Registration Workflow (5 kroků)</span>
-                                                        <i class="bi bi-chevron-down small"></i>
-                                                    </a>
-                                                    <div class="collapse mt-2" id="cfgNexusGuideCollapse">
-                                                        <div class="table-responsive">
-                                                            <table class="table table-sm table-bordered bg-white mb-1 small">
-                                                                <thead class="table-light">
-                                                                    <tr>
-                                                                        <th style="width: 50px;">Krok</th>
-                                                                        <th>Proces tvorby a registrace</th>
-                                                                        <th style="width: 140px;">Komponenta / Tým</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody>
-                                                                    <tr class="table-success table-opacity-25">
-                                                                        <td class="text-center fw-bold">1</td>
-                                                                        <td>Vytvoření HEAppE identifikátoru dle formule</td>
-                                                                        <td><span class="badge bg-primary text-white">HEAppE</span></td>
-                                                                    </tr>
-                                                                    <tr>
-                                                                        <td class="text-center fw-bold">2</td>
-                                                                        <td>Předat HEAppE Identifikátor AAI týmu</td>
-                                                                        <td><span class="badge bg-secondary text-white">HEAppE &rarr; AAI</span></td>
-                                                                    </tr>
-                                                                    <tr>
-                                                                        <td class="text-center fw-bold">3</td>
-                                                                        <td>Předat HEAppE Identifikátor / URL UserOrg týmu</td>
-                                                                        <td><span class="badge bg-secondary text-white">HEAppE &rarr; UserOrg</span></td>
-                                                                    </tr>
-                                                                    <tr>
-                                                                        <td class="text-center fw-bold">4</td>
-                                                                        <td>Vytvoření Client_id pro HEAppE instanci pro identifikátor a doplnění do NEXUS mapy</td>
-                                                                        <td><span class="badge bg-info text-dark">KeyCloak</span></td>
-                                                                    </tr>
-                                                                    <tr>
-                                                                        <td class="text-center fw-bold">5</td>
-                                                                        <td>Přidání mapování HEAppE identifikátoru / HEAppE URL do NEXUS API Proxy</td>
-                                                                        <td><span class="badge bg-warning text-dark">NEXUS API</span></td>
-                                                                    </tr>
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
                                                     </div>
                                                 </div>
 
@@ -1031,7 +983,7 @@ $(document).ready(function() {
 
     function parseFormulaIdentifier(val) {
         if (!val || typeof val !== 'string') {
-            return { scope: 'core', env: 'dev', provider: 'it4i', instance: 'develop' };
+            return { scope: 'core', env: 'dev', provider: 'default', instance: 'develop' };
         }
         const parts = val.split('_');
         if (parts.length >= 4) {
@@ -1042,7 +994,7 @@ $(document).ready(function() {
                 instance: parts.slice(3).join('_')
             };
         }
-        return { scope: 'core', env: 'dev', provider: 'it4i', instance: val };
+        return { scope: 'core', env: 'dev', provider: 'default', instance: val };
     }
 
     let currentAuthData = {
@@ -2251,7 +2203,7 @@ $(document).ready(function() {
     $(document).on('input change', '.cfg-f-input', function() {
         const s = $('#b-cfg-f-scope').val().trim() || 'core';
         const e = $('#b-cfg-f-env').val().trim() || 'dev';
-        const p = $('#b-cfg-f-provider').val().trim() || 'it4i';
+        const p = $('#b-cfg-f-provider').val().trim() || 'default';
         const i = $('#b-cfg-f-instance').val().trim() || 'develop';
         const combined = `${s}_${e}_${p}_${i}`;
         $('#b-heappe-instance-identifier').val(combined);

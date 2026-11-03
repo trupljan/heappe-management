@@ -5728,8 +5728,7 @@ class TestHeappeIdentifierFormulaAndPropagation(TestCase):
         self.assertIn("heappe-identifier-builder-card", content)
         self.assertIn("InstanceIdentifier", content)
         self.assertIn("ident-f-scope", content)
-        self.assertIn("core_dev_it4i_develop", content)
-        self.assertIn("NEXUS &amp; AAI Registration Workflow", content)
+        self.assertIn("core_dev_default_develop", content)
 
     def test_instance_health_check_api_fallback_reads_identifier(self):
         from heappe_ui.models import InstanceCredentials
