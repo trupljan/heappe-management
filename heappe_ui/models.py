@@ -117,11 +117,13 @@ class QSchedulerInstance(models.Model):
     ssh_host = models.CharField(max_length=255, blank=True, default="")
     ssh_port = models.IntegerField(default=22)
     ssh_user = models.CharField(max_length=255, blank=True, default="")
-    ssh_private_key = models.TextField(blank=True, default="")
-    ssh_key_passphrase = models.CharField(max_length=255, blank=True, default="")
+    # Secrets are stored encrypted (Fernet, key derived from SECRET_KEY). Use the ssh_private_key,
+    # ssh_key_passphrase and database_url properties.
+    ssh_private_key_encrypted = models.TextField(blank=True, default="")
+    ssh_key_passphrase_encrypted = models.TextField(blank=True, default="")
     ssh_host_key = models.TextField(blank=True, default="")      # pinned on registration: "<type> <base64>"
     docker_command = models.CharField(max_length=255, blank=True, default="docker")   # ssh_host, e.g. "sudo docker"
-    database_url = models.CharField(max_length=1024, blank=True, default="")          # ssh_container (optional); managed: for restore
+    database_url_encrypted = models.TextField(blank=True, default="")   # ssh_container (optional); managed: for restore
     restart_command = models.CharField(max_length=1024, blank=True, default="")       # ssh_container
 
     # Image source (managed / update)
@@ -191,6 +193,30 @@ class QSchedulerInstance(models.Model):
     @admin_token.setter
     def admin_token(self, value):
         self.admin_token_encrypted = encrypt_secret(value) if value else ""
+
+    @property
+    def ssh_private_key(self):
+        return decrypt_secret(self.ssh_private_key_encrypted)
+
+    @ssh_private_key.setter
+    def ssh_private_key(self, value):
+        self.ssh_private_key_encrypted = encrypt_secret(value) if value else ""
+
+    @property
+    def ssh_key_passphrase(self):
+        return decrypt_secret(self.ssh_key_passphrase_encrypted)
+
+    @ssh_key_passphrase.setter
+    def ssh_key_passphrase(self, value):
+        self.ssh_key_passphrase_encrypted = encrypt_secret(value) if value else ""
+
+    @property
+    def database_url(self):
+        return decrypt_secret(self.database_url_encrypted)
+
+    @database_url.setter
+    def database_url(self, value):
+        self.database_url_encrypted = encrypt_secret(value) if value else ""
 
 
 class QSchedulerAssignment(models.Model):

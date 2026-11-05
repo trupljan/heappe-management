@@ -663,8 +663,11 @@ yet still join the networks of the HEAppE instances assigned to them.
 
 ## Security notes
 
-- SSH private keys, key passphrases and database URLs are stored in the HEAppE Management database in plain text, the
-  same way as other instance credentials. They are never sent back to the browser.
+- SSH private keys, key passphrases, database URLs and admin tokens are stored **encrypted** in the HEAppE Management
+  database (Fernet: AES-128 with a random IV per value, plus HMAC), with a key derived from Django `SECRET_KEY`. A
+  database dump or backup alone does not reveal them; the database together with `SECRET_KEY` does. If `SECRET_KEY`
+  changes, the stored values can no longer be decrypted and must be entered again. They are never sent back to the
+  browser. Upgrading runs migration `0012`, which encrypts existing values and drops the plain-text columns.
 - Avoid the obsolete SSH modes: the admin API needs only the admin token, while an SSH key gives shell access. If SSH
   is still used, use a dedicated key per QScheduler instance with the minimum rights needed (Docker access on the VM,
   or the service user in the container).

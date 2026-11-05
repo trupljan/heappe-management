@@ -8772,3 +8772,75 @@ class QSchedulerNetworkDockerTests(TestCase):
                 self.assertIsNone(docker.json(["network", "inspect", q.qs_network]))
             self.assertFalse(os.path.exists(override))
             self.assertEqual(docker.networks_of("qse2n_heappe"), ["qse2n_external_network"])
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# QScheduler secrets stored encrypted (SSH private key, key passphrase, DATABASE_URL)
+# ---------------------------------------------------------------------------------------------------------------------
+from django.test import TransactionTestCase
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+
+
+class QSchedulerEncryptedSecretsTests(TestCase):
+    SECRETS = {"ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----",
+               "ssh_key_passphrase": "pass-123", "database_url": "postgres://u:secret-pw@h:5432/db"}
+
+    def test_stored_encrypted_and_read_back(self):
+        from heappe_ui.models import QSchedulerInstance
+        QSchedulerInstance.objects.create(name="qs-enc", kind="ssh_container", service_host="h", **self.SECRETS)
+        inst = QSchedulerInstance.objects.get(name="qs-enc")
+        for field, value in self.SECRETS.items():
+            self.assertEqual(getattr(inst, field), value)
+            stored = getattr(inst, f"{field}_encrypted")
+            self.assertTrue(stored)
+            self.assertNotIn(value, stored)
+        raw = QSchedulerInstance.objects.filter(name="qs-enc").values_list("database_url_encrypted", flat=True)[0]
+        self.assertNotIn("secret-pw", raw)
+
+    def test_random_iv_same_value_differs(self):
+        from heappe_ui.models import QSchedulerInstance
+        a = QSchedulerInstance(name="a", database_url="postgres://u:p@h/db")
+        b = QSchedulerInstance(name="b", database_url="postgres://u:p@h/db")
+        self.assertNotEqual(a.database_url_encrypted, b.database_url_encrypted)
+
+    def test_empty_values_stay_empty(self):
+        from heappe_ui.models import QSchedulerInstance
+        inst = QSchedulerInstance(name="e", ssh_private_key="", ssh_key_passphrase="", database_url="")
+        self.assertEqual((inst.ssh_private_key_encrypted, inst.ssh_key_passphrase_encrypted,
+                          inst.database_url_encrypted), ("", "", ""))
+        self.assertEqual(inst.database_url, "")
+
+
+class QSchedulerEncryptSecretsMigrationTests(TransactionTestCase):
+    before = [("heappe_ui", "0011_qscheduler_network_and_aliases")]
+    after = [("heappe_ui", "0012_qscheduler_encrypt_secrets")]
+
+    def _migrate(self, target):
+        executor = MigrationExecutor(connection)
+        executor.loader.build_graph()
+        executor.migrate(target)
+        return executor.loader.project_state(target).apps
+
+    def tearDown(self):
+        self._migrate(MigrationExecutor(connection).loader.graph.leaf_nodes())
+
+    def test_existing_rows_encrypted_and_reversible(self):
+        old_apps = self._migrate(self.before)
+        Old = old_apps.get_model("heappe_ui", "QSchedulerInstance")
+        Old.objects.create(name="qs-mig", kind="ssh_host", service_host="h", ssh_private_key="KEY",
+                           ssh_key_passphrase="PP", database_url="postgres://u:pw@h/db")
+        Old.objects.create(name="qs-empty", kind="managed", service_host="h")
+
+        self._migrate(self.after)
+        from heappe_ui.models import QSchedulerInstance
+        inst = QSchedulerInstance.objects.get(name="qs-mig")
+        self.assertEqual((inst.ssh_private_key, inst.ssh_key_passphrase, inst.database_url),
+                         ("KEY", "PP", "postgres://u:pw@h/db"))
+        self.assertNotIn("pw@h", inst.database_url_encrypted)
+        self.assertEqual(QSchedulerInstance.objects.get(name="qs-empty").database_url_encrypted, "")
+
+        old_apps = self._migrate(self.before)
+        row = old_apps.get_model("heappe_ui", "QSchedulerInstance").objects.get(name="qs-mig")
+        self.assertEqual((row.ssh_private_key, row.ssh_key_passphrase, row.database_url),
+                         ("KEY", "PP", "postgres://u:pw@h/db"))

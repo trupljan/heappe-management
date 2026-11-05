@@ -6,11 +6,11 @@ QScheduler cluster settings) by the automated tests in `heappe_ui/tests.py`.
 
 | | |
 |---|---|
-| Date | 2026-10-29 |
-| Tests | 157, all passing (`QSchedulerConfigTests`, `QSchedulerVaultToggleSerializationTests`, `QSchedulerHelperTests`, `QSchedulerOptionParsingTests`, `QSchedulerWorkflowTests`, `QSchedulerClusterDetailTemplateTests`, `QSchedulerViewTests`, `QSchedulerGitRefsTests`, `QSchedulerRecoveryTests`, `QSchedulerUnmanagedNotifierTests`, `QSchedulerClusterHealthTests`, `QSchedulerClusterMoveTests`, `QSchedulerImageBuildTests`, `QSchedulerNetworkSubnetTests`, `QSchedulerExtraHostsTests`, `QSchedulerAdminApiTests`, `QSchedulerAdminProxyTests`, `QSchedulerSharedDbDockerTests`, `QSchedulerSharedDbTests`, `QSchedulerMigrateToSharedDockerTests`, `QSchedulerMigrateToSharedTests`, `QSchedulerNetworkTests`, `QSchedulerNetworkWorkerTests`, `QSchedulerNetworkDockerTests`) |
+| Date | 2026-10-30 |
+| Tests | 161, all passing (`QSchedulerConfigTests`, `QSchedulerVaultToggleSerializationTests`, `QSchedulerHelperTests`, `QSchedulerOptionParsingTests`, `QSchedulerWorkflowTests`, `QSchedulerClusterDetailTemplateTests`, `QSchedulerViewTests`, `QSchedulerGitRefsTests`, `QSchedulerRecoveryTests`, `QSchedulerUnmanagedNotifierTests`, `QSchedulerClusterHealthTests`, `QSchedulerClusterMoveTests`, `QSchedulerImageBuildTests`, `QSchedulerNetworkSubnetTests`, `QSchedulerExtraHostsTests`, `QSchedulerAdminApiTests`, `QSchedulerAdminProxyTests`, `QSchedulerSharedDbDockerTests`, `QSchedulerSharedDbTests`, `QSchedulerMigrateToSharedDockerTests`, `QSchedulerMigrateToSharedTests`, `QSchedulerNetworkTests`, `QSchedulerNetworkWorkerTests`, `QSchedulerNetworkDockerTests`, `QSchedulerEncryptedSecretsTests`, `QSchedulerEncryptSecretsMigrationTests`) |
 | Measured code | `qscheduler_core.py`, `qscheduler_deploy.py`, `qscheduler_machines.py`, `qscheduler_recovery.py`, `qscheduler_cluster_health.py`, `qscheduler_admin.py`, `qscheduler_shared_db.py`, `qscheduler_network.py` |
 | Tool | coverage.py 7.6.1, line + branch coverage, Python 3.12 |
-| Source fingerprint | `3ceb85d0961e` (measured files + feature data) |
+| Source fingerprint | `c09bd64a64f7` (measured files + feature data) |
 
 ## Summary
 

@@ -591,7 +591,7 @@ def migrate_to_shared_worker(log, result, inst_id, opts, uid):
 
     inst.database_url = url
     inst.db_kind, inst.db_schema, inst.shared_database = Q.DB_SHARED, role, db
-    inst.save(update_fields=["database_url", "db_kind", "db_schema", "shared_database", "updated_at"])
+    inst.save(update_fields=["database_url_encrypted", "db_kind", "db_schema", "shared_database", "updated_at"])
     if opts.get('remove_old'):
         docker.run(["rm", "-f", pg], log, check=False)
         docker.run(["volume", "rm", f"{name}-pgdata"], log, check=False)
