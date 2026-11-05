@@ -59,6 +59,9 @@
                         <i class="bi bi-arrow-clockwise me-1.5"></i>Retry Deployment
                     </button>
                 {% endif %}
+                <button type="button" class="btn btn-outline-warning shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#renameInstanceModal" title="Rename Instance (Docker, Files &amp; DB)">
+                    <i class="bi bi-input-cursor-text me-1.5"></i>Rename Instance
+                </button>
                 <button type="button" class="btn btn-outline-danger shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#deleteTeardownModal" title="Delete &amp; Shut Down Instance">
                     <i class="bi bi-trash3-fill me-1.5"></i>Delete Instance
                 </button>
@@ -89,6 +92,31 @@
                     <i class="bi bi-trash3-fill me-1"></i>Delete &amp; Shut Down
                 </button>
             </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if instance_name and not containers and running_docker_projects %}
+    <div class="alert alert-info border-info shadow-sm p-3 mb-4 rounded-3 animate-fade-in">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-2.5">
+                <div class="p-2 bg-info bg-opacity-10 text-info rounded-3 flex-shrink-0">
+                    <i class="bi bi-info-circle-fill fs-4 d-block"></i>
+                </div>
+                <div>
+                    <h6 class="fw-bold mb-1 text-dark">Instance Name &amp; Docker Project Mismatch Detected</h6>
+                    <div class="small text-secondary">
+                        No containers are currently running under project <code>{{ instance_name }}</code>.
+                        Detected running Docker project(s) on server:
+                        {% for p in running_docker_projects %}
+                            <span class="badge bg-primary text-white font-monospace">{{ p }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#renameInstanceModal" onclick="$('#modalRenameSourceProject').val('{{ running_docker_projects.0 }}'); $('#modalRenameNewInstanceName').val('{{ instance_name }}');">
+                <i class="bi bi-arrow-left-right me-1"></i>Migrate / Rename <code>{{ running_docker_projects.0 }}</code> &rarr; <code>{{ instance_name }}</code>
+            </button>
         </div>
     </div>
     {% endif %}
@@ -1131,6 +1159,82 @@
         </div>
     </div>
 
+    <!-- Rename Instance Modal -->
+    <div class="modal fade" id="renameInstanceModal" tabindex="-1" aria-labelledby="renameInstanceModalLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-3">
+                <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="renameInstanceModalLabel">
+                        <i class="bi bi-input-cursor-text text-white"></i>
+                        <span>Rename HEAppE Instance</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="rename-instance-form" method="post" action="{% if instance_name %}{% url 'deploy_rename_instance' instance_name %}{% else %}#{% endif %}">
+                    {% csrf_token %}
+                    <div class="modal-body p-4">
+                        <p class="mb-3 text-secondary small">
+                            Safely rename this instance across <strong>Docker containers</strong> (starts under new Compose project name), <strong>filesystem directories</strong>, <strong>.env &amp; appsettings configs</strong>, and the <strong>database</strong>.
+                        </p>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-secondary text-uppercase mb-1">Source / Current Project</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light"><i class="bi bi-box-arrow-right text-muted"></i></span>
+                                <input type="text" name="source_project" id="modalRenameSourceProject" class="form-control font-monospace bg-light" value="{{ instance_name }}" list="detectedProjectsList" required>
+                                {% if running_docker_projects %}
+                                <datalist id="detectedProjectsList">
+                                    {% for p in running_docker_projects %}
+                                    <option value="{{ p }}">{{ p }} (Running in Docker)</option>
+                                    {% endfor %}
+                                </datalist>
+                                {% endif %}
+                            </div>
+                            <div class="form-text small text-muted">The currently running Docker Compose project or folder on disk (e.g. <code>develop</code>).</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold text-secondary text-uppercase mb-1">New Instance Name</label>
+                            <div class="input-group">
+                                <span class="input-group-text bg-white"><i class="bi bi-tag-fill text-primary"></i></span>
+                                <input type="text" name="new_instance_name" id="modalRenameNewInstanceName" class="form-control font-monospace fw-bold text-primary" placeholder="e.g. core_dev_it4i_develop" pattern="^[a-z0-9_]+$" required>
+                            </div>
+                            <div class="form-text small text-muted">Only lowercase letters, numbers, and underscores are allowed.</div>
+                        </div>
+
+                        <div class="bg-light p-3 rounded-3 border mb-3">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="update_identifier" id="modalRenameUpdateIdent" checked>
+                                <label class="form-check-label small fw-semibold text-dark" for="modalRenameUpdateIdent">
+                                    <i class="bi bi-fingerprint text-primary me-1"></i>Also update HEAppE Identifier (<code>InstanceIdentifierPath</code>) in <code>appsettings.json</code>
+                                </label>
+                            </div>
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" name="restart_containers" id="modalRenameRestartContainers" checked>
+                                <label class="form-check-label small fw-semibold text-dark" for="modalRenameRestartContainers">
+                                    <i class="bi bi-arrow-clockwise text-success me-1"></i>Start &amp; launch Docker containers with new name immediately
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info border-0 rounded-3 small mb-0 d-flex gap-2">
+                            <i class="bi bi-info-circle-fill text-primary fs-5 flex-shrink-0"></i>
+                            <div>
+                                <strong>Data Preservation:</strong> Existing MSSQL database data, configurations, and secrets are preserved and linked to the new instance name.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-between">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" id="btn-submit-rename" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                            <i class="bi bi-check-circle-fill me-1"></i>Rename Instance
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Retry Deployment Modal -->
     <div class="modal fade" id="retryDeployModal" tabindex="-1" aria-labelledby="retryDeployModalLabel" aria-hidden="true" data-bs-backdrop="static">
         <div class="modal-dialog modal-dialog-centered">
@@ -1684,6 +1788,51 @@ $(document).ready(function() {
         $('#loading-overlay').css('display','flex');
     }
     window.hideLoading = function() { $('#loading-overlay').css('display','none'); }
+
+    // --- RENAME INSTANCE SUBMIT HANDLER ---
+    $(document).on('submit', '#rename-instance-form', function(e) {
+        e.preventDefault();
+        const form = $(this);
+        const newName = form.find('input[name="new_instance_name"]').val().trim();
+        const srcProject = form.find('input[name="source_project"]').val().trim();
+        if (!newName) {
+            alert("Please enter a new instance name.");
+            return;
+        }
+
+        const renameModalEl = document.getElementById('renameInstanceModal');
+        if (renameModalEl) {
+            const rm = bootstrap.Modal.getInstance(renameModalEl);
+            if (rm) rm.hide();
+        }
+
+        showLoading("Renaming Instance...", `Migrating '${srcProject}' to '${newName}' (stopping old containers, moving directories, updating configs, and launching new containers). Please wait...`);
+
+        $.ajax({
+            url: form.attr('action'),
+            type: 'POST',
+            data: form.serialize(),
+            headers: {'X-Requested-With': 'XMLHttpRequest'},
+            success: function(resp) {
+                if (resp && resp.redirect_url) {
+                    window.location.href = resp.redirect_url;
+                } else {
+                    window.location.reload();
+                }
+            },
+            error: function(xhr) {
+                hideLoading();
+                let errMsg = "Rename failed: ";
+                try {
+                    const r = JSON.parse(xhr.responseText);
+                    errMsg += r.message || r.error || xhr.statusText;
+                } catch(e) {
+                    errMsg += xhr.statusText || 'Server Error';
+                }
+                alert(errMsg);
+            }
+        });
+    });
 
     // --- AUTOMATIC UPDATE / DEPLOYMENT STATE ON PAGE LOAD ---
     {% if instance_name and is_updating %}

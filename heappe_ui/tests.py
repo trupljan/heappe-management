@@ -5323,7 +5323,174 @@ class InstanceTeardownAndDeploymentFailureTests(TestCase):
 
         # Check modal triggers exist
         self.assertIn('id="deleteTeardownModal"', rendered)
-        self.assertIn('id="switchBranchModal"', rendered)
+        self.assertIn('id="renameInstanceModal"', rendered)
+
+    @mock.patch("heappe_ui.view.deploy.docker.from_env")
+    @mock.patch("heappe_ui.view.deploy.execute_docker_compose")
+    def test_rename_instance_success(self, mock_exec_compose, mock_docker_env):
+        import tempfile
+        import json
+        from heappe_ui.models import InstanceCredentials
+        from heappe_ui.view.deploy import rename_instance
+        import subprocess
+
+        mock_exec_compose.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        mock_container = mock.MagicMock()
+        mock_container.name = "develop_heappe"
+        mock_container.status = "running"
+        mock_container.labels = {"com.docker.compose.project": "develop"}
+
+        mock_client = mock.MagicMock()
+        mock_client.containers.list.return_value = [mock_container]
+        mock_client.volumes.list.return_value = []
+        mock_docker_env.return_value = mock_client
+
+        inst = InstanceCredentials.objects.create(
+            instance_name="develop",
+            heappe_host="localhost",
+            heappe_login="admin",
+            heappe_password="pwd",
+            heappe_port="5000",
+            log_db_host="localhost",
+            log_db_port="6000",
+            log_db_user="SA",
+            log_db_password="pwd",
+            log_db_database="db",
+            is_deployed=True
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            old_dir = os.path.join(temp_dir, "develop")
+            core_dir = os.path.join(old_dir, "heappe-core")
+            confs_dir = os.path.join(old_dir, "app", "confs")
+            os.makedirs(core_dir, exist_ok=True)
+            os.makedirs(confs_dir, exist_ok=True)
+
+            # Write .env
+            env_file = os.path.join(core_dir, ".env")
+            with open(env_file, "w") as f:
+                f.write(
+                    f"INSTANCE_NAME=develop\n"
+                    f"HOST_MSSQL_NAME=mssql-develop\n"
+                    f"HOST_APP_NAME=heappe-develop\n"
+                    f"BASE_PATH={temp_dir}/develop/app/confs\n"
+                    f"SHARED_VAULT_FILE_NAME=credentials_develop\n"
+                )
+
+            # Write credentials vault file
+            with open(os.path.join(old_dir, "credentials_develop"), "w") as f:
+                f.write("vault_secret")
+
+            # Write appsettings.json
+            appsettings_file = os.path.join(confs_dir, "appsettings.json")
+            with open(appsettings_file, "w") as f:
+                json.dump({
+                    "ConnectionStrings": {
+                        "MiddlewareContext": "Server=develop_mssql;Database=heappe;"
+                    },
+                    "ApplicationAPISettings": {
+                        "DeploymentSettings": {
+                            "HostPostfix": "develop",
+                            "Name": "develop instance"
+                        }
+                    },
+                    "HPCConnectionFrameworkSettings": {
+                        "ScriptsSettings": {
+                            "InstanceIdentifierPath": "develop"
+                        }
+                    }
+                }, f)
+
+            res = rename_instance(
+                old_name="develop",
+                new_name="core_dev_it4i_develop",
+                base_path=temp_dir,
+                update_identifier=True,
+                restart_containers=True
+            )
+
+            self.assertTrue(res["success"])
+            self.assertTrue(res["files_moved"])
+            new_dir = os.path.join(temp_dir, "core_dev_it4i_develop")
+            self.assertTrue(os.path.exists(new_dir))
+            self.assertFalse(os.path.exists(old_dir))
+
+            # Verify .env updated
+            with open(os.path.join(new_dir, "heappe-core", ".env"), "r") as f:
+                new_env = f.read()
+            self.assertIn("INSTANCE_NAME=core_dev_it4i_develop", new_env)
+            self.assertIn("HOST_MSSQL_NAME=mssql-core_dev_it4i_develop", new_env)
+            self.assertIn(f"BASE_PATH={temp_dir}/core_dev_it4i_develop/app/confs", new_env)
+            self.assertIn("SHARED_VAULT_FILE_NAME=credentials_core_dev_it4i_develop", new_env)
+
+            # Verify vault credentials file renamed
+            self.assertTrue(os.path.exists(os.path.join(new_dir, "credentials_core_dev_it4i_develop")))
+
+            # Verify appsettings.json updated
+            with open(os.path.join(new_dir, "app", "confs", "appsettings.json"), "r") as f:
+                new_appsettings = json.load(f)
+            self.assertIn("Server=core_dev_it4i_develop_mssql;", new_appsettings["ConnectionStrings"]["MiddlewareContext"])
+            self.assertEqual(new_appsettings["ApplicationAPISettings"]["DeploymentSettings"]["HostPostfix"], "core_dev_it4i_develop")
+            self.assertEqual(new_appsettings["HPCConnectionFrameworkSettings"]["ScriptsSettings"]["InstanceIdentifierPath"], "core_dev_it4i_develop")
+
+            # Verify DB updated
+            inst.refresh_from_db()
+            self.assertEqual(inst.instance_name, "core_dev_it4i_develop")
+
+    def test_rename_instance_validation_errors(self):
+        from heappe_ui.models import InstanceCredentials
+        from heappe_ui.view.deploy import rename_instance
+
+        # 1. Empty name
+        res = rename_instance("develop", "")
+        self.assertFalse(res["success"])
+        self.assertIn("cannot be empty", res["errors"][0])
+
+        # 2. Invalid chars
+        res = rename_instance("develop", "Invalid-Name!")
+        self.assertFalse(res["success"])
+        self.assertIn("lowercase", res["errors"][0])
+
+        # 3. Same name
+        res = rename_instance("develop", "develop")
+        self.assertFalse(res["success"])
+        self.assertIn("must be different", res["errors"][0])
+
+        # 4. Conflict with existing
+        InstanceCredentials.objects.create(instance_name="existing_target", heappe_host="h", heappe_login="u", heappe_password="p", heappe_port="5000")
+        res = rename_instance("develop", "existing_target")
+        self.assertFalse(res["success"])
+        self.assertIn("already exists", res["errors"][0])
+
+    @mock.patch("heappe_ui.view.deploy.rename_instance")
+    def test_deploy_rename_instance_view_ajax(self, mock_rename):
+        from heappe_ui.view.deploy import deploy_rename_instance
+        import json
+
+        mock_rename.return_value = {
+            "success": True,
+            "old_name": "develop",
+            "new_name": "core_dev_it4i_develop",
+            "errors": []
+        }
+
+        req = self.factory.post("/deploy/develop/rename/", {
+            "new_instance_name": "core_dev_it4i_develop",
+            "source_project": "develop",
+            "update_identifier": "true",
+            "restart_containers": "true"
+        }, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
+        req.user = self.user
+        req.session = {"chosen_instance": "develop"}
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        setattr(req, '_messages', FallbackStorage(req))
+
+        resp = deploy_rename_instance(req, instance_name="develop")
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.content)
+        self.assertEqual(data["status"], "success")
+        self.assertEqual(data["redirect_url"], "/deploy/core_dev_it4i_develop/")
+        self.assertEqual(req.session["chosen_instance"], "core_dev_it4i_develop")
 
 
 

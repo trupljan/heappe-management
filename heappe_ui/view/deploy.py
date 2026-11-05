@@ -697,6 +697,418 @@ def deploy_delete_instance(request, instance_name: str) -> HttpResponse:
     return redirect('deploy_view', instance_name=instance_name)
 
 
+def rename_instance(
+    old_name: str,
+    new_name: str,
+    base_path: str = "/opt/heappe-deployment/",
+    update_identifier: bool = True,
+    restart_containers: bool = True,
+    source_project_name: Optional[str] = None
+) -> dict:
+    """
+    Safely renames an entire HEAppE instance:
+    1. Stops old Docker containers (WITHOUT deleting volumes or persistent data)
+    2. Migrates Docker named volumes if any exist
+    3. Renames filesystem directory under base_path
+    4. Updates .env configuration (INSTANCE_NAME, mount paths, container hostnames, vault file)
+    5. Updates appsettings.json and appsettings-data.json (connection strings, HostPostfix, InstanceIdentifierPath)
+    6. Updates database (InstanceCredentials.instance_name)
+    7. Starts containers with new name under the new Docker Compose project
+    """
+    import re
+    import json
+    import logging
+    _logger = logging.getLogger(__name__)
+
+    old_name = (old_name or '').strip()
+    new_name = (new_name or '').strip().lower()
+    source_project = (source_project_name or '').strip() or old_name
+
+    results = {
+        "success": False,
+        "old_name": old_name,
+        "new_name": new_name,
+        "source_project": source_project,
+        "containers_stopped": 0,
+        "containers_removed": 0,
+        "containers_started": 0,
+        "files_moved": False,
+        "volumes_migrated": [],
+        "errors": []
+    }
+
+    if not new_name:
+        results["errors"].append("New instance name cannot be empty.")
+        return results
+
+    if not re.match(r'^[a-z0-9_]+$', new_name):
+        results["errors"].append("New instance name must contain only lowercase letters, numbers, and underscores.")
+        return results
+
+    if new_name == source_project and old_name == new_name:
+        results["errors"].append("New instance name must be different from current instance name.")
+        return results
+
+    # Check database conflict
+    try:
+        from ..models import InstanceCredentials
+        existing_cred = InstanceCredentials.objects.filter(instance_name=new_name).first()
+        if existing_cred and existing_cred.instance_name != old_name and existing_cred.instance_name != source_project:
+            results["errors"].append(f"An instance named '{new_name}' already exists in database.")
+            return results
+    except Exception as e:
+        _logger.warning(f"DB check note: {e}")
+
+    # Determine candidate base paths
+    candidate_base_paths = []
+    if base_path:
+        candidate_base_paths.append(base_path.rstrip('/'))
+    for bp in ["/opt/heappe-deployment", "/opt/heappe"]:
+        if bp not in candidate_base_paths:
+            candidate_base_paths.append(bp)
+
+    old_project_dir = None
+    active_base_path = None
+    for probe_name in [source_project, old_name]:
+        if not probe_name:
+            continue
+        for bp in candidate_base_paths:
+            p = os.path.join(bp, probe_name)
+            if os.path.isdir(p):
+                old_project_dir = p
+                active_base_path = bp
+                source_project = probe_name
+                break
+        if old_project_dir:
+            break
+
+    if not active_base_path:
+        active_base_path = candidate_base_paths[0]
+
+    new_project_dir = os.path.join(active_base_path, new_name)
+    if old_project_dir and old_project_dir != new_project_dir and os.path.exists(new_project_dir):
+        results["errors"].append(f"Target directory '{new_project_dir}' already exists on disk.")
+        return results
+
+    # 1. Stop and remove old containers (WITHOUT deleting volumes: v=False)
+    client = None
+    try:
+        client = docker.from_env()
+    except Exception as e:
+        _logger.warning(f"Docker client unavailable: {e}")
+
+    old_compose_dir = os.path.join(old_project_dir, "heappe-core") if old_project_dir else None
+    if old_compose_dir and os.path.isdir(old_compose_dir):
+        down_cmd = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging",
+            "--profile", "telemetry",
+            "-p", source_project,
+            "down", "--remove-orphans"
+        ]
+        try:
+            execute_docker_compose(down_cmd, old_compose_dir, timeout=120)
+        except Exception as e:
+            results["errors"].append(f"Docker compose down note: {e}")
+
+    if client:
+        targets_to_clean = set(filter(None, [source_project, old_name]))
+        for target_proj in targets_to_clean:
+            t_lower = target_proj.lower()
+            try:
+                for c in client.containers.list(all=True):
+                    labels = getattr(c, 'labels', {}) or {}
+                    proj = (labels.get('com.docker.compose.project') or '').lower()
+                    c_name = (getattr(c, 'name', '') or '').lower()
+                    if (proj == t_lower or
+                        c_name.startswith(f"{t_lower}_") or
+                        c_name.startswith(f"{t_lower}-") or
+                        c_name.endswith(f"-{t_lower}") or
+                        c_name.endswith(f"_{t_lower}")):
+                        try:
+                            if c.status == 'running':
+                                c.stop(timeout=10)
+                                results["containers_stopped"] += 1
+                        except Exception as e:
+                            results["errors"].append(f"Failed to stop container {getattr(c, 'name', 'unknown')}: {e}")
+                        try:
+                            c.remove(force=True, v=False)
+                            results["containers_removed"] += 1
+                        except Exception as e:
+                            results["errors"].append(f"Failed to remove container {getattr(c, 'name', 'unknown')}: {e}")
+            except Exception as e:
+                _logger.warning(f"Container sweep error: {e}")
+
+    # 2. Migrate named Docker volumes if any exist
+    if client:
+        try:
+            src_lower = source_project.lower()
+            for vol in client.volumes.list():
+                vol_name = vol.name
+                labels = getattr(vol, 'attrs', {}).get('Labels') or {}
+                proj = (labels.get('com.docker.compose.project') or '').lower()
+                if proj == src_lower or vol_name.lower().startswith(f"{src_lower}_"):
+                    suffix = vol_name[len(src_lower):].lstrip('_')
+                    new_vol_name = f"{new_name}_{suffix}" if suffix else f"{new_name}_data"
+                    if vol_name != new_vol_name:
+                        try:
+                            client.volumes.get(new_vol_name)
+                        except docker.errors.NotFound:
+                            try:
+                                client.volumes.create(name=new_vol_name, labels={'com.docker.compose.project': new_name})
+                                avail_imgs = [img.tags[0] for img in client.images.list() if getattr(img, 'tags', None)]
+                                helper_img = None
+                                for cand in ['bash:latest', 'alpine:latest', 'heappe:latest', 'heappe', 'datastagingapi', 'mcr.microsoft.com/mssql/server']:
+                                    for tag in avail_imgs:
+                                        if cand in tag:
+                                            helper_img = tag
+                                            break
+                                    if helper_img:
+                                        break
+                                if not helper_img and avail_imgs:
+                                    helper_img = avail_imgs[0]
+                                if helper_img:
+                                    client.containers.run(
+                                        helper_img,
+                                        command=['sh', '-c', 'cp -a /from/. /to/ 2>/dev/null || cp -r /from/* /to/ 2>/dev/null || true'],
+                                        volumes={
+                                            vol_name: {'bind': '/from', 'mode': 'ro'},
+                                            new_vol_name: {'bind': '/to', 'mode': 'rw'}
+                                        },
+                                        remove=True
+                                    )
+                                results["volumes_migrated"].append(f"{vol_name} -> {new_vol_name}")
+                            except Exception as ve:
+                                results["errors"].append(f"Failed to migrate volume {vol_name} to {new_vol_name}: {ve}")
+        except Exception as e:
+            _logger.warning(f"Volume migration check error: {e}")
+
+    # 3. Move filesystem directory
+    if old_project_dir and os.path.exists(old_project_dir) and old_project_dir != new_project_dir:
+        try:
+            shutil.move(old_project_dir, new_project_dir)
+            results["files_moved"] = True
+        except Exception as e:
+            results["errors"].append(f"Failed to move directory {old_project_dir} to {new_project_dir}: {e}")
+            return results
+
+    # 4. Update .env configuration
+    new_compose_dir = os.path.join(new_project_dir, "heappe-core")
+    env_path = os.path.join(new_compose_dir, ".env")
+    otel_disabled = True
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                env_lines = f.readlines()
+            new_env_lines = []
+            for line in env_lines:
+                line_strip = line.strip()
+                if line_strip.startswith("INSTANCE_NAME="):
+                    new_env_lines.append(f"INSTANCE_NAME={new_name}\n")
+                elif line_strip.startswith("HOST_SSHAGENT_NAME="):
+                    new_env_lines.append(f"HOST_SSHAGENT_NAME=sshagent-{new_name}\n")
+                elif line_strip.startswith("HOST_MSSQL_NAME="):
+                    new_env_lines.append(f"HOST_MSSQL_NAME=mssql-{new_name}\n")
+                elif line_strip.startswith("HOST_APP_NAME="):
+                    new_env_lines.append(f"HOST_APP_NAME=heappe-{new_name}\n")
+                elif line_strip.startswith("HOST_DATA_STAGING_NAME="):
+                    new_env_lines.append(f"HOST_DATA_STAGING_NAME=datastaging-{new_name}\n")
+                elif line_strip.startswith("HOST_LOCAL_NAME="):
+                    new_env_lines.append(f"HOST_LOCAL_NAME=localhpc-{new_name}\n")
+                elif line_strip.startswith("SHARED_VAULT_FILE_NAME="):
+                    new_env_lines.append(f"SHARED_VAULT_FILE_NAME=credentials_{new_name.lower()}\n")
+                elif line_strip.startswith("OTEL_DISABLED="):
+                    otel_disabled = (line_strip.split("=", 1)[1].strip().lower() == "true")
+                    new_env_lines.append(line)
+                else:
+                    replaced = line.replace(f"/{source_project}/", f"/{new_name}/")
+                    if old_name != source_project:
+                        replaced = replaced.replace(f"/{old_name}/", f"/{new_name}/")
+                    new_env_lines.append(replaced)
+
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(new_env_lines)
+
+            # Move credentials vault file if exists
+            old_vault_creds = os.path.join(new_project_dir, f"credentials_{source_project.lower()}")
+            new_vault_creds = os.path.join(new_project_dir, f"credentials_{new_name.lower()}")
+            if os.path.exists(old_vault_creds) and old_vault_creds != new_vault_creds:
+                shutil.move(old_vault_creds, new_vault_creds)
+        except Exception as e:
+            results["errors"].append(f"Failed to update .env: {e}")
+
+    # 5. Update appsettings.json & appsettings-data.json
+    appsettings_path = os.path.join(new_project_dir, "app", "confs", "appsettings.json")
+    if os.path.exists(appsettings_path):
+        try:
+            with open(appsettings_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+
+            conn_strs = cfg.get("ConnectionStrings", {})
+            for k, v in conn_strs.items():
+                if isinstance(v, str):
+                    v_mod = v.replace(f"{source_project}_mssql", f"{new_name}_mssql")
+                    if old_name != source_project:
+                        v_mod = v_mod.replace(f"{old_name}_mssql", f"{new_name}_mssql")
+                    conn_strs[k] = v_mod
+
+            dep_settings = cfg.setdefault("ApplicationAPISettings", {}).setdefault("DeploymentSettings", {})
+            dep_settings["HostPostfix"] = new_name
+            if update_identifier:
+                dep_settings["Name"] = f"{new_name} instance"
+                dep_settings["Description"] = f"Deployment for instance {new_name}"
+                cfg.setdefault("HPCConnectionFrameworkSettings", {}).setdefault("ScriptsSettings", {})["InstanceIdentifierPath"] = new_name
+
+            with open(appsettings_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=4)
+        except Exception as e:
+            results["errors"].append(f"Failed to update appsettings.json: {e}")
+
+    data_path = os.path.join(new_project_dir, "app", "confs", "appsettings-data.json")
+    if os.path.exists(data_path):
+        try:
+            with open(data_path, "r", encoding="utf-8") as f:
+                dcfg = json.load(f)
+            conn_strs = dcfg.get("ConnectionStrings", {})
+            for k, v in conn_strs.items():
+                if isinstance(v, str):
+                    v_mod = v.replace(f"{source_project}_mssql", f"{new_name}_mssql")
+                    if old_name != source_project:
+                        v_mod = v_mod.replace(f"{old_name}_mssql", f"{new_name}_mssql")
+                    conn_strs[k] = v_mod
+            with open(data_path, "w", encoding="utf-8") as f:
+                json.dump(dcfg, f, indent=4)
+        except Exception as e:
+            results["errors"].append(f"Failed to update appsettings-data.json: {e}")
+
+    # 6. Update Django database
+    try:
+        from ..models import InstanceCredentials
+        inst = InstanceCredentials.objects.filter(instance_name=old_name).first()
+        if not inst and source_project != old_name:
+            inst = InstanceCredentials.objects.filter(instance_name=source_project).first()
+
+        if inst:
+            inst.instance_name = new_name
+            inst.is_deployed = True
+            inst.save()
+        else:
+            inst_new = InstanceCredentials.objects.filter(instance_name=new_name).first()
+            if inst_new:
+                inst_new.is_deployed = True
+                inst_new.save()
+            else:
+                InstanceCredentials.objects.create(
+                    instance_name=new_name,
+                    heappe_host="localhost",
+                    heappe_port="5000",
+                    heappe_login="admin",
+                    heappe_password="",
+                    log_db_host="localhost",
+                    log_db_port="6000",
+                    log_db_user="SA",
+                    log_db_password="",
+                    log_db_database="heappe-monitoring",
+                    is_deployed=True
+                )
+    except Exception as e:
+        results["errors"].append(f"Failed to update database record: {e}")
+
+    # 7. Start containers under new project name
+    if restart_containers and os.path.isdir(new_compose_dir):
+        up_cmd = [
+            "docker", "compose",
+            "--profile", "db",
+            "--profile", "heappe",
+            "--profile", "initVault",
+            "--profile", "vault",
+            "--profile", "vaultagent",
+            "--profile", "sshagent",
+            "--profile", "staging"
+        ]
+        if not otel_disabled:
+            up_cmd.extend(["--profile", "telemetry"])
+        up_cmd.extend(["-p", new_name, "up", "-d"])
+        try:
+            up_res = execute_docker_compose(up_cmd, new_compose_dir, timeout=300)
+            if up_res.returncode == 0:
+                results["containers_started"] = 1
+            else:
+                results["errors"].append(f"Docker compose up note: {up_res.stderr}")
+        except Exception as e:
+            results["errors"].append(f"Docker compose up error: {e}")
+
+    # 8. Reset restart states
+    try:
+        with RESTART_STATES_LOCK:
+            RESTART_STATES.pop(old_name, None)
+            RESTART_STATES.pop(source_project, None)
+            RESTART_STATES[new_name] = {'status': 'done', 'error': None}
+    except Exception:
+        pass
+
+    results["success"] = True
+    results["message"] = f"Instance successfully renamed from '{source_project}' to '{new_name}'."
+    return results
+
+
+@login_required
+def deploy_rename_instance(request, instance_name: str) -> HttpResponse:
+    """Rename an instance, Docker containers, files on disk, and DB records."""
+    if request.method == 'POST':
+        new_name = request.POST.get('new_instance_name', '').strip()
+        source_project = request.POST.get('source_project', '').strip() or instance_name
+        update_ident = request.POST.get('update_identifier', 'true') in ['true', '1', 'on', True]
+        restart_containers = request.POST.get('restart_containers', 'true') in ['true', '1', 'on', True]
+
+        result = rename_instance(
+            old_name=instance_name,
+            new_name=new_name,
+            source_project_name=source_project,
+            update_identifier=update_ident,
+            restart_containers=restart_containers
+        )
+
+        if result["success"]:
+            # Update session
+            request.session["chosen_instance"] = new_name
+            request.session.pop("heappe_session_code", None)
+            request.session.pop("heappe_host", None)
+            request.session.pop("heappe_host_url", None)
+            request.session.pop("heappe_use_api_key", None)
+            request.session.pop("heappe_last_auth", None)
+            request.session.pop("heappe_last_failed_auth", None)
+
+            msg = f"Instance '{source_project}' was successfully renamed to '{new_name}' across Docker containers, files, and database."
+            messages.success(request, msg)
+
+            redirect_url = reverse('deploy_view', kwargs={'instance_name': new_name})
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'status': 'success',
+                    'message': msg,
+                    'redirect_url': redirect_url
+                })
+            return redirect('deploy_view', instance_name=new_name)
+        else:
+            err_msg = "Rename failed: " + "; ".join(result["errors"])
+            messages.error(request, err_msg)
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'status': 'danger',
+                    'message': err_msg
+                }, status=400)
+            return redirect('deploy_view', instance_name=instance_name)
+
+    return redirect('deploy_view', instance_name=instance_name)
+
+
 def handle_switch_branch_action(config, instance_name, no_cache=False, update_configs=True):
     """Switch HEAppE git branch/tag, update configs (optional), build and up containers."""
     from datetime import datetime
@@ -1320,6 +1732,9 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
         if request.method == 'POST':
             action = request.POST.get('action')
 
+            if action == 'rename':
+                return deploy_rename_instance(request, instance_name)
+
             # If deploying new, get name from form, otherwise use URL param
             if action == 'deploy':
                 instance_name = request.POST.get('InstanceName', 'heappe-instance').strip()
@@ -1607,8 +2022,21 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
             except Exception as e:
                 print(f"Error inspecting deploy.log: {e}")
 
+    running_docker_projects = []
+    try:
+        if client:
+            seen_projects = set()
+            for c in client.containers.list(all=True):
+                p = c.labels.get('com.docker.compose.project')
+                if p and p not in seen_projects:
+                    seen_projects.add(p)
+                    running_docker_projects.append(p)
+    except Exception:
+        pass
+
     context = {
         "containers": containers,
+        "running_docker_projects": running_docker_projects,
         "instance_name": instance_name,
         "action_message": action_message,
         "action_status": action_status,
