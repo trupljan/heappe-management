@@ -885,17 +885,30 @@ def rename_instance(
                         except docker.errors.NotFound:
                             try:
                                 client.volumes.create(name=new_vol_name, labels={'com.docker.compose.project': new_name})
-                                # Method 1: Direct host filesystem copy (fastest, safest, zero container overhead)
+                                # Method 1: Direct host filesystem copy (fastest, safest, zero container overhead, preserves UID/GID)
                                 src_vol_dir = os.path.join("/var/lib/docker/volumes", vol_name, "_data")
                                 dst_vol_dir = os.path.join("/var/lib/docker/volumes", new_vol_name, "_data")
                                 if os.path.isdir(src_vol_dir) and os.path.isdir(dst_vol_dir):
-                                    for item in os.listdir(src_vol_dir):
-                                        s = os.path.join(src_vol_dir, item)
-                                        d = os.path.join(dst_vol_dir, item)
-                                        if os.path.isdir(s):
-                                            shutil.copytree(s, d, symlinks=True, dirs_exist_ok=True)
-                                        else:
-                                            shutil.copy2(s, d)
+                                    cp_ok = False
+                                    try:
+                                        cp_res = subprocess.run(
+                                            ["cp", "-a", f"{src_vol_dir}/.", dst_vol_dir],
+                                            capture_output=True,
+                                            text=True
+                                        )
+                                        if cp_res.returncode == 0:
+                                            cp_ok = True
+                                    except Exception:
+                                        pass
+
+                                    if not cp_ok:
+                                        for item in os.listdir(src_vol_dir):
+                                            s = os.path.join(src_vol_dir, item)
+                                            d = os.path.join(dst_vol_dir, item)
+                                            if os.path.isdir(s):
+                                                shutil.copytree(s, d, symlinks=True, dirs_exist_ok=True)
+                                            else:
+                                                shutil.copy2(s, d)
                                     results["volumes_migrated"].append(f"{vol_name} -> {new_vol_name} (fs)")
                                     continue
 
@@ -915,6 +928,7 @@ def rename_instance(
                                     try:
                                         helper_c = client.containers.create(
                                             helper_img,
+                                            user="0:0",
                                             entrypoint=["/bin/sh", "-c"],
                                             command=["cp -a /from/. /to/ 2>/dev/null || cp -r /from/* /to/ 2>/dev/null || true"],
                                             volumes={
@@ -957,8 +971,11 @@ def rename_instance(
             with open(env_path, "r", encoding="utf-8") as f:
                 env_lines = f.readlines()
             new_env_lines = []
+            vault_password = None
             for line in env_lines:
                 line_strip = line.strip()
+                if line_strip.startswith("VAULT_PASSWORD="):
+                    vault_password = line_strip.split("=", 1)[1].strip()
                 if line_strip.startswith("INSTANCE_NAME="):
                     new_env_lines.append(f"INSTANCE_NAME={new_name}\n")
                 elif line_strip.startswith("HOST_SSHAGENT_NAME="):
@@ -986,6 +1003,7 @@ def rename_instance(
                 f.writelines(new_env_lines)
 
             # Move credentials vault file if exists (handling both prefix and postfix naming conventions)
+            moved_creds_files = []
             for old_v, new_v in [
                 (f"credentials_{source_project.lower()}", f"credentials_{new_name.lower()}"),
                 (f"{source_project.lower()}_credentials", f"{new_name.lower()}_credentials"),
@@ -994,8 +1012,75 @@ def rename_instance(
             ]:
                 old_vault_creds = os.path.join(new_project_dir, old_v)
                 new_vault_creds = os.path.join(new_project_dir, new_v)
-                if os.path.exists(old_vault_creds) and old_vault_creds != new_vault_creds:
-                    shutil.move(old_vault_creds, new_vault_creds)
+                if os.path.exists(old_vault_creds):
+                    if old_vault_creds != new_vault_creds:
+                        shutil.move(old_vault_creds, new_vault_creds)
+                    if new_vault_creds not in moved_creds_files:
+                        moved_creds_files.append(new_vault_creds)
+
+            # Ensure both credentials_<name> and <name>_credentials exist so whichever script looks for it finds it
+            pfx_file = os.path.join(new_project_dir, f"credentials_{new_name.lower()}")
+            sfx_file = os.path.join(new_project_dir, f"{new_name.lower()}_credentials")
+            if os.path.exists(pfx_file) and not os.path.exists(sfx_file):
+                try:
+                    shutil.copy2(pfx_file, sfx_file)
+                    moved_creds_files.append(sfx_file)
+                except Exception:
+                    pass
+            elif os.path.exists(sfx_file) and not os.path.exists(pfx_file):
+                try:
+                    shutil.copy2(sfx_file, pfx_file)
+                    moved_creds_files.append(pfx_file)
+                except Exception:
+                    pass
+
+            # Decrypt, update JSON key "HashiCorpVault_<old>" -> "HashiCorpVault_<new>", and re-encrypt
+            if vault_password and moved_creds_files:
+                import tempfile
+                pass_f_path = None
+                try:
+                    with tempfile.NamedTemporaryFile("w+", delete=False) as pass_f:
+                        pass_f.write(vault_password)
+                        pass_f_path = pass_f.name
+
+                    for c_file in set(moved_creds_files):
+                        if not os.path.exists(c_file):
+                            continue
+                        dec_f_path = None
+                        try:
+                            with tempfile.NamedTemporaryFile("w+", delete=False) as dec_f:
+                                dec_f_path = dec_f.name
+
+                            dec_cmd = ["ansible-vault", "decrypt", f"--vault-password-file={pass_f_path}", f"--output={dec_f_path}", c_file]
+                            res_dec = subprocess.run(dec_cmd, capture_output=True, text=True)
+                            if res_dec.returncode == 0:
+                                with open(dec_f_path, "r", encoding="utf-8") as f:
+                                    cred_content = f.read()
+
+                                new_key = f"HashiCorpVault_{new_name}"
+                                old_key1 = f"HashiCorpVault_{source_project}"
+                                old_key2 = f"HashiCorpVault_{old_name}"
+                                updated_content = cred_content.replace(old_key1, new_key).replace(old_key2, new_key)
+
+                                with open(dec_f_path, "w", encoding="utf-8") as f:
+                                    f.write(updated_content)
+
+                                enc_cmd = ["ansible-vault", "encrypt", f"--vault-password-file={pass_f_path}", f"--output={c_file}", dec_f_path]
+                                subprocess.run(enc_cmd, capture_output=True, text=True)
+                        except Exception as ce:
+                            _logger.warning(f"Note on updating ansible vault key in {c_file}: {ce}")
+                        finally:
+                            if dec_f_path and os.path.exists(dec_f_path):
+                                try:
+                                    os.remove(dec_f_path)
+                                except Exception:
+                                    pass
+                finally:
+                    if pass_f_path and os.path.exists(pass_f_path):
+                        try:
+                            os.remove(pass_f_path)
+                        except Exception:
+                            pass
         except Exception as e:
             results["errors"].append(f"Failed to update .env: {e}")
 

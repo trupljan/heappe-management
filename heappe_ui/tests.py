@@ -5423,8 +5423,9 @@ class InstanceTeardownAndDeploymentFailureTests(TestCase):
             self.assertIn(f"BASE_PATH={temp_dir}/core_dev_it4i_develop/app/confs", new_env)
             self.assertIn("SHARED_VAULT_FILE_NAME=credentials_core_dev_it4i_develop", new_env)
 
-            # Verify vault credentials file renamed
+            # Verify vault credentials file renamed (both postfix and prefix created)
             self.assertTrue(os.path.exists(os.path.join(new_dir, "core_dev_it4i_develop_credentials")))
+            self.assertTrue(os.path.exists(os.path.join(new_dir, "credentials_core_dev_it4i_develop")))
 
             # Verify appsettings.json updated
             with open(os.path.join(new_dir, "app", "confs", "appsettings.json"), "r") as f:
