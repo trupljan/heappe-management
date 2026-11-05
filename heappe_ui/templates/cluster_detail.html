@@ -73,6 +73,7 @@
                              data-move-url="{% url 'qscheduler_cluster_move' cluster.id %}"
                              data-cluster-id="{{ cluster.id }}"
                              data-suspension-url="{% url 'qscheduler_cluster_suspension' cluster.id %}"
+                             data-rename-url="{% url 'qscheduler_cluster_rename' cluster.id %}"
                              data-machines-url="{% url 'qscheduler_machine_list' 0 %}"
                              data-qs-page-url="{% url 'qscheduler_page' %}">
                             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1636,6 +1637,11 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         html += line('hdd-network', 'text-primary', 'Attached to ' + qsLink(d.instance.name) + ' <span class="text-muted">(' + esc(d.instance.kind) + ', <code>' + esc(d.endpoint) + '</code>)</span>' +
             (d.instance.archived ? ' <span class="badge bg-dark-subtle text-dark-emphasis border">archived</span>' : '') + ' &middot; machine <code>' + esc(d.machine) + '</code>');
+        if (!d.name_matches) {
+            html += line('exclamation-octagon', 'text-danger', 'The cluster is named <code>' + esc(d.cluster_name) + '</code>, but its machine is <code>' + esc(d.machine) +
+                '</code>: jobs on this cluster fail, because HEAppE uses the cluster name as the QScheduler machine.') +
+                '<button type="button" class="btn btn-sm btn-outline-danger fw-semibold mb-2" id="qs-cs-rename"><i class="bi bi-input-cursor-text me-1"></i>Rename cluster to ' + esc(d.machine) + '</button>';
+        }
         if (d.instance.archived) {
             html += line('archive', 'text-secondary', 'The instance is archived: restore it on the ' + qsLink('QScheduler page') + ' (this reassigns the cluster with a new notifier token), or move this cluster to another QScheduler.');
             body.innerHTML = html + moveHtml(d); bindMove(); return;
@@ -1798,6 +1804,18 @@ document.addEventListener('DOMContentLoaded', function () {
         body.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Checking the QScheduler instance...';
         U.getJson(box.dataset.statusUrl).then(render).catch(() => { body.textContent = 'Status unavailable.'; });
     }
+    // Rename to the machine name (the button can appear in any state of the panel)
+    body.addEventListener('click', ev => {
+        const btn = ev.target.closest('#qs-cs-rename');
+        if (!btn || !status) return;
+        if (!confirm('Rename cluster "' + status.cluster_name + '" to "' + status.machine + '"? Its queues, projects, settings and job history are kept.')) return;
+        const restore = U.setButtonLoading(btn, 'Renaming...');
+        U.postJson(box.dataset.renameUrl, {}).then(r => {
+            restore();
+            if (r.status !== 'success') { alert(r.message || 'Renaming failed.'); return; }
+            location.reload();
+        }).catch(err => { restore(); alert(err.message || 'Network error.'); });
+    });
     document.getElementById('qs-cs-refresh').addEventListener('click', load);
     load();
 });

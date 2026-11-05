@@ -76,6 +76,7 @@
                             &middot; <span class="qs-live-version">version ?</span>
                             <span class="qs-live-admin"></span>
                             {% if inst.source == 'git' %} &middot; source <code>{{ inst.repo }}#{{ inst.ref }}</code>{% elif inst.image %} &middot; image <code>{{ inst.image }}</code>{% endif %}
+                            {% if inst.log_level %} &middot; log level <code>{{ inst.log_level }}</code>{% endif %}
                             &middot; database: {{ inst.db_kind_label|lower }}{% if inst.db_schema %} <code>{{ inst.db_schema }}</code>{% endif %}
                         </div>
                         {% if inst.qs_network %}
@@ -110,6 +111,7 @@
                             {% if inst.can_migrate_to_shared and shared_db_deployed %}<li><button type="button" class="dropdown-item small qs-action" data-action="migrate_shared" data-id="{{ inst.id }}"><i class="bi bi-database-up me-2 text-primary"></i>Migrate to shared database...</button></li>{% endif %}
                             {% if inst.can_migrate_network %}<li><button type="button" class="dropdown-item small qs-action" data-action="migrate_network" data-id="{{ inst.id }}"><i class="bi bi-hdd-network me-2 text-primary"></i>Migrate to QScheduler network...</button></li>{% endif %}
                             {% if inst.can_edit_aliases %}<li><button type="button" class="dropdown-item small qs-action" data-action="aliases" data-id="{{ inst.id }}"><i class="bi bi-signpost-split me-2 text-primary"></i>Aliases...</button></li>{% endif %}
+                            {% if inst.can_update %}<li><button type="button" class="dropdown-item small qs-action" data-action="log_level" data-id="{{ inst.id }}"><i class="bi bi-journal-text me-2 text-secondary"></i>Log level...</button></li>{% endif %}
                             {% if inst.can_backup %}<li><button type="button" class="dropdown-item small qs-backups" data-id="{{ inst.id }}" data-name="{{ inst.name }}"><i class="bi bi-archive me-2 text-secondary"></i>Backups...</button></li>{% endif %}
                             <li><button type="button" class="dropdown-item small qs-admin-token" data-id="{{ inst.id }}" data-name="{{ inst.name }}" data-regen="{% if inst.can_update %}1{% endif %}"><i class="bi bi-key me-2 text-warning"></i>Admin token...</button></li>
                             <li><button type="button" class="dropdown-item small qs-action" data-action="restart" data-id="{{ inst.id }}"><i class="bi bi-bootstrap-reboot me-2 text-primary"></i>{% if inst.manual_restart %}Confirm manual restart{% else %}Restart{% endif %}</button></li>
@@ -251,6 +253,17 @@
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-host_port">Publish on host</label>
                         <input type="number" class="form-control form-control-sm" id="qs-dep-host_port" name="host_port" placeholder="none" min="1" max="65535">
                         <div class="form-text" style="font-size: 0.72rem;">Binds 127.0.0.1 only.</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-log_level">Log level</label>
+                        <select class="form-select form-select-sm" id="qs-dep-log_level" name="log_level">
+                            <option value="error">error</option>
+                            <option value="warn">warn</option>
+                            <option value="info" selected>info (default)</option>
+                            <option value="debug">debug</option>
+                            <option value="trace">trace</option>
+                        </select>
+                        <div class="form-text" style="font-size: 0.72rem;"><code>RUST_LOG</code>; change it later with <em>Actions &rsaquo; Log level...</em></div>
                     </div>
                     <div class="col-12">
                         <label class="form-label small text-muted fw-semibold mb-1 d-block">Database</label>
@@ -576,6 +589,38 @@
     </div>
 </div>
 
+<!-- Log level (RUST_LOG) -->
+<div class="modal fade" id="qsLogLevelModal" tabindex="-1" aria-labelledby="qsLogLevelLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content border-0 shadow-lg rounded-3" id="qsLogLevelForm" novalidate>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsLogLevelLabel"><i class="bi bi-journal-text me-2"></i>Log level of <span id="qs-ll-name"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 small">
+                <p class="mb-2" id="qs-ll-current"><span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Reading the current level...</p>
+                <label class="form-label fw-semibold mb-1" for="qs-ll-select">New level</label>
+                <select class="form-select form-select-sm mb-2" id="qs-ll-select">
+                    <option value="error">error &ndash; errors only</option>
+                    <option value="warn">warn &ndash; also warnings</option>
+                    <option value="info">info &ndash; default</option>
+                    <option value="debug">debug &ndash; detailed, for troubleshooting</option>
+                    <option value="trace">trace &ndash; everything (very verbose)</option>
+                    <option value="__custom__">Custom filter...</option>
+                </select>
+                <input type="text" class="form-control form-control-sm font-monospace mb-1 d-none" id="qs-ll-custom" maxlength="200" placeholder="info,qscheduler=debug">
+                <div class="form-text mt-0 mb-3 d-none" id="qs-ll-custom-help">A <code>RUST_LOG</code> filter: a default level and per-module levels, e.g. <code>info,qscheduler=debug,hyper=warn</code>.</div>
+                <div class="alert alert-warning border-0 rounded-3 mb-0"><i class="bi bi-exclamation-triangle me-1"></i>QScheduler reads the log level only at startup, so the container is <strong>recreated</strong> with the same image and settings. Requests fail for a few seconds; running work is persisted and re-attached. On failure the previous container is restored. Use <em>debug</em> or <em>trace</em> only temporarily: they log a lot.</div>
+                <div id="qs-ll-error" class="alert alert-danger border-0 rounded-3 mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsLogLevelBtn"><i class="bi bi-check2 me-1"></i>Apply</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Migrate to QScheduler network / aliases -->
 <div class="modal fade" id="qsNetModal" tabindex="-1" aria-labelledby="qsNetLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered modal-lg">
@@ -673,7 +718,7 @@ document.addEventListener('DOMContentLoaded', function () {
         unassign: "{% url 'qscheduler_unassign' 0 %}", heappeInfo: "{% url 'qscheduler_heappe_info' 0 %}",
         notifierRemove: "{% url 'qscheduler_notifier_remove' 0 %}",
         migrateShared: "{% url 'qscheduler_migrate_to_shared' 0 %}",
-        migrateNetwork: "{% url 'qscheduler_migrate_network' 0 %}", aliases: "{% url 'qscheduler_aliases' 0 %}",
+        migrateNetwork: "{% url 'qscheduler_migrate_network' 0 %}", aliases: "{% url 'qscheduler_aliases' 0 %}", logLevel: "{% url 'qscheduler_log_level' 0 %}",
     };
     const proposalUrl = "{% url 'qscheduler_network_proposal' %}";
     const url = (key, id) => urls[key].replace('/0/', '/' + id + '/');
@@ -950,6 +995,45 @@ document.addEventListener('DOMContentLoaded', function () {
         (bools || []).forEach(k => { data[k] = form[k].checked; });
         return data;
     }
+
+    // ---- Log level (RUST_LOG): presets or a custom filter; applying recreates the container ----
+    const llForm = document.getElementById('qsLogLevelForm');
+    const llSelect = document.getElementById('qs-ll-select');
+    const llCustom = document.getElementById('qs-ll-custom');
+    const LL_CUSTOM = '__custom__';
+    function llToggle() {
+        const custom = llSelect.value === LL_CUSTOM;
+        llCustom.classList.toggle('d-none', !custom);
+        document.getElementById('qs-ll-custom-help').classList.toggle('d-none', !custom);
+    }
+    llSelect.addEventListener('change', () => { llToggle(); if (llSelect.value === LL_CUSTOM) llCustom.focus(); });
+    function openLogLevel() {
+        const inst = current;
+        hideErr('qs-ll-error');
+        document.getElementById('qs-ll-name').textContent = inst.name;
+        const cur = document.getElementById('qs-ll-current');
+        cur.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Reading the current level...';
+        llSelect.value = 'info'; llCustom.value = ''; llToggle();
+        modal('qsLogLevelModal').show();
+        U.getJson(url('logLevel', inst.id)).then(d => {
+            if (d.status !== 'success') { cur.textContent = d.message || 'The current level cannot be read.'; return; }
+            const level = d.log_level || '';
+            cur.innerHTML = 'Current level: <code>' + U.esc(d.effective) + '</code>' + (level ? '' : ' <span class="text-muted">(RUST_LOG not set, QScheduler default)</span>') +
+                (d.error ? '<br><span class="text-warning-emphasis">' + U.esc(d.error) + (d.stored ? ' Last set here: <code>' + U.esc(d.stored) + '</code>.' : '') + '</span>' : '');
+            if (!level || d.presets.includes(level)) llSelect.value = level || 'info';
+            else { llSelect.value = LL_CUSTOM; llCustom.value = level; }
+            llToggle();
+        }).catch(() => { cur.textContent = 'The current level cannot be read.'; });
+    }
+    llForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const level = llSelect.value === LL_CUSTOM ? llCustom.value.trim() : llSelect.value;
+        if (!level) { showErr('qs-ll-error', 'Enter a RUST_LOG filter.'); return; }
+        submitOperation(document.getElementById('qsLogLevelBtn'), 'qs-ll-error', 'qsLogLevelModal', url('logLevel', current.id), { log_level: level }, {
+            title: 'Setting the log level of ' + current.name, hint: 'Recreating the container with RUST_LOG=' + level + '...',
+            successTitle: 'Log level changed',
+            details: (r, esc) => 'Instance: ' + esc(r.name) + '<br>Log level: <code>' + esc(r.log_level) + '</code> (was <code>' + esc(r.previous) + '</code>)' });
+    });
 
     function submitOperation(btn, errId, modalId, postUrl, data, track) {
         hideErr(errId);
@@ -1270,6 +1354,8 @@ document.addEventListener('DOMContentLoaded', function () {
             openNet('migrate');
         } else if (action === 'aliases') {
             openNet('aliases');
+        } else if (action === 'log_level') {
+            openLogLevel();
         } else if (action === 'migrate_shared') {
             askConfirm('Migrate ' + current.name + ' to the shared database',
                 'Copies the data from <code>' + U.esc(current.container_name) + '-pgsql</code> into role and schema <code>qs_&hellip;</code> of the shared database and restarts QScheduler on it.'

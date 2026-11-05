@@ -218,6 +218,7 @@ def machines_overview(instance_name):
             continue
         inst = _instance_of_cluster(d)
         row = {'cluster_id': d.get('id'), 'cluster': d.get('name'), 'machine': core.cluster_machine(d),
+               'name_matches': core.cluster_name_matches(d),
                'instance': inst.name if inst else None, 'instance_id': inst.id if inst else None,
                'state': None, 'suspension': None, 'online': None, 'online_reason': "", 'error': None,
                'can_act': False}

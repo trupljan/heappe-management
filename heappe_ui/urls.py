@@ -46,6 +46,7 @@ urlpatterns = [
     path('clusters/qscheduler/cluster/<int:cluster_id>/recreate-notifier/', views.qscheduler_cluster_recreate_notifier_api, name='qscheduler_cluster_recreate_notifier'),
     path('clusters/qscheduler/cluster/<int:cluster_id>/recover-machine/', views.qscheduler_cluster_recover_machine_api, name='qscheduler_cluster_recover_machine'),
     path('clusters/qscheduler/cluster/<int:cluster_id>/move/', views.qscheduler_cluster_move_api, name='qscheduler_cluster_move'),
+    path('clusters/qscheduler/cluster/<int:cluster_id>/rename-to-machine/', views.qscheduler_cluster_rename_api, name='qscheduler_cluster_rename'),
     path('clusters/qscheduler/cluster/<int:cluster_id>/suspension/', views.qscheduler_cluster_suspension_api, name='qscheduler_cluster_suspension'),
 
     # QScheduler instances and HEAppE assignments
@@ -64,6 +65,7 @@ urlpatterns = [
     path('qscheduler/<int:inst_id>/migrate-to-shared/', views.qscheduler_migrate_to_shared_api, name='qscheduler_migrate_to_shared'),
     path('qscheduler/<int:inst_id>/migrate-network/', views.qscheduler_migrate_network_api, name='qscheduler_migrate_network'),
     path('qscheduler/<int:inst_id>/aliases/', views.qscheduler_aliases_api, name='qscheduler_aliases'),
+    path('qscheduler/<int:inst_id>/log-level/', views.qscheduler_log_level_api, name='qscheduler_log_level'),
     path('qscheduler/network-proposal/', views.qscheduler_network_proposal_api, name='qscheduler_network_proposal'),
     path('qscheduler/shared-database/', views.qscheduler_shared_db_api, name='qscheduler_shared_db'),
     path('qscheduler/<int:inst_id>/undeploy/', views.qscheduler_undeploy_api, name='qscheduler_undeploy'),

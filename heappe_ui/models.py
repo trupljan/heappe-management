@@ -145,6 +145,9 @@ class QSchedulerInstance(models.Model):
                                         related_name="instances")
 
     restart_pending = models.BooleanField(default=False)
+    # Log level of the service (RUST_LOG, e.g. "debug" or "info,qscheduler=debug"), set when the container is
+    # created; "" = not managed here (QScheduler logs at info unless the container sets RUST_LOG itself).
+    log_level = models.CharField(max_length=200, blank=True, default="")
     # ADMIN_TOKEN of the service (bearer token of the admin API, QScheduler >= 0.2.1), encrypted with a key derived
     # from SECRET_KEY. Use the admin_token property.
     admin_token_encrypted = models.TextField(blank=True, default="")

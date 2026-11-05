@@ -50,7 +50,8 @@ def cluster_status(instance_name, cluster):
     cfg = cluster.get('custom_configuration') or {}
     machine = core.cluster_machine(cluster)
     endpoint = f"{cfg.get('QSchedulerHost') or cluster.get('master_node_name')}:{cfg.get('QSchedulerPort') or cluster.get('port')}"
-    out = {'cluster_id': cluster.get('id'), 'machine': machine, 'endpoint': endpoint, 'instance': None,
+    out = {'cluster_id': cluster.get('id'), 'cluster_name': cluster.get('name'),
+           'name_matches': core.cluster_name_matches(cluster), 'machine': machine, 'endpoint': endpoint, 'instance': None,
            'assigned': False, 'notifications': None, 'machine_status': None, 'error': None,
            'move_candidates': [], 'can_move': False}
     inst = _instance_of_cluster(cluster)
@@ -223,6 +224,13 @@ def _set_queue(controller, session_code, cluster, old_machine, new_machine, log)
         nt['queue'] = new_machine
 
 
+def _name_after_machine(cluster, machine, log):
+    """The cluster is PUT back named after its machine (see core.cluster_name_matches)."""
+    if cluster.get('name') != machine:
+        log(f"Cluster '{cluster.get('name')}' is renamed to '{machine}': a QScheduler cluster is named after its machine.")
+        cluster['name'] = machine
+
+
 def recover_machine_worker(log, result, instance_name, cluster_id, opts):
     controller, session_code, cluster, inst, asg = _context(instance_name, cluster_id, log)
     old_machine = core.cluster_machine(cluster)
@@ -234,6 +242,8 @@ def recover_machine_worker(log, result, instance_name, cluster_id, opts):
             if c.get('id') != cluster.get('id') and core.cluster_machine(c) == new_machine:
                 raise RuntimeError(f"HEAppE cluster '{c.get('name')}' (ID {c.get('id')}) already uses machine "
                                    f"'{new_machine}' on '{inst.name}'.")
+    if cluster.get('name') != new_machine:
+        core.check_cluster_name_free(controller, session_code, new_machine, cluster.get('id'))
 
     target = core.target_for(inst)
     changed = False
@@ -268,6 +278,7 @@ def recover_machine_worker(log, result, instance_name, cluster_id, opts):
 
     if new_machine != old_machine:
         _set_queue(controller, session_code, cluster, old_machine, new_machine, log)
+    _name_after_machine(cluster, new_machine, log)
     core.update_cluster_notifications(controller, session_code, cluster, notifier, log)
     result.update({'cluster': cluster.get('name'), 'machine': new_machine, 'mode': opts['mode'],
                    'notifier': notifier[0] if notifier else None})
@@ -331,6 +342,8 @@ def move_cluster_worker(log, result, instance_name, cluster_id, opts):
         if core.cluster_machine(c) == new_machine:
             raise RuntimeError(f"HEAppE cluster '{c.get('name')}' (ID {c.get('id')}) already uses machine "
                                f"'{new_machine}' on '{inst.name}'.")
+    if cluster.get('name') != new_machine:
+        core.check_cluster_name_free(controller, session_code, new_machine, cluster.get('id'))
 
     target = core.target_for(inst)
     changed = False
@@ -380,6 +393,7 @@ def move_cluster_worker(log, result, instance_name, cluster_id, opts):
     _remove_old_notifier(controller, session_code, old_inst, cluster, log)
     if new_machine != old_machine:
         _set_queue(controller, session_code, cluster, old_machine, new_machine, log)
+    _name_after_machine(cluster, new_machine, log)
     location = (inst.service_host, inst.port)
     core.update_cluster_notifications(controller, session_code, cluster, notifier, log, location=location)
     core.repoint_file_transfer_methods(controller, session_code, cluster, inst.service_host, inst.port, log)
@@ -457,3 +471,26 @@ def qscheduler_cluster_move_api(request: HttpRequest, cluster_id: int) -> HttpRe
     ok, msg = core.start_operation("move_cluster", move_cluster_worker, request.session.get("chosen_instance"),
                                    cluster_id, opts)
     return JsonResponse({'status': 'success' if ok else 'error', 'message': msg}, status=200 if ok else 409)
+
+
+@login_required
+def qscheduler_cluster_rename_api(request: HttpRequest, cluster_id: int) -> HttpResponse:
+    """Renames a QScheduler cluster after its machine (its jobs fail when the names differ)."""
+    if request.method != "POST":
+        return _error('Only POST method is allowed', 405)
+    err = _version_error(request)
+    if err:
+        return _error(err)
+    lines = []
+    try:
+        controller, session_code = _connect(request.session.get("chosen_instance"), lambda *_: None)
+        cluster = _qs_cluster(controller, session_code, cluster_id)
+        machine = core.cluster_machine(cluster)
+        if core.cluster_name_matches(cluster):
+            return JsonResponse({'status': 'success', 'message': f"Cluster is already named '{machine}'.",
+                                 'cluster_name': machine})
+        core.check_cluster_name_free(controller, session_code, machine, cluster.get('id'))
+        core.rename_cluster(controller, session_code, cluster, machine, lines.append)
+    except Exception as e:
+        return _error(str(e).splitlines()[0][:500])
+    return JsonResponse({'status': 'success', 'message': lines[-1] if lines else "Renamed.", 'cluster_name': machine})

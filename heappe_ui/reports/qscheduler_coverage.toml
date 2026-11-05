@@ -330,6 +330,14 @@ verified = "New notifier with a new token, the cluster's old notifier removed (k
 not_tested = "Assignment without callback URL."
 
 [[sections.features]]
+name = "Cluster name = machine name"
+code = ["core:_cluster_put_body", "core:cluster_name_matches", "core:find_cluster_named",
+        "core:check_cluster_name_free", "core:rename_cluster", "health:_name_after_machine",
+        "health:qscheduler_cluster_rename_api"]
+verified = "Add quantum machine names the cluster after the machine (an entered name is ignored); a cluster of any scheduler type with that name is a conflict; rename keeps configuration, masked Vault values, toggles and endpoint, and sends nothing when the name already matches; rename API refused when the name is taken; recover with an existing machine renames the cluster together with the queue."
+not_tested = "Move renaming the cluster (same code path as recover); the panel and dashboard warnings in the browser."
+
+[[sections.features]]
 name = "QScheduler panel: recover machine"
 code = ["health:recover_machine_worker", "health:parse_recover_options", "health:_set_queue",
         "health:qscheduler_cluster_recover_machine_api"]
@@ -416,6 +424,13 @@ code = ["admin:proxy_image", "admin:proxy_name", "admin:AdminApiUnavailable", "a
         "deploy:qscheduler_admin_token_api", "deploy:regenerate_admin_token_worker"]
 verified = "Proxy forwards only /machines, /machine/{name}, /notifiers, /notifiers/{name} (404 otherwise), published on 127.0.0.1 only, in the assignment's HEAppE network; created when missing, recreated when the upstream changes, joins/leaves networks with assignments, refused without an assignment, removed with the last one. Token encrypted on the record, adopted from the container environment, not adoptable over SSH into the container. Client against a local HTTP server: method, path, bearer token, JSON body; 401 -> rejected, 403 -> not set, token never in errors. Token errors found through wrapped exceptions and reported in the operation result. Token API: show, set (rejected token not stored), regenerate (operation); regenerate worker recreates with the new token and checks it; register validates an entered token."
 not_tested = "A real nginx proxy container (checked by hand against nginx:1.27-alpine); proxy_status."
+
+[[sections.features]]
+name = "Log level (RUST_LOG)"
+code = ["core:parse_log_level", "core:container_log_level", "deploy:log_level_worker",
+        "deploy:qscheduler_log_level_api"]
+verified = "Presets (case-insensitive), empty = info, custom RUST_LOG filters, invalid characters and length refused; deploy option validated; the container is recreated with RUST_LOG replacing the old value (other environment kept) and the level is stored only on success; API reads the level from the container, validates, starts the operation and refuses instances without Docker control."
+not_tested = "The dialog in the browser; RUST_LOG on a deployed container (deploy_service); Restore passing the stored level."
 
 [[sections.features]]
 name = "Machine suspension and dashboard quantum machines"

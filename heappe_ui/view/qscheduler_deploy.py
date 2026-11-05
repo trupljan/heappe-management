@@ -44,6 +44,8 @@ from . import qscheduler_network as qnet
 from .extra_hosts import extra_hosts_as_list, format_extra_host, qscheduler_container_extra_hosts
 
 DOCKER_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL, Q.KIND_SSH_HOST)
+LOG_LEVEL_UNSUPPORTED = ("The log level can be changed only for Docker-based instances (it is set as RUST_LOG when the "
+                         "container is created). Over SSH into the container, set RUST_LOG in the service yourself.")
 NAME_PREFIX_MAX = 54          # + "-<8 hex>" = 63, the maximum instance name
 ARCHIVED_MESSAGE = "QScheduler instance '{name}' is archived: restore it or delete it with its clusters."
 LOCAL_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL)
@@ -144,6 +146,9 @@ def parse_deploy_options(data: dict, uid: str) -> tuple:
         'assign_heappe_id': r.s('assign_heappe_id'),
         'assign_notifications': r.b('assign_notifications', True),
     }
+    opts['log_level'], err = core.parse_log_level(r.s('log_level'))
+    if err:
+        r.errors.append(err)
     if not NAME_RE.match(base) or len(base) > NAME_PREFIX_MAX:
         r.errors.append(f"Name may contain only letters, digits, '_', '.', '-' and must start with a letter or digit "
                         f"(max {NAME_PREFIX_MAX} chars; '-<random id>' is appended).")
@@ -442,6 +447,8 @@ def deploy_service(docker, opts, log):
                    "-e", f"DATABASE_URL={database_url}",
                    # admin API (QScheduler >= 0.2.1); older versions ignore it
                    "-e", f"ADMIN_TOKEN={admin_token}", "--network", "bridge"]
+        if opts.get('log_level'):
+            run_cmd += ["-e", f"RUST_LOG={opts['log_level']}"]
         if opts['host_port']:
             run_cmd += ["-p", f"127.0.0.1:{opts['host_port']}:{opts['port']}"]
         for h, ip in extra_hosts_as_list(opts.get('extra_hosts')):
@@ -510,7 +517,8 @@ def deploy_worker(log, result, opts):
                             database_url=info['database_url'], db_kind=info.get('db_kind') or Q.DB_EXTERNAL,
                             db_schema=info.get('db_schema') or "", shared_database=info.get('shared_database'),
                             qs_network=info.get('qs_network') or "", qs_subnet=info.get('qs_subnet') or "",
-                            qs_ip=info.get('qs_ip') or "", aliases=opts.get('aliases') or [])
+                            qs_ip=info.get('qs_ip') or "", aliases=opts.get('aliases') or [],
+                            log_level=opts.get('log_level') or "")
     inst.admin_token = info.get('admin_token', "")
     inst.save(update_fields=["admin_token_encrypted", "updated_at"])
     result['id'] = inst.id
@@ -725,6 +733,33 @@ def regenerate_admin_token_worker(log, result, inst_id, uid):
         target.close()
     result['name'] = inst.name
     log(f"SUCCESS: admin token of '{inst.name}' regenerated.")
+
+
+def log_level_worker(log, result, inst_id, level, uid):
+    """New log level (RUST_LOG): recreate the container (same image and settings) with it; rolled back on failure."""
+    inst = Q.objects.get(pk=inst_id)
+    if inst.kind not in DOCKER_KINDS:
+        raise RuntimeError(LOG_LEVEL_UNSUPPORTED)
+    target = core.target_for(inst)
+    docker = target.docker
+    name = inst.container_name
+    log(f"=== QSCHEDULER: SET LOG LEVEL OF '{inst.name}' TO '{level}'{docker.where} ===")
+    log("QScheduler reads the log level only at startup: the container is recreated (running work is persisted and "
+        "re-attached, requests fail for a few seconds).")
+    try:
+        info = docker.inspect(name)
+        if not info:
+            raise RuntimeError(f"Container '{name}' not found{docker.where}.")
+        old = core.container_log_level(info) or f"{core.DEFAULT_LOG_LEVEL} (default)"
+        image = (info.get("Config") or {}).get("Image") or inst.image
+        recreate_container(docker, target, info, image, None, log, uid, "Changing the log level",
+                           None, {"RUST_LOG": level})
+    finally:
+        target.close()
+    inst.log_level = level
+    inst.save(update_fields=["log_level", "updated_at"])
+    result.update({'name': inst.name, 'log_level': level, 'previous': old})
+    log(f"SUCCESS: '{inst.name}' logs at '{level}' (was '{old}').")
 
 
 def restart_worker(log, result, inst_id):
@@ -1040,6 +1075,7 @@ def instance_summary(inst):
         'ssh': f"{inst.ssh_user}@{inst.ssh_host}:{inst.ssh_port}" if inst.is_remote else "",
         'source': inst.source, 'repo': inst.repo, 'ref': inst.ref, 'image': inst.image,
         'restart_pending': inst.restart_pending, 'can_update': inst.kind in DOCKER_KINDS,
+        'log_level': inst.log_level,
         'manual_restart': inst.kind == Q.KIND_SSH_CONTAINER and not inst.restart_command,
         'archived': inst.is_archived,
         'archived_at': inst.archived_at.strftime("%Y-%m-%d %H:%M UTC") if inst.archived_at else "",
@@ -1352,6 +1388,46 @@ def qscheduler_aliases_api(request: HttpRequest, inst_id: int) -> HttpResponse:
     if errors:
         return _error(" ".join(errors))
     return _started(*core.start_operation("aliases", qnet.aliases_worker, inst.id, aliases))
+
+
+@login_required
+def qscheduler_log_level_api(request: HttpRequest, inst_id: int) -> HttpResponse:
+    """
+    GET: the log level of an instance (RUST_LOG of its container; stored value when the container cannot be read).
+    POST {log_level}: sets it, recreating the container (background operation, rolled back on failure).
+    """
+    inst = _instance_or_404(inst_id)
+    if not inst:
+        return _error("QScheduler instance not found.", 404)
+    supported = inst.kind in DOCKER_KINDS
+    if request.method == "GET":
+        current, error = inst.log_level, None
+        if supported and not inst.is_archived:
+            target = None
+            try:
+                target = core.target_for(inst)
+                info = target.docker.inspect(inst.container_name)
+                if info:
+                    current = core.container_log_level(info)
+            except Exception as e:
+                error = f"The container cannot be read: {str(e).splitlines()[0][:200]}"
+            finally:
+                if target:
+                    target.close()
+        return JsonResponse({'status': 'success', 'supported': supported, 'log_level': current,
+                             'effective': current or core.DEFAULT_LOG_LEVEL, 'stored': inst.log_level,
+                             'presets': list(core.LOG_LEVEL_PRESETS), 'error': error,
+                             'message': None if supported else LOG_LEVEL_UNSUPPORTED})
+    if request.method != "POST":
+        return _error('Only GET and POST are allowed', 405)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
+    if not supported:
+        return _error(LOG_LEVEL_UNSUPPORTED)
+    level, err = core.parse_log_level(_json_body(request).get('log_level'))
+    if err:
+        return _error(err)
+    return _started(*core.start_operation("log level", log_level_worker, inst.id, level, str(uuid.uuid4())[:8]))
 
 
 @login_required

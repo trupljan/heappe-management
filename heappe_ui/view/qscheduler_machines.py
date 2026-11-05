@@ -74,7 +74,6 @@ def parse_machine_options(data: dict, uid: str) -> tuple:
         'iqm_token': s('iqm_token'),
         'iqm_device': s('iqm_device'),
         'iqm_poll_interval': s('iqm_poll_interval', '500ms'),
-        'cluster_name': s('cluster_name'),
         'host': s('host').lower(),          # "" = service host; or one of the instance's aliases
         'use_sessions': b('use_sessions', True),
         'create_project': b('create_project', True),
@@ -89,9 +88,8 @@ def parse_machine_options(data: dict, uid: str) -> tuple:
         errors.append("Machine must be 'new' or 'existing'.")
     if not MACHINE_RE.match(opts['machine_name']):
         errors.append("Machine name may contain only letters, digits, '_', '.', '-' (max 30 chars).")
-    opts['cluster_name'] = opts['cluster_name'] or opts['machine_name']
-    if len(opts['cluster_name']) > 50:
-        errors.append("Cluster name must be at most 50 characters.")
+    # The cluster must be named after its machine (HEAppE uses the cluster name as the QScheduler machine).
+    opts['cluster_name'] = opts['machine_name']
     if not opts['create_project']:
         opts.update({'custom_name': False, 'project_name': None, 'qpu_allocation_seconds': None})
     else:
@@ -156,6 +154,7 @@ def add_machine_worker(log, result, instance_name, opts, uid):
         if host != inst.service_host and core.cluster_host(c) == host:
             raise RuntimeError(f"Alias '{host}' is already used by HEAppE cluster '{c.get('name')}' (ID {c.get('id')}): "
                                f"one cluster per alias (it moves with the cluster on a redirect).")
+    core.check_cluster_name_free(controller, session_code, machine)
 
     # Notifier of this cluster (own token, kept in HEAppE Vault)
     notifier = None

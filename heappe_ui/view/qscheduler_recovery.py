@@ -439,6 +439,7 @@ def restore_worker(log, result, inst_id, opts):
     # 2. Database and service
     deploy_opts = dict(opts)
     deploy_opts['extra_hosts'] = inst.extra_hosts or []
+    deploy_opts['log_level'] = inst.log_level or ""       # the restored service logs as before
     if opts['db_mode'] == 'reuse':
         url, net = _prepare_reused_database(docker, inst, log, prefix=opts.get('network_prefix'))
         deploy_opts.update(db_mode='existing', database_url=url, db_network=net,

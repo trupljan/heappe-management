@@ -80,6 +80,10 @@ ADMIN_API_MIN_VERSION = (0, 2, 1)
 SUSPENSION_UNSUPPORTED = "Suspending machines needs QScheduler 0.2.1 or newer (admin API)."
 SUSPENSION_CANCEL_MODES = ("none", "waiting", "all")
 SUSPENSION_MESSAGE_MAX_LEN = 512
+# Log level of the service: RUST_LOG (tracing EnvFilter), read only at startup; QScheduler's default is "info".
+LOG_LEVEL_PRESETS = ("error", "warn", "info", "debug", "trace")
+DEFAULT_LOG_LEVEL = "info"
+LOG_LEVEL_RE = re.compile(r"^[A-Za-z0-9_:=,.\-]{1,200}$")   # e.g. "info,qscheduler=debug,hyper=warn"
 
 SECRET_FLAGS = ("--token",)
 
@@ -202,6 +206,27 @@ def parse_version(text):
     """(major, minor, patch) from a version string such as 'qscheduler v0.2.1', or None."""
     m = re.search(r"(\d+)\.(\d+)\.(\d+)", text or "")
     return tuple(int(x) for x in m.groups()) if m else None
+
+
+def parse_log_level(value):
+    """(RUST_LOG value, error or "") of an entered log level: a preset or a tracing filter like "info,qscheduler=debug"."""
+    level = str(value or "").strip()
+    if not level:
+        return DEFAULT_LOG_LEVEL, ""
+    if level.lower() in LOG_LEVEL_PRESETS:
+        return level.lower(), ""
+    if not LOG_LEVEL_RE.match(level):
+        return level, (f"Log level must be one of {', '.join(LOG_LEVEL_PRESETS)} or a RUST_LOG filter such as "
+                       f"'info,qscheduler=debug' (letters, digits and _ : = , . -, at most 200 characters).")
+    return level, ""
+
+
+def container_log_level(info):
+    """RUST_LOG of a container (docker inspect output), or "" when not set (QScheduler then logs at info)."""
+    for e in ((info or {}).get("Config") or {}).get("Env") or []:
+        if e.startswith("RUST_LOG="):
+            return e.split("=", 1)[1]
+    return ""
 
 
 def supports_admin_api(version_text):
@@ -1073,8 +1098,15 @@ def update_cluster_notifications(controller, session_code, cluster: dict, notifi
         cfg.pop(k, None)
         toggles.pop(k, None)
     toggles.update(toggle_updates)
+    controller.heappe_management_cluster_put(body=_cluster_put_body(cluster, session_code, master, port, cfg, toggles))
+    log(f"Cluster '{cluster.get('name')}' (ID {cluster.get('id')}): callbacks "
+        f"{'enabled via notifier ' + repr(notifier[0]) + ' (token in Vault)' if notifier else 'disabled'}"
+        f"{f', now on {master}:{port}' if location else ''}.")
+
+
+def _cluster_put_body(cluster, session_code, master, port, cfg, toggles):
     proxy = cluster.get('proxy_connection') or {}
-    body = {
+    return {
         "Id": cluster.get('id'),
         "Name": cluster.get('name'),
         "Description": cluster.get('description'),
@@ -1090,10 +1122,42 @@ def update_cluster_notifications(controller, session_code, cluster: dict, notifi
         "CustomConfigurationVaultToggles": toggles,
         "SessionCode": session_code,
     }
-    controller.heappe_management_cluster_put(body=body)
-    log(f"Cluster '{cluster.get('name')}' (ID {cluster.get('id')}): callbacks "
-        f"{'enabled via notifier ' + repr(notifier[0]) + ' (token in Vault)' if notifier else 'disabled'}"
-        f"{f', now on {master}:{port}' if location else ''}.")
+
+
+# A QScheduler cluster's name must equal its machine name (the queue of its node type), otherwise its jobs fail.
+
+def cluster_name_matches(cluster: dict) -> bool:
+    return cluster.get('name') == cluster_machine(cluster)
+
+
+def find_cluster_named(controller, session_code, name, exclude_id=None):
+    """A cluster of this HEAppE (any scheduler type) named `name`, other than `exclude_id`, or None."""
+    for c in controller.heappe_management_clusters_get(SessionCode=session_code) or []:
+        d = as_dict(c)
+        if d.get('name') == name and d.get('id') != exclude_id:
+            return d
+    return None
+
+
+def check_cluster_name_free(controller, session_code, name, exclude_id=None):
+    other = find_cluster_named(controller, session_code, name, exclude_id)
+    if other:
+        raise RuntimeError(f"HEAppE cluster '{name}' (ID {other.get('id')}) already exists. A QScheduler cluster must "
+                           f"be named after its machine, so rename or remove that cluster first.")
+
+
+def rename_cluster(controller, session_code, cluster: dict, name, log):
+    """PUT the cluster back with the new name; everything else (configuration, Vault values) unchanged."""
+    old = cluster.get('name')
+    if old == name:
+        return
+    cfg = dict(cluster.get('custom_configuration') or {})
+    toggles = {k: bool(v) for k, v in (cluster.get('custom_configuration_vault_toggles') or {}).items()}
+    renamed = dict(cluster, name=name)
+    controller.heappe_management_cluster_put(body=_cluster_put_body(
+        renamed, session_code, cluster.get('master_node_name'), cluster.get('port'), cfg, toggles))
+    cluster['name'] = name
+    log(f"Cluster '{old}' (ID {cluster.get('id')}) renamed to '{name}' (the name of its QScheduler machine).")
 
 
 def repoint_file_transfer_methods(controller, session_code, cluster: dict, host, port, log):

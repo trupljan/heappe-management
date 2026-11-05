@@ -13,6 +13,7 @@ adding quantum machines as HEAppE clusters.
   - [Instance card](#instance-card)
   - [Update](#update)
   - [Restart](#restart)
+  - [Log level](#log-level)
   - [Undeploy / Unregister](#undeploy--unregister)
 - [Assigning HEAppE instances](#assigning-heappe-instances)
   - [Notifications](#notifications)
@@ -113,6 +114,7 @@ step; machines are added from the Clusters page.
 | Service | Name | A prefix of your choice (letters, digits, `_`, `.`, `-`, max 54 characters); a random id is **always appended**: `mydev` becomes e.g. `mydev-5190156f`, empty gives `qscheduler-5190156f`. The result is the instance name, the container name and the host name HEAppE uses; the database container, network and volume are named after it. |
 | | Service port | Port of the REST API inside the container (default `4300`). |
 | | Publish on host | Optional. Publishes the port on `127.0.0.1` only. |
+| | Log level | `error`, `warn`, `info` (default), `debug` or `trace`, set as `RUST_LOG` of the container. Change it later with [Log level](#log-level). |
 | | Database | *Shared database (recommended)*: creates the role and schema `qs_<name>` in the [shared database](#shared-database) and the internal network `<name>_db_net`, which the shared database joins; available once the shared database is deployed. *Dedicated PostgreSQL container (experiments)*: creates the container `<name>-pgsql`, the internal network `<name>_db_net` (subnet size chosen in *Database network size*, default `/29`, see [Database networks](#database-networks)) and the volume `<name>-pgdata`. *Use existing database*: enter `DATABASE_URL` (`postgres://...`) and optionally the Docker network on which the database is reachable. |
 | QScheduler network and aliases | Subnet, Size | Subnet of the instance's own internal network `<name>_qs_net` (default `/27`). A free subnet of `QSCHEDULER_NETWORK_POOL` is proposed when the dialog opens or the size changes (magic-wand button: propose again); enter another one if it collides with your LAN or VPN. An entered subnet is checked at once: when it overlaps an existing Docker network, a free one of the same size is offered. See [QScheduler network and aliases](#qscheduler-network-and-aliases). |
 | | Aliases | Optional, comma separated host names, e.g. `vlq.machine.qscheduler.it4i.cz` (any valid DNS name of your site; restricted to a zone only when `QSCHEDULER_ALIAS_ZONE` is set). HEAppE clusters can use them instead of the container name. |
@@ -223,6 +225,26 @@ For an instance reached over SSH into the container **without a restart command*
 manual restart**. Restart the container yourself first; the action then checks that `/health` answers and clears
 *restart pending*.
 
+### Log level
+
+**Actions → Log level...** (Docker-based instances: deployed, local container, SSH to VM). Sets `RUST_LOG` of the
+QScheduler container:
+
+| Level | Logs |
+|---|---|
+| `error` | errors only |
+| `warn` | also warnings |
+| `info` | default |
+| `debug` | detailed, for troubleshooting |
+| `trace` | everything (very verbose) |
+| *Custom filter* | any `RUST_LOG` filter, e.g. `info,qscheduler=debug,hyper=warn` (letters, digits and `_ : = , . -`, at most 200 characters) |
+
+QScheduler reads the level only at startup, so the container is **recreated** with the same image and settings, as in
+*Update*: requests fail for a few seconds, running work is persisted and re-attached, and the previous container is
+restored if the new one does not become healthy. The level is kept by *Update*, *Regenerate token*, extra hosts and
+*Restore*. The dialog shows the level the container runs with; the instance card shows the level last set here. Use
+`debug` and `trace` only temporarily. Over SSH into the container, set `RUST_LOG` in the service yourself.
+
 ### Undeploy / Unregister
 
 Refused while any HEAppE instance is assigned. [Unassign](#unassign) them first.
@@ -327,7 +349,7 @@ Only QScheduler instances **assigned** to the current HEAppE instance are offere
 | | Machine name | Up to 30 characters (letters, digits, `_`, `.`, `-`). Becomes the HEAppE queue. With *Use existing machine*, a dropdown lists the machines registered in the selected instance (with their backend); *Other (type manually)...* or an instance whose machines cannot be listed falls back to a text field. For a new machine, registered names are suggested. |
 | | Backend | `test` (in-process simulator) or `iqm`. For `iqm`: server URL, device name (for example `star24`), token and poll interval (for example `500ms`). |
 | | Machine limits | Queue size (`4`), max session time (`2h`), default task time limit (`1h`), limit check interval (`2s`), max clock skew (`4s`). Durations need a unit. |
-| HEAppE cluster | Cluster name | Default: the machine name. |
+| HEAppE cluster | Cluster name | Always the machine name (read-only): HEAppE uses the cluster name as the QScheduler machine, so a cluster named differently fails its jobs. Refused when this HEAppE already has a cluster of that name. |
 | | Accounting formula | Default `exectime_ms/1000` (QPU seconds). |
 | | Use sessions by default | Sets `QSchedulerUseSessions`. |
 | | Create HEAppE project | Creates a project (usage type QPU seconds) assigned to the cluster, and a service credential. Optional *custom project name* and *QPU allocation (seconds)*. Without an allocation, HEAppE rejects jobs for the project until one is added. |
@@ -357,9 +379,13 @@ panel at the top of it (checked when the page opens; the arrow checks again):
   instances and instances this HEAppE is not assigned to are reported and nothing else is checked.
 - **Notifications**: whether the cluster's notifier and callbacks match the assignment.
 - **Machine**: whether the cluster's machine (the queue of its node type) exists in QScheduler.
+- **Cluster name**: whether it equals the machine name. HEAppE uses the cluster name as the QScheduler machine, so a
+  cluster named differently (e.g. created before this check, or renamed by hand) fails its jobs. **Rename cluster to
+  &lt;machine&gt;** fixes it; queues, projects, settings, Vault values and job history are kept. The dashboard's Quantum
+  Machines card flags such clusters too. *Recover machine* and *Move* with another machine rename the cluster as well.
 
-When a check fails, the panel offers **Recreate notifier** / **Disable callbacks**, **Recover machine...** or **Move to
-another QScheduler...**. See [Cluster checks](QScheduler_Recovery_README.md#cluster-checks-on-the-cluster-detail-page).
+When a check fails, the panel offers **Rename cluster**, **Recreate notifier** / **Disable callbacks**, **Recover
+machine...** or **Move to another QScheduler...**. See [Cluster checks](QScheduler_Recovery_README.md#cluster-checks-on-the-cluster-detail-page).
 
 The panel needs HEAppE 6.6.0+ for its actions. Its *Webhook & Callback
 Notifications* section contains the cluster's notifier settings instead of the generic webhook fields:
@@ -755,6 +781,7 @@ restart pending) are described in [QScheduler_Recovery_README.md](QScheduler_Rec
 | Instance → Actions | Aliases... | not archived (local: with a QScheduler network) | Sets the instance's aliases; local instances are reconnected to their QScheduler network. |
 | Instance → Actions | Backups... | deployed (shared or dedicated database) | List, create and delete database dumps (see [Backups](#backups)). |
 | Instance → Actions | Update | deployed, local, SSH to VM | New image (git build or existing image), container recreated, rollback on failure. |
+| Instance → Actions | Log level... | deployed, local, SSH to VM | Sets `RUST_LOG` (preset or custom filter); container recreated, rollback on failure. |
 | Instance → Actions | Restart | all | Graceful restart. SSH into container without a restart command: *Confirm manual restart* (health check only). |
 | Instance → Actions | Undeploy | deployed | Removes containers and network, optionally the database volume. Requires no assignments. |
 | Instance → Actions | Unregister | local, SSH to VM, SSH into container | Removes the instance from HEAppE Management only. Requires no assignments. |

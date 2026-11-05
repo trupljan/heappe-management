@@ -113,7 +113,8 @@
                 <div class="row g-2 mb-1 bg-light p-3 rounded border border-light-subtle">
                     <div class="col-md-6">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-cluster_name">Cluster name</label>
-                        <input type="text" class="form-control form-control-sm" id="qs-add-cluster_name" name="cluster_name" placeholder="machine name" maxlength="50">
+                        <input type="text" class="form-control form-control-sm bg-light text-muted" id="qs-add-cluster_name" readonly tabindex="-1">
+                        <div class="form-text" style="font-size: 0.72rem;">Always the machine name: HEAppE uses the cluster name as the QScheduler machine.</div>
                     </div>
                     <div class="col-md-6">
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-accounting_formula">Accounting formula</label>
@@ -233,7 +234,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!createProj) addForm.custom_name.checked = false;
         addForm.project_name.disabled = !(createProj && addForm.custom_name.checked);
         addForm.qpu_allocation_seconds.disabled = !createProj;
+        syncClusterName();
     }
+    // The cluster is always named after the machine (shown read-only, not submitted).
+    function syncClusterName() {
+        document.getElementById('qs-add-cluster_name').value = addForm.machine_name.value.trim();
+    }
+    addForm.machine_name.addEventListener('input', syncClusterName);
     addForm.querySelectorAll('input[name="machine_mode"]').forEach(r => r.addEventListener('change', toggleAdd));
     ['backend', 'create_project', 'custom_name'].forEach(k => addForm[k].addEventListener('change', toggleAdd));
 
@@ -266,6 +273,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!other) m.value = machineSelect.value;
         m.classList.toggle('d-none', !other);
         m.classList.toggle('mt-1', other);
+        syncClusterName();
     }
     machineSelect.addEventListener('change', () => { applyMachineSelect(); if (machineSelect.value === OTHER_MACHINE) addForm.machine_name.focus(); });
 

@@ -563,7 +563,11 @@
             }
             body.innerHTML = '<ul class="list-group list-group-flush">' + d.machines.map(m => {
                 const st = STATES[m.state] || STATES.unreachable;
-                const info = detail(m);
+                let info = detail(m);
+                if (m.name_matches === false) {
+                    info = '<span class="text-danger"><i class="bi bi-exclamation-octagon me-1"></i>Cluster name differs from the machine name: jobs fail. ' +
+                        '<a href="{% url "cluster_detail" 0 %}'.replace('/0/', '/' + m.cluster_id + '/') + '">Rename it on the cluster page</a>.</span>' + (info ? '<br>' + info : '');
+                }
                 let btn = '';
                 if (m.can_act) {
                     btn = m.state === 'suspended'
