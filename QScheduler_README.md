@@ -21,6 +21,7 @@ adding quantum machines as HEAppE clusters.
 - [Clusters page: quantum machines](#clusters-page-quantum-machines)
   - [Add a quantum machine](#add-a-quantum-machine)
   - [Remove a quantum machine](#remove-a-quantum-machine)
+  - [Suspend / resume a machine](#suspend--resume-a-machine)
 - [SSH directly into the QScheduler container (obsolete)](#ssh-directly-into-the-qscheduler-container-obsolete)
 - [When QScheduler is restarted](#when-qscheduler-is-restarted)
 - [Security notes](#security-notes)
@@ -392,6 +393,44 @@ Select one of the current HEAppE instance's QScheduler clusters.
   - *Force* also deletes the machine's tasks and sessions. Time they consumed is not returned to their projects.
 - The option is unavailable when the cluster's QScheduler is not registered in HEAppE Management.
 
+### Suspend / resume a machine
+
+Stops a machine from taking new work without removing anything, e.g. during calibration or maintenance. Needs
+QScheduler **0.2.1 or newer** (admin API); the HEAppE instance must be assigned to the QScheduler.
+
+Where:
+
+- **Dashboard → Quantum Machines**: one row per QScheduler cluster of the current HEAppE instance with its machine,
+  QScheduler instance and state, and **Suspend** / **Resume**. The card is hidden when the HEAppE instance is not
+  assigned to any QScheduler.
+- **Cluster detail → QScheduler panel**: the machine's state and **Suspend machine...** / **Resume machine...**.
+
+| State | Meaning |
+|---|---|
+| Online | Registered, not suspended, its backend answers (`GET /machine/{name}/about`). |
+| Backend offline | Registered and not suspended, but the backend (e.g. IQM) does not answer. |
+| Suspended | New tasks and sessions are rejected; the reason and the time are shown. |
+| Not registered | The machine does not exist in QScheduler (see *Recover machine...* on the cluster detail). |
+| Unknown | QScheduler cannot be asked (not running, admin token, older than 0.2.1) or is not registered here. |
+
+**Suspend** asks for a reason (shown to users whose jobs are rejected, at most 512 characters) and what happens to
+the work already on the machine:
+
+| Option | Effect |
+|---|---|
+| Let it finish (default) | Queued and running tasks and open sessions continue. |
+| Cancel waiting work | Tasks not yet sent to the backend fail, all sessions close; running tasks continue. |
+| Cancel everything | Running tasks fail too, and their cancellation is requested from the backend. |
+
+While suspended, QScheduler answers every new task and session on the machine with HTTP `409` and the reason, also
+tasks submitted into an already open session. The suspension stays in place after a QScheduler restart. **Resume**
+lets the machine accept new work again; work failed or closed by the suspension stays so.
+
+**The suspension belongs to the machine, not to the cluster.** Before the dialog can be confirmed, HEAppE Management
+asks every HEAppE instance assigned to the QScheduler which of its clusters use the machine. When another cluster uses
+it, or an assigned HEAppE instance cannot be asked, the dialog lists them and the action needs the confirmation
+*I understand that ... affects all these clusters*. The server refuses an unconfirmed action on a shared machine.
+
 ---
 
 ## SSH directly into the QScheduler container (obsolete)
@@ -544,7 +583,9 @@ Management:
   - **remote instances**: it joins the HEAppE network of every assigned HEAppE instance and reaches QScheduler through
     the tunnel that connects its Docker network to the local HEAppE network,
 - it is also on Docker's default `bridge`: a container only on internal networks cannot publish a port,
-- it forwards only the admin endpoints; every other path returns `404`,
+- it forwards only the admin endpoints and the machine state endpoints (`/machine/{name}/suspension`,
+  `/machine/{name}/suspensions`, `/machine/{name}/about`); every other path returns `404`. A proxy created with an
+  older set of routes is recreated on its next use,
 - it is published on `127.0.0.1` only (random port, shown on the instance card), i.e. for HEAppE Management,
 - it is created on the first admin call, follows assignment changes, is recreated when the endpoint, image or network
   layout changes (e.g. after *Restore*), and is removed with *Undeploy* / *Unregister* or *Delete with entities*, and
@@ -727,6 +768,7 @@ restart pending) are described in [QScheduler_Recovery_README.md](QScheduler_Rec
 | Assignments table | Unassign | all | Removes network access and leftover notifiers. Requires no clusters of that HEAppE on the instance. |
 | Clusters → QScheduler | Add quantum machine | assigned instances | New or shared machine + HEAppE cluster, queue, queue group, optional project; with notifications on, the cluster's own notifier and token (Vault). |
 | Clusters → QScheduler | Remove quantum machine | QScheduler clusters of the current HEAppE | Deletes the cluster and its notifier, optionally removes the machine from QScheduler (`--force` optional). |
+| Dashboard → Quantum Machines, Cluster detail → QScheduler | Suspend / Resume | QScheduler clusters of the current HEAppE (QScheduler 0.2.1+) | Suspends the cluster's machine (new work rejected, existing work kept or cancelled) or resumes it; a machine shared with other clusters needs a confirmation. |
 | Clusters → QScheduler | Manage QScheduler instances | – | Opens the QScheduler page. |
 | Cluster detail → QScheduler | Recreate notifier / Disable callbacks | QScheduler clusters with wrong notification settings | New notifier and token for the cluster (or callbacks off), one restart. |
 | Cluster detail → QScheduler | Recover machine... | QScheduler clusters whose machine is missing | Registers the machine again or switches the cluster to an existing machine; new notifier and token. |

@@ -15,6 +15,7 @@ urlpatterns = [
     path('dashboard/metrics-partial/', views.dashboard_metrics_partial, name='dashboard_metrics_partial'),
     path('dashboard/jobs-distribution-partial/', views.dashboard_jobs_distribution_partial, name='dashboard_jobs_distribution_partial'),
     path('dashboard/jobs-history-partial/', views.dashboard_jobs_history_partial, name='dashboard_jobs_history_partial'),
+    path('dashboard/qscheduler-machines/', views.dashboard_qscheduler_machines_api, name='dashboard_qscheduler_machines'),
 
     path("deploy/", views.deploy_view, name="deploy_view"),
     path("deploy/<str:instance_name>/", views.deploy_view, name="deploy_view"),
@@ -45,6 +46,7 @@ urlpatterns = [
     path('clusters/qscheduler/cluster/<int:cluster_id>/recreate-notifier/', views.qscheduler_cluster_recreate_notifier_api, name='qscheduler_cluster_recreate_notifier'),
     path('clusters/qscheduler/cluster/<int:cluster_id>/recover-machine/', views.qscheduler_cluster_recover_machine_api, name='qscheduler_cluster_recover_machine'),
     path('clusters/qscheduler/cluster/<int:cluster_id>/move/', views.qscheduler_cluster_move_api, name='qscheduler_cluster_move'),
+    path('clusters/qscheduler/cluster/<int:cluster_id>/suspension/', views.qscheduler_cluster_suspension_api, name='qscheduler_cluster_suspension'),
 
     # QScheduler instances and HEAppE assignments
     path('qscheduler/', views.qscheduler_page, name='qscheduler_page'),

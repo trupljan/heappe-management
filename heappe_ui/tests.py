@@ -8844,3 +8844,253 @@ class QSchedulerEncryptSecretsMigrationTests(TransactionTestCase):
         row = old_apps.get_model("heappe_ui", "QSchedulerInstance").objects.get(name="qs-mig")
         self.assertEqual((row.ssh_private_key, row.ssh_key_passphrase, row.database_url),
                          ("KEY", "PP", "postgres://u:pw@h/db"))
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# QScheduler machine suspension (suspend / resume, dashboard overview, shared-machine confirmation)
+# ---------------------------------------------------------------------------------------------------------------------
+
+class QSchedulerSuspensionTargetTests(TestCase):
+    """QsTarget: suspend / resume / machine states / backend check over the admin API."""
+
+    def _target(self, version="qscheduler v0.2.2", responses=None):
+        from heappe_ui.view.qscheduler_core import QsTarget
+
+        class Fake(QsTarget):
+            def __init__(self):
+                self.port, self.requests = 4300, []
+
+            def version(self):
+                return version
+
+            def admin_request(self, method, path, body=None, timeout=60):
+                self.requests.append((method, path, body))
+                res = (responses or {}).get((method, path), (200, "[]"))
+                if isinstance(res, Exception):
+                    raise res
+                return res
+        return Fake()
+
+    def test_suspend_and_resume_requests(self):
+        sus = '{"message": "calib", "cancel": "waiting", "suspended_at": "2026-11-05T10:00:00Z"}'
+        t = self._target(responses={("POST", "/machine/Sim%20A/suspension"): (201, sus),
+                                    ("DELETE", "/machine/Sim%20A/suspension"): (200, sus)})
+        logs = []
+        self.assertEqual(t.suspend_machine("Sim A", "calib", "waiting", logs.append)["cancel"], "waiting")
+        self.assertEqual(t.requests[-1], ("POST", "/machine/Sim%20A/suspension", {"message": "calib", "cancel": "waiting"}))
+        t.resume_machine("Sim A", logs.append)
+        self.assertEqual(t.requests[-1][:2], ("DELETE", "/machine/Sim%20A/suspension"))
+
+    def test_errors_are_explained(self):
+        t = self._target(responses={("POST", "/machine/Sim/suspension"): (409, '{"error": "already"}'),
+                                    ("DELETE", "/machine/Sim/suspension"): (409, "not suspended")})
+        with self.assertRaisesRegex(RuntimeError, "already suspended"):
+            t.suspend_machine("Sim", "m", "none", lambda *_: None)
+        with self.assertRaisesRegex(RuntimeError, "is not suspended"):
+            t.resume_machine("Sim", lambda *_: None)
+
+    def test_machine_states_and_online(self):
+        machines = '[{"name": "A", "backend": {"type": "test"}, "suspension": null},' \
+                   ' {"name": "B", "backend": {"type": "iqm"}, "suspension": {"message": "x", "cancel": "none", "suspended_at": "t"}}]'
+        t = self._target(responses={("GET", "/machines"): (200, machines),
+                                    ("GET", "/machine/A/about"): (200, "{}"),
+                                    ("GET", "/machine/B/about"): (502, "backend down")})
+        states = t.machine_states()
+        self.assertEqual(states["A"], {"backend": "test", "suspension": None})
+        self.assertEqual(states["B"]["suspension"]["message"], "x")
+        self.assertEqual(t.machine_online("A"), (True, ""))
+        ok, reason = t.machine_online("B")
+        self.assertFalse(ok)
+        self.assertIn("502", reason)
+
+    def test_old_qscheduler_unsupported(self):
+        t = self._target(version="qscheduler v0.2.0")
+        with self.assertRaisesRegex(RuntimeError, "0.2.1"):
+            t.suspend_machine("Sim", "m", "none", lambda *_: None)
+        self.assertEqual(t.requests, [])
+
+    def test_proxy_forwards_suspension_routes_and_is_recreated_on_new_config(self):
+        from heappe_ui.models import QSchedulerInstance
+        from heappe_ui.view import qscheduler_admin as qa
+        conf = qa.proxy_config("qs-1", 4300)
+        self.assertIn("location ~ ^/machine/[^/]+/(suspension|suspensions|about)$", conf)
+        inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                 service_host="qs-1", port=4300, qs_network="qs-1_qs_net")
+        old = {"Config": {"Labels": {qa.LABEL_UPSTREAM: "qs-1:4300", qa.LABEL_CONFIG: "old-routes"},
+                          "Image": qa.proxy_image()},
+               "State": {"Status": "running"},
+               "NetworkSettings": {"Networks": {"bridge": {}, "qs-1_qs_net": {}},
+                                   "Ports": {"8080/tcp": [{"HostPort": "49001"}]}}}
+        docker = mock.Mock(where="")
+        docker.inspect.side_effect = [old, old]
+        docker.run.return_value = mock.Mock(returncode=0)
+        qa.ensure_proxy(inst, docker=docker)
+        cmds = [c.args[0] for c in docker.run.call_args_list]
+        self.assertEqual(cmds[0], ["rm", "-f", "qs-1-admin-proxy"])
+        self.assertIn(f"{qa.LABEL_CONFIG}={qa.config_hash(inst)}", cmds[1])
+
+
+class QSchedulerSuspensionViewTests(TestCase):
+    """Machine state, shared-machine detection and the suspend / resume / dashboard APIs."""
+
+    def setUp(self):
+        from django.contrib.auth.models import User
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance, QSchedulerAssignment
+        self.inst = QSchedulerInstance.objects.create(name="qs-1", kind="managed", container_name="qs-1",
+                                                      service_host="qs-1", port=4300)
+        self.dev = InstanceCredentials.objects.create(instance_name="dev", heappe_host="h", heappe_login="u",
+                                                      heappe_password="p", heappe_port="5000")
+        self.prod = InstanceCredentials.objects.create(instance_name="prod", heappe_host="h2", heappe_login="u",
+                                                       heappe_password="p", heappe_port="5000")
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.dev)
+        self.user = User.objects.create_user(username="admin1", password="pw")
+        self.client.force_login(self.user)
+        s = self.client.session
+        s["chosen_instance"] = "dev"
+        s.save()
+
+    @staticmethod
+    def _cluster(cid, name, machine, host="qs-1"):
+        return {"id": cid, "name": name, "scheduler_type": 32, "master_node_name": host, "port": 4300,
+                "custom_configuration": {"QSchedulerHost": host, "QSchedulerPort": "4300"},
+                "node_types": [{"queue": machine}]}
+
+    def _controller(self, clusters):
+        c = mock.Mock()
+        c.heappe_management_clusters_get.return_value = clusters
+        c.heappe_management_cluster_get.side_effect = lambda Id, SessionCode: next(x for x in clusters if x["id"] == Id)
+        return c
+
+    def _target(self, suspension=None, online=(True, ""), machines=("Sim",), admin=True):
+        t = mock.Mock()
+        t.uses_admin_api.return_value = admin
+        t.machine_states.return_value = {m: {"backend": "test", "suspension": suspension} for m in machines}
+        t.machine_online.return_value = online
+        return t
+
+    def test_parse_options(self):
+        from heappe_ui.view.qscheduler_suspension import parse_suspend_options
+        opts, errors = parse_suspend_options({"action": "suspend", "cancel": "all", "confirm_shared": "true"}, "admin1")
+        self.assertEqual(errors, [])
+        self.assertEqual(opts["message"], "Suspended in HEAppE Management by admin1")
+        self.assertTrue(opts["confirm_shared"])
+        self.assertTrue(parse_suspend_options({"action": "pause"})[1])
+        self.assertTrue(parse_suspend_options({"action": "suspend", "cancel": "some"})[1])
+        self.assertTrue(parse_suspend_options({"action": "suspend", "message": "x" * 513})[1])
+        self.assertEqual(parse_suspend_options({"action": "resume", "cancel": "bogus"})[1], [])
+
+    def test_instance_machine_states(self):
+        from heappe_ui.view import qscheduler_suspension as qs
+        with mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=self._target(machines=("A",))):
+            out = qs.instance_machine_states(self.inst, ["A", "Gone"])
+        self.assertEqual(out["machines"]["A"]["state"], qs.ONLINE)
+        self.assertEqual(out["machines"]["Gone"]["state"], qs.MISSING)
+        with mock.patch("heappe_ui.view.qscheduler_core.target_for",
+                        return_value=self._target(online=(False, "HTTP 502"))):
+            self.assertEqual(qs.instance_machine_states(self.inst, ["Sim"])["machines"]["Sim"]["state"], qs.OFFLINE)
+        with mock.patch("heappe_ui.view.qscheduler_core.target_for",
+                        return_value=self._target(suspension={"message": "m", "cancel": "none", "suspended_at": "t"})):
+            self.assertEqual(qs.instance_machine_states(self.inst, ["Sim"])["machines"]["Sim"]["state"], qs.SUSPENDED)
+        with mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=self._target(admin=False)):
+            self.assertEqual(qs.instance_machine_states(self.inst, ["Sim"])["state"], qs.UNSUPPORTED)
+        broken = self._target()
+        broken.machine_states.side_effect = RuntimeError("connection refused")
+        with mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=broken):
+            out = qs.instance_machine_states(self.inst, ["Sim"])
+        self.assertEqual(out["state"], qs.UNREACHABLE)
+        self.assertIn("connection refused", out["error"])
+
+    def _post(self, data):
+        return self.client.post("/clusters/qscheduler/cluster/1/suspension/", data=json.dumps(data),
+                                content_type="application/json")
+
+    def test_suspend_unshared_machine(self):
+        target = self._target()
+        dev = self._controller([self._cluster(1, "Sim cluster", "Sim")])
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect", return_value=(dev, "s")), \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
+            r = self._post({"action": "suspend", "message": "Calibration", "cancel": "waiting"})
+        self.assertEqual(r.status_code, 200, r.content)
+        target.suspend_machine.assert_called_once()
+        self.assertEqual(target.suspend_machine.call_args.args[:3], ("Sim", "Calibration", "waiting"))
+
+    def test_shared_machine_needs_confirmation(self):
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.prod)
+        target = self._target()
+        dev = self._controller([self._cluster(1, "Sim cluster", "Sim")])
+        prod = self._controller([self._cluster(7, "prod Sim", "Sim"), self._cluster(8, "other", "Other")])
+        connect = lambda name: (dev, "s") if name == "dev" else (prod, "s")
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect", side_effect=connect), \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
+            status = self.client.get("/clusters/qscheduler/cluster/1/suspension/").json()
+            self.assertTrue(status["shared"])
+            self.assertEqual({(u["heappe"], u["cluster"]) for u in status["users"]},
+                             {("dev", "Sim cluster"), ("prod", "prod Sim")})
+            r = self._post({"action": "suspend", "message": "m"})
+            self.assertEqual(r.status_code, 409)
+            self.assertEqual(r.json()["status"], "confirm")
+            target.suspend_machine.assert_not_called()
+            r = self._post({"action": "suspend", "message": "m", "confirm_shared": True})
+            self.assertEqual(r.status_code, 200, r.content)
+            target.suspend_machine.assert_called_once()
+
+    def test_unreachable_heappe_counts_as_shared(self):
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.prod)
+        dev = self._controller([self._cluster(1, "Sim cluster", "Sim")])
+
+        def connect(name):
+            if name == "prod":
+                raise RuntimeError("HEAppE down")
+            return dev, "s"
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect", side_effect=connect), \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=self._target()):
+            status = self.client.get("/clusters/qscheduler/cluster/1/suspension/").json()
+        self.assertTrue(status["shared"])
+        self.assertEqual(status["unchecked"][0]["heappe"], "prod")
+
+    def test_resume_and_state_only_get(self):
+        target = self._target(suspension={"message": "m", "cancel": "none", "suspended_at": "t"})
+        dev = self._controller([self._cluster(1, "Sim cluster", "Sim")])
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect", return_value=(dev, "s")) as conn, \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target), \
+                mock.patch("heappe_ui.view.qscheduler_suspension.machine_users") as users:
+            d = self.client.get("/clusters/qscheduler/cluster/1/suspension/?users=0").json()
+            self.assertEqual(d["state"], "suspended")
+            users.assert_not_called()
+            users.return_value = ([{"heappe": "dev", "cluster_id": 1, "cluster": "Sim cluster"}], [])
+            r = self._post({"action": "resume"})
+        self.assertEqual(r.status_code, 200, r.content)
+        target.resume_machine.assert_called_once()
+
+    def test_not_assigned_cannot_act(self):
+        other = self._controller([self._cluster(1, "Sim cluster", "Sim", host="unknown-host")])
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect", return_value=(other, "s")):
+            d = self.client.get("/clusters/qscheduler/cluster/1/suspension/").json()
+            self.assertFalse(d["can_act"])
+            self.assertEqual(d["state"], "unregistered")
+            r = self._post({"action": "suspend", "message": "m"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_dashboard_overview(self):
+        clusters = [self._cluster(1, "Sim cluster", "Sim"), self._cluster(2, "Iqm cluster", "Garnet"),
+                    {"id": 3, "name": "slurm", "scheduler_type": 1}]
+        target = self._target(machines=("Sim",))
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect", return_value=(self._controller(clusters), "s")), \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
+            d = self.client.get("/dashboard/qscheduler-machines/").json()
+        self.assertTrue(d["assigned"])
+        rows = {r["machine"]: r for r in d["machines"]}
+        self.assertEqual(set(rows), {"Sim", "Garnet"})
+        self.assertEqual(rows["Sim"]["state"], "online")
+        self.assertTrue(rows["Sim"]["can_act"])
+        self.assertEqual(rows["Garnet"]["state"], "missing")
+        self.assertFalse(rows["Garnet"]["can_act"])
+
+    def test_dashboard_hidden_without_assignment(self):
+        s = self.client.session
+        s["chosen_instance"] = "prod"
+        s.save()
+        d = self.client.get("/dashboard/qscheduler-machines/").json()
+        self.assertEqual((d["status"], d["assigned"], d["machines"]), ("success", False, []))

@@ -71,6 +71,8 @@
                              data-recreate-url="{% url 'qscheduler_cluster_recreate_notifier' cluster.id %}"
                              data-recover-url="{% url 'qscheduler_cluster_recover_machine' cluster.id %}"
                              data-move-url="{% url 'qscheduler_cluster_move' cluster.id %}"
+                             data-cluster-id="{{ cluster.id }}"
+                             data-suspension-url="{% url 'qscheduler_cluster_suspension' cluster.id %}"
                              data-machines-url="{% url 'qscheduler_machine_list' 0 %}"
                              data-qs-page-url="{% url 'qscheduler_page' %}">
                             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1606,6 +1608,7 @@
     </div>
 </div>
 {% include 'partials/qscheduler_progress_modal.html' %}
+{% include 'partials/qscheduler_suspend_modal.html' %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const box = document.getElementById('qs-cluster-status');
@@ -1666,7 +1669,10 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const m = d.machine_status;
-        if (m.registered === true) html += line('motherboard', 'text-success', 'Machine <code>' + esc(d.machine) + '</code> is registered in QScheduler.');
+        if (m.registered === true) {
+            html += line('motherboard', 'text-success', 'Machine <code>' + esc(d.machine) + '</code> is registered in QScheduler.');
+            html += '<div id="qs-cs-suspension" class="mb-1"></div>';
+        }
         else if (m.registered === false) {
             html += line('motherboard', 'text-danger', 'Machine <code>' + esc(d.machine) + '</code> does <strong>not exist</strong> in ' + esc(d.instance.name) + ': jobs on this cluster fail.');
             html += '<button type="button" class="btn btn-sm btn-outline-danger fw-semibold" id="qs-cs-recover"><i class="bi bi-wrench-adjustable me-1"></i>Recover machine...</button>';
@@ -1683,6 +1689,31 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         const rv = document.getElementById('qs-cs-recover');
         if (rv) rv.addEventListener('click', () => openRecover('recover'));
+        if (document.getElementById('qs-cs-suspension')) loadSuspension();
+    }
+
+    // Machine state (online / suspended) with Suspend / Resume; the dialog warns when the machine is shared.
+    function loadSuspension() {
+        const el = document.getElementById('qs-cs-suspension');
+        el.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span><span class="text-muted">Checking the machine state...</span>';
+        U.getJson(box.dataset.suspensionUrl + '?users=0').then(s => {
+            if (s.status !== 'success' || !s.can_act) {
+                el.innerHTML = line('question-circle', 'text-secondary', esc((s && (s.error || s.message)) || 'The machine state is unknown.'));
+                return;
+            }
+            const sus = s.suspension;
+            const btn = sus
+                ? '<button type="button" class="btn btn-sm btn-outline-success fw-semibold" id="qs-cs-suspend" data-action="resume"><i class="bi bi-play-circle me-1"></i>Resume machine...</button>'
+                : '<button type="button" class="btn btn-sm btn-outline-warning fw-semibold" id="qs-cs-suspend" data-action="suspend"><i class="bi bi-pause-circle me-1"></i>Suspend machine...</button>';
+            let text;
+            if (sus) text = line('pause-circle-fill', 'text-warning', '<strong>Suspended</strong> since ' + esc(new Date(sus.suspended_at).toLocaleString()) +
+                ': <em>' + esc(sus.message) + '</em>. New tasks and sessions are rejected.');
+            else if (s.state === 'offline') text = line('wifi-off', 'text-danger', '<strong>Backend offline</strong>: ' + esc(s.online_reason));
+            else text = line('check-circle-fill', 'text-success', '<strong>Online</strong>: accepts tasks and sessions.');
+            el.innerHTML = text + btn;
+            document.getElementById('qs-cs-suspend').addEventListener('click', ev =>
+                window.qsSuspend.open(Number(box.dataset.clusterId), ev.currentTarget.dataset.action, loadSuspension));
+        }).catch(() => { el.innerHTML = line('question-circle', 'text-secondary', 'The machine state is unknown.'); });
     }
     function bindMove() {
         body.querySelectorAll('.qs-cs-move').forEach(b => b.addEventListener('click', () => openRecover('move')));

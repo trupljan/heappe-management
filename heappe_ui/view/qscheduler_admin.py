@@ -8,8 +8,10 @@ Admin proxy
     its assignments (remote QScheduler, reached through the tunnel that connects its Docker network to the local
     HEAppE network), so it reaches the service as <service_host>:<port>. It is created on Docker's default bridge:
     a container only on internal networks cannot publish a port.
-  * It forwards only the admin endpoints (/machines, /machine/{name}, /notifiers, /notifiers/{name}); everything
+  * It forwards only the admin endpoints (/machines, /machine/{name}, /notifiers, /notifiers/{name}) and the machine
+    state endpoints (/machine/{name}/suspension, /machine/{name}/suspensions, /machine/{name}/about); everything
     else gets 404. It is published on 127.0.0.1 only (random host port), i.e. for HEAppE Management on this host.
+    A proxy whose nginx config differs from proxy_config() (label LABEL_CONFIG) is recreated.
   * ensure_proxy() creates or repairs it (networks, upstream after a restore) whenever an admin call needs it;
     sync_proxy() / remove_proxy() follow unassignments and removal of the instance.
 
@@ -20,6 +22,7 @@ Admin token
     HEAppE Management that manages the same QScheduler) or to regenerate it (recreates the container; other admin
     panels lose admin access until they get the new token).
 """
+import hashlib
 import http.client
 import json
 import os
@@ -33,6 +36,7 @@ from .qscheduler_core import DockerCli
 PROXY_PORT = 8080
 LABEL_PROXY_FOR = "qscheduler.admin-proxy-for"
 LABEL_UPSTREAM = "qscheduler.admin-upstream"
+LABEL_CONFIG = "qscheduler.admin-proxy-config"     # hash of the nginx config the proxy runs with
 PROXY_START_TIMEOUT = 15        # seconds to wait for a new proxy to accept connections
 _LOCK = threading.Lock()
 
@@ -108,15 +112,21 @@ def proxy_config(host, port):
     location = /__proxy_health {{ access_log off; return 200 "ok\\n"; }}
     location ~ ^/(machines|notifiers)$ {{ proxy_pass $qscheduler; }}
     location ~ ^/(machine|notifiers)/[^/]+$ {{ proxy_pass $qscheduler; }}
+    location ~ ^/machine/[^/]+/(suspension|suspensions|about)$ {{ proxy_pass $qscheduler; }}
     location / {{ return 404; }}
 }}
 """
+
+
+def config_hash(inst):
+    return hashlib.sha256(proxy_config(inst.service_host, inst.port).encode()).hexdigest()[:12]
 
 
 def proxy_run_args(inst):
     upstream = f"{inst.service_host}:{inst.port}"
     return ["run", "-d", "--name", proxy_name(inst), "--restart", "unless-stopped",
             "--label", f"{LABEL_PROXY_FOR}={inst.name}", "--label", f"{LABEL_UPSTREAM}={upstream}",
+            "--label", f"{LABEL_CONFIG}={config_hash(inst)}",
             "--network", "bridge", "-p", f"127.0.0.1::{PROXY_PORT}",
             "-e", f"QS_PROXY_CONF={proxy_config(inst.service_host, inst.port)}",
             proxy_image(), "sh", "-c",
@@ -159,9 +169,11 @@ def ensure_proxy(inst, log=None, extra_networks=(), docker=None):
         if info:
             cfg = info.get("Config") or {}
             on_bridge = "bridge" in ((info.get("NetworkSettings") or {}).get("Networks") or {})
-            if (cfg.get("Labels") or {}).get(LABEL_UPSTREAM) != upstream or cfg.get("Image") != proxy_image() \
-                    or not on_bridge:
-                log(f"Admin proxy '{name}' is outdated (upstream, image or network layout changed); recreating it.")
+            labels = cfg.get("Labels") or {}
+            if labels.get(LABEL_UPSTREAM) != upstream or labels.get(LABEL_CONFIG) != config_hash(inst) \
+                    or cfg.get("Image") != proxy_image() or not on_bridge:
+                log(f"Admin proxy '{name}' is outdated (upstream, routes, image or network layout changed); "
+                    f"recreating it.")
                 docker.run(["rm", "-f", name], log)
                 info = None
         if not info:

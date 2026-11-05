@@ -48,6 +48,20 @@
                 </div>
             </div>
 
+            <!-- Quantum Machines Card (QScheduler clusters of this HEAppE; hidden when it uses no QScheduler) -->
+            <div class="card border-0 shadow-sm bg-white rounded-3 mb-4 d-none" id="qs-machines-card">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-cpu text-primary fs-5"></i>
+                        <h5 class="h6 mb-0 fw-bold text-dark">Quantum Machines</h5>
+                    </div>
+                    <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="qs-machines-refresh" title="Check again"><i class="bi bi-arrow-clockwise"></i></button>
+                </div>
+                <div class="card-body p-0" id="qs-machines-body">
+                    <div class="p-3 text-muted small"><span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Checking quantum machines...</div>
+                </div>
+            </div>
+
             <!-- Jobs Distribution Card -->
             <div class="card border-0 shadow-sm bg-white rounded-3">
                 <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
@@ -507,6 +521,78 @@
         const params = new URLSearchParams(window.location.search);
         if (!params.has('time_from') && inpFrom) inpFrom.value = dayAgoStr;
         if (!params.has('time_to')   && inpTo)   inpTo.value   = nowStr;
+    })();
+</script>
+
+{% include 'partials/qscheduler_suspend_modal.html' %}
+<script>
+    // Quantum machines of this HEAppE's QScheduler clusters: state and suspend / resume.
+    (function () {
+        const card = document.getElementById('qs-machines-card');
+        const body = document.getElementById('qs-machines-body');
+        const esc = window.qsSuspend.esc;
+        const STATES = {
+            online:       ['bg-success-subtle text-success-emphasis', 'Online'],
+            offline:      ['bg-danger-subtle text-danger-emphasis', 'Backend offline'],
+            suspended:    ['bg-warning-subtle text-warning-emphasis', 'Suspended'],
+            missing:      ['bg-danger-subtle text-danger-emphasis', 'Not registered'],
+            unreachable:  ['bg-secondary-subtle text-secondary-emphasis', 'Unknown'],
+            unsupported:  ['bg-secondary-subtle text-secondary-emphasis', 'Unknown'],
+            unregistered: ['bg-secondary-subtle text-secondary-emphasis', 'Unknown'],
+            archived:     ['bg-dark-subtle text-dark-emphasis', 'Archived'],
+            not_assigned: ['bg-secondary-subtle text-secondary-emphasis', 'Not assigned'],
+        };
+
+        function detail(m) {
+            if (m.state === 'suspended' && m.suspension)
+                return esc(m.suspension.message) + ' (since ' + esc(new Date(m.suspension.suspended_at).toLocaleString()) + ')';
+            if (m.state === 'offline') return 'Backend does not answer: ' + esc(m.online_reason);
+            return m.error ? esc(m.error) : '';
+        }
+
+        function render(d) {
+            if (d.status === 'success' && !d.assigned) { card.classList.add('d-none'); return; }
+            card.classList.remove('d-none');
+            if (d.status !== 'success') {
+                body.innerHTML = '<div class="p-3 small text-danger"><i class="bi bi-exclamation-triangle me-1"></i>' + esc(d.message || 'Machines cannot be checked.') + '</div>';
+                return;
+            }
+            if (!d.machines.length) {
+                body.innerHTML = '<div class="p-3 small text-muted">No QScheduler cluster yet. Add one on the Clusters page (QScheduler &rsaquo; Add quantum machine).</div>';
+                return;
+            }
+            body.innerHTML = '<ul class="list-group list-group-flush">' + d.machines.map(m => {
+                const st = STATES[m.state] || STATES.unreachable;
+                const info = detail(m);
+                let btn = '';
+                if (m.can_act) {
+                    btn = m.state === 'suspended'
+                        ? '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 qs-m-act" data-action="resume" data-cluster="' + m.cluster_id + '" title="Resume the machine"><i class="bi bi-play-circle me-1"></i>Resume</button>'
+                        : '<button type="button" class="btn btn-sm btn-outline-warning py-0 px-2 qs-m-act" data-action="suspend" data-cluster="' + m.cluster_id + '" title="Suspend the machine"><i class="bi bi-pause-circle me-1"></i>Suspend</button>';
+                }
+                return '<li class="list-group-item px-3 py-2">' +
+                    '<div class="d-flex justify-content-between align-items-center gap-2">' +
+                        '<div class="text-truncate"><code class="fw-semibold">' + esc(m.machine) + '</code>' +
+                            '<div class="text-muted text-truncate" style="font-size: 0.72rem;">' + esc(m.cluster) + ' &middot; ' + esc(m.instance || 'unregistered QScheduler') + '</div></div>' +
+                        '<div class="d-flex align-items-center gap-2 flex-shrink-0"><span class="badge rounded-pill ' + st[0] + '">' + st[1] + '</span>' + btn + '</div>' +
+                    '</div>' +
+                    (info ? '<div class="text-muted mt-1" style="font-size: 0.72rem;">' + info + '</div>' : '') +
+                '</li>';
+            }).join('') + '</ul>';
+            body.querySelectorAll('.qs-m-act').forEach(b => b.addEventListener('click', () =>
+                window.qsSuspend.open(Number(b.dataset.cluster), b.dataset.action, load)));
+        }
+
+        function load() {
+            body.innerHTML = '<div class="p-3 text-muted small"><span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Checking quantum machines...</div>';
+            fetch("{% url 'dashboard_qscheduler_machines' %}")
+                .then(r => r.json())
+                .then(render)
+                .catch(() => render({ status: 'error', message: 'Machines cannot be checked.' }));
+        }
+
+        document.getElementById('qs-machines-refresh').addEventListener('click', load);
+        load();
     })();
 </script>
 {% endblock %}

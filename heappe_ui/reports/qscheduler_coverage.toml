@@ -33,6 +33,7 @@ health = "heappe_ui/view/qscheduler_cluster_health.py"
 admin = "heappe_ui/view/qscheduler_admin.py"
 shareddb = "heappe_ui/view/qscheduler_shared_db.py"
 network = "heappe_ui/view/qscheduler_network.py"
+suspension = "heappe_ui/view/qscheduler_suspension.py"
 
 [file_descriptions]
 core = "Docker/SSH runners, targets, HEAppE and git helpers"
@@ -43,6 +44,7 @@ health = "cluster detail: QScheduler panel"
 admin = "admin API proxy, client and admin token"
 shareddb = "shared PostgreSQL, instance schemas, backups"
 network = "QScheduler network, static IP, aliases, migration"
+suspension = "machine suspension, dashboard quantum machines"
 
 [tests]
 module = "heappe_ui.tests"
@@ -408,12 +410,23 @@ not_tested = "Against a running QScheduler 0.2.1 container."
 [[sections.features]]
 name = "Admin proxy and admin token"
 code = ["admin:proxy_image", "admin:proxy_name", "admin:AdminApiUnavailable", "admin:AdminTokenError",
-        "admin:find_admin_token_error", "admin:proxy_config", "admin:proxy_run_args", "admin:desired_networks",
+        "admin:find_admin_token_error", "admin:proxy_config", "admin:config_hash", "admin:proxy_run_args", "admin:desired_networks",
         "admin:_host_port", "admin:ensure_proxy", "admin:remove_proxy", "admin:sync_proxy", "admin:proxy_status",
         "admin:container_admin_token", "admin:admin_token", "admin:http_request", "admin:AdminClient",
         "deploy:qscheduler_admin_token_api", "deploy:regenerate_admin_token_worker"]
 verified = "Proxy forwards only /machines, /machine/{name}, /notifiers, /notifiers/{name} (404 otherwise), published on 127.0.0.1 only, in the assignment's HEAppE network; created when missing, recreated when the upstream changes, joins/leaves networks with assignments, refused without an assignment, removed with the last one. Token encrypted on the record, adopted from the container environment, not adoptable over SSH into the container. Client against a local HTTP server: method, path, bearer token, JSON body; 401 -> rejected, 403 -> not set, token never in errors. Token errors found through wrapped exceptions and reported in the operation result. Token API: show, set (rejected token not stored), regenerate (operation); regenerate worker recreates with the new token and checks it; register validates an entered token."
 not_tested = "A real nginx proxy container (checked by hand against nginx:1.27-alpine); proxy_status."
+
+[[sections.features]]
+name = "Machine suspension and dashboard quantum machines"
+code = ["core:QsTarget.machine_states", "core:QsTarget.machine_online", "core:QsTarget.suspend_machine",
+        "core:QsTarget.resume_machine", "suspension:_connect", "suspension:_first_line",
+        "suspension:parse_suspend_options", "suspension:instance_machine_states", "suspension:machine_users",
+        "suspension:_cluster", "suspension:cluster_suspension_status", "suspension:apply_suspension",
+        "suspension:machines_overview", "suspension:dashboard_qscheduler_machines_api",
+        "suspension:qscheduler_cluster_suspension_api"]
+verified = "Suspend / resume requests (path, message, cancel mode) and their 404/409 wording, machine states with the active suspension, backend check via /about, refused for QScheduler < 0.2.1; proxy forwards the suspension and about routes and is recreated when its config changes. States online / offline / suspended / missing / unreachable / unsupported / unregistered; options validated (message length, cancel mode, default message). A machine used by clusters of other HEAppE instances, or with an assigned HEAppE that cannot be checked, is refused without confirmation (HTTP 409) and suspended with it; state-only GET does not ask other HEAppE instances; dashboard rows per QScheduler cluster, hidden without an assignment."
+not_tested = "The dashboard card and the dialogs in the browser; against a running QScheduler 0.2.2."
 
 [[sections.features]]
 name = "SSH to VM / local Docker"

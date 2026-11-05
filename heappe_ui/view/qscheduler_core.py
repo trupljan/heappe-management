@@ -77,6 +77,9 @@ NOTIFIER_MAX_LEN = 512
 # From this version machines and notifiers are managed over the admin API (Bearer ADMIN_TOKEN) and changes apply
 # at once; older versions only have the CLI, whose changes are loaded at service start (restart needed).
 ADMIN_API_MIN_VERSION = (0, 2, 1)
+SUSPENSION_UNSUPPORTED = "Suspending machines needs QScheduler 0.2.1 or newer (admin API)."
+SUSPENSION_CANCEL_MODES = ("none", "waiting", "all")
+SUSPENSION_MESSAGE_MAX_LEN = 512
 
 SECRET_FLAGS = ("--token",)
 
@@ -543,6 +546,52 @@ class QsTarget:
             except ValueError:
                 res.stdout = f"Machine '{name}' removed."
         return res
+
+    # --- machine suspension (admin API only) --------------------------------
+
+    def machine_states(self, log=None):
+        """
+        {name: {'backend', 'suspension'}} of all machines (admin API, QScheduler >= 0.2.1). 'suspension' is the
+        active suspension ({'message', 'cancel', 'suspended_at'}) or None.
+        """
+        if not self.uses_admin_api(log):
+            raise RuntimeError(SUSPENSION_UNSUPPORTED)
+        return {m['name']: {'backend': (m.get('backend') or {}).get('type', ''), 'suspension': m.get('suspension')}
+                for m in self._admin_json("GET", "/machines") or []}
+
+    def machine_online(self, name, timeout=10):
+        """(True, "") when the machine's backend answers GET /machine/{name}/about, else (False, reason)."""
+        try:
+            status, text = self.admin_request("GET", f"/machine/{quote(name, safe='')}/about", timeout=timeout)
+        except Exception as e:
+            return False, str(e).splitlines()[0][:200]
+        return (True, "") if status == 200 else (False, api_error_text(status, text)[:200])
+
+    def suspend_machine(self, name, message, cancel, log):
+        """Suspends a machine: new tasks and sessions get 409; `cancel` (none | waiting | all) handles existing work."""
+        if not self.uses_admin_api(log):
+            raise RuntimeError(SUSPENSION_UNSUPPORTED)
+        path = f"/machine/{quote(name, safe='')}/suspension"
+        log(f"Admin API: POST {path} (cancel={cancel})")
+        status, text = self.admin_request("POST", path, {"message": message, "cancel": cancel})
+        if status not in (200, 201):
+            prefix = {404: f"Machine '{name}' not found", 409: f"Machine '{name}' is already suspended",
+                      422: "Invalid suspension"}.get(status, "Suspending failed")
+            raise RuntimeError(f"{prefix}: {api_error_text(status, text)}")
+        return json.loads(text) if text.strip() else {}
+
+    def resume_machine(self, name, log):
+        """Ends a machine's suspension; work failed or closed by it stays so."""
+        if not self.uses_admin_api(log):
+            raise RuntimeError(SUSPENSION_UNSUPPORTED)
+        path = f"/machine/{quote(name, safe='')}/suspension"
+        log(f"Admin API: DELETE {path}")
+        status, text = self.admin_request("DELETE", path)
+        if status != 200:
+            prefix = {404: f"Machine '{name}' not found",
+                      409: f"Machine '{name}' is not suspended"}.get(status, "Resuming failed")
+            raise RuntimeError(f"{prefix}: {api_error_text(status, text)}")
+        return json.loads(text) if text.strip() else {}
 
     def add_notifier(self, name, url, token, log):
         if not self.uses_admin_api(log):
