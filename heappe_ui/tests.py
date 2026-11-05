@@ -5377,8 +5377,8 @@ class InstanceTeardownAndDeploymentFailureTests(TestCase):
                     f"SHARED_VAULT_FILE_NAME=credentials_develop\n"
                 )
 
-            # Write credentials vault file
-            with open(os.path.join(old_dir, "credentials_develop"), "w") as f:
+            # Write credentials vault file (test postfix pattern develop_credentials)
+            with open(os.path.join(old_dir, "develop_credentials"), "w") as f:
                 f.write("vault_secret")
 
             # Write appsettings.json
@@ -5424,7 +5424,7 @@ class InstanceTeardownAndDeploymentFailureTests(TestCase):
             self.assertIn("SHARED_VAULT_FILE_NAME=credentials_core_dev_it4i_develop", new_env)
 
             # Verify vault credentials file renamed
-            self.assertTrue(os.path.exists(os.path.join(new_dir, "credentials_core_dev_it4i_develop")))
+            self.assertTrue(os.path.exists(os.path.join(new_dir, "core_dev_it4i_develop_credentials")))
 
             # Verify appsettings.json updated
             with open(os.path.join(new_dir, "app", "confs", "appsettings.json"), "r") as f:
@@ -5436,6 +5436,57 @@ class InstanceTeardownAndDeploymentFailureTests(TestCase):
             # Verify DB updated
             inst.refresh_from_db()
             self.assertEqual(inst.instance_name, "core_dev_it4i_develop")
+
+    @mock.patch("heappe_ui.view.deploy.docker.from_env")
+    @mock.patch("heappe_ui.view.deploy.execute_docker_compose")
+    def test_rename_instance_volume_migration_with_container(self, mock_exec_compose, mock_docker_env):
+        import tempfile
+        from heappe_ui.models import InstanceCredentials
+        from heappe_ui.view.deploy import rename_instance
+        import subprocess
+
+        mock_exec_compose.return_value = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+        mock_vol = mock.MagicMock()
+        mock_vol.name = "develop_mssql_data"
+        mock_vol.attrs = {"Labels": {"com.docker.compose.project": "develop"}}
+
+        mock_helper_container = mock.MagicMock()
+        mock_image = mock.MagicMock()
+        mock_image.tags = ["hashicorp/vault:1.17.3"]
+
+        mock_client = mock.MagicMock()
+        mock_client.containers.list.return_value = []
+        mock_client.volumes.list.return_value = [mock_vol]
+        import docker
+        mock_client.volumes.get.side_effect = docker.errors.NotFound("not found")
+        mock_client.images.list.return_value = [mock_image]
+        mock_client.containers.create.return_value = mock_helper_container
+
+        mock_docker_env.return_value = mock_client
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            old_dir = os.path.join(temp_dir, "develop")
+            os.makedirs(os.path.join(old_dir, "heappe-core"), exist_ok=True)
+            with open(os.path.join(old_dir, "heappe-core", ".env"), "w") as f:
+                f.write("INSTANCE_NAME=develop\n")
+
+            res = rename_instance(
+                old_name="develop",
+                new_name="prod",
+                base_path=temp_dir,
+                restart_containers=False
+            )
+
+            self.assertTrue(res["success"])
+            self.assertIn("develop_mssql_data -> prod_mssql_data", res["volumes_migrated"])
+            # Verify container was created with entrypoint to prevent hanging
+            mock_client.containers.create.assert_called_once()
+            call_kwargs = mock_client.containers.create.call_args[1]
+            self.assertEqual(call_kwargs["entrypoint"], ["/bin/sh", "-c"])
+            mock_helper_container.start.assert_called_once()
+            mock_helper_container.wait.assert_called_once_with(timeout=15)
+            mock_helper_container.remove.assert_called_once_with(force=True)
 
     def test_rename_instance_validation_errors(self):
         from heappe_ui.models import InstanceCredentials

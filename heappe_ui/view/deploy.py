@@ -786,9 +786,19 @@ def rename_instance(
         active_base_path = candidate_base_paths[0]
 
     new_project_dir = os.path.join(active_base_path, new_name)
+    if not old_project_dir and os.path.isdir(new_project_dir):
+        old_project_dir = new_project_dir
+
     if old_project_dir and old_project_dir != new_project_dir and os.path.exists(new_project_dir):
-        results["errors"].append(f"Target directory '{new_project_dir}' already exists on disk.")
-        return results
+        new_core = os.path.join(new_project_dir, "heappe-core")
+        if not os.path.exists(new_core) or not os.listdir(new_project_dir):
+            try:
+                shutil.rmtree(new_project_dir, ignore_errors=True)
+            except Exception:
+                pass
+        else:
+            results["errors"].append(f"Target directory '{new_project_dir}' already exists on disk.")
+            return results
 
     # 1. Stop and remove old containers (WITHOUT deleting volumes: v=False)
     client = None
@@ -796,6 +806,19 @@ def rename_instance(
         client = docker.from_env()
     except Exception as e:
         _logger.warning(f"Docker client unavailable: {e}")
+
+    # 1a. Clean up any leftover helper containers
+    if client:
+        try:
+            for c in client.containers.list(all=True):
+                labels = getattr(c, 'labels', {}) or {}
+                if labels.get('com.heappe.rename_helper') == 'true':
+                    try:
+                        c.remove(force=True)
+                    except Exception:
+                        pass
+        except Exception as e:
+            _logger.warning(f"Helper cleanup note: {e}")
 
     old_compose_dir = os.path.join(old_project_dir, "heappe-core") if old_project_dir else None
     if old_compose_dir and os.path.isdir(old_compose_dir):
@@ -862,27 +885,54 @@ def rename_instance(
                         except docker.errors.NotFound:
                             try:
                                 client.volumes.create(name=new_vol_name, labels={'com.docker.compose.project': new_name})
+                                # Method 1: Direct host filesystem copy (fastest, safest, zero container overhead)
+                                src_vol_dir = os.path.join("/var/lib/docker/volumes", vol_name, "_data")
+                                dst_vol_dir = os.path.join("/var/lib/docker/volumes", new_vol_name, "_data")
+                                if os.path.isdir(src_vol_dir) and os.path.isdir(dst_vol_dir):
+                                    for item in os.listdir(src_vol_dir):
+                                        s = os.path.join(src_vol_dir, item)
+                                        d = os.path.join(dst_vol_dir, item)
+                                        if os.path.isdir(s):
+                                            shutil.copytree(s, d, symlinks=True, dirs_exist_ok=True)
+                                        else:
+                                            shutil.copy2(s, d)
+                                    results["volumes_migrated"].append(f"{vol_name} -> {new_vol_name} (fs)")
+                                    continue
+
+                                # Method 2: Fallback to lightweight container with explicit entrypoint and timeout
                                 avail_imgs = [img.tags[0] for img in client.images.list() if getattr(img, 'tags', None)]
                                 helper_img = None
-                                for cand in ['bash:latest', 'alpine:latest', 'heappe:latest', 'heappe', 'datastagingapi', 'mcr.microsoft.com/mssql/server']:
+                                for cand in ['alpine:latest', 'alpine', 'busybox:latest', 'busybox', 'bash:latest', 'bash', 'hashicorp/vault:1.17.3', 'hashicorp/vault', 'sshagent']:
                                     for tag in avail_imgs:
                                         if cand in tag:
                                             helper_img = tag
                                             break
                                     if helper_img:
                                         break
-                                if not helper_img and avail_imgs:
-                                    helper_img = avail_imgs[0]
+
                                 if helper_img:
-                                    client.containers.run(
-                                        helper_img,
-                                        command=['sh', '-c', 'cp -a /from/. /to/ 2>/dev/null || cp -r /from/* /to/ 2>/dev/null || true'],
-                                        volumes={
-                                            vol_name: {'bind': '/from', 'mode': 'ro'},
-                                            new_vol_name: {'bind': '/to', 'mode': 'rw'}
-                                        },
-                                        remove=True
-                                    )
+                                    helper_c = None
+                                    try:
+                                        helper_c = client.containers.create(
+                                            helper_img,
+                                            entrypoint=["/bin/sh", "-c"],
+                                            command=["cp -a /from/. /to/ 2>/dev/null || cp -r /from/* /to/ 2>/dev/null || true"],
+                                            volumes={
+                                                vol_name: {'bind': '/from', 'mode': 'ro'},
+                                                new_vol_name: {'bind': '/to', 'mode': 'rw'}
+                                            },
+                                            labels={'com.heappe.rename_helper': 'true'}
+                                        )
+                                        helper_c.start()
+                                        helper_c.wait(timeout=15)
+                                    except Exception as ce:
+                                        _logger.warning(f"Volume copy container note: {ce}")
+                                    finally:
+                                        if helper_c:
+                                            try:
+                                                helper_c.remove(force=True)
+                                            except Exception:
+                                                pass
                                 results["volumes_migrated"].append(f"{vol_name} -> {new_vol_name}")
                             except Exception as ve:
                                 results["errors"].append(f"Failed to migrate volume {vol_name} to {new_vol_name}: {ve}")
@@ -935,11 +985,17 @@ def rename_instance(
             with open(env_path, "w", encoding="utf-8") as f:
                 f.writelines(new_env_lines)
 
-            # Move credentials vault file if exists
-            old_vault_creds = os.path.join(new_project_dir, f"credentials_{source_project.lower()}")
-            new_vault_creds = os.path.join(new_project_dir, f"credentials_{new_name.lower()}")
-            if os.path.exists(old_vault_creds) and old_vault_creds != new_vault_creds:
-                shutil.move(old_vault_creds, new_vault_creds)
+            # Move credentials vault file if exists (handling both prefix and postfix naming conventions)
+            for old_v, new_v in [
+                (f"credentials_{source_project.lower()}", f"credentials_{new_name.lower()}"),
+                (f"{source_project.lower()}_credentials", f"{new_name.lower()}_credentials"),
+                (f"credentials_{old_name.lower()}", f"credentials_{new_name.lower()}"),
+                (f"{old_name.lower()}_credentials", f"{new_name.lower()}_credentials"),
+            ]:
+                old_vault_creds = os.path.join(new_project_dir, old_v)
+                new_vault_creds = os.path.join(new_project_dir, new_v)
+                if os.path.exists(old_vault_creds) and old_vault_creds != new_vault_creds:
+                    shutil.move(old_vault_creds, new_vault_creds)
         except Exception as e:
             results["errors"].append(f"Failed to update .env: {e}")
 
