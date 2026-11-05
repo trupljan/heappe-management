@@ -23,6 +23,7 @@ adding quantum machines as HEAppE clusters.
   - [Add a quantum machine](#add-a-quantum-machine)
   - [Remove a quantum machine](#remove-a-quantum-machine)
   - [Suspend / resume a machine](#suspend--resume-a-machine)
+  - [Pulse-level tasks](#pulse-level-tasks)
 - [SSH directly into the QScheduler container (obsolete)](#ssh-directly-into-the-qscheduler-container-obsolete)
 - [When QScheduler is restarted](#when-qscheduler-is-restarted)
 - [Security notes](#security-notes)
@@ -349,6 +350,7 @@ Only QScheduler instances **assigned** to the current HEAppE instance are offere
 | | Machine name | Up to 30 characters (letters, digits, `_`, `.`, `-`). Becomes the HEAppE queue. With *Use existing machine*, a dropdown lists the machines registered in the selected instance (with their backend); *Other (type manually)...* or an instance whose machines cannot be listed falls back to a text field. For a new machine, registered names are suggested. |
 | | Backend | `test` (in-process simulator) or `iqm`. For `iqm`: server URL, device name (for example `star24`), token and poll interval (for example `500ms`). |
 | | Machine limits | Queue size (`4`), max session time (`2h`), default task time limit (`1h`), limit check interval (`2s`), max clock skew (`4s`). Durations need a unit. |
+| | Allow pulse-level tasks | Off by default. The machine also accepts `kind=pulse` tasks (e.g. IQM Pulla `RunDefinition`s), not only circuits. Needs QScheduler 0.2.2+; change it later with [Pulse-level tasks](#pulse-level-tasks). |
 | HEAppE cluster | Cluster name | Always the machine name (read-only): HEAppE uses the cluster name as the QScheduler machine, so a cluster named differently fails its jobs. Refused when this HEAppE already has a cluster of that name. |
 | | Accounting formula | Default `exectime_ms/1000` (QPU seconds). |
 | | Use sessions by default | Sets `QSchedulerUseSessions`. |
@@ -418,6 +420,25 @@ Select one of the current HEAppE instance's QScheduler clusters.
     then not deleted either.
   - *Force* also deletes the machine's tasks and sessions. Time they consumed is not returned to their projects.
 - The option is unavailable when the cluster's QScheduler is not registered in HEAppE Management.
+
+### Pulse-level tasks
+
+A machine accepts pulse-level tasks (`kind=pulse`, e.g. protobuf `RunDefinition`s compiled with IQM Pulla) only when
+**pulse access** is on; otherwise QScheduler rejects them with HTTP `422` and accepts circuits only. Needs QScheduler
+**0.2.2 or newer**. Off by default.
+
+- **Add quantum machine** (and *Recover machine* / *Move* with a new machine): **Allow pulse-level tasks**. Stored with
+  the machine's definition, so *Restore* registers it again with the same setting.
+- **Cluster detail → QScheduler panel**: *Pulse-level tasks: allowed / not allowed* with **Allow pulse tasks...** /
+  **Forbid pulse tasks...**.
+- **Dashboard → Quantum Machines**: a *Pulse allowed* / *Pulse disabled* badge per machine (status only; nothing is
+  shown before QScheduler 0.2.2).
+
+Changing it rewrites the machine's configuration in QScheduler (`PUT /machine/{name}`, all other settings sent back
+unchanged), and QScheduler **restarts the machine**: queued tasks are kept and tasks on the backend re-attached, but an
+open session is closed (its unfinished tasks are cancelled) and new tasks are rejected for a moment. An **IQM** machine
+needs its IQM token in the dialog: QScheduler never returns it and HEAppE Management does not store it. The setting
+belongs to the machine, so a machine shared with other clusters needs the same confirmation as *Suspend*.
 
 ### Suspend / resume a machine
 
@@ -795,6 +816,7 @@ restart pending) are described in [QScheduler_Recovery_README.md](QScheduler_Rec
 | Assignments table | Unassign | all | Removes network access and leftover notifiers. Requires no clusters of that HEAppE on the instance. |
 | Clusters → QScheduler | Add quantum machine | assigned instances | New or shared machine + HEAppE cluster, queue, queue group, optional project; with notifications on, the cluster's own notifier and token (Vault). |
 | Clusters → QScheduler | Remove quantum machine | QScheduler clusters of the current HEAppE | Deletes the cluster and its notifier, optionally removes the machine from QScheduler (`--force` optional). |
+| Cluster detail → QScheduler | Allow / Forbid pulse tasks | QScheduler clusters of the current HEAppE (QScheduler 0.2.2+) | Sets the machine's pulse access (machine restarted, open session closed; IQM token needed); a shared machine needs a confirmation. |
 | Dashboard → Quantum Machines, Cluster detail → QScheduler | Suspend / Resume | QScheduler clusters of the current HEAppE (QScheduler 0.2.1+) | Suspends the cluster's machine (new work rejected, existing work kept or cancelled) or resumes it; a machine shared with other clusters needs a confirmation. |
 | Clusters → QScheduler | Manage QScheduler instances | – | Opens the QScheduler page. |
 | Cluster detail → QScheduler | Recreate notifier / Disable callbacks | QScheduler clusters with wrong notification settings | New notifier and token for the cluster (or callbacks off), one restart. |

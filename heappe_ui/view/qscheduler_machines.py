@@ -70,6 +70,7 @@ def parse_machine_options(data: dict, uid: str) -> tuple:
         'max_session_time': s('max_session_time', '2h'),
         'default_task_time_limit': s('default_task_time_limit', '1h'),
         'max_clock_skew': s('max_clock_skew', '4s'),
+        'pulse_access': b('pulse_access', False),   # pulse-level tasks (kind=pulse), QScheduler 0.2.2+
         'iqm_url': s('iqm_url'),
         'iqm_token': s('iqm_token'),
         'iqm_device': s('iqm_device'),
@@ -97,6 +98,8 @@ def parse_machine_options(data: dict, uid: str) -> tuple:
             opts['project_name'] = f"qs-{uid}"
         if not NAME_RE.match(opts['project_name']):
             errors.append("QScheduler project name may contain only letters, digits, '_', '.', '-'.")
+    if opts['machine_mode'] != 'new':
+        opts['pulse_access'] = False          # an existing machine keeps its own setting
     if opts['machine_mode'] == 'new':
         for key, label in (('limit_check_interval', "Limit check interval"), ('max_session_time', "Max session time"),
                            ('default_task_time_limit', "Default task time limit"), ('max_clock_skew', "Max clock skew")):

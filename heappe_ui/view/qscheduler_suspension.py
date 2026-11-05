@@ -97,12 +97,13 @@ def instance_machine_states(inst, machines, check_online=True):
             info = registered.get(m)
             if info is None:
                 out['machines'][m] = {'state': MISSING, 'suspension': None, 'online': None, 'online_reason': "",
-                                      'backend': ""}
+                                      'backend': "", 'pulse_access': None}
                 continue
             ok, reason = online.get(m, (None, ""))
             state = SUSPENDED if info['suspension'] else (ONLINE if ok or ok is None else OFFLINE)
             out['machines'][m] = {'state': state, 'suspension': info['suspension'], 'online': ok,
-                                  'online_reason': reason, 'backend': info['backend']}
+                                  'online_reason': reason, 'backend': info['backend'],
+                                  'pulse_access': info.get('pulse_access')}
     except Exception as e:
         from .qscheduler_admin import find_admin_token_error
         tok = find_admin_token_error(e)
@@ -151,7 +152,8 @@ def cluster_suspension_status(instance_name, cluster_id, with_users=True):
     out = {'heappe': instance_name, 'cluster_id': cluster.get('id'), 'cluster': cluster.get('name'),
            'machine': machine, 'instance': None,
            'state': None, 'suspension': None, 'online': None, 'online_reason': "", 'error': None,
-           'can_act': False, 'users': [], 'unchecked': [], 'shared': False}
+           'can_act': False, 'users': [], 'unchecked': [], 'shared': False,
+           'backend': "", 'pulse_access': None}
     inst = _instance_of_cluster(cluster)
     if not inst:
         out['state'] = UNREGISTERED
@@ -170,7 +172,7 @@ def cluster_suspension_status(instance_name, cluster_id, with_users=True):
         out['state'], out['error'] = states['state'], states['error']
         return out
     m = states['machines'][machine]
-    out.update({k: m[k] for k in ('state', 'suspension', 'online', 'online_reason')})
+    out.update({k: m[k] for k in ('state', 'suspension', 'online', 'online_reason', 'backend', 'pulse_access')})
     out['can_act'] = m['state'] != MISSING
     if with_users and out['can_act']:
         out['users'], out['unchecked'] = machine_users(inst, machine, (instance_name, controller, session_code))
@@ -204,6 +206,45 @@ def apply_suspension(instance_name, cluster_id, opts, log):
     return cluster_suspension_status(instance_name, cluster_id, with_users=False)
 
 
+def parse_pulse_options(data: dict):
+    """(opts, errors) of a pulse access change."""
+    flag = lambda v: v if isinstance(v, bool) else str(v or "").strip().lower() in ("1", "true", "on", "yes")
+    if data.get('enabled') is None or str(data.get('enabled')).strip() == "":
+        return None, ["Choose whether pulse-level tasks are allowed."]
+    return {'enabled': flag(data.get('enabled')), 'iqm_token': str(data.get('iqm_token') or "").strip(),
+            'confirm_shared': flag(data.get('confirm_shared'))}, []
+
+
+def apply_pulse_access(instance_name, cluster_id, opts, log):
+    """
+    Allows / forbids pulse-level tasks on the cluster's machine (it restarts in QScheduler). Raises PermissionError
+    when a shared machine is not confirmed. The stored machine definition (used by Restore) follows.
+    """
+    from heappe_ui.models import QSchedulerMachine
+    status = cluster_suspension_status(instance_name, cluster_id)
+    if not status['can_act']:
+        raise RuntimeError(status['error'] or f"Machine '{status['machine']}' cannot be changed.")
+    if status['pulse_access'] is None:
+        raise RuntimeError(core.PULSE_UNSUPPORTED)
+    if status['shared'] and not opts['confirm_shared']:
+        raise PermissionError(status)
+    inst = QSchedulerAssignment.objects.select_related("qscheduler").get(
+        heappe_instance__instance_name=instance_name, qscheduler_id=status['instance']['id']).qscheduler
+    machine = status['machine']
+    target = core.target_for(inst)
+    try:
+        target.set_pulse_access(machine, opts['enabled'], log, opts['iqm_token'])
+    finally:
+        target.close()
+    stored = QSchedulerMachine.objects.filter(qscheduler=inst, name=machine).first()
+    if stored:
+        stored.options = dict(stored.options or {}, pulse_access=opts['enabled'])
+        stored.save(update_fields=["options", "updated_at"])
+    logger.info("Pulse-level tasks %s on QScheduler machine %s (%s) from HEAppE %s",
+                "allowed" if opts['enabled'] else "forbidden", machine, inst.name, instance_name)
+    return cluster_suspension_status(instance_name, cluster_id, with_users=False)
+
+
 # ---------------------------------------------------------------------------
 # Dashboard overview
 # ---------------------------------------------------------------------------
@@ -221,6 +262,7 @@ def machines_overview(instance_name):
                'name_matches': core.cluster_name_matches(d),
                'instance': inst.name if inst else None, 'instance_id': inst.id if inst else None,
                'state': None, 'suspension': None, 'online': None, 'online_reason': "", 'error': None,
+               'pulse_access': None,
                'can_act': False}
         if not inst:
             row['state'], row['error'] = UNREGISTERED, "QScheduler not registered in HEAppE Management."
@@ -238,7 +280,7 @@ def machines_overview(instance_name):
                 r['state'], r['error'] = states['state'], states['error']
                 continue
             m = states['machines'][r['machine']]
-            r.update({k: m[k] for k in ('state', 'suspension', 'online', 'online_reason')})
+            r.update({k: m[k] for k in ('state', 'suspension', 'online', 'online_reason', 'pulse_access')})
             r['can_act'] = m['state'] != MISSING
     rows.sort(key=lambda r: (r['instance'] or "~", r['machine'] or "", r['cluster'] or ""))
     return rows
@@ -262,6 +304,32 @@ def dashboard_qscheduler_machines_api(request: HttpRequest) -> HttpResponse:
         return JsonResponse({'status': 'error', 'assigned': True,
                              'message': f"Clusters of HEAppE '{instance_name}' cannot be listed: {_first_line(e)}"})
     return JsonResponse({'status': 'success', 'assigned': True, 'machines': rows})
+
+
+@login_required
+def qscheduler_cluster_pulse_api(request: HttpRequest, cluster_id: int) -> HttpResponse:
+    """
+    POST {enabled, iqm_token (IQM machines), confirm_shared}: allows / forbids pulse-level tasks on the cluster's
+    machine. A shared machine without confirm_shared gets HTTP 409 with status 'confirm'.
+    """
+    if request.method != "POST":
+        return _error('Only POST method is allowed', 405)
+    opts, errors = parse_pulse_options(_json_body(request))
+    if errors:
+        return _error(" ".join(errors))
+    lines = []
+    try:
+        result = apply_pulse_access(request.session.get("chosen_instance"), cluster_id, opts, lines.append)
+    except PermissionError as e:
+        status = e.args[0]
+        return JsonResponse(dict(status, status='confirm',
+                                 message=f"Machine '{status['machine']}' is used by other clusters. Confirm the change."),
+                            status=409)
+    except Exception as e:
+        return _error(_first_line(e, 500))
+    return JsonResponse(dict(result, status='success', log=lines,
+                             message=f"Pulse-level tasks {'allowed' if opts['enabled'] else 'not allowed'} on machine "
+                                     f"'{result['machine']}'."))
 
 
 @login_required

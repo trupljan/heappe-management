@@ -8901,7 +8901,7 @@ class QSchedulerSuspensionTargetTests(TestCase):
                                     ("GET", "/machine/A/about"): (200, "{}"),
                                     ("GET", "/machine/B/about"): (502, "backend down")})
         states = t.machine_states()
-        self.assertEqual(states["A"], {"backend": "test", "suspension": None})
+        self.assertEqual(states["A"], {"backend": "test", "suspension": None, "pulse_access": None})   # no field: < 0.2.2
         self.assertEqual(states["B"]["suspension"]["message"], "x")
         self.assertEqual(t.machine_online("A"), (True, ""))
         ok, reason = t.machine_online("B")
@@ -8935,8 +8935,8 @@ class QSchedulerSuspensionTargetTests(TestCase):
         self.assertIn(f"{qa.LABEL_CONFIG}={qa.config_hash(inst)}", cmds[1])
 
 
-class QSchedulerSuspensionViewTests(TestCase):
-    """Machine state, shared-machine detection and the suspend / resume / dashboard APIs."""
+class _QsMachineViewFixtures:
+    """Session, QScheduler instance and HEAppE mocks for the machine action APIs."""
 
     def setUp(self):
         from django.contrib.auth.models import User
@@ -8972,6 +8972,10 @@ class QSchedulerSuspensionViewTests(TestCase):
         t.machine_states.return_value = {m: {"backend": "test", "suspension": suspension} for m in machines}
         t.machine_online.return_value = online
         return t
+
+
+class QSchedulerSuspensionViewTests(_QsMachineViewFixtures, TestCase):
+    """Machine state, shared-machine detection and the suspend / resume / dashboard APIs."""
 
     def test_parse_options(self):
         from heappe_ui.view.qscheduler_suspension import parse_suspend_options
@@ -9293,3 +9297,168 @@ class QSchedulerLogLevelTests(TestCase):
                              content_type="application/json")
         self.assertEqual(r.status_code, 400)
         self.assertIn("Docker-based", r.json()["message"])
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# QScheduler pulse-level tasks (pulse_access, QScheduler >= 0.2.2)
+# ---------------------------------------------------------------------------------------------------------------------
+
+class QSchedulerPulseAccessTests(TestCase):
+    """pulse_access: add machine option, toggle via PUT /machine/{name} (whole config sent back), API."""
+
+    MACHINE = {"name": "Sim", "queue_size": 4, "limit_check_interval_ms": 2000, "max_session_time_ms": 7200000,
+               "default_task_time_limit_ms": 3600000, "max_clock_skew_ms": 4000, "pulse_access": False,
+               "backend": {"type": "test"}, "suspension": None}
+
+    def _opts(self, **kw):
+        return dict({"machine_name": "Sim", "backend": "test", "queue_size": 4, "limit_check_interval": "2s",
+                     "max_session_time": "2h", "default_task_time_limit": "1h", "max_clock_skew": "4s",
+                     "iqm_url": "", "iqm_token": "", "iqm_device": "", "iqm_poll_interval": "500ms"}, **kw)
+
+    def _target(self, version="qscheduler v0.2.2", responses=None):
+        from heappe_ui.view.qscheduler_core import QsTarget
+
+        class Fake(QsTarget):
+            def __init__(self):
+                self.port, self.requests = 4300, []
+
+            def version(self):
+                return version
+
+            def admin_request(self, method, path, body=None, timeout=60):
+                self.requests.append((method, path, body))
+                return (responses or {}).get((method, path), (200, "{}"))
+        return Fake()
+
+    def test_request_and_cli_only_carry_pulse_when_on(self):
+        from heappe_ui.view.qscheduler_core import machine_request, machine_args
+        self.assertNotIn("pulse_access", machine_request(self._opts()))       # 0.2.1 never gets the field
+        self.assertIs(machine_request(self._opts(pulse_access=True))["pulse_access"], True)
+        self.assertIn("--pulse-access", machine_args(self._opts(pulse_access=True)))
+        self.assertNotIn("--pulse-access", machine_args(self._opts()))
+
+    def test_parse_and_definition(self):
+        from heappe_ui.view.qscheduler_core import machine_definition
+        from heappe_ui.view.qscheduler_machines import parse_machine_options
+        opts, errors = parse_machine_options({"qscheduler_id": "1", "machine_name": "Sim", "machine_mode": "new",
+                                              "backend": "test", "pulse_access": "on"}, "u1")
+        self.assertEqual(errors, [])
+        self.assertTrue(opts["pulse_access"])
+        self.assertTrue(machine_definition(opts)[1]["pulse_access"])          # Restore registers it again with it
+        opts, _ = parse_machine_options({"qscheduler_id": "1", "machine_name": "Sim", "machine_mode": "existing",
+                                         "pulse_access": True}, "u1")
+        self.assertFalse(opts["pulse_access"])
+
+    def test_add_machine_with_pulse_needs_022(self):
+        t = self._target(version="qscheduler v0.2.1")
+        res = t.add_machine(self._opts(pulse_access=True), lambda *_: None)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("0.2.2", res.output)
+        self.assertEqual(t.requests, [])
+        t = self._target(responses={("POST", "/machines"): (201, "{}")})
+        self.assertEqual(t.add_machine(self._opts(pulse_access=True), lambda *_: None).returncode, 0)
+        self.assertTrue(t.requests[0][2]["pulse_access"])
+
+    def test_settings_from_config(self):
+        from heappe_ui.view.qscheduler_core import machine_settings_from_config
+        body = machine_settings_from_config(dict(self.MACHINE, decay_half_time_ms=5400000))
+        self.assertNotIn("name", body)
+        self.assertNotIn("suspension", body)
+        self.assertEqual(body["decay_half_time_ms"], 5400000)                  # newer settings are kept too
+        self.assertEqual(body["backend"], {"type": "test"})
+        iqm = dict(self.MACHINE, backend={"type": "iqm", "url": "https://iqm", "machine_name": "garnet",
+                                          "poll_interval_ms": 500})
+        with self.assertRaisesRegex(RuntimeError, "IQM token"):
+            machine_settings_from_config(iqm)
+        self.assertEqual(machine_settings_from_config(iqm, "tok")["backend"]["token"], "tok")
+
+    def test_set_pulse_access_sends_whole_config(self):
+        t = self._target(responses={("GET", "/machine/Sim"): (200, json.dumps(self.MACHINE)),
+                                    ("PUT", "/machine/Sim"): (200, json.dumps(dict(self.MACHINE, pulse_access=True)))})
+        t.set_pulse_access("Sim", True, lambda *_: None)
+        method, path, body = t.requests[-1]
+        self.assertEqual((method, path), ("PUT", "/machine/Sim"))
+        self.assertTrue(body["pulse_access"])
+        self.assertEqual((body["queue_size"], body["max_session_time_ms"]), (4, 7200000))
+
+    def test_set_pulse_access_refused_without_field(self):
+        old = {k: v for k, v in self.MACHINE.items() if k != "pulse_access"}
+        t = self._target(responses={("GET", "/machine/Sim"): (200, json.dumps(old))})
+        with self.assertRaisesRegex(RuntimeError, "0.2.2"):
+            t.set_pulse_access("Sim", True, lambda *_: None)
+        self.assertNotIn("PUT", [r[0] for r in t.requests])
+
+
+class QSchedulerPulseApiTests(_QsMachineViewFixtures, TestCase):
+    """POST .../pulse/: shared-machine confirmation, IQM token, stored definition."""
+
+    def _post_pulse(self, data):
+        return self.client.post("/clusters/qscheduler/cluster/1/pulse/", data=json.dumps(data),
+                                content_type="application/json")
+
+    def _ptarget(self, pulse=False, backend="test"):
+        t = self._target()
+        t.machine_states.return_value = {"Sim": {"backend": backend, "suspension": None, "pulse_access": pulse}}
+        return t
+
+    def test_toggle_updates_machine_and_stored_definition(self):
+        from heappe_ui.models import QSchedulerMachine
+        QSchedulerMachine.objects.create(qscheduler=self.inst, name="Sim", backend="test", options={"queue_size": 4})
+        target = self._ptarget()
+        dev = self._controller([self._cluster(1, "Sim", "Sim")])
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect", return_value=(dev, "s")), \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
+            status = self.client.get("/clusters/qscheduler/cluster/1/suspension/?users=0").json()
+            self.assertIs(status["pulse_access"], False)
+            r = self._post_pulse({"enabled": True})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(target.set_pulse_access.call_args.args[:2], ("Sim", True))
+        self.assertTrue(QSchedulerMachine.objects.get(name="Sim").options["pulse_access"])
+
+    def test_shared_machine_needs_confirmation(self):
+        from heappe_ui.models import QSchedulerAssignment
+        QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=self.prod)
+        target = self._ptarget()
+        dev = self._controller([self._cluster(1, "Sim", "Sim")])
+        prod = self._controller([self._cluster(7, "Sim", "Sim")])
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect",
+                        side_effect=lambda n: (dev, "s") if n == "dev" else (prod, "s")), \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
+            r = self._post_pulse({"enabled": True})
+            self.assertEqual((r.status_code, r.json()["status"]), (409, "confirm"))
+            target.set_pulse_access.assert_not_called()
+            r = self._post_pulse({"enabled": True, "confirm_shared": True})
+        self.assertEqual(r.status_code, 200, r.content)
+
+    def test_old_qscheduler_and_validation(self):
+        target = self._ptarget(pulse=None)
+        dev = self._controller([self._cluster(1, "Sim", "Sim")])
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect", return_value=(dev, "s")), \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
+            r = self._post_pulse({"enabled": True})
+            self.assertEqual(r.status_code, 400)
+            self.assertIn("0.2.2", r.json()["message"])
+            self.assertEqual(self._post_pulse({}).status_code, 400)
+        target.set_pulse_access.assert_not_called()
+
+
+class QSchedulerDashboardPulseTests(_QsMachineViewFixtures, TestCase):
+    """Dashboard Quantum Machines rows carry the machine's pulse access (None before QScheduler 0.2.2)."""
+
+    def test_rows_show_pulse_access(self):
+        clusters = [self._cluster(1, "Sim", "Sim"), self._cluster(2, "Garnet", "Garnet")]
+        target = self._target(machines=("Sim", "Garnet"))
+        target.machine_states.return_value = {
+            "Sim": {"backend": "test", "suspension": None, "pulse_access": True},
+            "Garnet": {"backend": "iqm", "suspension": None, "pulse_access": False}}
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect", return_value=(self._controller(clusters), "s")), \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
+            rows = {r["machine"]: r for r in self.client.get("/dashboard/qscheduler-machines/").json()["machines"]}
+        self.assertIs(rows["Sim"]["pulse_access"], True)
+        self.assertIs(rows["Garnet"]["pulse_access"], False)
+        target.machine_states.return_value = {"Sim": {"backend": "test", "suspension": None, "pulse_access": None}}
+        with mock.patch("heappe_ui.view.qscheduler_suspension._connect",
+                        return_value=(self._controller(clusters[:1]), "s")), \
+                mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
+            rows = self.client.get("/dashboard/qscheduler-machines/").json()["machines"]
+        self.assertIsNone(rows[0]["pulse_access"])

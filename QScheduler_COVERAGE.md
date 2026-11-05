@@ -7,10 +7,10 @@ QScheduler cluster settings) by the automated tests in `heappe_ui/tests.py`.
 | | |
 |---|---|
 | Date | 2026-11-05 |
-| Tests | 186, all passing (`QSchedulerConfigTests`, `QSchedulerVaultToggleSerializationTests`, `QSchedulerHelperTests`, `QSchedulerOptionParsingTests`, `QSchedulerWorkflowTests`, `QSchedulerClusterDetailTemplateTests`, `QSchedulerViewTests`, `QSchedulerGitRefsTests`, `QSchedulerRecoveryTests`, `QSchedulerUnmanagedNotifierTests`, `QSchedulerClusterHealthTests`, `QSchedulerClusterMoveTests`, `QSchedulerImageBuildTests`, `QSchedulerNetworkSubnetTests`, `QSchedulerExtraHostsTests`, `QSchedulerAdminApiTests`, `QSchedulerAdminProxyTests`, `QSchedulerSharedDbDockerTests`, `QSchedulerSharedDbTests`, `QSchedulerMigrateToSharedDockerTests`, `QSchedulerMigrateToSharedTests`, `QSchedulerNetworkTests`, `QSchedulerNetworkWorkerTests`, `QSchedulerNetworkDockerTests`, `QSchedulerEncryptedSecretsTests`, `QSchedulerEncryptSecretsMigrationTests`, `QSchedulerSuspensionTargetTests`, `QSchedulerSuspensionViewTests`, `QSchedulerClusterNameTests`, `QSchedulerLogLevelTests`) |
+| Tests | 196, all passing (`QSchedulerConfigTests`, `QSchedulerVaultToggleSerializationTests`, `QSchedulerHelperTests`, `QSchedulerOptionParsingTests`, `QSchedulerWorkflowTests`, `QSchedulerClusterDetailTemplateTests`, `QSchedulerViewTests`, `QSchedulerGitRefsTests`, `QSchedulerRecoveryTests`, `QSchedulerUnmanagedNotifierTests`, `QSchedulerClusterHealthTests`, `QSchedulerClusterMoveTests`, `QSchedulerImageBuildTests`, `QSchedulerNetworkSubnetTests`, `QSchedulerExtraHostsTests`, `QSchedulerAdminApiTests`, `QSchedulerAdminProxyTests`, `QSchedulerSharedDbDockerTests`, `QSchedulerSharedDbTests`, `QSchedulerMigrateToSharedDockerTests`, `QSchedulerMigrateToSharedTests`, `QSchedulerNetworkTests`, `QSchedulerNetworkWorkerTests`, `QSchedulerNetworkDockerTests`, `QSchedulerEncryptedSecretsTests`, `QSchedulerEncryptSecretsMigrationTests`, `QSchedulerSuspensionTargetTests`, `QSchedulerSuspensionViewTests`, `QSchedulerClusterNameTests`, `QSchedulerLogLevelTests`, `QSchedulerPulseAccessTests`, `QSchedulerPulseApiTests`, `QSchedulerDashboardPulseTests`) |
 | Measured code | `qscheduler_core.py`, `qscheduler_deploy.py`, `qscheduler_machines.py`, `qscheduler_recovery.py`, `qscheduler_cluster_health.py`, `qscheduler_admin.py`, `qscheduler_shared_db.py`, `qscheduler_network.py`, `qscheduler_suspension.py` |
 | Tool | coverage.py 7.6.1, line + branch coverage, Python 3.12 |
-| Source fingerprint | `417b40859371` (measured files + feature data) |
+| Source fingerprint | `a32dcc53851d` (measured files + feature data) |
 
 ## Summary
 
@@ -20,16 +20,16 @@ Share of executable lines (statements) run by the tests.
 
 | File | Lines | Covered | Missed | Line coverage |
 |---|---:|---:|---:|---:|
-| `qscheduler_core.py` (Docker/SSH runners, targets, HEAppE and git helpers) | 1023 | 696 | 327 | **68.0%** |
+| `qscheduler_core.py` (Docker/SSH runners, targets, HEAppE and git helpers) | 1062 | 731 | 331 | **68.8%** |
 | `qscheduler_deploy.py` (QScheduler page, instances, assignments) | 1149 | 785 | 364 | **68.3%** |
-| `qscheduler_machines.py` (Clusters page: add/remove machine) | 324 | 219 | 105 | **67.6%** |
+| `qscheduler_machines.py` (Clusters page: add/remove machine) | 326 | 221 | 105 | **67.8%** |
 | `qscheduler_recovery.py` (missing instances: archive, cascade deletion, restore) | 525 | 404 | 121 | **77.0%** |
 | `qscheduler_cluster_health.py` (cluster detail: QScheduler panel) | 347 | 308 | 39 | **88.8%** |
 | `qscheduler_admin.py` (admin API proxy, client and admin token) | 170 | 152 | 18 | **89.4%** |
 | `qscheduler_shared_db.py` (shared PostgreSQL, instance schemas, backups) | 405 | 263 | 142 | **64.9%** |
 | `qscheduler_network.py` (QScheduler network, static IP, aliases, migration) | 276 | 244 | 32 | **88.4%** |
-| `qscheduler_suspension.py` (machine suspension, dashboard quantum machines) | 201 | 178 | 23 | **88.6%** |
-| **Total** | **4420** | **3249** | **1171** | **73.5%** |
+| `qscheduler_suspension.py` (machine suspension, dashboard quantum machines) | 243 | 218 | 25 | **89.7%** |
+| **Total** | **4503** | **3326** | **1177** | **73.9%** |
 
 ### Branch coverage
 
@@ -38,16 +38,16 @@ direction was taken.
 
 | File | Branches | Covered | Partial | Branch coverage |
 |---|---:|---:|---:|---:|
-| `qscheduler_core.py` | 355 | 200 | 41 | **56.3%** |
+| `qscheduler_core.py` | 373 | 215 | 44 | **57.6%** |
 | `qscheduler_deploy.py` | 598 | 376 | 104 | **62.9%** |
-| `qscheduler_machines.py` | 158 | 88 | 34 | **55.7%** |
+| `qscheduler_machines.py` | 160 | 90 | 34 | **56.2%** |
 | `qscheduler_recovery.py` | 291 | 198 | 57 | **68.0%** |
 | `qscheduler_cluster_health.py` | 166 | 123 | 41 | **74.1%** |
 | `qscheduler_admin.py` | 70 | 53 | 9 | **75.7%** |
 | `qscheduler_shared_db.py` | 126 | 60 | 34 | **47.6%** |
 | `qscheduler_network.py` | 129 | 94 | 29 | **72.9%** |
-| `qscheduler_suspension.py` | 87 | 71 | 14 | **81.6%** |
-| **Total** | **1980** | **1263** | **363** | **63.8%** |
+| `qscheduler_suspension.py` | 107 | 89 | 16 | **83.2%** |
+| **Total** | **2020** | **1298** | **368** | **64.3%** |
 
 ### Combined coverage
 
@@ -56,19 +56,19 @@ pure line nor pure branch coverage.
 
 | File | Combined coverage |
 |---|---:|
-| `qscheduler_core.py` | **65.0%** |
+| `qscheduler_core.py` | **65.9%** |
 | `qscheduler_deploy.py` | **66.5%** |
-| `qscheduler_machines.py` | **63.7%** |
+| `qscheduler_machines.py` | **64.0%** |
 | `qscheduler_recovery.py` | **73.8%** |
 | `qscheduler_cluster_health.py` | **84.0%** |
 | `qscheduler_admin.py` | **85.4%** |
 | `qscheduler_shared_db.py` | **60.8%** |
 | `qscheduler_network.py` | **83.5%** |
-| `qscheduler_suspension.py` | **86.5%** |
-| **Total** | **70.5%** |
+| `qscheduler_suspension.py` | **87.7%** |
+| **Total** | **70.9%** |
 
-Compared with the previous report: line coverage 73.2% → 73.5%, branch coverage
-63.5% → 63.8%, combined 70.2% → 70.5%.
+Compared with the previous report: line coverage 73.5% → 73.9%, branch coverage
+63.8% → 64.3%, combined 70.5% → 70.9%.
 
 All tests run without Docker, SSH, git, GitHub/GitLab, a QScheduler or a HEAppE server: those are replaced by mocks.
 The tests therefore cover **decision logic** (validation, what is sent to QScheduler and HEAppE, blocking rules,
@@ -132,8 +132,8 @@ Each cluster has its own notifier `<HEAppE identifier>.<machine>` with its own t
 
 | Feature | Status | Coverage | What the tests verify | Not tested | Code |
 |---|---|---:|---|---|---|
-| Add machine – validation | ✅ | 82.7% / 80.6% | Defaults; QScheduler instance required; IQM URL, device, token and poll interval with unit required; existing-machine mode skips backend validation; no project → no project name. | Integer range errors (queue size, allocation). | `machines:parse_machine_options` |
-| QScheduler CLI arguments | ✅ | 81.8% / 66.7% | `machine add` option order (options before backend), `--limit-check-interval`, IQM `--poll-interval`; `notifier add <name> --url --token`; `notifier list` parsing (table and "No notifiers registered."). | `machine remove [--force]` arguments. | `core:machine_args`, `core:machine_remove_args`, `core:notifier_add_args`, `core:parse_notifier_list` |
+| Add machine – validation | ✅ | 83.3% / 81.6% | Defaults; QScheduler instance required; IQM URL, device, token and poll interval with unit required; existing-machine mode skips backend validation; no project → no project name. | Integer range errors (queue size, allocation). | `machines:parse_machine_options` |
+| QScheduler CLI arguments | ✅ | 83.3% / 71.4% | `machine add` option order (options before backend), `--limit-check-interval`, IQM `--poll-interval`; `notifier add <name> --url --token`; `notifier list` parsing (table and "No notifiers registered."). | `machine remove [--force]` arguments. | `core:machine_args`, `core:machine_remove_args`, `core:notifier_add_args`, `core:parse_notifier_list` |
 | Add machine | 🟡 | 65.9% / 50.0% | New machine: refused when it already exists (points to *Use existing machine*), otherwise `machine add` + `notifier add`, one restart, cluster with the notifier and its token in Vault. Existing (shared) machine: only `notifier add`, cluster with `MasterNodeName` = QScheduler host and `EnableCallback=true`, no project when not requested. Without notifications: no command, no restart, `EnableCallback=false`. | CLI failure, REST verification of the machine, project/allocation/credential creation, machine missing from the instance list. | `machines:add_machine_worker`, `machines:_create_cluster`, `machines:_register_cluster_resources`, `machines:_assignment_for`, `core:machine_definition` |
 | Remove machine | 🟡 | 56.8% / 43.2% | Cluster deleted, its notifier removed, one restart, machine kept in QScheduler. | *Also remove the machine* (`machine remove`, `--force`), refused removal keeping the cluster, the remove API. | `machines:remove_machine_worker`, `machines:_instance_of_cluster`, `machines:qscheduler_machine_remove_api` |
 | Machine dialog data | 🟡 | 37.9% / 9.1% | Lists the instances assigned to the current HEAppE; reports a HEAppE API error. | Cluster list for removal, `qscheduler_machine_list_api`. | `machines:qscheduler_machine_defaults_api`, `machines:qscheduler_machine_list_api` |
@@ -165,11 +165,12 @@ Detected as *missing* (container gone) or *unreachable*; resolved by archiving, 
 | Feature | Status | Coverage | What the tests verify | Not tested | Code |
 |---|---|---:|---|---|---|
 | SSH into container | 🟡 | 19.2% / 21.4% | `DATABASE_URL` is exported before the command (given value, or read from `/proc/1/environ`). | Health check, restart + reconnect, machine listing via `psql`. | `core:ContainerShellTarget`, `core:_psql_machines_sql` |
-| Admin API (QScheduler >= 0.2.1) | ✅ | 84.5% / 75.0% | Version gate (0.2.1+), machine body with durations in ms (test and IQM), admin API writes without restart, error wording matching the CLI (already exists / not found / has tasks or sessions), machine and notifier listing, CLI with one restart only for older versions, no CLI or database fallback when the admin token is missing or rejected, no admin call without the admin client, errors without request details, ADMIN_TOKEN redaction and its addition on Update. | Against a running QScheduler 0.2.1 container. | `core:parse_version`, `core:supports_admin_api`, `core:duration_ms`, `core:machine_request`, `core:http_body`, `core:api_error_text`, `core:new_admin_token`, `core:QsTarget.admin_request`, `core:QsTarget._admin_json`, `core:QsTarget.uses_admin_api`, `core:QsTarget._api_result`, `core:QsTarget._cli_write`, `core:QsTarget.list_machines`, `core:QsTarget.list_notifiers`, `core:QsTarget.add_machine`, `core:QsTarget.remove_machine`, `core:QsTarget.add_notifier`, `core:QsTarget.remove_notifier`, `deploy:admin_token_env` |
+| Admin API (QScheduler >= 0.2.1) | ✅ | 84.4% / 75.8% | Version gate (0.2.1+), machine body with durations in ms (test and IQM), admin API writes without restart, error wording matching the CLI (already exists / not found / has tasks or sessions), machine and notifier listing, CLI with one restart only for older versions, no CLI or database fallback when the admin token is missing or rejected, no admin call without the admin client, errors without request details, ADMIN_TOKEN redaction and its addition on Update. | Against a running QScheduler 0.2.1 container. | `core:parse_version`, `core:supports_admin_api`, `core:duration_ms`, `core:machine_request`, `core:http_body`, `core:api_error_text`, `core:new_admin_token`, `core:QsTarget.admin_request`, `core:QsTarget._admin_json`, `core:QsTarget.uses_admin_api`, `core:QsTarget._api_result`, `core:QsTarget._cli_write`, `core:QsTarget.list_machines`, `core:QsTarget.list_notifiers`, `core:QsTarget.add_machine`, `core:QsTarget.remove_machine`, `core:QsTarget.add_notifier`, `core:QsTarget.remove_notifier`, `deploy:admin_token_env` |
 | Admin proxy and admin token | ✅ | 83.4% / 68.2% | Proxy forwards only /machines, /machine/{name}, /notifiers, /notifiers/{name} (404 otherwise), published on 127.0.0.1 only, in the assignment's HEAppE network; created when missing, recreated when the upstream changes, joins/leaves networks with assignments, refused without an assignment, removed with the last one. Token encrypted on the record, adopted from the container environment, not adoptable over SSH into the container. Client against a local HTTP server: method, path, bearer token, JSON body; 401 -> rejected, 403 -> not set, token never in errors. Token errors found through wrapped exceptions and reported in the operation result. Token API: show, set (rejected token not stored), regenerate (operation); regenerate worker recreates with the new token and checks it; register validates an entered token. | A real nginx proxy container (checked by hand against nginx:1.27-alpine); proxy_status. | `admin:proxy_image`, `admin:proxy_name`, `admin:AdminApiUnavailable`, `admin:AdminTokenError`, `admin:find_admin_token_error`, `admin:proxy_config`, `admin:config_hash`, `admin:proxy_run_args`, `admin:desired_networks`, `admin:_host_port`, `admin:ensure_proxy`, `admin:remove_proxy`, `admin:sync_proxy`, `admin:proxy_status`, `admin:container_admin_token`, `admin:admin_token`, `admin:http_request`, `admin:AdminClient`, `deploy:qscheduler_admin_token_api`, `deploy:regenerate_admin_token_worker` |
+| Pulse-level tasks (pulse_access) | ✅ | 92.1% / 85.7% | pulse_access sent on machine add (API and CLI) only when on, refused before QScheduler 0.2.2 without a request, ignored for an existing machine, stored in the machine definition for Restore; the toggle reads the machine and PUTs its whole configuration back (newer settings kept, name and suspension dropped) with only pulse_access changed, IQM needs its token again, refused when the version has no pulse_access; API: shared machine needs confirmation, stored definition follows, validation. | The checkboxes and the panel dialog in the browser; against a running QScheduler 0.2.2 (machine restart on PUT). | `core:supports_pulse`, `core:machine_settings_from_config`, `core:QsTarget.machine_config`, `core:QsTarget.set_pulse_access`, `suspension:parse_pulse_options`, `suspension:apply_pulse_access`, `suspension:qscheduler_cluster_pulse_api` |
 | Log level (RUST_LOG) | ✅ | 88.3% / 76.5% | Presets (case-insensitive), empty = info, custom RUST_LOG filters, invalid characters and length refused; deploy option validated; the container is recreated with RUST_LOG replacing the old value (other environment kept) and the level is stored only on success; API reads the level from the container, validates, starts the operation and refuses instances without Docker control. | The dialog in the browser; RUST_LOG on a deployed container (deploy_service); Restore passing the stored level. | `core:parse_log_level`, `core:container_log_level`, `deploy:log_level_worker`, `deploy:qscheduler_log_level_api` |
 | Machine suspension and dashboard quantum machines | ✅ | 86.2% / 80.6% | Suspend / resume requests (path, message, cancel mode) and their 404/409 wording, machine states with the active suspension, backend check via /about, refused for QScheduler < 0.2.1; proxy forwards the suspension and about routes and is recreated when its config changes. States online / offline / suspended / missing / unreachable / unsupported / unregistered; options validated (message length, cancel mode, default message). A machine used by clusters of other HEAppE instances, or with an assigned HEAppE that cannot be checked, is refused without confirmation (HTTP 409) and suspended with it; state-only GET does not ask other HEAppE instances; dashboard rows per QScheduler cluster, hidden without an assignment. | The dashboard card and the dialogs in the browser; against a running QScheduler 0.2.2. | `core:QsTarget.machine_states`, `core:QsTarget.machine_online`, `core:QsTarget.suspend_machine`, `core:QsTarget.resume_machine`, `suspension:_connect`, `suspension:_first_line`, `suspension:parse_suspend_options`, `suspension:instance_machine_states`, `suspension:machine_users`, `suspension:_cluster`, `suspension:cluster_suspension_status`, `suspension:apply_suspension`, `suspension:machines_overview`, `suspension:dashboard_qscheduler_machines_api`, `suspension:qscheduler_cluster_suspension_api` |
-| SSH to VM / local Docker | 🟡 | 47.2% / 41.2% | – | All (exec, restart, health wait, machine listing). | `core:DockerTarget`, `core:DockerCli`, `core:QsTarget`, `core:target_for`, `core:apply_changes` |
+| SSH to VM / local Docker | 🟡 | 49.4% / 43.5% | – | All (exec, restart, health wait, machine listing). | `core:DockerTarget`, `core:DockerCli`, `core:QsTarget`, `core:target_for`, `core:apply_changes` |
 | SSH session | ❌ | 0.0% / 0.0% | – (checked manually with generated RSA keys, encrypted and broken keys, not in the test suite). | Key loading, host-key pinning and mismatch, timeouts. | `core:SshSession`, `core:load_private_key`, `core:ssh_session_for` |
 | Internal networks with small subnets | ✅ | 90.4% / 96.3% | Selectable size (/24-/29, default /29 or QSCHEDULER_NETWORK_PREFIX) in deploy and restore options, passed to the network creation; first free subnet of that size, skipping subnets of existing Docker networks; next subnet tried when Docker reports an overlap; other errors and an exhausted pool reported with a hint; QSCHEDULER_NETWORK_POOL / QSCHEDULER_NETWORK_PREFIX validated. Checked once against the local Docker host (two networks created and removed). | IPv6 pools. | `core:create_internal_network`, `core:free_subnets`, `core:used_subnets`, `core:network_pool`, `core:check_network_prefix`, `deploy:_network_prefix`, `deploy:_default_prefix` |
 | Command helpers and secret redaction | ✅ | 87.1% / 94.4% | `DATABASE_URL` password, `--token` values and `POSTGRES_PASSWORD` are masked in logs; `serve --port` parsing. | Health-check command builders. | `core:redact_args`, `core:parse_serve_port`, `core:status_of`, `core:bash_http_get`, `core:qscheduler_healthcheck_args`, `core:CommandResult` |
@@ -233,4 +234,4 @@ python manage.py qscheduler_coverage --check    # fail if this report is out of 
 The command finds all `QScheduler*` test classes in `heappe_ui/tests.py`, runs them under coverage.py and fails when
 a test fails or a feature refers to code that no longer exists.
 
-<!-- qscheduler-coverage-state {"previous": {"branch": 63.5, "combined": 70.2, "line": 73.2}, "totals": {"branch": 63.8, "combined": 70.5, "line": 73.5}} -->
+<!-- qscheduler-coverage-state {"previous": {"branch": 63.8, "combined": 70.5, "line": 73.5}, "totals": {"branch": 64.3, "combined": 70.9, "line": 73.9}} -->

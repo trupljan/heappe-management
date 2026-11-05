@@ -1588,6 +1588,12 @@
                         <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-iqm_poll_interval">Poll interval</label>
                         <input type="text" class="form-control form-control-sm" id="qs-rec-iqm_poll_interval" name="iqm_poll_interval" value="500ms">
                     </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="qs-rec-pulse_access" name="pulse_access">
+                            <label class="form-check-label small" for="qs-rec-pulse_access">Allow pulse-level tasks <span class="text-muted">(QScheduler 0.2.2+)</span></label>
+                        </div>
+                    </div>
                 </div>
                 <div class="form-check">
                     <input class="form-check-input" type="radio" name="mode" id="qs-rec-mode-existing" value="existing">
@@ -1716,9 +1722,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 ': <em>' + esc(sus.message) + '</em>. New tasks and sessions are rejected.');
             else if (s.state === 'offline') text = line('wifi-off', 'text-danger', '<strong>Backend offline</strong>: ' + esc(s.online_reason));
             else text = line('check-circle-fill', 'text-success', '<strong>Online</strong>: accepts tasks and sessions.');
-            el.innerHTML = text + btn;
-            document.getElementById('qs-cs-suspend').addEventListener('click', ev =>
-                window.qsSuspend.open(Number(box.dataset.clusterId), ev.currentTarget.dataset.action, loadSuspension));
+            let pulse = '';
+            if (s.pulse_access !== null && s.pulse_access !== undefined) {      // QScheduler 0.2.2+
+                pulse = '<div class="mt-2">' + line(s.pulse_access ? 'activity' : 'slash-circle', s.pulse_access ? 'text-primary' : 'text-secondary',
+                    'Pulse-level tasks: <strong>' + (s.pulse_access ? 'allowed' : 'not allowed') + '</strong> ' +
+                    '<span class="text-muted">(' + (s.pulse_access ? 'circuits and <code>kind=pulse</code> tasks' : 'circuits only') + ')</span>') +
+                    '<button type="button" class="btn btn-sm btn-outline-' + (s.pulse_access ? 'secondary' : 'primary') + ' fw-semibold qs-cs-machine-act" data-action="' +
+                    (s.pulse_access ? 'pulse_off' : 'pulse_on') + '"><i class="bi bi-' + (s.pulse_access ? 'slash-circle' : 'activity') + ' me-1"></i>' +
+                    (s.pulse_access ? 'Forbid pulse tasks...' : 'Allow pulse tasks...') + '</button></div>';
+            }
+            el.innerHTML = text + btn + pulse;
+            el.querySelectorAll('#qs-cs-suspend, .qs-cs-machine-act').forEach(b => b.addEventListener('click', ev =>
+                window.qsSuspend.open(Number(box.dataset.clusterId), ev.currentTarget.dataset.action, loadSuspension)));
         }).catch(() => { el.innerHTML = line('question-circle', 'text-secondary', 'The machine state is unknown.'); });
     }
     function bindMove() {

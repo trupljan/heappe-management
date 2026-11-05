@@ -80,6 +80,9 @@ ADMIN_API_MIN_VERSION = (0, 2, 1)
 SUSPENSION_UNSUPPORTED = "Suspending machines needs QScheduler 0.2.1 or newer (admin API)."
 SUSPENSION_CANCEL_MODES = ("none", "waiting", "all")
 SUSPENSION_MESSAGE_MAX_LEN = 512
+# Pulse-level tasks (kind=pulse) are allowed per machine (pulse_access, default off) from this version.
+PULSE_MIN_VERSION = (0, 2, 2)
+PULSE_UNSUPPORTED = "Pulse-level tasks need QScheduler 0.2.2 or newer."
 # Log level of the service: RUST_LOG (tracing EnvFilter), read only at startup; QScheduler's default is "info".
 LOG_LEVEL_PRESETS = ("error", "warn", "info", "debug", "trace")
 DEFAULT_LOG_LEVEL = "info"
@@ -173,6 +176,8 @@ def machine_args(opts: dict) -> list:
             "--max-session-time", opts['max_session_time'],
             "--default-task-time-limit", opts['default_task_time_limit'],
             "--max-clock-skew", opts['max_clock_skew']]
+    if opts.get('pulse_access'):
+        args.append("--pulse-access")
     if opts['backend'] == 'iqm':
         args += ["iqm",
                  "--url", opts['iqm_url'],
@@ -253,12 +258,35 @@ def machine_request(opts: dict) -> dict:
             "max_session_time_ms": duration_ms(opts['max_session_time']),
             "default_task_time_limit_ms": duration_ms(opts['default_task_time_limit']),
             "max_clock_skew_ms": duration_ms(opts['max_clock_skew'])}
+    if opts.get('pulse_access'):           # sent only when on: QScheduler < 0.2.2 does not know the field
+        body["pulse_access"] = True
     if opts['backend'] == 'iqm':
         body["backend"] = {"type": "iqm", "url": opts['iqm_url'], "token": opts['iqm_token'],
                            "machine_name": opts['iqm_device'],
                            "poll_interval_ms": duration_ms(opts['iqm_poll_interval'])}
     else:
         body["backend"] = {"type": "test"}
+    return body
+
+
+def supports_pulse(version_text):
+    v = parse_version(version_text)
+    return bool(v) and v >= PULSE_MIN_VERSION
+
+
+def machine_settings_from_config(cfg: dict, iqm_token=""):
+    """
+    PUT /machine/{name} body (MachineSettings) from GET /machine/{name}: every setting as it is (also ones newer
+    QScheduler versions add), the backend with its token (required for IQM, not returned by GET).
+    """
+    body = {k: v for k, v in cfg.items() if k not in ("name", "backend", "suspension")}
+    backend = dict(cfg.get('backend') or {"type": "test"})
+    if backend.get('type') == 'iqm':
+        if not iqm_token:
+            raise RuntimeError("Enter the IQM token of the machine: QScheduler needs it to save the machine's settings "
+                               "and never returns it.")
+        backend['token'] = iqm_token
+    body['backend'] = backend
     return body
 
 
@@ -547,9 +575,14 @@ class QsTarget:
     def add_machine(self, opts, log) -> CommandResult:
         """Registers machine opts['machine_name']; returncode != 0 on failure ('already exists' when it does)."""
         if not self.uses_admin_api(log):
+            if opts.get('pulse_access'):
+                return CommandResult(1, "", PULSE_UNSUPPORTED)
             return self._cli_write(machine_args(dict(opts, action='add')), log)
         name = opts['machine_name']
-        log(f"Admin API: POST /machines '{name}' ({opts['backend']} backend)")
+        if opts.get('pulse_access') and not supports_pulse(self.version()):
+            return CommandResult(1, "", PULSE_UNSUPPORTED)
+        log(f"Admin API: POST /machines '{name}' ({opts['backend']} backend"
+            f"{', pulse-level tasks allowed' if opts.get('pulse_access') else ''})")
         status, text = self.admin_request("POST", "/machines", machine_request(opts))
         return self._api_result(status, text, (200, 201), {409: f"Machine '{name}' already exists",
                                                            422: "Invalid machine configuration"})
@@ -581,7 +614,8 @@ class QsTarget:
         """
         if not self.uses_admin_api(log):
             raise RuntimeError(SUSPENSION_UNSUPPORTED)
-        return {m['name']: {'backend': (m.get('backend') or {}).get('type', ''), 'suspension': m.get('suspension')}
+        return {m['name']: {'backend': (m.get('backend') or {}).get('type', ''), 'suspension': m.get('suspension'),
+                            'pulse_access': m.get('pulse_access')}       # None: QScheduler < 0.2.2
                 for m in self._admin_json("GET", "/machines") or []}
 
     def machine_online(self, name, timeout=10):
@@ -602,6 +636,33 @@ class QsTarget:
         if status not in (200, 201):
             prefix = {404: f"Machine '{name}' not found", 409: f"Machine '{name}' is already suspended",
                       422: "Invalid suspension"}.get(status, "Suspending failed")
+            raise RuntimeError(f"{prefix}: {api_error_text(status, text)}")
+        return json.loads(text) if text.strip() else {}
+
+    def machine_config(self, name):
+        """GET /machine/{name}: the machine's configuration (backend token not included)."""
+        return self._admin_json("GET", f"/machine/{quote(name, safe='')}")
+
+    def set_pulse_access(self, name, enabled, log, iqm_token=""):
+        """
+        Allows / forbids pulse-level tasks on a machine (QScheduler >= 0.2.2). PUT /machine/{name} replaces the whole
+        configuration, so the current one is sent back with only pulse_access changed; an IQM backend needs its
+        token again (it is never returned). QScheduler restarts the machine: queued tasks are kept, tasks on the
+        backend re-attached, an open session is closed (its unfinished tasks cancelled).
+        """
+        if not self.uses_admin_api(log):
+            raise RuntimeError(PULSE_UNSUPPORTED)
+        cfg = self.machine_config(name) or {}
+        if 'pulse_access' not in cfg:
+            raise RuntimeError(PULSE_UNSUPPORTED)
+        body = machine_settings_from_config(cfg, iqm_token)
+        body['pulse_access'] = bool(enabled)
+        path = f"/machine/{quote(name, safe='')}"
+        log(f"Admin API: PUT {path} (pulse_access={str(bool(enabled)).lower()}, other settings unchanged)")
+        status, text = self.admin_request("PUT", path, body)
+        if status != 200:
+            prefix = {404: f"Machine '{name}' not found", 409: f"Machine '{name}' is restarting",
+                      422: "Invalid machine configuration"}.get(status, "Changing pulse access failed")
             raise RuntimeError(f"{prefix}: {api_error_text(status, text)}")
         return json.loads(text) if text.strip() else {}
 
@@ -1316,10 +1377,10 @@ def presence(inst):
 
 
 MACHINE_OPTION_KEYS = ("queue_size", "limit_check_interval", "max_session_time", "default_task_time_limit",
-                       "max_clock_skew", "iqm_url", "iqm_device", "iqm_poll_interval")
+                       "max_clock_skew", "iqm_url", "iqm_device", "iqm_poll_interval", "pulse_access")
 MACHINE_DEFAULTS = {"queue_size": 4, "limit_check_interval": "2s", "max_session_time": "2h",
                     "default_task_time_limit": "1h", "max_clock_skew": "4s", "iqm_url": "", "iqm_device": "",
-                    "iqm_poll_interval": "500ms"}
+                    "iqm_poll_interval": "500ms", "pulse_access": False}
 
 
 def machine_definition(opts):

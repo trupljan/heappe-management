@@ -48,6 +48,7 @@ urlpatterns = [
     path('clusters/qscheduler/cluster/<int:cluster_id>/move/', views.qscheduler_cluster_move_api, name='qscheduler_cluster_move'),
     path('clusters/qscheduler/cluster/<int:cluster_id>/rename-to-machine/', views.qscheduler_cluster_rename_api, name='qscheduler_cluster_rename'),
     path('clusters/qscheduler/cluster/<int:cluster_id>/suspension/', views.qscheduler_cluster_suspension_api, name='qscheduler_cluster_suspension'),
+    path('clusters/qscheduler/cluster/<int:cluster_id>/pulse/', views.qscheduler_cluster_pulse_api, name='qscheduler_cluster_pulse'),
 
     # QScheduler instances and HEAppE assignments
     path('qscheduler/', views.qscheduler_page, name='qscheduler_page'),

@@ -550,6 +550,14 @@
             return m.error ? esc(m.error) : '';
         }
 
+        // Pulse-level tasks (QScheduler 0.2.2+; nothing shown when the version or the machine state is unknown)
+        function pulseBadge(m) {
+            if (m.pulse_access === null || m.pulse_access === undefined) return '';
+            return m.pulse_access
+                ? '<span class="badge rounded-pill bg-primary-subtle text-primary-emphasis" title="Accepts circuits and kind=pulse tasks"><i class="bi bi-activity me-1"></i>Pulse allowed</span>'
+                : '<span class="badge rounded-pill bg-light text-muted border" title="Circuits only; pulse-level tasks are rejected"><i class="bi bi-slash-circle me-1"></i>Pulse disabled</span>';
+        }
+
         function render(d) {
             if (d.status === 'success' && !d.assigned) { card.classList.add('d-none'); return; }
             card.classList.remove('d-none');
@@ -578,7 +586,7 @@
                     '<div class="d-flex justify-content-between align-items-center gap-2">' +
                         '<div class="text-truncate"><code class="fw-semibold">' + esc(m.machine) + '</code>' +
                             '<div class="text-muted text-truncate" style="font-size: 0.72rem;">' + esc(m.cluster) + ' &middot; ' + esc(m.instance || 'unregistered QScheduler') + '</div></div>' +
-                        '<div class="d-flex align-items-center gap-2 flex-shrink-0"><span class="badge rounded-pill ' + st[0] + '">' + st[1] + '</span>' + btn + '</div>' +
+                        '<div class="d-flex align-items-center gap-2 flex-shrink-0">' + pulseBadge(m) + '<span class="badge rounded-pill ' + st[0] + '">' + st[1] + '</span>' + btn + '</div>' +
                     '</div>' +
                     (info ? '<div class="text-muted mt-1" style="font-size: 0.72rem;">' + info + '</div>' : '') +
                 '</li>';

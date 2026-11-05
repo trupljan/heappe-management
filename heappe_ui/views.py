@@ -20,7 +20,8 @@ from heappe_ui.view.qscheduler_cluster_health import (qscheduler_cluster_status_
                                                       qscheduler_cluster_rename_api)
 from heappe_ui.view.qscheduler_machines import (qscheduler_machine_defaults_api, qscheduler_machine_list_api,
                                                 qscheduler_machine_add_api, qscheduler_machine_remove_api)
-from heappe_ui.view.qscheduler_suspension import dashboard_qscheduler_machines_api, qscheduler_cluster_suspension_api
+from heappe_ui.view.qscheduler_suspension import (dashboard_qscheduler_machines_api, qscheduler_cluster_suspension_api,
+                                                  qscheduler_cluster_pulse_api)
 from heappe_ui.view.queue import *
 from heappe_ui.view.file_transfer_method import *
 from heappe_ui.view.project import *

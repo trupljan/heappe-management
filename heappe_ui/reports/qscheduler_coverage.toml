@@ -426,6 +426,14 @@ verified = "Proxy forwards only /machines, /machine/{name}, /notifiers, /notifie
 not_tested = "A real nginx proxy container (checked by hand against nginx:1.27-alpine); proxy_status."
 
 [[sections.features]]
+name = "Pulse-level tasks (pulse_access)"
+code = ["core:supports_pulse", "core:machine_settings_from_config", "core:QsTarget.machine_config",
+        "core:QsTarget.set_pulse_access", "suspension:parse_pulse_options", "suspension:apply_pulse_access",
+        "suspension:qscheduler_cluster_pulse_api"]
+verified = "pulse_access sent on machine add (API and CLI) only when on, refused before QScheduler 0.2.2 without a request, ignored for an existing machine, stored in the machine definition for Restore; the toggle reads the machine and PUTs its whole configuration back (newer settings kept, name and suspension dropped) with only pulse_access changed, IQM needs its token again, refused when the version has no pulse_access; API: shared machine needs confirmation, stored definition follows, validation."
+not_tested = "The checkboxes and the panel dialog in the browser; against a running QScheduler 0.2.2 (machine restart on PUT)."
+
+[[sections.features]]
 name = "Log level (RUST_LOG)"
 code = ["core:parse_log_level", "core:container_log_level", "deploy:log_level_worker",
         "deploy:qscheduler_log_level_api"]

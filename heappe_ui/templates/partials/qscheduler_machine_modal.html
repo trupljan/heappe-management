@@ -105,6 +105,11 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="form-check form-switch mt-2">
+                            <input class="form-check-input" type="checkbox" id="qs-add-pulse_access" name="pulse_access">
+                            <label class="form-check-label small" for="qs-add-pulse_access">Allow pulse-level tasks</label>
+                        </div>
+                        <div class="form-text mt-0" style="font-size: 0.72rem;">Accepts <code>kind=pulse</code> tasks (e.g. IQM Pulla <code>RunDefinition</code>s) besides circuits. Needs QScheduler 0.2.2+; can be changed later on the cluster's QScheduler panel.</div>
                         <div class="form-text" style="font-size: 0.72rem;">QScheduler 0.2.1+ registers the machine over its admin API at once; older versions are restarted to load it (running work is persisted and re-attached).</div>
                     </div>
                 </div>
@@ -393,7 +398,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function collectAdd() {
         const data = {};
         new FormData(addForm).forEach((v, k) => { data[k] = v; });
-        ['use_sessions', 'create_project', 'custom_name'].forEach(k => { data[k] = addForm[k].checked; });
+        ['use_sessions', 'create_project', 'custom_name', 'pulse_access'].forEach(k => { data[k] = addForm[k].checked; });
         if (!data.create_project || !data.custom_name) delete data.project_name;
         if (!data.create_project) delete data.qpu_allocation_seconds;
         if (data.backend !== 'iqm' || data.machine_mode !== 'new') ['iqm_url', 'iqm_token', 'iqm_device', 'iqm_poll_interval'].forEach(k => delete data[k]);
