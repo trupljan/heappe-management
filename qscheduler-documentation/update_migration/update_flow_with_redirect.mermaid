@@ -1,0 +1,52 @@
+flowchart TD
+    A([Start: update cluster to a new QScheduler]) --> P1
+
+    subgraph PREP["1 · Prepare (no impact on running work)"]
+        P1["Deploy new QScheduler instance (new version)<br/>own QScheduler network, static IP"] --> P2["Assign it to the HEAppE instance(s)<br/>admin proxy, DNS server joins its network"]
+        P2 --> P3["Same machine exists on the new instance<br/>(machine name, backend, options)"]
+        P3 --> P4{"Machine on the old instance<br/>shared with other clusters?"}
+        P4 -- yes --> P5["List the other clusters (all HEAppE instances)<br/>extra confirmation"]
+        P4 -- no --> D1
+        P5 --> D1
+    end
+
+    subgraph DRAIN["2 · Drain the old machine"]
+        D1["POST /machine/{m}/suspension on the old instance<br/>cancel = none (or waiting: fail queued, close sessions)"] --> D2["HEAppE check for every cluster on the machine:<br/>ListDetailedJobsForAdmin (unfinished jobs)<br/>ListSessions state=Open"]
+        D2 --> D3{"Idle?"}
+        D3 -- "no, wait / refresh" --> D2
+        D3 -- "abort" --> R0["DELETE suspension on the old instance<br/>(nothing changed)"]
+    end
+
+    D3 -- yes --> B1
+
+    subgraph DB["3 · Backup and database migration"]
+        B1["pg_dump of the old database → backup file (kept)"] --> B2{"Database of the new instance"}
+        B2 -- "clone (recommended)" --> B3["Stop new service · restore dump into its DB"]
+        B2 -- "fresh" --> B6["Keep the new DB<br/>(no task history, project usage restarts)"]
+        B3 --> B4["Start new service → migrations run automatically on connect"]
+        B4 --> B5["DELETE suspension on the new instance<br/>(copied with the dump)"]
+        B5 --> V1
+        B6 --> V1
+    end
+
+    subgraph VERIFY["4 · Verify the new instance"]
+        V1["/health = 200, version, machine listed via admin API,<br/>notifier present, project budgets"] --> V2{"OK?"}
+    end
+
+    V2 -- no --> R1["Roll back: resume old machine (DELETE suspension)<br/>alias unchanged → HEAppE never left the old instance"]
+    V2 -- yes --> S1
+
+    subgraph SWITCH["5 · Switch"]
+        S1["DNS: alias → static IP of the new instance<br/>(or local reverse proxy if remote) · TTL 60 s"] --> S2["HEAppE cluster: queue (if machine name differs),<br/>notifier / token if changed · PUT drops HEAppE's cached scheduler"]
+        S2 --> S3["Check from the HEAppE container:<br/>GET http://alias:port/machine/{m}/about"]
+    end
+
+    S3 --> S4{"OK?"}
+    S4 -- no --> R2["Switch back: alias → old instance, restore old queue/notifier,<br/>resume old machine · tasks created on the new instance stay there"]
+    S4 -- yes --> E1
+
+    subgraph AFTER["6 · Afterwards"]
+        E1["Remember the previous target (for 'Switch back')"] --> E2["Old machine: stays suspended<br/>→ put on a different alias (test cluster) or delete"]
+        E2 --> E3["Keep the backup file"]
+    end
+    E3 --> Z([Done])

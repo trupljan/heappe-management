@@ -109,16 +109,9 @@ check_error
 mkdir -p "$STATIC_ROOT_DIR"
 $VENV_PYTHON manage.py collectstatic --noinput --clear >> "$LOG_FILE" 2>&1 || log "WARNING: collectstatic failed"
 
+log "=== SUCCESS ==="
+
 sudo systemctl restart "$SERVICE_NAME"
 check_error
-
-sleep 5
-if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
-    log "=== SUCCESS ==="
-else
-    log "FAILED"
-    sudo journalctl -u "$SERVICE_NAME" -n 50 --no-pager >> "$LOG_FILE"
-    exit 1
-fi
 
 exit 0

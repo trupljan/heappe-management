@@ -1,0 +1,101 @@
+{% comment %}
+One container card on the Containers tab. Context: container (Docker SDK object), info (describe_container()),
+instance_name.
+{% endcomment %}
+<div class="col">
+    <div class="card h-100 shadow-sm border-0 container-card{% if info.is_job %} container-card-job{% endif %}"
+         data-container-id="{{ container.id }}" data-container-service="{{ info.service }}">
+        <div class="card-body pb-2">
+            <div class="d-flex align-items-start gap-3">
+                <div class="container-card-icon rounded-3 d-flex align-items-center justify-content-center flex-shrink-0 bg-{{ info.tone }}-subtle text-{{ info.tone }}-emphasis">
+                    <i class="bi {{ info.icon }}"></i>
+                </div>
+                <div class="flex-grow-1" style="min-width: 0;">
+                    <div class="d-flex align-items-start justify-content-between gap-2">
+                        <h6 class="mb-0 fw-bold text-truncate container-card-title" title="{{ info.title }}">{{ info.title }}</h6>
+                        <span class="badge rounded-pill d-inline-flex align-items-center gap-1 flex-shrink-0 bg-{{ info.tone }}-subtle text-{{ info.tone }}-emphasis border border-{{ info.tone }}-subtle">
+                            {% if info.pulse %}
+                                <span class="spinner-grow text-{{ info.tone }}" aria-hidden="true" style="width: 6px; height: 6px;"></span>
+                            {% else %}
+                                <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
+                            {% endif %}
+                            <span class="fw-bold text-uppercase" style="font-size: 0.65rem; letter-spacing: .02em;">{{ info.badge }}</span>
+                        </span>
+                    </div>
+                    {% if info.service %}
+                        <span class="badge bg-body-secondary text-body-secondary border font-monospace fw-normal mt-1" title="Compose service">{{ info.service }}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <dl class="container-card-details small mb-0 mt-3">
+                <dt>Container</dt>
+                <dd class="font-monospace text-break" title="ID {{ container.short_id }}">{{ info.name }}</dd>
+                {% if info.is_job %}
+                    <dt>Last run</dt>
+                    <dd>{% if info.finished %}{{ info.finished }} UTC{% elif info.started %}since {{ info.started }} UTC{% else %}never{% endif %}{% if info.exit_code is not None %} · exit code <code>{{ info.exit_code }}</code>{% endif %}</dd>
+                {% else %}
+                    <dt>Ports</dt>
+                    <dd>
+                        {% for p in info.ports %}<span class="badge bg-body-tertiary text-body border font-monospace fw-normal me-1">{{ p }}</span>{% empty %}<span class="text-muted">not published</span>{% endfor %}
+                    </dd>
+                    {% if container.status == 'running' and info.started %}
+                        <dt>Started</dt>
+                        <dd>{{ info.started }} UTC</dd>
+                    {% elif info.exit_code is not None %}
+                        <dt>Stopped</dt>
+                        <dd>{{ info.finished }} UTC · exit code <code>{{ info.exit_code }}</code></dd>
+                    {% endif %}
+                {% endif %}
+            </dl>
+        </div>
+        <div class="card-footer bg-transparent border-top-0 pt-0 pb-3 d-flex justify-content-center">
+            <div class="btn-group shadow-sm">
+                <form class="container-control-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                    <input type="hidden" name="action" value="start">
+                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="{% if info.is_job %}Run again{% else %}Start{% endif %}"><i class="bi bi-play-fill"></i></button>
+                </form>
+                {% if not info.is_job %}
+                <form class="container-control-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                    <input type="hidden" name="action" value="stop">
+                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop"><i class="bi bi-stop-fill"></i></button>
+                </form>
+                <form class="container-control-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                    <input type="hidden" name="action" value="restart">
+                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart"><i class="bi bi-arrow-clockwise"></i></button>
+                </form>
+                {% endif %}
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal"
+                        data-container-id="{{ container.id }}" data-container-title="{{ info.title }} ({{ info.name }})" title="Logs"><i class="bi bi-terminal"></i></button>
+                {% if info.has_files %}
+                <button type="button" class="btn btn-sm btn-outline-dark open-fm-tab-btn" data-container-id="{{ container.id }}"
+                        data-container-name="{{ info.name }}" data-container-service="{{ info.service }}" title="File Manager"><i class="bi bi-files"></i></button>
+                {% endif %}
+                {% if info.config_file %}
+                <a href="{% url 'instance_config_view' instance_name %}?file={{ info.config_file }}" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center" title="Configure ({{ info.config_file }})"><i class="bi bi-gear"></i></a>
+                {% endif %}
+                {% if info.can_unseal %}
+                <button type="button" class="btn btn-sm btn-outline-warning" onclick="openUnsealVaultModal();" title="Unlock / Unseal Vault without restart"><i class="bi bi-unlock-fill"></i></button>
+                {% endif %}
+                {% if info.can_delete %}
+                <form class="container-control-form" onsubmit="return confirm('Delete container {{ info.name|escapejs }}?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    <input type="hidden" name="container_id" value="{{ container.id }}">
+                    <input type="hidden" name="action" value="delete">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>

@@ -27,6 +27,8 @@ from heappe_ui.appsettings.generator import (
     generate_appsettings_data_staging_v6_4_17,
     generate_appsettings_v6_5_0,
     generate_appsettings_data_staging_v6_5_0,
+    generate_appsettings_v6_6_0,
+    generate_appsettings_data_staging_v6_6_0,
 )
 from heappe_ui.view.utils import clean_ver
 
@@ -519,7 +521,7 @@ PWD={self.config.base_path}{instance_name}/heappe-core
         v_clean = clean_ver(version)
         if not version or v_clean == [0, 0, 0] or not any(v_clean):
             # Branch names without version numbers (e.g. master, main, development) default to latest generator
-            return generate_appsettings_v6_5_0, generate_appsettings_data_staging_v6_5_0
+            return generate_appsettings_v6_6_0, generate_appsettings_data_staging_v6_6_0
         if v_clean < [6, 1, 0]:
             return generate_appsettings_v6_0_0, generate_appsettings_data_staging_v6_0_0
         elif v_clean < [6, 2, 0]:
@@ -532,8 +534,10 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             return generate_appsettings_v6_4_0, generate_appsettings_data_staging_v6_4_0
         elif v_clean < [6, 5, 0]:
             return generate_appsettings_v6_4_17, generate_appsettings_data_staging_v6_4_17
-        else:
+        elif v_clean < [6, 6, 0]:
             return generate_appsettings_v6_5_0, generate_appsettings_data_staging_v6_5_0
+        else:
+            return generate_appsettings_v6_6_0, generate_appsettings_data_staging_v6_6_0
 
     def generate_appsettings_and_merge_with_old(self, old_appsettings: dict, version: str) -> dict:
         """Generate appsettings.json and merge with old settings."""
@@ -563,7 +567,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             automigrate: bool = True,
             version: str = None,
             deployed_ip: str = None,
-            overwrite_existing: bool = False
+            overwrite_existing: bool = False,
+            instance_identifier: str = None
     ) -> Dict[str, Any]:
         """Generate appsettings.json and appsettings-data.json files for HEAppE instance."""
         clean_version = self.resolve_clean_version(version or self.config.default_version, instance_name=instance_name)
@@ -573,14 +578,18 @@ PWD={self.config.base_path}{instance_name}/heappe-core
 
         app_fn, data_fn = self._get_generators_for_version(clean_version)
 
-        appsettings = app_fn(
-            instance_name=instance_name,
-            sa_password=sa_password,
-            port=port_app,
-            automigrate=automigrate,
-            version=clean_version,
-            deployed_ip=deployed_ip
-        )
+        app_kwargs = {
+            "instance_name": instance_name,
+            "sa_password": sa_password,
+            "port": port_app,
+            "automigrate": automigrate,
+            "version": clean_version,
+            "deployed_ip": deployed_ip
+        }
+        if instance_identifier:
+            app_kwargs["instance_identifier"] = instance_identifier
+
+        appsettings = app_fn(**app_kwargs)
 
         appsettings_data_staging = data_fn(
             instance_name=instance_name,
@@ -671,7 +680,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
             overwrite_existing: bool = False,
             ports: Optional[Dict[str, int]] = None,
             version: Optional[str] = None,
-            deployed_ip: Optional[str] = None
+            deployed_ip: Optional[str] = None,
+            instance_identifier: Optional[str] = None
     ) -> Dict[str, Any]:
         """Initialize HEAppE deployment with option to overwrite existing resources."""
         try:
@@ -697,7 +707,8 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                 sa_password=sa_password,
                 data_staging_token=data_staging_token,
                 automigrate=True,
-                overwrite_existing=overwrite_existing
+                overwrite_existing=overwrite_existing,
+                instance_identifier=instance_identifier
             )
 
             self.logger.info("HEAppE deployment initialization completed successfully")
@@ -748,6 +759,10 @@ PWD={self.config.base_path}{instance_name}/heappe-core
                     result[key] = merged_list
                 else:
                     result[key] = value
+            elif key == "ExtendedUserInfoV2Endpoint" and value == "/api/v2/users/me/extended" and key in result:
+                pass
+            elif key == "CommandTemplatePermissionsV2Endpoint" and value == "/api/v2/heappe/command-template-permissions/" and key in result:
+                pass
             else:
                 result[key] = value  # use value from old JSON
         return result

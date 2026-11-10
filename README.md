@@ -4,6 +4,10 @@ Django web application for administration and management of HEAppE middleware.
 
 ---
 
+QScheduler (quantum task scheduler) deployment and quantum machines: see [QScheduler_README.md](QScheduler_README.md).
+
+Recognised error states and the fixes the admin panel offers: HEAppE instances in [Recovery_README.md](Recovery_README.md), QScheduler in [QScheduler_Recovery_README.md](QScheduler_Recovery_README.md).
+
 ## Quickstart (Local Development)
 
 ### Requirements
@@ -39,6 +43,23 @@ python manage.py runserver
 The application will be accessible at:
 - **Web App:** [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 - **Django Admin:** [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/)
+
+### Tests and coverage report
+
+Development tools (coverage.py) are in `requirements-dev.txt`, which also installs `requirements.txt`:
+
+```bash
+pip install -r requirements-dev.txt
+
+python manage.py test heappe_ui                 # all tests
+python manage.py qscheduler_coverage            # regenerate QScheduler_COVERAGE.md
+python manage.py qscheduler_coverage --check    # fail if QScheduler_COVERAGE.md is out of date (CI)
+```
+
+[QScheduler_COVERAGE.md](QScheduler_COVERAGE.md) is generated: numbers and feature statuses are measured, the feature
+descriptions come from `heappe_ui/reports/qscheduler_coverage.toml`. After changing QScheduler code or tests, update
+that file (the report lists code not assigned to any feature), regenerate the report and commit it. The
+`qscheduler-coverage` job in `.gitlab-ci.yml` runs the check on merge requests.
 
 ---
 

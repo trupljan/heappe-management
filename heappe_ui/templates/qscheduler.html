@@ -1,0 +1,1670 @@
+{% extends "base.html" %}
+
+{% block title %}QScheduler{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item"><a href="{% url 'dashboard_view' %}" class="text-decoration-none text-secondary">Dashboard</a></li>
+    <li class="breadcrumb-item active" aria-current="page">QScheduler</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+    <div class="card border-0 shadow-sm rounded-3 bg-white">
+        <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-cpu text-primary fs-5"></i>
+                <h5 class="h6 mb-0 fw-bold text-dark">QScheduler Instances</h5>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" id="qsRegisterOpen">
+                    <i class="bi bi-link-45deg me-1"></i>Register Existing
+                </button>
+                <button type="button" class="btn btn-sm btn-primary fw-bold shadow-sm" id="qsDeployOpen">
+                    <i class="bi bi-rocket-takeoff me-1"></i>Deploy New
+                </button>
+                <button class="btn btn-sm btn-outline-secondary fw-semibold" onclick="location.reload();" title="Refresh">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-3">
+            <p class="text-secondary small mb-3">
+                A QScheduler instance (quantum task scheduler) can be shared by several HEAppE instances. Assign a HEAppE instance to
+                let it reach the QScheduler and, optionally, receive task and session notifications through its own QScheduler notifier.
+                QScheduler features require <strong>HEAppE 6.6.0 or newer</strong>; older HEAppE instances cannot be assigned. Quantum machines are added per HEAppE instance on the
+                <a href="{% url 'cluster_list' %}">Clusters</a> page.
+            </p>
+
+            <div class="border border-light-subtle rounded-3 p-3 mb-3 bg-light" id="qs-shared-db-card">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                        <div class="fw-bold small text-primary"><i class="bi bi-database me-1"></i>Shared database</div>
+                        <div class="small text-muted mt-1" id="qs-shared-db-summary"><span class="spinner-border spinner-border-sm" style="width: .7rem; height: .7rem;"></span> loading...</div>
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap" id="qs-shared-db-actions"></div>
+                </div>
+                <div class="mt-2 d-none" id="qs-shared-db-schemas"></div>
+            </div>
+
+            {% if not instances %}
+            <div class="text-center py-5">
+                <i class="bi bi-cpu text-muted" style="font-size: 3rem;"></i>
+                <h6 class="fw-bold text-dark mt-3">No QScheduler instance yet</h6>
+                <p class="small text-secondary mb-0">Deploy a new one from git or a local image, or register an existing one.</p>
+            </div>
+            {% endif %}
+
+            {% for inst in instances %}
+            <div class="card border border-light-subtle rounded-3 mb-3" data-instance-id="{{ inst.id }}">
+                <div class="card-header bg-light d-flex justify-content-between align-items-start flex-wrap gap-2 py-2">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="fw-bold text-dark font-monospace">{{ inst.name }}</span>
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis border">{{ inst.kind_label }}</span>
+                            {% if inst.kind == 'ssh_container' %}<span class="badge bg-warning text-dark" role="note"><i class="bi bi-exclamation-triangle-fill me-1"></i>Limited management: no Docker control, restarts via restart command</span>{% endif %}
+                            {% if inst.archived %}<span class="badge bg-dark-subtle text-dark-emphasis border border-dark-subtle"><i class="bi bi-archive me-1"></i>Archived {{ inst.archived_at }}</span>{% endif %}
+                            <span class="badge bg-light text-muted border qs-live-health"><span class="spinner-border spinner-border-sm" style="width: .7rem; height: .7rem;"></span> checking</span>
+                            <span class="badge d-none qs-live-presence"></span>
+                            {% if not inst.archived %}<button type="button" class="btn btn-sm btn-primary fw-semibold py-0 px-2 d-none qs-action qs-try-restart-btn" data-action="restart" data-id="{{ inst.id }}"><i class="bi bi-bootstrap-reboot me-1"></i>{% if inst.manual_restart %}Confirm manual restart{% else %}Try restart{% endif %}</button>{% endif %}
+                            <button type="button" class="btn btn-sm btn-warning fw-semibold py-0 px-2 d-none qs-recovery-action qs-resolve-btn" data-action="resolve" data-id="{{ inst.id }}"><i class="bi bi-life-preserver me-1"></i>Resolve...</button>
+                            {% if inst.restart_pending %}<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"><i class="bi bi-exclamation-triangle me-1"></i>restart pending</span>{% endif %}
+                        </div>
+                        <div class="small text-muted mt-1">
+                            HEAppE endpoint <code>{{ inst.service_host }}:{{ inst.port }}</code>
+                            {% if inst.ssh %} &middot; SSH <code>{{ inst.ssh }}</code>{% endif %}
+                            {% if inst.container_name %} &middot; container <code>{{ inst.container_name }}</code>{% endif %}
+                            &middot; <span class="qs-live-version">version ?</span>
+                            <span class="qs-live-admin"></span>
+                            {% if inst.source == 'git' %} &middot; source <code>{{ inst.repo }}#{{ inst.ref }}</code>{% elif inst.image %} &middot; image <code>{{ inst.image }}</code>{% endif %}
+                            {% if inst.log_level %} &middot; log level <code>{{ inst.log_level }}</code>{% endif %}
+                            {% if inst.serve_options %} &middot; service limits {% for k, v in inst.serve_options.items %}<code>{{ k }}={{ v }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}
+                            &middot; database: {{ inst.db_kind_label|lower }}{% if inst.db_schema %} <code>{{ inst.db_schema }}</code>{% endif %}
+                        </div>
+                        {% if inst.qs_network %}
+                        <div class="small text-muted mt-1"><i class="bi bi-hdd-network me-1 text-primary"></i>QScheduler network <code>{{ inst.qs_network }}</code> <span class="font-monospace">{{ inst.qs_subnet }}</span>
+                            &middot; QScheduler at <code class="fw-semibold">{{ inst.qs_ip }}</code> <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">static</span>
+                            {% if inst.aliases %} &middot; aliases {% for a in inst.aliases %}<code>{{ a }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</div>
+                        {% elif inst.is_local and not inst.archived %}
+                        <div class="small text-warning-emphasis mt-1"><i class="bi bi-exclamation-triangle me-1"></i>No QScheduler network: QScheduler joins the HEAppE networks and has no static address or aliases.
+                            <button type="button" class="btn btn-link btn-sm p-0 align-baseline qs-action" data-action="migrate_network" data-id="{{ inst.id }}">Migrate to QScheduler network...</button></div>
+                        {% elif inst.aliases %}
+                        <div class="small text-muted mt-1"><i class="bi bi-signpost-split me-1"></i>Aliases {% for a in inst.aliases %}<code>{{ a }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}
+                            <span class="badge bg-secondary-subtle text-secondary-emphasis border">manual &middot; to be automated</span> HEAppE resolves them through extra hosts with the QScheduler's IP (Containers &amp; Services &gt; Extra Hosts).</div>
+                        {% endif %}
+                        {% if inst.archived %}
+                        <div class="small text-dark-emphasis mt-1"><i class="bi bi-info-circle me-1"></i>{{ inst.archived_reason }}. Not managed: HEAppE clusters are kept unchanged.
+                            <strong>Restore</strong> deploys it again and reassigns the clusters; <strong>Delete with entities</strong> removes them.</div>
+                        {% endif %}
+                        <div class="small text-danger mt-1 d-none qs-live-error"></div>
+                    </div>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-gear me-1"></i>Actions
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                            {% if inst.archived %}
+                            <li><button type="button" class="dropdown-item small qs-recovery-action" data-action="restore" data-id="{{ inst.id }}"><i class="bi bi-arrow-counterclockwise me-2 text-success"></i>Restore...</button></li>
+                            <li class="d-none qs-unarchive-item"><button type="button" class="dropdown-item small qs-recovery-action" data-action="unarchive" data-id="{{ inst.id }}"><i class="bi bi-box-arrow-up me-2 text-primary"></i>Unarchive (service is running again)</button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><button type="button" class="dropdown-item small text-danger qs-recovery-action" data-action="cascade" data-id="{{ inst.id }}"><i class="bi bi-trash me-2"></i>Delete with entities...</button></li>
+                            {% else %}
+                            {% if inst.can_update %}<li><button type="button" class="dropdown-item small qs-action" data-action="update" data-id="{{ inst.id }}"><i class="bi bi-arrow-repeat me-2 text-info"></i>Update</button></li>{% endif %}
+                            {% if inst.can_migrate_to_shared and shared_db_deployed %}<li><button type="button" class="dropdown-item small qs-action" data-action="migrate_shared" data-id="{{ inst.id }}"><i class="bi bi-database-up me-2 text-primary"></i>Migrate to shared database...</button></li>{% endif %}
+                            {% if inst.can_migrate_network %}<li><button type="button" class="dropdown-item small qs-action" data-action="migrate_network" data-id="{{ inst.id }}"><i class="bi bi-hdd-network me-2 text-primary"></i>Migrate to QScheduler network...</button></li>{% endif %}
+                            {% if inst.can_edit_aliases %}<li><button type="button" class="dropdown-item small qs-action" data-action="aliases" data-id="{{ inst.id }}"><i class="bi bi-signpost-split me-2 text-primary"></i>Aliases...</button></li>{% endif %}
+                            {% if inst.can_update %}<li><button type="button" class="dropdown-item small qs-action" data-action="log_level" data-id="{{ inst.id }}"><i class="bi bi-journal-text me-2 text-secondary"></i>Log level...</button></li>{% endif %}
+                            {% if inst.can_update %}<li><button type="button" class="dropdown-item small qs-action" data-action="serve_options" data-id="{{ inst.id }}"><i class="bi bi-speedometer2 me-2 text-secondary"></i>Service limits...</button></li>{% endif %}
+                            {% if not inst.archived %}<li><button type="button" class="dropdown-item small qs-action" data-action="users" data-id="{{ inst.id }}"><i class="bi bi-people me-2 text-secondary"></i>Users and consumption...</button></li>{% endif %}
+                            {% if inst.can_backup %}<li><button type="button" class="dropdown-item small qs-backups" data-id="{{ inst.id }}" data-name="{{ inst.name }}"><i class="bi bi-archive me-2 text-secondary"></i>Backups...</button></li>{% endif %}
+                            <li><button type="button" class="dropdown-item small qs-admin-token" data-id="{{ inst.id }}" data-name="{{ inst.name }}" data-regen="{% if inst.can_update %}1{% endif %}"><i class="bi bi-key me-2 text-warning"></i>Admin token...</button></li>
+                            <li><button type="button" class="dropdown-item small qs-action" data-action="restart" data-id="{{ inst.id }}"><i class="bi bi-bootstrap-reboot me-2 text-primary"></i>{% if inst.manual_restart %}Confirm manual restart{% else %}Restart{% endif %}</button></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><button type="button" class="dropdown-item small text-danger qs-action" data-action="undeploy" data-id="{{ inst.id }}">
+                                <i class="bi bi-trash me-2"></i>{% if inst.kind == 'managed' %}Undeploy{% else %}Unregister{% endif %}</button></li>
+                            <li class="d-none qs-resolve-item"><button type="button" class="dropdown-item small text-warning-emphasis qs-recovery-action" data-action="resolve" data-id="{{ inst.id }}"><i class="bi bi-life-preserver me-2"></i>Resolve missing service...</button></li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body py-3">
+                    <div class="row g-3">
+                        <div class="col-lg-7">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-bold small text-primary"><i class="bi bi-diagram-3 me-1"></i>Assigned HEAppE instances</div>
+                                {% if not inst.archived %}
+                                <button type="button" class="btn btn-sm btn-outline-success py-0 qs-action" data-action="assign" data-id="{{ inst.id }}">
+                                    <i class="bi bi-plus-lg me-1"></i>Assign
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% if inst.assignments %}
+                            <div class="table-responsive">
+                                <table class="table table-sm small align-middle mb-0">
+                                    <thead class="text-muted"><tr><th>HEAppE</th><th>Notifications</th><th>Project prefix</th><th>Network</th><th class="text-end"></th></tr></thead>
+                                    <tbody>
+                                    {% for a in inst.assignments %}
+                                        <tr>
+                                            <td class="fw-semibold">{{ a.heappe_instance }}</td>
+                                            <td>
+                                                {% if a.notifications_enabled %}
+                                                    <span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">on</span>
+                                                    <span class="text-muted">per cluster, notifiers <code>{{ a.heappe_identifier|default:"?" }}.&lt;machine&gt;</code></span>
+                                                    <div class="text-muted text-truncate" style="max-width: 280px;" title="{{ a.callback_url }}">{{ a.callback_url }}</div>
+                                                {% else %}
+                                                    <span class="badge bg-light text-muted border">off</span> <span class="text-muted">HEAppE polls</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if a.project_prefix %}<code>{{ a.project_prefix }}</code>{% if a.projects_renamed_at %} <span class="text-muted" title="Projects migrated {{ a.projects_renamed_at }}"><i class="bi bi-check2-circle text-success"></i></span>{% endif %}{% else %}<span class="text-muted">not chosen</span>{% endif %}
+                                                {% if not inst.archived %}<div><button type="button" class="btn btn-link btn-sm p-0 align-baseline qs-action" data-action="prefix" data-id="{{ inst.id }}" data-asg="{{ a.id }}">Project prefix...</button></div>{% endif %}
+                                            </td>
+                                            <td class="text-muted">{{ a.network|default:"-" }}
+                                                {% if not a.heappe_local and inst.aliases %}<div class="text-warning-emphasis" style="max-width: 260px;"><i class="bi bi-info-circle me-1"></i>HEAppE is not on this host: add the aliases with the QScheduler's IP to its hosts yourself (to be automated).</div>{% endif %}</td>
+                                            <td class="text-end text-nowrap">
+                                                {% if not inst.archived %}
+                                                <button type="button" class="btn btn-sm btn-link py-0 qs-action" data-action="edit_assignment" data-id="{{ inst.id }}" data-asg="{{ a.id }}" title="Edit"><i class="bi bi-pencil"></i></button>
+                                                <button type="button" class="btn btn-sm btn-link text-danger py-0 qs-action" data-action="unassign" data-id="{{ inst.id }}" data-asg="{{ a.id }}" title="Unassign"><i class="bi bi-x-circle"></i></button>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="small text-muted">No HEAppE instance assigned.</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-lg-5">
+                            <div class="fw-bold small text-primary mb-2"><i class="bi bi-motherboard me-1"></i>Machines</div>
+                            <div class="small text-muted mb-3 qs-live-machines">loading...</div>
+                            <div class="fw-bold small text-primary mb-2"><i class="bi bi-bell me-1"></i>Notifiers</div>
+                            <div class="small text-muted qs-live-notifiers">loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{{ instances|json_script:"qs-instances-data" }}
+{{ heappe_instances|json_script:"qs-heappe-data" }}
+{{ defaults|json_script:"qs-defaults-data" }}
+{{ chosen_instance|json_script:"qs-chosen-data" }}
+
+<!-- Deploy -->
+<div class="modal fade" id="qsDeployModal" tabindex="-1" aria-labelledby="qsDeployLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsDeployForm" novalidate data-no-loading>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsDeployLabel"><i class="bi bi-rocket-takeoff-fill"></i>Deploy QScheduler Instance</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-secondary small mb-3">Starts <code>qscheduler serve</code> on this Docker host with its own PostgreSQL (or an existing database) and a Docker healthcheck. Machines are added later from the Clusters page.</p>
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-box-seam me-1"></i> Image</div>
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-12">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="source" id="qs-dep-src-git" value="git" checked>
+                            <label class="form-check-label small fw-semibold" for="qs-dep-src-git">Build from git (branch / tag)</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="source" id="qs-dep-src-image" value="image">
+                            <label class="form-check-label small fw-semibold" for="qs-dep-src-image">Image available on this host</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6 qs-git-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-repo">Git repository</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-dep-repo" name="repo">
+                    </div>
+                    <div class="col-md-3 qs-git-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-ref-select">Branch / tag</label>
+                        <select class="form-select form-select-sm d-none qs-ref-select" id="qs-dep-ref-select"></select>
+                        <input type="text" class="form-control form-control-sm qs-ref-input" id="qs-dep-ref" name="ref" aria-label="Branch / tag" placeholder="branch or tag">
+                        <div class="form-text qs-ref-status" style="font-size: 0.72rem;"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-image">Image</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-dep-image" name="image" list="qs-local-images" autocomplete="off">
+                    </div>
+                    <div class="col-12 qs-git-only">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-dep-rebuild_image" name="rebuild_image">
+                            <label class="form-check-label small" for="qs-dep-rebuild_image">Rebuild the image even if it already exists</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-dep-no_cache" name="no_cache">
+                            <label class="form-check-label small" for="qs-dep-no_cache">Force a clean rebuild: no build cache, pull newer base images (<code>--no-cache --pull</code>, slower)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-hdd-stack me-1"></i> Service</div>
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-name">Name</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control" id="qs-dep-name" name="name" placeholder="qscheduler" maxlength="54" aria-describedby="qs-dep-name-suffix qs-dep-name-help">
+                            <span class="input-group-text font-monospace text-muted" id="qs-dep-name-suffix">-&lt;random id&gt;</span>
+                        </div>
+                        <div class="form-text" style="font-size: 0.72rem;" id="qs-dep-name-help">A random id is always appended, e.g. <code><span id="qs-dep-name-example">qscheduler</span>-5190156f</code>: it is the instance and container name and the host name HEAppE uses.</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-port">Service port</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-dep-port" name="port" min="1" max="65535">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-host_port">Publish on host</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-dep-host_port" name="host_port" placeholder="none" min="1" max="65535">
+                        <div class="form-text" style="font-size: 0.72rem;">Binds 127.0.0.1 only.</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-log_level">Log level</label>
+                        <select class="form-select form-select-sm" id="qs-dep-log_level" name="log_level">
+                            <option value="error">error</option>
+                            <option value="warn">warn</option>
+                            <option value="info" selected>info (default)</option>
+                            <option value="debug">debug</option>
+                            <option value="trace">trace</option>
+                        </select>
+                        <div class="form-text" style="font-size: 0.72rem;"><code>RUST_LOG</code>; change it later with <em>Actions &rsaquo; Log level...</em></div>
+                    </div>
+                    <div class="col-12">
+                        <a class="small fw-semibold text-decoration-none" data-bs-toggle="collapse" href="#qsDeployServeOptions" role="button" aria-expanded="false"><i class="bi bi-speedometer2 me-1"></i>Service limits (QScheduler 0.3.0+)</a>
+                        <div class="collapse mt-2" id="qsDeployServeOptions">
+                            <div class="row g-2">
+                                <div class="col-md-3"><label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-max_payload">Max request size</label>
+                                    <input type="text" class="form-control form-control-sm" id="qs-dep-max_payload" name="max_payload" placeholder="32M"></div>
+                                <div class="col-md-3"><label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-max_user_active_payload">Active payload per user</label>
+                                    <input type="text" class="form-control form-control-sm" id="qs-dep-max_user_active_payload" name="max_user_active_payload" placeholder="200M"></div>
+                                <div class="col-md-3"><label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-max_user_active_items">Active items per user</label>
+                                    <input type="number" class="form-control form-control-sm" id="qs-dep-max_user_active_items" name="max_user_active_items" min="1" placeholder="2000"></div>
+                                <div class="col-md-3"><label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-task_retention">Task retention in memory</label>
+                                    <input type="text" class="form-control form-control-sm" id="qs-dep-task_retention" name="task_retention" placeholder="10m"></div>
+                            </div>
+                            <div class="form-text" style="font-size: 0.72rem;">Empty: QScheduler's default (shown). Sizes are whole numbers with K, M, G or T (powers of 1024); max request size at most 4G. A user over a limit gets HTTP 429 (413 for a too large payload), which HEAppE passes on. Ignored for older images.</div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small text-muted fw-semibold mb-1 d-block">Database</label>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-dep-db-shared" value="shared" {% if shared_db_deployed %}checked{% else %}disabled{% endif %}>
+                            <label class="form-check-label small" for="qs-dep-db-shared">Shared database (recommended){% if not shared_db_deployed %} <span class="text-muted">&ndash; deploy it first</span>{% endif %}</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-dep-db-new" value="new" {% if not shared_db_deployed %}checked{% endif %}>
+                            <label class="form-check-label small" for="qs-dep-db-new">Dedicated PostgreSQL container (experiments)</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-dep-db-existing" value="existing">
+                            <label class="form-check-label small" for="qs-dep-db-existing">Use existing database</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4 qs-dep-db-new-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-network_prefix">Database network size</label>
+                        <select class="form-select form-select-sm" id="qs-dep-network_prefix" name="network_prefix"><option value="24">/24 (254 addresses)</option><option value="25">/25 (126 addresses)</option><option value="26">/26 (62 addresses)</option><option value="27">/27 (30 addresses)</option><option value="28">/28 (14 addresses)</option><option value="29">/29 (6 addresses, default)</option></select>
+                        <div class="form-text" style="font-size: 0.72rem;">Subnet of the internal <code>&lt;name&gt;_db_net</code>, taken from <code>QSCHEDULER_NETWORK_POOL</code>. Two containers use it (QScheduler and its or the shared PostgreSQL).</div>
+                    </div>
+                    <div class="col-md-8 qs-dep-db-shared-only{% if not shared_db_deployed %} d-none{% endif %}">
+                        <div class="form-text small mt-4"><i class="bi bi-info-circle me-1"></i>Creates role and schema <code>qs_&lt;name&gt;</code> in the shared database; only this instance can use it.</div>
+                    </div>
+                    <div class="col-md-8 qs-db-existing-only d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-database_url">DATABASE_URL <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control form-control-sm font-monospace" id="qs-dep-database_url" name="database_url" placeholder="postgres://user:pass@host:5432/db" autocomplete="off">
+                    </div>
+                    <div class="col-md-4 qs-db-existing-only d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-db_network">DB Docker network</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-dep-db_network" name="db_network" placeholder="optional">
+                    </div>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-hdd-network me-1"></i> QScheduler network and aliases</div>
+                <div class="row g-2 mb-2 bg-light p-3 rounded border border-light-subtle qs-net-fields">
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted fw-semibold mb-1">Subnet</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control font-monospace qs-net-subnet" name="qs_subnet" placeholder="proposed automatically" autocomplete="off" aria-label="QScheduler network subnet">
+                            <button type="button" class="btn btn-outline-secondary qs-net-propose" title="Propose a free subnet"><i class="bi bi-magic"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1">Size</label>
+                        <select class="form-select form-select-sm qs-net-prefix" name="qs_prefix" aria-label="QScheduler network size">{% for p in qs_network_prefixes %}<option value="{{ p }}"{% if p == qs_network_default_prefix %} selected{% endif %}>/{{ p }}{% if p == qs_network_default_prefix %} (default){% endif %}</option>{% endfor %}</select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end"><div class="form-text small m-0 qs-net-status"></div></div>
+                    <div class="col-12"><div class="form-text" style="font-size: 0.72rem;">Internal network <code>&lt;name&gt;_qs_net</code>: QScheduler gets the static address <code>.2</code>, the assigned HEAppE containers join it. The subnet is proposed from <code>QSCHEDULER_NETWORK_POOL</code>; change it if it collides with your LAN or VPN.</div></div>
+                </div>
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-12">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-aliases">Aliases</label>
+                        <input type="text" class="form-control form-control-sm font-monospace" id="qs-dep-aliases" name="aliases" placeholder="e.g. {{ alias_example }}" autocomplete="off">
+                        <div class="form-text" style="font-size: 0.72rem;">Optional, comma separated host names{% if alias_zone %} inside <code>{{ alias_zone }}</code>{% endif %}, e.g. <code>{{ alias_example }}</code>. Host names HEAppE clusters can use instead of the container name (Docker network aliases; one cluster per alias). They can be changed later (<em>Aliases...</em>).</div>
+                    </div>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-diagram-3 me-1"></i> Assignment</div>
+                <div class="row g-2 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-dep-assign_heappe_id">Assign HEAppE instance</label>
+                        <select class="form-select form-select-sm" id="qs-dep-assign_heappe_id" name="assign_heappe_id"></select>
+                        <div class="form-text" style="font-size: 0.72rem;">HEAppE 6.6.0 or newer.</div>
+                    </div>
+                    <div class="col-md-6 d-flex align-items-end">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="qs-dep-assign_notifications" name="assign_notifications" checked>
+                            <label class="form-check-label small" for="qs-dep-assign_notifications">Enable notifications</label>
+                        </div>
+                    </div>
+                </div>
+                <div id="qs-dep-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsDeployBtn"><i class="bi bi-rocket-takeoff-fill me-1"></i>Deploy</button>
+            </div>
+        </form>
+    </div>
+</div>
+<datalist id="qs-local-images"></datalist>
+
+<!-- Register existing -->
+<div class="modal fade" id="qsRegisterModal" tabindex="-1" aria-labelledby="qsRegisterLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsRegisterForm" novalidate data-no-loading autocomplete="off">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsRegisterLabel"><i class="bi bi-link-45deg"></i>Register Existing QScheduler</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="kind" id="qs-reg-kind-local" value="local" checked>
+                        <label class="form-check-label small fw-semibold" for="qs-reg-kind-local">Container on this Docker host</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="kind" id="qs-reg-kind-ssh_host" value="ssh_host">
+                        <label class="form-check-label small fw-semibold" for="qs-reg-kind-ssh_host">Remote: SSH to the VM running the container</label>
+                        <div class="form-text mt-0" style="font-size: 0.72rem;">QScheduler 0.2.1+: admin API inside the container (its <code>ADMIN_TOKEN</code>); older: <code>docker exec &lt;container&gt; qscheduler ...</code> and <code>docker restart</code>.</div>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="kind" id="qs-reg-kind-ssh_container" value="ssh_container">
+                        <label class="form-check-label small fw-semibold" for="qs-reg-kind-ssh_container">Remote: SSH directly into the QScheduler container</label>
+                        <div class="form-text mt-0" style="font-size: 0.72rem;">The container must run an SSH server. Commands run as <code>qscheduler ...</code> inside it.</div>
+                    </div>
+                </div>
+
+                {% include 'partials/qscheduler_sshc_warning.html' %}
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle qs-reg-ssh-only d-none">
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-ssh_host">SSH host <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="qs-reg-ssh_host" name="ssh_host" placeholder="qscheduler.example.org">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-ssh_port">SSH port</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-reg-ssh_port" name="ssh_port" value="22" min="1" max="65535">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-ssh_user">SSH user <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="qs-reg-ssh_user" name="ssh_user">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-ssh_private_key">SSH private key <span class="text-danger">*</span></label>
+                        <textarea class="form-control form-control-sm font-monospace" id="qs-reg-ssh_private_key" name="ssh_private_key" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----" spellcheck="false"></textarea>
+                        <input type="file" class="form-control form-control-sm mt-1" id="qs-reg-key-file" aria-label="Load private key from file">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-ssh_key_passphrase">Key passphrase</label>
+                        <input type="password" class="form-control form-control-sm" id="qs-reg-ssh_key_passphrase" name="ssh_key_passphrase" placeholder="if the key is encrypted">
+                    </div>
+                    <div class="col-12 form-text" style="font-size: 0.72rem;">The server's host key is pinned on registration and checked on every later connection.</div>
+                </div>
+
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-md-6 qs-reg-container-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-container_name">Container <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" id="qs-reg-container_name" name="container_name" list="qs-local-containers">
+                        <datalist id="qs-local-containers"></datalist>
+                    </div>
+                    <div class="col-md-6 qs-reg-sshhost-only d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-docker_command">Docker command</label>
+                        <select class="form-select form-select-sm" id="qs-reg-docker_command" name="docker_command">
+                            <option value="docker">docker</option>
+                            <option value="sudo -n docker">sudo -n docker (passwordless sudo)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-8 qs-reg-sshcontainer-only d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-database_url">DATABASE_URL</label>
+                        <input type="password" class="form-control form-control-sm font-monospace" id="qs-reg-database_url" name="database_url" placeholder="default: read from the service environment" autocomplete="off">
+                    </div>
+                    <div class="col-md-4 qs-reg-sshcontainer-only d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-restart_command">Restart command</label>
+                        <input type="text" class="form-control form-control-sm font-monospace" id="qs-reg-restart_command" name="restart_command">
+                    </div>
+                    <div class="col-12 qs-reg-sshcontainer-only d-none form-text" style="font-size: 0.72rem;">
+                        Before QScheduler 0.2.1, new machines and notifiers need a service restart (0.2.1+ is managed over its admin API, no restart). The default sends SIGTERM to PID 1 (graceful shutdown) and relies on
+                        the container's restart policy. Leave it empty to restart manually (the instance is then marked "restart pending").
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-service_host">Host as seen from HEAppE</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-reg-service_host" name="service_host" placeholder="default: container name / SSH host">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-port">Service port</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-reg-port" name="port" placeholder="auto / 4300" min="1" max="65535">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-name">Name</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-reg-name" name="name" placeholder="auto">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-reg-admin_token">Admin token</label>
+                        <input type="password" class="form-control form-control-sm font-monospace" id="qs-reg-admin_token" name="admin_token" placeholder="ADMIN_TOKEN of the service (QScheduler 0.2.1+)" autocomplete="off">
+                        <div class="form-text" style="font-size: 0.72rem;">QScheduler 0.2.1+ is managed only over its admin API. Leave empty to take it from the container environment;
+                            when another HEAppE Management already manages this QScheduler, copy it from there (Actions &rarr; Admin token... &rarr; Show).</div>
+                    </div>
+                </div>
+                <div id="qs-reg-error" class="alert alert-danger border-0 rounded-3 small mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsRegisterBtn"><i class="bi bi-link-45deg me-1"></i>Register</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Update -->
+<div class="modal fade" id="qsUpdateModal" tabindex="-1" aria-labelledby="qsUpdateLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsUpdateForm" novalidate data-no-loading>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsUpdateLabel"><i class="bi bi-arrow-repeat"></i><span>Update QScheduler Instance</span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-2 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-12">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="source" id="qs-upd-src-git" value="git" checked>
+                            <label class="form-check-label small fw-semibold" for="qs-upd-src-git">Build from git (branch / tag)</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="source" id="qs-upd-src-image" value="image">
+                            <label class="form-check-label small fw-semibold" for="qs-upd-src-image">Existing image on the Docker host</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6 qs-git-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-upd-repo">Git repository</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-upd-repo" name="repo">
+                    </div>
+                    <div class="col-md-3 qs-git-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-upd-ref-select">Branch / tag</label>
+                        <select class="form-select form-select-sm d-none qs-ref-select" id="qs-upd-ref-select"></select>
+                        <input type="text" class="form-control form-control-sm qs-ref-input" id="qs-upd-ref" name="ref" aria-label="Branch / tag" placeholder="branch or tag">
+                        <div class="form-text qs-ref-status" style="font-size: 0.72rem;"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-upd-image">Image</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-upd-image" name="image" list="qs-local-images" autocomplete="off">
+                    </div>
+                    <div class="col-12 qs-git-only">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-upd-no_cache" name="no_cache">
+                            <label class="form-check-label small" for="qs-upd-no_cache">Force a clean rebuild: no build cache, pull newer base images (<code>--no-cache --pull</code>, slower)</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-upd-confirm_backup" name="confirm_backup">
+                            <label class="form-check-label small" for="qs-upd-confirm_backup">I have a backup of the database <span class="text-muted">(needed when updating to QScheduler 0.3.0 and the database cannot be backed up here)</span></label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-upd-ignore_compatibility" name="ignore_compatibility">
+                            <label class="form-check-label small" for="qs-upd-ignore_compatibility">Update anyway when an assigned HEAppE is too old <span class="text-muted">(QScheduler 0.2.2+ needs HEAppE 6.7.0+)</span></label>
+                        </div>
+                    </div>
+                    <div class="col-12 form-text" style="font-size: 0.72rem;">
+                        Recreates the container with the same configuration (database, networks, ports); for git the image is rebuilt on the
+                        instance's Docker host. Machines, notifiers and projects are kept in PostgreSQL. If the new version is not healthy,
+                        the previous container is restored. Downgrades are refused (database migrations are one-way). Updating to
+                        <strong>0.3.0</strong> backs the database up first and restores it on failure; machines then accept tasks of at most
+                        15 minutes unless their max task time limit is raised (checked against the queues afterwards).
+                    </div>
+                </div>
+                <div id="qs-upd-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsUpdateBtn"><i class="bi bi-arrow-repeat me-1"></i>Update</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Assign / edit assignment -->
+<div class="modal fade" id="qsAssignModal" tabindex="-1" aria-labelledby="qsAssignLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsAssignForm" novalidate data-no-loading>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsAssignLabel"><i class="bi bi-diagram-3-fill"></i><span id="qs-asg-title">Assign HEAppE Instance</span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                {% include 'partials/qscheduler_sshc_warning.html' %}
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-asg-heappe_instance_id">HEAppE instance</label>
+                        <select class="form-select form-select-sm" id="qs-asg-heappe_instance_id" name="heappe_instance_id"></select>
+                    </div>
+                    <div class="col-md-6 small text-muted d-flex align-items-end" id="qs-asg-info"></div>
+                    <div class="col-12 form-text" style="font-size: 0.72rem;">
+                        For a QScheduler on this Docker host, its container joins the HEAppE API network (the HEAppE API restarts briefly).
+                        A remote QScheduler must be reachable from HEAppE at its configured host and port.
+                    </div>
+                </div>
+                <div class="row g-2 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-12">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="qs-asg-notifications_enabled" name="notifications_enabled">
+                            <label class="form-check-label small fw-semibold" for="qs-asg-notifications_enabled">Task and session notifications</label>
+                        </div>
+                        <div class="form-text" style="font-size: 0.72rem;">
+                            Every cluster of this HEAppE on this QScheduler gets its own notifier <code id="qs-asg-notifier-pattern">&lt;identifier&gt;.&lt;machine&gt;</code>
+                            with its own token, created when the cluster is added on the Clusters page. The token is always stored in HEAppE Vault.
+                            Changing these settings recreates the notifiers of existing clusters with new tokens. When off, HEAppE polls task state.
+                        </div>
+                    </div>
+                    <div class="col-12 qs-asg-notify-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-asg-callback_url">Callback URL</label>
+                        <input type="url" class="form-control form-control-sm" id="qs-asg-callback_url" name="callback_url" placeholder="auto-detected">
+                        <div class="form-text" style="font-size: 0.72rem;">HEAppE TaskCallback endpoint as reachable from the QScheduler host.</div>
+                    </div>
+                    <div class="col-12 qs-asg-notify-only qs-asg-edit-only">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="qs-asg-rotate_tokens" name="rotate_tokens">
+                            <label class="form-check-label small" for="qs-asg-rotate_tokens">Generate new tokens for all clusters of this HEAppE (QScheduler &lt; 0.2.1 restarts)</label>
+                        </div>
+                    </div>
+                </div>
+                <div id="qs-asg-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsAssignBtn"><i class="bi bi-check-lg me-1"></i>Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Confirm (undeploy / unregister / unassign / restart) -->
+<div class="modal fade" id="qsConfirmModal" tabindex="-1" aria-labelledby="qsConfirmLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-danger text-white border-0 py-3 px-4" id="qs-confirm-header">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsConfirmLabel"><i class="bi bi-exclamation-triangle-fill"></i><span id="qs-confirm-title"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                {% include 'partials/qscheduler_sshc_warning.html' %}
+                <div class="small text-secondary" id="qs-confirm-body"></div>
+                <div class="form-check form-switch mt-3 d-none" id="qs-confirm-option-wrap">
+                    <input class="form-check-input" type="checkbox" id="qs-confirm-option">
+                    <label class="form-check-label small text-danger" for="qs-confirm-option" id="qs-confirm-option-label"></label>
+                </div>
+                <div id="qs-confirm-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsConfirmBtn"></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Log level (RUST_LOG) -->
+<div class="modal fade" id="qsLogLevelModal" tabindex="-1" aria-labelledby="qsLogLevelLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content border-0 shadow-lg rounded-3" id="qsLogLevelForm" novalidate>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsLogLevelLabel"><i class="bi bi-journal-text me-2"></i>Log level of <span id="qs-ll-name"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 small">
+                <p class="mb-2" id="qs-ll-current"><span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Reading the current level...</p>
+                <label class="form-label fw-semibold mb-1" for="qs-ll-select">New level</label>
+                <select class="form-select form-select-sm mb-2" id="qs-ll-select">
+                    <option value="error">error &ndash; errors only</option>
+                    <option value="warn">warn &ndash; also warnings</option>
+                    <option value="info">info &ndash; default</option>
+                    <option value="debug">debug &ndash; detailed, for troubleshooting</option>
+                    <option value="trace">trace &ndash; everything (very verbose)</option>
+                    <option value="__custom__">Custom filter...</option>
+                </select>
+                <input type="text" class="form-control form-control-sm font-monospace mb-1 d-none" id="qs-ll-custom" maxlength="200" placeholder="info,qscheduler=debug">
+                <div class="form-text mt-0 mb-3 d-none" id="qs-ll-custom-help">A <code>RUST_LOG</code> filter: a default level and per-module levels, e.g. <code>info,qscheduler=debug,hyper=warn</code>.</div>
+                <div class="alert alert-warning border-0 rounded-3 mb-0"><i class="bi bi-exclamation-triangle me-1"></i>QScheduler reads the log level only at startup, so the container is <strong>recreated</strong> with the same image and settings. Requests fail for a few seconds; running work is persisted and re-attached. On failure the previous container is restored. Use <em>debug</em> or <em>trace</em> only temporarily: they log a lot.</div>
+                <div id="qs-ll-error" class="alert alert-danger border-0 rounded-3 mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsLogLevelBtn"><i class="bi bi-check2 me-1"></i>Apply</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Service limits (qscheduler serve options, QScheduler 0.3.0+) -->
+<div class="modal fade" id="qsServeModal" tabindex="-1" aria-labelledby="qsServeLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content border-0 shadow-lg rounded-3" id="qsServeForm" novalidate>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsServeLabel"><i class="bi bi-speedometer2 me-2"></i>Service limits of <span id="qs-sv-name"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 small">
+                <p class="mb-3" id="qs-sv-current"></p>
+                <div class="row g-2">
+                    <div class="col-6"><label class="form-label fw-semibold mb-1" for="qs-sv-max_payload">Max request size</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-sv-max_payload" name="max_payload"></div>
+                    <div class="col-6"><label class="form-label fw-semibold mb-1" for="qs-sv-max_user_active_payload">Active payload per user</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-sv-max_user_active_payload" name="max_user_active_payload"></div>
+                    <div class="col-6"><label class="form-label fw-semibold mb-1" for="qs-sv-max_user_active_items">Active items per user</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-sv-max_user_active_items" name="max_user_active_items" min="1"></div>
+                    <div class="col-6"><label class="form-label fw-semibold mb-1" for="qs-sv-task_retention">Task retention in memory</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-sv-task_retention" name="task_retention"></div>
+                </div>
+                <div class="form-text mb-3">Empty: QScheduler's default (shown as placeholder). Active items are unfinished tasks plus open sessions of a user; QScheduler answers 429 over a limit and 413 for a payload larger than the limit.</div>
+                <div class="alert alert-warning border-0 rounded-3 mb-0"><i class="bi bi-exclamation-triangle me-1"></i>QScheduler reads these only at startup: the container is <strong>recreated</strong> with the same image and settings. Requests fail for a few seconds; running work is persisted and re-attached. On failure the previous container is restored.</div>
+                <div id="qs-sv-error" class="alert alert-danger border-0 rounded-3 mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsServeBtn"><i class="bi bi-check2 me-1"></i>Apply</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Project prefix and project rename (HEAppE 6.7.0+) -->
+<div class="modal fade" id="qsPrefixModal" tabindex="-1" aria-labelledby="qsPrefixLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsPrefixLabel"><i class="bi bi-tag me-2"></i>Project prefix: <span id="qs-px-name"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 small">
+                <p class="mb-2">HEAppE 6.7.0+ names its QScheduler projects and users <code>&lt;prefix&gt;.&lt;name&gt;</code>, so several HEAppE instances can share one QScheduler. The prefix comes from the cluster setting <code>QSchedulerProjectPrefix</code>; without it HEAppE falls back to the notifier name, which contains a dot, and <strong>refuses to submit</strong>. You can choose the prefix until the first migration; after that it never changes.</p>
+                <div id="qs-px-body"><span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Reading HEAppE and QScheduler...</div>
+                <div id="qs-px-error" class="alert alert-danger border-0 rounded-3 mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-between gap-2">
+                <div class="form-check d-none" id="qs-px-manual-wrap">
+                    <input class="form-check-input" type="checkbox" id="qs-px-manual">
+                    <label class="form-check-label small" for="qs-px-manual">Projects renamed by hand (SQL above run)</label>
+                </div>
+                <div class="ms-auto d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-primary btn-sm fw-semibold rounded-3 px-3 py-2 d-none" id="qsPrefixDryBtn"><i class="bi bi-eye me-1"></i>Dry run</button>
+                    <button type="button" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2 d-none" id="qsPrefixBtn"><i class="bi bi-tag me-1"></i>Migrate</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Users and consumption (QScheduler 0.3.0+) -->
+<div class="modal fade" id="qsUsersModal" tabindex="-1" aria-labelledby="qsUsersLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsUsersLabel"><i class="bi bi-people me-2"></i>Users of <span id="qs-us-name"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 small" id="qs-us-body"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Migrate to QScheduler network / aliases -->
+<div class="modal fade" id="qsNetModal" tabindex="-1" aria-labelledby="qsNetLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form class="modal-content border-0 shadow-lg rounded-3" id="qsNetForm" novalidate>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsNetLabel"><i class="bi bi-hdd-network me-2"></i><span id="qs-net-title"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="qs-net-mode-migrate">
+                    <p class="small text-secondary mb-2">Creates the internal network <code id="qs-net-name"></code> with its own subnet and connects QScheduler there with a static address (and its aliases). Then:</p>
+                    <ul class="small text-secondary mb-3">
+                        <li>the <code>heappe</code> container of every assigned HEAppE instance joins it (live, and in its <code>docker-compose.override.yml</code>) and must reach QScheduler there;</li>
+                        <li>only then QScheduler leaves the HEAppE networks. No downtime; the clusters keep their host name.</li>
+                        <li>On failure everything is rolled back and nothing else changes.</li>
+                    </ul>
+                    <div class="row g-2 mb-0 bg-light p-3 rounded border border-light-subtle qs-net-fields">
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted fw-semibold mb-1">Subnet</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control font-monospace qs-net-subnet" name="qs_subnet" placeholder="proposed automatically" autocomplete="off" aria-label="QScheduler network subnet">
+                            <button type="button" class="btn btn-outline-secondary qs-net-propose" title="Propose a free subnet"><i class="bi bi-magic"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1">Size</label>
+                        <select class="form-select form-select-sm qs-net-prefix" name="qs_prefix" aria-label="QScheduler network size">{% for p in qs_network_prefixes %}<option value="{{ p }}"{% if p == qs_network_default_prefix %} selected{% endif %}>/{{ p }}{% if p == qs_network_default_prefix %} (default){% endif %}</option>{% endfor %}</select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end"><div class="form-text small m-0 qs-net-status"></div></div>
+                    <div class="col-12"><div class="form-text" style="font-size: 0.72rem;">Internal network <code>&lt;name&gt;_qs_net</code>: QScheduler gets the static address <code>.2</code>, the assigned HEAppE containers join it. The subnet is proposed from <code>QSCHEDULER_NETWORK_POOL</code>; change it if it collides with your LAN or VPN.</div></div>
+                </div>
+                </div>
+                <div class="qs-net-mode-aliases">
+                    <p class="small text-secondary mb-2">Host names HEAppE clusters can use instead of the container name{% if alias_zone %}, inside <code>{{ alias_zone }}</code>{% endif %}; unique on this host, one cluster per alias.</p>
+                    <ul class="small text-secondary mb-3 qs-net-aliases-local">
+                        <li>Applied as Docker network aliases on <code id="qs-net-aliases-net"></code>: QScheduler is reconnected to it, which interrupts it for well under a second for the HEAppE instances on that network.</li>
+                        <li>An alias that a HEAppE cluster still uses cannot be removed.</li>
+                    </ul>
+                    <p class="small text-warning-emphasis mb-3 qs-net-aliases-remote"><i class="bi bi-info-circle me-1"></i>Remote instance: the aliases are only stored. Add each with the QScheduler's IP as an extra host of the HEAppE instance (Containers &amp; Services &gt; Extra Hosts); to be automated.</p>
+                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-net-aliases">Aliases</label>
+                    <textarea class="form-control form-control-sm font-monospace" id="qs-net-aliases" name="aliases" rows="3" placeholder="{{ alias_example }}"></textarea>
+                    <div class="form-text" style="font-size: 0.72rem;">One per line or comma separated; empty removes all.</div>
+                </div>
+                <div id="qs-net-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsNetBtn"></button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Backups of an instance -->
+<div class="modal fade" id="qsBackupsModal" tabindex="-1" aria-labelledby="qsBackupsLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-light py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsBackupsLabel"><i class="bi bi-archive me-2 text-primary"></i>Backups &ndash; <span class="font-monospace" id="qs-bk-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="small text-muted mb-2">Database dumps (<code>pg_dump</code> custom format, checked with <code>pg_restore --list</code>) in <code id="qs-bk-dir"></code> on the host.
+                    The in-place update creates one automatically and restores it on rollback.</p>
+                <div id="qs-bk-msg" class="alert border-0 rounded-3 small d-none"></div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light"><tr><th class="small text-secondary">File</th><th class="small text-secondary">Created</th><th class="small text-secondary text-end">Size</th><th></th></tr></thead>
+                        <tbody id="qs-bk-rows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4">
+                <button type="button" class="btn btn-primary btn-sm fw-bold" id="qs-bk-now"><i class="bi bi-plus-circle me-1"></i>Backup now</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include 'partials/qscheduler_progress_modal.html' %}
+{% include 'partials/qscheduler_recovery_modals.html' %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const U = window.qsUtil;
+    const instances = JSON.parse(document.getElementById('qs-instances-data').textContent);
+    const heappes = JSON.parse(document.getElementById('qs-heappe-data').textContent);
+    const defaults = JSON.parse(document.getElementById('qs-defaults-data').textContent);
+    const chosen = JSON.parse(document.getElementById('qs-chosen-data').textContent);
+    const byId = {};
+    instances.forEach(i => { byId[i.id] = i; });
+    const urls = {
+        live: "{% url 'qscheduler_live' 0 %}", update: "{% url 'qscheduler_update' 0 %}", restart: "{% url 'qscheduler_restart' 0 %}",
+        undeploy: "{% url 'qscheduler_undeploy' 0 %}", assign: "{% url 'qscheduler_assign' 0 %}",
+        unassign: "{% url 'qscheduler_unassign' 0 %}", heappeInfo: "{% url 'qscheduler_heappe_info' 0 %}",
+        notifierRemove: "{% url 'qscheduler_notifier_remove' 0 %}",
+        migrateShared: "{% url 'qscheduler_migrate_to_shared' 0 %}",
+        migrateNetwork: "{% url 'qscheduler_migrate_network' 0 %}", aliases: "{% url 'qscheduler_aliases' 0 %}", logLevel: "{% url 'qscheduler_log_level' 0 %}",
+        serveOptions: "{% url 'qscheduler_serve_options' 0 %}", users: "{% url 'qscheduler_users' 0 %}",
+        prefixPlan: "{% url 'qscheduler_prefix_plan' 0 %}", prefixMigrate: "{% url 'qscheduler_prefix_migrate' 0 %}",
+    };
+    const proposalUrl = "{% url 'qscheduler_network_proposal' %}";
+    const url = (key, id) => urls[key].replace('/0/', '/' + id + '/');
+    const modal = id => bootstrap.Modal.getOrCreateInstance(document.getElementById(id));
+    const showErr = (id, msg) => { const el = document.getElementById(id); el.textContent = msg; el.classList.remove('d-none'); };
+    const hideErr = id => document.getElementById(id).classList.add('d-none');
+
+    // ---- shared database ----
+    const sharedUrl = "{% url 'qscheduler_shared_db' %}";
+    const size = b => b >= 1073741824 ? (b / 1073741824).toFixed(1) + ' GiB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MiB' : Math.max(1, Math.round(b / 1024)) + ' KiB';
+    function sharedOp(data, title, hint) {
+        return U.postJson(sharedUrl, data).then(d => {
+            if (d.status !== 'success') { showErr('qs-confirm-error', d.message || 'Request failed.'); return; }
+            modal('qsConfirmModal').hide();
+            U.track({ title, hint, successTitle: 'Done', details: (r, esc) => esc(r.name || r.schema || '') });
+        });
+    }
+    function sharedButton(cls, icon, text, onClick) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-sm fw-semibold ' + cls;
+        b.innerHTML = '<i class="bi bi-' + icon + ' me-1"></i>' + text;
+        b.addEventListener('click', onClick);
+        return b;
+    }
+    function loadShared() {
+        const summary = document.getElementById('qs-shared-db-summary');
+        const actions = document.getElementById('qs-shared-db-actions');
+        const schemasEl = document.getElementById('qs-shared-db-schemas');
+        U.getJson(sharedUrl).then(d => {
+            actions.innerHTML = '';
+            if (d.status !== 'success') { summary.textContent = d.message || 'Status unknown.'; return; }
+            if (!d.deployed) {
+                summary.innerHTML = 'Not deployed. One PostgreSQL for all QScheduler instances on this host, each with its own role and schema (recommended); '
+                    + 'a dedicated PostgreSQL container per instance stays available for experiments.';
+                actions.appendChild(sharedButton('btn-primary', 'database-add', 'Deploy shared database', () =>
+                    askConfirm('Deploy shared database',
+                        'Starts <code>qscheduler-shared-pgsql</code> (<code>' + U.esc(d.image) + '</code>) with its own volume and internal network, no published port. '
+                        + 'Backups are written to the host directory set by <code>QSCHEDULER_BACKUP_DIR</code>.',
+                        'Deploy', null, btn => sharedOp({ action: 'deploy' }, 'Deploying the shared database', 'Starting PostgreSQL...'), false)));
+                return;
+            }
+            const state = d.running ? '<span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">running</span>'
+                                    : '<span class="badge bg-danger-subtle text-danger-emphasis border border-danger-subtle">' + (d.exists ? 'stopped' : 'container missing') + '</span>';
+            summary.innerHTML = state + ' <code>' + U.esc(d.name) + '</code> &middot; image <code>' + U.esc(d.image) + '</code>'
+                + (d.version ? ' &middot; PostgreSQL ' + U.esc(d.version) : '') + ' &middot; backups in <code>' + U.esc(d.backup_dir) + '</code>'
+                + (d.error ? '<div class="text-danger mt-1">' + U.esc(d.error) + '</div>' : '');
+            actions.appendChild(sharedButton('btn-outline-secondary', 'arrow-repeat', 'Update image', () =>
+                askConfirm('Update the shared database image',
+                    'New image of the <strong>same PostgreSQL major version</strong> (the container is recreated on the same volume; QScheduler instances lose the database for a few seconds).'
+                    + '<input type="text" class="form-control form-control-sm font-monospace mt-2" id="qs-shared-image" value="' + U.esc(d.image) + '">',
+                    'Update', null, () => sharedOp({ action: 'update', image: document.getElementById('qs-shared-image').value.trim() },
+                                                   'Updating the shared database', 'Recreating PostgreSQL...'), false)));
+            actions.appendChild(sharedButton('btn-outline-danger', 'trash', 'Remove', () =>
+                askConfirm('Remove the shared database', 'Possible only when no QScheduler instance uses it.', 'Remove',
+                    'Also delete the volume ' + d.volume, (btn, removeData) => sharedOp({ action: 'remove', remove_data: removeData },
+                                                                                        'Removing the shared database', 'Removing...'))));
+            if ((d.schemas || []).length) {
+                schemasEl.classList.remove('d-none');
+                schemasEl.innerHTML = '<table class="table table-sm small mb-0 bg-white"><thead><tr><th>Schema</th><th>Instance</th><th class="text-end">Size</th><th class="text-end">Connections</th><th></th></tr></thead><tbody>'
+                    + d.schemas.map(x => '<tr><td><code>' + U.esc(x.schema) + '</code></td><td>' + (x.instance ? U.esc(x.instance) : '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">unused</span>')
+                        + '</td><td class="text-end">' + size(x.size) + '</td><td class="text-end">' + x.connections + '</td><td class="text-end">'
+                        + (x.instance ? '' : '<button type="button" class="btn btn-link btn-sm text-danger p-0 qs-drop-schema" data-schema="' + U.esc(x.schema) + '"><i class="bi bi-trash"></i> drop</button>') + '</td></tr>').join('')
+                    + '</tbody></table>';
+                schemasEl.querySelectorAll('.qs-drop-schema').forEach(b => b.addEventListener('click', () =>
+                    askConfirm('Drop schema ' + b.dataset.schema, 'Drops the schema and its role with all data (no registered instance uses it).', 'Drop', null,
+                        () => sharedOp({ action: 'drop_schema', schema: b.dataset.schema }, 'Dropping schema ' + b.dataset.schema, 'Dropping...'))));
+            }
+        }).catch(() => { summary.textContent = 'Status unknown.'; });
+    }
+    loadShared();
+
+    // ---- backups ----
+    const backupsUrl = id => "{% url 'qscheduler_backups' 0 %}".replace('/0/', '/' + id + '/');
+    let bkInst = null;
+    function bkMsg(ok, text) {
+        const el = document.getElementById('qs-bk-msg');
+        el.className = 'alert border-0 rounded-3 small ' + (ok ? 'alert-success' : 'alert-danger');
+        el.textContent = text;
+    }
+    function bkRender(d) {
+        document.getElementById('qs-bk-dir').textContent = d.directory || '';
+        const rows = document.getElementById('qs-bk-rows');
+        rows.innerHTML = (d.backups || []).length ? d.backups.map(b => '<tr><td class="font-monospace small">' + U.esc(b.file) + '</td><td class="small">' + U.esc(b.created)
+            + '</td><td class="small text-end">' + size(b.size) + '</td><td class="text-end"><button type="button" class="btn btn-link btn-sm text-danger p-0 qs-bk-del" data-file="' + U.esc(b.file) + '"><i class="bi bi-trash"></i></button></td></tr>').join('')
+            : '<tr><td colspan="4" class="small text-muted">No backups yet.</td></tr>';
+        rows.querySelectorAll('.qs-bk-del').forEach(b => b.addEventListener('click', () => {
+            if (!confirm('Delete backup ' + b.dataset.file + '?')) return;
+            U.postJson(backupsUrl(bkInst.id), { action: 'delete', file: b.dataset.file }).then(r => {
+                bkMsg(r.status === 'success', r.message || 'Delete failed.');
+                if (r.status === 'success') bkRender(Object.assign(d, { backups: r.backups }));
+            });
+        }));
+    }
+    document.querySelectorAll('.qs-backups').forEach(b => b.addEventListener('click', () => {
+        bkInst = { id: b.dataset.id, name: b.dataset.name };
+        document.getElementById('qs-bk-name').textContent = bkInst.name;
+        document.getElementById('qs-bk-msg').classList.add('d-none');
+        document.getElementById('qs-bk-rows').innerHTML = '<tr><td colspan="4" class="small text-muted">loading...</td></tr>';
+        modal('qsBackupsModal').show();
+        U.getJson(backupsUrl(bkInst.id)).then(bkRender);
+    }));
+    document.getElementById('qs-bk-now').addEventListener('click', ev => {
+        const done = U.setButtonLoading(ev.currentTarget, 'Starting');
+        U.postJson(backupsUrl(bkInst.id), { action: 'backup' }).then(d => {
+            done();
+            if (d.status !== 'success') { bkMsg(false, d.message || 'Could not start.'); return; }
+            modal('qsBackupsModal').hide();
+            U.track({ title: 'Backup of ' + bkInst.name, hint: 'pg_dump of the instance database...', successTitle: 'Backup created',
+                      details: (r, esc) => 'File: ' + esc(r.file), reloadOnClose: false });
+        });
+    });
+
+    // ---- live status of each instance (SSH instances can be slow: loaded after the page) ----
+    instances.forEach(inst => {
+        const card = document.querySelector('[data-instance-id="' + inst.id + '"]');
+        U.getJson(url('live', inst.id)).then(d => {
+            const health = card.querySelector('.qs-live-health');
+            const presence = card.querySelector('.qs-live-presence');
+            if (d.archived) {
+                health.className = 'badge bg-light text-muted border';
+                health.textContent = 'not managed';
+                card.querySelector('.qs-live-machines').textContent = 'not loaded (archived)';
+                card.querySelector('.qs-live-notifiers').textContent = 'not loaded (archived)';
+                if (d.presence === 'present') {
+                    presence.className = 'badge bg-success-subtle text-success-emphasis border border-success-subtle qs-live-presence';
+                    presence.textContent = 'service is running again';
+                    card.querySelectorAll('.qs-unarchive-item').forEach(el => el.classList.remove('d-none'));
+                }
+                return;
+            }
+            if (d.restartable) {
+                presence.className = 'badge border bg-warning-subtle text-warning-emphasis border-warning-subtle qs-live-presence';
+                presence.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>not responding';
+                presence.title = (d.presence_detail || 'the container exists') + '; QScheduler does not answer /health';
+                card.querySelectorAll('.qs-try-restart-btn').forEach(el => el.classList.remove('d-none'));
+            }
+            if (d.presence === 'missing' || d.presence === 'unreachable') {
+                const missing = d.presence === 'missing';
+                presence.className = 'badge border qs-live-presence ' + (missing ? 'bg-danger text-white' : 'bg-warning text-dark');
+                presence.innerHTML = '<i class="bi bi-' + (missing ? 'x-octagon' : 'question-octagon') + ' me-1"></i>' + (missing ? 'Missing' : 'Unreachable');
+                presence.title = d.presence_detail || '';
+                card.querySelectorAll('.qs-resolve-btn, .qs-resolve-item').forEach(el => el.classList.remove('d-none'));
+                byId[inst.id].presence = d.presence;
+                byId[inst.id].presence_detail = d.presence_detail;
+            }
+            const ok = d.health === 200;
+            health.className = 'badge border ' + (ok ? 'bg-success-subtle text-success-emphasis border-success-subtle' : 'bg-danger-subtle text-danger-emphasis border-danger-subtle');
+            health.textContent = ok ? 'healthy' : (d.health ? 'HTTP ' + d.health : 'unreachable');
+            card.querySelector('.qs-live-version').textContent = d.version || 'version ?';
+            const adm = card.querySelector('.qs-live-admin');
+            if (d.admin && d.admin.api === false) {
+                adm.innerHTML = '&middot; managed with the CLI (before 0.2.1)';
+            } else if (d.admin && d.admin.api) {
+                const p = d.admin.proxy;
+                adm.innerHTML = '&middot; admin API ' + (p && p.running ? 'via proxy <code>' + U.esc(p.address) + '</code>'
+                    : '<span class="text-muted">(admin proxy is created with the first HEAppE assignment)</span>')
+                    + (d.admin.token_stored ? '' : ' <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">no admin token</span>');
+            }
+            if (d.error) {
+                const e = card.querySelector('.qs-live-error');
+                e.textContent = d.error;
+                e.classList.remove('d-none');
+                const te = d.admin_token_error;
+                if (te) {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'btn btn-sm btn-warning fw-semibold py-0 px-2 ms-2';
+                    b.innerHTML = '<i class="bi bi-key me-1"></i>Fix admin token...';
+                    b.addEventListener('click', () => U.adminToken(te.instance_id, te.instance_name, te.can_regenerate, te.message));
+                    e.appendChild(b);
+                }
+            }
+            const m = card.querySelector('.qs-live-machines');
+            m.innerHTML = d.machines === null || d.machines === undefined ? 'cannot be listed'
+                : (d.machines.length ? d.machines.map(x => '<span class="badge bg-light text-dark border me-1">' + U.esc(x.name) + ' <span class="text-muted">' + U.esc(x.backend) + '</span></span>').join('') : 'none');
+            const n = card.querySelector('.qs-live-notifiers');
+            n.innerHTML = d.notifiers === null || d.notifiers === undefined ? 'cannot be listed'
+                : (d.notifiers.length ? d.notifiers.map(x => '<div><code>' + U.esc(x.name) + '</code> &rarr; ' + U.esc(x.url) +
+                    (x.managed ? '' : ' <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" title="Not named &lt;HEAppE identifier&gt;.&lt;machine&gt; of an assigned HEAppE instance: HEAppE Management does not create, update or remove it">unmanaged</span>' +
+                        ' <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-1 align-baseline qs-notifier-remove" data-name="' + U.esc(x.name) + '" title="Remove this notifier (asks for confirmation)"><i class="bi bi-trash"></i> remove</button>') + '</div>').join('') : 'none');
+        }).catch(() => { card.querySelector('.qs-live-health').textContent = 'status unknown'; });
+    });
+
+    // ---- local Docker images / containers (for deploy, update and register forms) ----
+    let localDocker = null;
+    function loadLocalDocker() {
+        if (localDocker) return Promise.resolve(localDocker);
+        return U.getJson("{% url 'qscheduler_local_docker' %}").then(d => {
+            localDocker = d.status === 'success' ? d : { images: [], containers: [] };
+            const imgs = document.getElementById('qs-local-images');
+            imgs.innerHTML = '';
+            (localDocker.images || []).forEach(i => { const o = document.createElement('option'); o.value = i; imgs.appendChild(o); });
+            const cs = document.getElementById('qs-local-containers');
+            cs.innerHTML = '';
+            (localDocker.containers || []).filter(c => !c.registered).forEach(c => {
+                const o = document.createElement('option'); o.value = c.name; o.label = c.image + ' (' + c.status + ')'; cs.appendChild(o);
+            });
+            return localDocker;
+        }).catch(() => ({ images: [], containers: [] }));
+    }
+
+    function sourceToggle(form) {
+        const git = form.querySelector('input[name="source"]:checked').value === 'git';
+        form.querySelectorAll('.qs-git-only').forEach(el => el.classList.toggle('d-none', !git));
+    }
+
+    // ---- branch / tag picker: lists the repository's branches and tags (GitHub / GitLab API or git ls-remote);
+    //      falls back to the plain text field when they cannot be loaded ----
+    const MANUAL_REF = '__manual__';
+    const REF_SOURCES = { github: 'GitHub', gitlab: 'GitLab', git: 'git' };
+    function refPicker(form) {
+        const sel = form.querySelector('.qs-ref-select');
+        const input = form.querySelector('.qs-ref-input');
+        const status = form.querySelector('.qs-ref-status');
+        let seq = 0;
+        function manual(html) {
+            sel.classList.add('d-none');
+            sel.innerHTML = '';
+            input.classList.remove('d-none', 'mt-1');
+            status.innerHTML = html || '';
+        }
+        function apply() {
+            const isManual = sel.value === MANUAL_REF;
+            if (!isManual) input.value = sel.value;
+            input.classList.toggle('d-none', !isManual);
+            input.classList.toggle('mt-1', isManual);
+        }
+        function option(value, text) {
+            const o = document.createElement('option');
+            o.value = value; o.textContent = text;
+            return o;
+        }
+        function load() {
+            const my = ++seq;
+            const repo = form.repo.value.trim();
+            if (!repo) { manual(''); return; }
+            const wanted = input.value.trim();
+            status.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: 0.7rem; height: 0.7rem;"></span>Loading branches and tags...';
+            U.getJson("{% url 'qscheduler_git_refs' %}?repo=" + encodeURIComponent(repo)).then(d => {
+                if (my !== seq) return;
+                const branches = d.branches || [], tags = d.tags || [];
+                if (d.status !== 'success' || (!branches.length && !tags.length)) {
+                    manual('<span title="' + U.esc(d.message || '') + '"><i class="bi bi-pencil me-1"></i>Branches and tags could not be loaded; type the name.</span>');
+                    return;
+                }
+                sel.innerHTML = '';
+                [['Branches', branches], ['Tags', tags]].forEach(([label, refs]) => {
+                    if (!refs.length) return;
+                    const g = document.createElement('optgroup');
+                    g.label = label;
+                    refs.forEach(r => g.appendChild(option(r, r + (label === 'Branches' && r === d.default_branch ? ' (default)' : ''))));
+                    sel.appendChild(g);
+                });
+                sel.appendChild(option(MANUAL_REF, 'Other (type manually)...'));
+                const known = branches.includes(wanted) || tags.includes(wanted);
+                sel.value = known ? wanted : (wanted ? MANUAL_REF : (d.default_branch && branches.includes(d.default_branch) ? d.default_branch : (branches[0] || tags[0])));
+                sel.classList.remove('d-none');
+                apply();
+                status.textContent = branches.length + ' branches, ' + tags.length + ' tags (' + (REF_SOURCES[d.source] || d.source) + ')';
+            }).catch(() => { if (my === seq) manual('<i class="bi bi-pencil me-1"></i>Branches and tags could not be loaded; type the name.'); });
+        }
+        sel.addEventListener('change', () => { apply(); if (sel.value === MANUAL_REF) input.focus(); });
+        form.repo.addEventListener('change', load);
+        form.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', () => {
+            if (r.checked && r.value === 'git' && sel.classList.contains('d-none')) load();
+        }));
+        return { load: () => { if (form.querySelector('input[name="source"]:checked').value === 'git') load(); else manual(''); } };
+    }
+
+    function formData(form, bools) {
+        const data = {};
+        new FormData(form).forEach((v, k) => { data[k] = typeof v === 'string' ? v : ''; });
+        (bools || []).forEach(k => { data[k] = form[k].checked; });
+        return data;
+    }
+
+    // ---- Log level (RUST_LOG): presets or a custom filter; applying recreates the container ----
+    const llForm = document.getElementById('qsLogLevelForm');
+    const llSelect = document.getElementById('qs-ll-select');
+    const llCustom = document.getElementById('qs-ll-custom');
+    const LL_CUSTOM = '__custom__';
+    function llToggle() {
+        const custom = llSelect.value === LL_CUSTOM;
+        llCustom.classList.toggle('d-none', !custom);
+        document.getElementById('qs-ll-custom-help').classList.toggle('d-none', !custom);
+    }
+    llSelect.addEventListener('change', () => { llToggle(); if (llSelect.value === LL_CUSTOM) llCustom.focus(); });
+    function openLogLevel() {
+        const inst = current;
+        hideErr('qs-ll-error');
+        document.getElementById('qs-ll-name').textContent = inst.name;
+        const cur = document.getElementById('qs-ll-current');
+        cur.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Reading the current level...';
+        llSelect.value = 'info'; llCustom.value = ''; llToggle();
+        modal('qsLogLevelModal').show();
+        U.getJson(url('logLevel', inst.id)).then(d => {
+            if (d.status !== 'success') { cur.textContent = d.message || 'The current level cannot be read.'; return; }
+            const level = d.log_level || '';
+            cur.innerHTML = 'Current level: <code>' + U.esc(d.effective) + '</code>' + (level ? '' : ' <span class="text-muted">(RUST_LOG not set, QScheduler default)</span>') +
+                (d.error ? '<br><span class="text-warning-emphasis">' + U.esc(d.error) + (d.stored ? ' Last set here: <code>' + U.esc(d.stored) + '</code>.' : '') + '</span>' : '');
+            if (!level || d.presets.includes(level)) llSelect.value = level || 'info';
+            else { llSelect.value = LL_CUSTOM; llCustom.value = level; }
+            llToggle();
+        }).catch(() => { cur.textContent = 'The current level cannot be read.'; });
+    }
+    llForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const level = llSelect.value === LL_CUSTOM ? llCustom.value.trim() : llSelect.value;
+        if (!level) { showErr('qs-ll-error', 'Enter a RUST_LOG filter.'); return; }
+        submitOperation(document.getElementById('qsLogLevelBtn'), 'qs-ll-error', 'qsLogLevelModal', url('logLevel', current.id), { log_level: level }, {
+            title: 'Setting the log level of ' + current.name, hint: 'Recreating the container with RUST_LOG=' + level + '...',
+            successTitle: 'Log level changed',
+            details: (r, esc) => 'Instance: ' + esc(r.name) + '<br>Log level: <code>' + esc(r.log_level) + '</code> (was <code>' + esc(r.previous) + '</code>)' });
+    });
+
+    // ---- Service limits (qscheduler serve options of QScheduler 0.3.0+): applying recreates the container ----
+    const svForm = document.getElementById('qsServeForm');
+    const SV_KEYS = ['max_payload', 'max_user_active_payload', 'max_user_active_items', 'task_retention'];
+    function openServeOptions() {
+        const inst = current;
+        hideErr('qs-sv-error');
+        document.getElementById('qs-sv-name').textContent = inst.name;
+        const cur = document.getElementById('qs-sv-current');
+        cur.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Reading the service options...';
+        SV_KEYS.forEach(k => { svForm[k].value = ''; });
+        document.getElementById('qsServeBtn').disabled = true;
+        modal('qsServeModal').show();
+        U.getJson(url('serveOptions', inst.id)).then(d => {
+            if (d.status !== 'success') { cur.textContent = d.message || 'The options cannot be read.'; return; }
+            SV_KEYS.forEach(k => { svForm[k].placeholder = d.defaults[k]; svForm[k].value = d.serve_options[k] || ''; });
+            if (!d.supported) { cur.textContent = d.message; return; }
+            if (!d.version_supported) { cur.textContent = 'Service limits need QScheduler 0.3.0+; this instance runs ' + (d.version || 'an unknown version') + '.'; return; }
+            cur.innerHTML = 'QScheduler ' + U.esc(d.version) + (d.error ? '<br><span class="text-warning-emphasis">' + U.esc(d.error) + '</span>' : '');
+            document.getElementById('qsServeBtn').disabled = false;
+        }).catch(() => { cur.textContent = 'The options cannot be read.'; });
+    }
+    svForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const data = {};
+        SV_KEYS.forEach(k => { data[k] = svForm[k].value.trim(); });
+        submitOperation(document.getElementById('qsServeBtn'), 'qs-sv-error', 'qsServeModal', url('serveOptions', current.id), data, {
+            title: 'Setting the service limits of ' + current.name, hint: 'Recreating the container...', successTitle: 'Service limits changed',
+            details: (r, esc) => 'Instance: ' + esc(r.name) + '<br>' + (Object.keys(r.serve_options || {}).map(k => esc(k) + ' = <code>' + esc(r.serve_options[k]) + '</code>').join('<br>') || 'QScheduler defaults') });
+    });
+
+    // ---- Users and consumption (QScheduler 0.3.0+) ----
+    const fmtMs = ms => { const s = Math.round((ms || 0) / 1000); return s >= 3600 ? (s / 3600).toFixed(2) + ' h' : s >= 60 ? (s / 60).toFixed(1) + ' min' : s + ' s'; };
+    function openUsers() {
+        const inst = current;
+        document.getElementById('qs-us-name').textContent = inst.name;
+        const el = document.getElementById('qs-us-body');
+        el.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Reading users...';
+        modal('qsUsersModal').show();
+        U.getJson(url('users', inst.id)).then(d => {
+            if (d.status !== 'success') { el.textContent = d.message || 'Users cannot be read.'; return; }
+            if (!d.supported) { el.textContent = d.message; return; }
+            if (!d.users.length) { el.textContent = 'No users yet: a user appears with its first task or session.'; return; }
+            el.innerHTML = '<p class="text-muted">Consumed time per user, project and machine. A user is charged the sessions it owns and its tasks outside a session. ' +
+                'HEAppE 6.7.0+ sends users as <code>&lt;prefix&gt;.&lt;username&gt;</code>.' + (d.truncated ? ' Showing the first ' + d.users.length + ' of ' + d.total_users + ' users.' : '') + '</p>' +
+                '<table class="table table-sm align-middle"><thead class="text-muted"><tr><th>User</th><th>HEAppE</th><th>Project</th><th>Machine</th><th class="text-end">Consumed</th></tr></thead><tbody>' +
+                d.users.map(u => (u.consumption.length ? u.consumption : [{ project: '-', machine: '-', consumed_ms: 0 }]).map((c, i) =>
+                    '<tr>' + (i === 0 ? '<td rowspan="' + Math.max(1, u.consumption.length) + '" class="fw-semibold">' + U.esc(u.name) + '<div class="text-muted fw-normal">total ' + fmtMs(u.total_ms) + '</div></td>' +
+                        '<td rowspan="' + Math.max(1, u.consumption.length) + '">' + (u.heappe_instance ? U.esc(u.heappe_instance) : '<span class="text-muted">other</span>') + '</td>' : '') +
+                    '<td><code>' + U.esc(c.project) + '</code></td><td>' + U.esc(c.machine) + '</td><td class="text-end">' + fmtMs(c.consumed_ms) + '</td></tr>').join('')).join('') +
+                '</tbody></table>';
+        }).catch(() => { el.textContent = 'Users cannot be read.'; });
+    }
+
+    // ---- Project prefix and project rename (HEAppE 6.7.0+) ----
+    let prefixAsg = null, prefixPlan = null, prefixWanted = null;
+    const PX_STATE = { rename: ['primary', 'rename'], done: ['success', 'already prefixed'], new: ['secondary', 'created by HEAppE on first use'],
+                       conflict: ['danger', 'conflict'], error: ['danger', 'error'] };
+    function openPrefix(a, wanted) {
+        prefixAsg = a; prefixPlan = null; prefixWanted = wanted || null;
+        hideErr('qs-px-error');
+        document.getElementById('qs-px-name').textContent = a.heappe_instance + ' on ' + current.name;
+        const el = document.getElementById('qs-px-body');
+        el.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Reading HEAppE and QScheduler...';
+        ['qsPrefixBtn', 'qsPrefixDryBtn', 'qs-px-manual-wrap'].forEach(id => document.getElementById(id).classList.add('d-none'));
+        document.getElementById('qs-px-manual').checked = false;
+        modal('qsPrefixModal').show();
+        U.getJson(url('prefixPlan', a.id) + (prefixWanted ? '?prefix=' + encodeURIComponent(prefixWanted) : '')).then(p => {
+            if (p.status !== 'success') {
+                el.textContent = p.message || 'The plan cannot be built.';
+                if (prefixWanted) {      // invalid prefix: offer to go back to the saved one
+                    el.insertAdjacentHTML('beforeend', ' <button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="qs-px-back">Back</button>');
+                    document.getElementById('qs-px-back').addEventListener('click', () => openPrefix(prefixAsg));
+                }
+                return;
+            }
+            prefixPlan = p;
+            let html = '';
+            if (p.prefix_editable) html += '<div class="d-flex flex-wrap align-items-end gap-2 mb-2"><div><label class="form-label small text-muted fw-semibold mb-1" for="qs-px-input">Prefix</label>' +
+                '<input type="text" class="form-control form-control-sm" id="qs-px-input" maxlength="64" pattern="[A-Za-z0-9_-]+" value="' + U.esc(p.prefix) + '" style="width: 16rem;"></div>' +
+                '<button type="button" class="btn btn-sm btn-outline-primary fw-semibold" id="qs-px-check"><i class="bi bi-arrow-clockwise me-1"></i>Check</button>' +
+                '<div class="form-text w-100 mt-0">Letters, digits, <code>-</code> and <code>_</code>; no dot. Unique on this QScheduler. Changeable until the first migration.</div></div>';
+            if (p.previous_prefix) html += '<div class="alert alert-warning border-0 rounded-3 py-2">Changes the prefix from <code>' + U.esc(p.previous_prefix) + '</code>: clusters with the old prefix get the new one and projects named <code>' +
+                U.esc(p.previous_prefix) + '.&lt;name&gt;</code> are renamed. QScheduler users created with the old prefix keep their names.</div>';
+            html += '<p class="mb-2">Prefix <code>' + U.esc(p.prefix) + '</code>' + (p.prefix_saved ? '' : ' <span class="text-muted">(' + (p.saved_prefix ? 'not saved yet' : 'proposed') + '; saved by the migration)</span>') +
+                ' &middot; HEAppE ' + U.esc(p.heappe_version || '?') + ' &middot; QScheduler ' + U.esc(p.qscheduler_version || '?') +
+                (p.renamed_at ? ' &middot; <span class="text-success">migrated ' + U.esc(new Date(p.renamed_at).toLocaleString()) + '</span>' : '') + '</p>';
+            if (!p.heappe_supported) html += '<div class="alert alert-warning border-0 rounded-3 py-2">HEAppE ' + U.esc(p.heappe_version || '?') + ' keeps the plain project names; the prefix needs HEAppE 6.7.0+. Upgrade HEAppE first, then migrate before submitting QScheduler jobs.</div>';
+            html += '<div class="fw-semibold mb-1">Clusters</div><ul class="mb-2">' + (p.clusters.map(c => '<li>' + U.esc(c.name) + ' <span class="text-muted">(machine ' + U.esc(c.machine) + ')</span>: ' +
+                (c.replace ? 'prefix <code>' + U.esc(c.prefix) + '</code> &rarr; <code>' + U.esc(p.prefix) + '</code>' :
+                 c.prefix ? 'prefix <code>' + U.esc(c.prefix) + '</code>' + (c.kept ? ' <span class="text-warning-emphasis">(kept)</span>' : '') : '<span class="text-danger">no prefix</span> &rarr; <code>' + U.esc(p.prefix) + '</code>') + '</li>').join('') || '<li class="text-muted">none</li>') + '</ul>';
+            if (p.rows.length) html += '<div class="fw-semibold mb-1">QScheduler projects (QPU projects of these clusters)</div><table class="table table-sm align-middle"><thead class="text-muted"><tr><th>HEAppE project</th><th>Now in QScheduler</th><th>New name</th><th>State</th></tr></thead><tbody>' +
+                p.rows.map(r => '<tr><td>' + U.esc(r.project) + '</td><td>' + (r.old ? '<code>' + U.esc(r.old) + '</code>' + (r.consumed_ms !== null ? ' <span class="text-muted">' + fmtMs(r.consumed_ms) + ' used</span>' : '') : '<span class="text-muted">-</span>') +
+                    '</td><td><code>' + U.esc(r.new) + '</code></td><td><span class="badge bg-' + PX_STATE[r.state][0] + '-subtle text-' + PX_STATE[r.state][0] + '-emphasis border">' + PX_STATE[r.state][1] + '</span></td></tr>').join('') + '</tbody></table>';
+            if (p.problems.length) html += '<div class="alert alert-' + (p.blocked ? 'danger' : 'warning') + ' border-0 rounded-3 py-2"><ul class="mb-0 ps-3">' + p.problems.map(x => '<li>' + U.esc(x) + '</li>').join('') + '</ul></div>';
+            if (p.renames && p.can_rename_here) html += '<div class="alert alert-info border-0 rounded-3 py-2 mb-0"><i class="bi bi-info-circle me-1"></i>Migrate: backup of the database, QScheduler <strong>stopped</strong> (it caches projects by name), ' +
+                p.renames + ' project(s) renamed, the prefix set on the clusters, QScheduler started again. Requests fail meanwhile. Users are not renamed.</div>';
+            else if (p.renames) html += '<div class="alert alert-warning border-0 rounded-3 py-2">This instance\'s database is not managed here. Stop QScheduler, run this SQL against its database, start it again, then tick <em>Projects renamed by hand</em> and Migrate (sets the prefix on the clusters):</div>' +
+                '<pre class="bg-light border rounded p-2 small" style="max-height: 240px; overflow: auto;">' + U.esc(p.sql) + '</pre>';
+            else if (p.pending) html += '<p class="mb-0">Nothing to rename in QScheduler: Migrate only saves the prefix and sets it on the clusters.</p>';
+            else html += '<p class="mb-0 text-success">All clusters have their prefix.</p>';
+            el.innerHTML = html;
+            const input = document.getElementById('qs-px-input');
+            if (input) {
+                const check = () => { const v = input.value.trim(); if (v && v !== p.prefix) openPrefix(prefixAsg, v); };
+                document.getElementById('qs-px-check').addEventListener('click', check);
+                input.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); check(); } });
+                // Migrate must use the checked plan: an edited, unchecked prefix disables it
+                input.addEventListener('input', () => ['qsPrefixBtn', 'qsPrefixDryBtn'].forEach(id => { document.getElementById(id).disabled = input.value.trim() !== p.prefix; }));
+            }
+            ['qsPrefixBtn', 'qsPrefixDryBtn'].forEach(id => { document.getElementById(id).disabled = false; });
+            const actionable = p.pending && !p.blocked && p.heappe_supported;
+            document.getElementById('qsPrefixBtn').classList.toggle('d-none', !actionable);
+            document.getElementById('qsPrefixDryBtn').classList.toggle('d-none', !(actionable && p.renames && p.can_rename_here));
+            document.getElementById('qs-px-manual-wrap').classList.toggle('d-none', !(actionable && p.renames && !p.can_rename_here));
+        }).catch(() => { el.textContent = 'The plan cannot be built.'; });
+    }
+    function runPrefix(dry) {
+        if (!prefixPlan) return;
+        const manual = document.getElementById('qs-px-manual').checked;
+        if (!dry && prefixPlan.renames && !prefixPlan.can_rename_here && !manual) { showErr('qs-px-error', "Run the SQL first, then tick 'Projects renamed by hand'."); return; }
+        if (!dry && !confirm('Set prefix "' + prefixPlan.prefix + '" on the clusters of ' + prefixAsg.heappe_instance +
+            (prefixPlan.renames && prefixPlan.can_rename_here ? ' and rename ' + prefixPlan.renames + ' project(s) in QScheduler (QScheduler is stopped meanwhile)' : '') + '? The prefix cannot be changed after this.')) return;
+        submitOperation(document.getElementById(dry ? 'qsPrefixDryBtn' : 'qsPrefixBtn'), 'qs-px-error', 'qsPrefixModal', url('prefixMigrate', prefixAsg.id), { dry_run: dry, manual_done: manual, prefix: prefixPlan.prefix }, {
+            title: (dry ? 'Dry run: project prefix of ' : 'Project prefix of ') + prefixAsg.heappe_instance, successTitle: dry ? 'Dry run finished' : 'Prefix set',
+            details: (r, esc) => 'Prefix: <code>' + esc(r.prefix) + '</code><br>Projects ' + (r.dry_run ? 'that would be renamed' : 'renamed') + ': ' + esc(r.renames) +
+                (r.clusters ? '<br>Clusters updated: ' + esc(r.clusters.length) : '') });
+    }
+    document.getElementById('qsPrefixBtn').addEventListener('click', () => runPrefix(false));
+    document.getElementById('qsPrefixDryBtn').addEventListener('click', () => runPrefix(true));
+
+    function submitOperation(btn, errId, modalId, postUrl, data, track) {
+        hideErr(errId);
+        const restore = U.setButtonLoading(btn, 'Starting...');
+        return U.postJson(postUrl, data).then(d => {
+            restore();
+            if (d.status !== 'success') { showErr(errId, d.message || 'Failed to start.'); return; }
+            if (modalId) modal(modalId).hide();
+            U.track(track);
+        }).catch(err => { restore(); showErr(errId, err.message || 'Network error.'); });
+    }
+
+    // ---- QScheduler network subnet: proposed automatically, the admin can enter another one ----
+    function netPicker(root) {
+        const subnet = root.querySelector('.qs-net-subnet');
+        const prefix = root.querySelector('.qs-net-prefix');
+        const status = root.querySelector('.qs-net-status');
+        let seq = 0;
+        function query(params) {
+            const n = ++seq;
+            status.className = 'form-text small m-0 qs-net-status text-muted';
+            status.textContent = params.subnet ? 'Checking...' : 'Finding a free subnet...';
+            return fetch(proposalUrl + '?' + new URLSearchParams(params), { credentials: 'same-origin' })
+                .then(r => r.json()).then(d => {
+                    if (n !== seq) return;
+                    if (d.status === 'success') {
+                        if (!params.subnet) subnet.value = d.subnet;
+                        status.className = 'form-text small m-0 qs-net-status text-success-emphasis';
+                        status.innerHTML = '<i class="bi bi-check-circle me-1"></i>QScheduler at <code>' + U.esc(d.ip) + '</code>, dynamic <code>' + U.esc(d.ip_range) + '</code>';
+                    } else {
+                        status.className = 'form-text small m-0 qs-net-status text-danger';
+                        status.innerHTML = U.esc(d.message || 'Not usable.') + (d.proposal
+                            ? ' <a href="#" class="qs-net-use" data-subnet="' + U.esc(d.proposal) + '">Use ' + U.esc(d.proposal) + '</a>' : '');
+                    }
+                }).catch(() => { if (n === seq) status.textContent = ''; });
+        }
+        const propose = () => query({ prefix: prefix.value });
+        prefix.addEventListener('change', propose);
+        root.querySelector('.qs-net-propose').addEventListener('click', propose);
+        subnet.addEventListener('change', () => subnet.value.trim() ? query({ subnet: subnet.value.trim() }) : propose());
+        status.addEventListener('click', e => {
+            const a = e.target.closest('.qs-net-use');
+            if (!a) return;
+            e.preventDefault();
+            subnet.value = a.dataset.subnet;
+            query({ subnet: a.dataset.subnet });
+        });
+        return {
+            reset(initial) {
+                prefix.value = String({{ qs_network_default_prefix }});
+                subnet.value = initial || '';
+                return initial ? query({ subnet: initial }) : propose();
+            },
+        };
+    }
+
+    // ---- deploy ----
+    const depForm = document.getElementById('qsDeployForm');
+    const depNet = netPicker(depForm.querySelector('.qs-net-fields'));
+    const depRefs = refPicker(depForm);
+    depForm.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', () => sourceToggle(depForm)));
+    function depDbToggle() {
+        const mode = depForm.querySelector('input[name="db_mode"]:checked').value;
+        depForm.querySelectorAll('.qs-db-existing-only').forEach(el => el.classList.toggle('d-none', mode !== 'existing'));
+        depForm.querySelectorAll('.qs-dep-db-new-only').forEach(el => el.classList.toggle('d-none', mode === 'existing'));
+        depForm.querySelectorAll('.qs-dep-db-shared-only').forEach(el => el.classList.toggle('d-none', mode !== 'shared'));
+    }
+    depForm.querySelectorAll('input[name="db_mode"]').forEach(r => r.addEventListener('change', depDbToggle));
+    depForm.name.addEventListener('input', () => {
+        document.getElementById('qs-dep-name-example').textContent = depForm.name.value.trim().replace(/[-_.]+$/, '') || 'qscheduler';
+    });
+    document.getElementById('qsDeployOpen').addEventListener('click', () => {
+        hideErr('qs-dep-error');
+        depForm.repo.value = defaults.repo; depForm.ref.value = defaults.ref; depForm.image.value = defaults.image;
+        depForm.port.value = defaults.port;
+        depForm.rebuild_image.checked = false; depForm.no_cache.checked = false;
+        depForm.name.value = ''; document.getElementById('qs-dep-name-example').textContent = 'qscheduler';
+        depForm.network_prefix.value = String(defaults.network_prefix || 29);
+        depForm.aliases.value = '';
+        depNet.reset();
+        depDbToggle();
+        const sel = depForm.assign_heappe_id;
+        sel.innerHTML = '<option value="">- none -</option>' + heappes.map(h => '<option value="' + h.id + '"' +
+            (h.instance_name === chosen ? ' selected' : '') + '>' + U.esc(h.instance_name) + '</option>').join('');
+        sourceToggle(depForm);
+        depRefs.load();
+        loadLocalDocker();
+        modal('qsDeployModal').show();
+    });
+    depForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const data = formData(depForm, ['rebuild_image', 'no_cache', 'assign_notifications']);
+        if (data.db_mode !== 'existing') { delete data.database_url; delete data.db_network; }
+        submitOperation(document.getElementById('qsDeployBtn'), 'qs-dep-error', 'qsDeployModal', "{% url 'qscheduler_deploy' %}", data, {
+            title: 'Deploying QScheduler', hint: 'Building the image (several minutes on the first build), starting PostgreSQL and the service...',
+            successTitle: 'QScheduler instance running',
+            details: (r, esc) => 'Instance: ' + esc(r.name) + ':' + esc(r.port) + '<br>Version: ' + esc(r.version) +
+                (r.qs_ip ? '<br>QScheduler network: ' + esc(r.qs_network) + ' (QScheduler at ' + esc(r.qs_ip) + ')' : '') +
+                (r.heappe_instance ? '<br>Assigned: ' + esc(r.heappe_instance) + (r.notifier ? ' (notifier ' + esc(r.notifier) + ')' : '') : ''),
+        });
+    });
+
+    // ---- register ----
+    const regForm = document.getElementById('qsRegisterForm');
+    function regToggle() {
+        const kind = regForm.querySelector('input[name="kind"]:checked').value;
+        const show = (sel, on) => regForm.querySelectorAll(sel).forEach(el => el.classList.toggle('d-none', !on));
+        show('.qs-reg-ssh-only', kind !== 'local');
+        show('.qs-reg-container-only', kind !== 'ssh_container');
+        show('.qs-reg-sshhost-only', kind === 'ssh_host');
+        show('.qs-reg-sshcontainer-only', kind === 'ssh_container');
+        show('.qs-sshc-warning', kind === 'ssh_container');
+        document.getElementById('qs-reg-container_name').setAttribute('list', kind === 'local' ? 'qs-local-containers' : '');
+    }
+    regForm.querySelectorAll('input[name="kind"]').forEach(r => r.addEventListener('change', regToggle));
+    document.getElementById('qs-reg-key-file').addEventListener('change', ev => {
+        const f = ev.target.files[0];
+        if (f) f.text().then(t => { regForm.ssh_private_key.value = t; ev.target.value = ''; });
+    });
+    document.getElementById('qsRegisterOpen').addEventListener('click', () => {
+        hideErr('qs-reg-error');
+        regForm.restart_command.value = defaults.restart_command;
+        regToggle();
+        loadLocalDocker();
+        modal('qsRegisterModal').show();
+    });
+    regForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const data = formData(regForm);
+        if (data.kind !== 'ssh_container') delete data.restart_command;
+        submitOperation(document.getElementById('qsRegisterBtn'), 'qs-reg-error', 'qsRegisterModal', "{% url 'qscheduler_register' %}", data, {
+            title: 'Registering QScheduler', hint: 'Connecting and checking the service...', successTitle: 'QScheduler instance registered',
+            details: (r, esc) => 'Instance: ' + esc(r.name) + '<br>Version: ' + esc(r.version),
+        });
+    });
+
+    // ---- update ----
+    const updForm = document.getElementById('qsUpdateForm');
+    const updRefs = refPicker(updForm);
+    let current = null;
+    updForm.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', () => sourceToggle(updForm)));
+    updForm.addEventListener('submit', e => {
+        e.preventDefault();
+        submitOperation(document.getElementById('qsUpdateBtn'), 'qs-upd-error', 'qsUpdateModal', url('update', current.id), formData(updForm, ['no_cache', 'confirm_backup', 'ignore_compatibility']), {
+            title: 'Updating ' + current.name, hint: 'Building / pulling the image and recreating the container...', successTitle: 'QScheduler instance updated',
+            details: (r, esc) => 'Instance: ' + esc(r.name) + '<br>Image: ' + esc(r.image) + '<br>Version: ' + esc(r.version) +
+                (r.backup ? '<br>Backup before the update: ' + esc(r.backup) : '') +
+                (r.time_limit_problems && r.time_limit_problems.length ? '<br><span class="text-danger">' + r.time_limit_problems.length +
+                    ' queue(s) allow a longer walltime than their machine: see the log and fix them on the clusters\' QScheduler panel.</span>' : ''),
+        });
+    });
+
+    // ---- assign ----
+    const asgForm = document.getElementById('qsAssignForm');
+    let editing = null;
+    function asgToggle() {
+        const on = asgForm.notifications_enabled.checked;
+        asgForm.querySelectorAll('.qs-asg-notify-only').forEach(el => el.classList.toggle('d-none', !on));
+        asgForm.querySelectorAll('.qs-asg-edit-only').forEach(el => el.classList.toggle('d-none', !on || !editing || !editing.notifications_enabled));
+    }
+    asgForm.notifications_enabled.addEventListener('change', asgToggle);
+    function loadHeappeInfo() {
+        const info = document.getElementById('qs-asg-info');
+        const id = asgForm.heappe_instance_id.value;
+        const submitBtn = document.getElementById('qsAssignBtn');
+        if (!id) { info.textContent = ''; return; }
+        submitBtn.disabled = false;
+        info.textContent = 'Checking HEAppE...';
+        U.getJson(url('heappeInfo', id)).then(d => {
+            if (d.status !== 'success') { info.textContent = d.message || ''; return; }
+            info.innerHTML = 'HEAppE ' + U.esc(d.version || 'version unknown') + ' &middot; identifier <code>' + U.esc(d.identifier) + '</code>' +
+                (d.supported ? '' : '<br><span class="text-danger">QScheduler requires HEAppE ' + U.esc(d.min_version) + ' or newer; this instance cannot be assigned.</span>');
+            submitBtn.disabled = !d.supported;
+            document.getElementById('qs-asg-notifier-pattern').textContent = (d.identifier || '<identifier>') + '.<machine>';
+            asgForm.callback_url.placeholder = d.callback_url ? d.callback_url + ' (auto)' : 'required, e.g. https://heappe.example.org/heappe/JobManagement/TaskCallback';
+            if (!editing) {
+                asgForm.notifications_enabled.checked = !!d.supported;
+                asgToggle();
+            }
+        }).catch(() => { info.textContent = ''; });
+    }
+    asgForm.heappe_instance_id.addEventListener('change', loadHeappeInfo);
+    asgForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const data = formData(asgForm, ['notifications_enabled', 'rotate_tokens']);
+        data.heappe_instance_id = asgForm.heappe_instance_id.value;
+        submitOperation(document.getElementById('qsAssignBtn'), 'qs-asg-error', 'qsAssignModal', url('assign', current.id), data, {
+            title: (editing ? 'Updating assignment' : 'Assigning HEAppE') + ' on ' + current.name,
+            hint: 'Configuring network access; when notification settings change, the notifiers of existing clusters are recreated (QScheduler < 0.2.1 restarts)...',
+            successTitle: 'Assignment saved',
+            details: (r, esc) => 'HEAppE: ' + esc(r.heappe_instance) + '<br>Notifications: ' + (r.notifications ? 'on' : 'off') +
+                '<br>Updated clusters: ' + esc((r.updated_clusters || []).join(', ') || 'none'),
+        });
+    });
+
+    // ---- confirm dialog ----
+    let confirmAction = null;
+    function askConfirm(title, bodyHtml, btnText, option, action, danger, optionChecked) {
+        document.getElementById('qs-confirm-title').textContent = title;
+        document.getElementById('qs-confirm-body').innerHTML = bodyHtml;
+        const header = document.getElementById('qs-confirm-header');
+        header.className = 'modal-header text-white border-0 py-3 px-4 ' + (danger === false ? 'bg-primary' : 'bg-danger');
+        const btn = document.getElementById('qsConfirmBtn');
+        btn.className = 'btn btn-sm fw-bold rounded-3 shadow-sm px-4 py-2 ' + (danger === false ? 'btn-primary' : 'btn-danger');
+        btn.textContent = btnText;
+        const wrap = document.getElementById('qs-confirm-option-wrap');
+        wrap.classList.toggle('d-none', !option);
+        document.getElementById('qs-confirm-option').checked = !!optionChecked;
+        if (option) document.getElementById('qs-confirm-option-label').textContent = option;
+        hideErr('qs-confirm-error');
+        confirmAction = action;
+        modal('qsConfirmModal').show();
+    }
+    document.getElementById('qsConfirmBtn').addEventListener('click', function () {
+        if (confirmAction) confirmAction(this, document.getElementById('qs-confirm-option').checked);
+    });
+
+    // ---- remove an unmanaged notifier (optional, with a warning) ----
+    document.querySelectorAll('.qs-live-notifiers').forEach(el => el.addEventListener('click', e => {
+        const btn = e.target.closest('.qs-notifier-remove');
+        if (!btn) return;
+        const inst = byId[el.closest('[data-instance-id]').dataset.instanceId];
+        const name = btn.dataset.name;
+        document.querySelectorAll('#qsConfirmModal .qs-sshc-warning').forEach(w => w.classList.toggle('d-none', inst.kind !== 'ssh_container'));
+        askConfirm('Remove notifier ' + name,
+            '<p class="mb-2"><strong>Only remove a notifier when you know what it was created for.</strong></p>' +
+            '<p class="mb-2">A notifier is the callback target QScheduler calls for every task and session that names it (<code>notify=' + U.esc(name) + '</code>). ' +
+            'If anything still uses it, QScheduler stops sending its events, and HEAppE clusters with callbacks enabled do not poll task state, so <strong>their jobs stop updating</strong>.</p>' +
+            '<p class="mb-1"><em>Unmanaged</em> means it is not named <code>&lt;HEAppE identifier&gt;.&lt;machine&gt;</code> of a HEAppE instance assigned here, typically a leftover of the old one-notifier-per-HEAppE scheme or one created by hand.</p>' +
+            '<p class="mb-1">HEAppE Management refuses the removal when a cluster of an assigned HEAppE instance uses it, or when an assigned HEAppE instance cannot be checked. It <strong>cannot check</strong>:</p>' +
+            '<ul class="mb-2"><li>HEAppE instances not assigned to <strong>' + U.esc(inst.name) + '</strong> or not registered in HEAppE Management,</li>' +
+            '<li>other clients or scripts that call QScheduler directly,</li>' +
+            '<li>tasks and sessions already submitted with this notifier (their remaining events are lost).</li></ul>' +
+            '<p class="mb-0">QScheduler is restarted to apply the change.</p>',
+            'Remove notifier', 'I know what this notifier is used for and that nothing listed above still uses it',
+            (b, acknowledged) => {
+                if (!acknowledged) { showErr('qs-confirm-error', 'Tick the confirmation first.'); return; }
+                submitOperation(b, 'qs-confirm-error', 'qsConfirmModal', url('notifierRemove', inst.id), { name: name, acknowledged: true }, {
+                    title: 'Removing notifier ' + name, hint: 'Checking the clusters of the assigned HEAppE instances, removing the notifier and restarting QScheduler...',
+                    successTitle: 'Notifier removed', details: (r, esc) => esc(r.notifier) + ' removed from ' + esc(r.name) });
+            });
+    }));
+
+    // ---- migrate to QScheduler network / aliases ----
+    const netForm = document.getElementById('qsNetForm');
+    const netNet = netPicker(netForm.querySelector('.qs-net-fields'));
+    let netMode = null;
+    function openNet(mode) {
+        netMode = mode;
+        hideErr('qs-net-error');
+        netForm.querySelectorAll('.qs-net-mode-migrate').forEach(el => el.classList.toggle('d-none', mode !== 'migrate'));
+        netForm.querySelectorAll('.qs-net-mode-aliases').forEach(el => el.classList.toggle('d-none', mode !== 'aliases'));
+        if (mode === 'migrate') {
+            document.getElementById('qs-net-title').textContent = 'Migrate ' + current.name + ' to a QScheduler network';
+            document.getElementById('qs-net-name').textContent = current.name + '_qs_net';
+            document.getElementById('qsNetBtn').textContent = 'Migrate';
+            netNet.reset();
+        } else {
+            document.getElementById('qs-net-title').textContent = 'Aliases of ' + current.name;
+            document.getElementById('qs-net-aliases-net').textContent = current.qs_network || '';
+            netForm.querySelector('.qs-net-aliases-local').classList.toggle('d-none', !current.is_local);
+            netForm.querySelector('.qs-net-aliases-remote').classList.toggle('d-none', current.is_local);
+            netForm.aliases.value = (current.aliases || []).join('\n');
+            document.getElementById('qsNetBtn').textContent = 'Save aliases';
+        }
+        modal('qsNetModal').show();
+    }
+    netForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const btn = document.getElementById('qsNetBtn');
+        if (netMode === 'migrate') {
+            submitOperation(btn, 'qs-net-error', 'qsNetModal', url('migrateNetwork', current.id),
+                { qs_subnet: netForm.qs_subnet.value.trim(), qs_prefix: netForm.qs_prefix.value, aliases: current.aliases || [] }, {
+                    title: 'Migrating ' + current.name + ' to its QScheduler network',
+                    hint: 'Creating the network, connecting QScheduler and the HEAppE containers, checking, then leaving the HEAppE networks...',
+                    successTitle: 'QScheduler network in use',
+                    details: (r, esc) => 'Network: ' + esc(r.qs_network) + ' (' + esc(r.qs_subnet) + ')<br>QScheduler at ' + esc(r.qs_ip) });
+        } else {
+            submitOperation(btn, 'qs-net-error', 'qsNetModal', url('aliases', current.id), { aliases: netForm.aliases.value }, {
+                title: 'Setting the aliases of ' + current.name,
+                hint: current.is_local ? 'Reconnecting QScheduler to its QScheduler network and checking the aliases from HEAppE...' : 'Saving...',
+                successTitle: 'Aliases saved', details: (r, esc) => esc((r.aliases || []).join(', ') || 'none') });
+        }
+    });
+
+    // Helpers for the recovery dialogs (partials/qscheduler_recovery_modals.html)
+    window.qsPage = { byId, url, modal, showErr, hideErr, formData, submitOperation, sourceToggle, refPicker, loadLocalDocker, askConfirm, netPicker };
+
+    // ---- per-instance actions ----
+    document.querySelectorAll('.qs-admin-token').forEach(b => b.addEventListener('click', () =>
+        U.adminToken(b.dataset.id, b.dataset.name, !!b.dataset.regen, '')));
+
+    document.querySelectorAll('.qs-action').forEach(b => b.addEventListener('click', () => {
+        current = byId[b.dataset.id];
+        const action = b.dataset.action;
+        document.querySelectorAll('#qsAssignModal .qs-sshc-warning, #qsConfirmModal .qs-sshc-warning')
+            .forEach(el => el.classList.toggle('d-none', current.kind !== 'ssh_container'));
+        if (action === 'update') {
+            hideErr('qs-upd-error');
+            document.querySelector('#qsUpdateLabel span').textContent = 'Update ' + current.name;
+            const git = current.source === 'git' || !current.image;
+            updForm.querySelector('input[name="source"][value="' + (git ? 'git' : 'image') + '"]').checked = true;
+            updForm.repo.value = current.repo || defaults.repo;
+            updForm.ref.value = current.ref || defaults.ref;
+            updForm.image.value = current.image || defaults.image;
+            updForm.no_cache.checked = false;
+            updForm.confirm_backup.checked = false;
+            updForm.ignore_compatibility.checked = false;
+            sourceToggle(updForm);
+            updRefs.load();
+            if (current.kind !== 'ssh_host') loadLocalDocker();
+            modal('qsUpdateModal').show();
+        } else if (action === 'restart') {
+            const manual = current.manual_restart;
+            askConfirm((manual ? 'Confirm manual restart of ' : 'Restart ') + current.name,
+                manual ? 'This instance has no restart command. Restart the QScheduler container yourself first; this only checks that the service answers <code>/health</code> and clears <em>restart pending</em>.'
+                       : (b.classList.contains('qs-try-restart-btn')
+                          ? 'The container exists but QScheduler does not answer. It is restarted (a stopped container is started) and the panel waits until <code>/health</code> answers; the log shows why if it does not come back.'
+                          : 'QScheduler stops gracefully (pending state is written to the database) and starts again; running backend jobs are re-attached.'),
+                manual ? 'Check service' : 'Restart', null, (btn) => submitOperation(btn, 'qs-confirm-error', 'qsConfirmModal', url('restart', current.id), {}, {
+                    title: 'Restarting ' + current.name, successTitle: 'QScheduler restarted', details: (r, esc) => 'Instance: ' + esc(r.name) }), false);
+        } else if (action === 'migrate_network') {
+            openNet('migrate');
+        } else if (action === 'aliases') {
+            openNet('aliases');
+        } else if (action === 'log_level') {
+            openLogLevel();
+        } else if (action === 'serve_options') {
+            openServeOptions();
+        } else if (action === 'users') {
+            openUsers();
+        } else if (action === 'prefix') {
+            openPrefix(current.assignments.find(a => String(a.id) === b.dataset.asg));
+        } else if (action === 'migrate_shared') {
+            askConfirm('Migrate ' + current.name + ' to the shared database',
+                'Copies the data from <code>' + U.esc(current.container_name) + '-pgsql</code> into role and schema <code>qs_&hellip;</code> of the shared database and restarts QScheduler on it.'
+                + '<ul class="small mt-2 mb-0"><li>QScheduler is <strong>stopped during the copy</strong> (requests fail meanwhile; running backend work is re-attached afterwards, as after a restart).</li>'
+                + '<li>A backup of the old database is written first; the row counts of every table are compared before switching.</li>'
+                + '<li>On failure QScheduler starts again on the old database.</li>'
+                + '<li>The old PostgreSQL container and volume are kept (stopped) unless you tick the option below.</li></ul>',
+                'Migrate', 'Remove the old PostgreSQL container and volume after a successful migration',
+                (btn, removeOld) => submitOperation(btn, 'qs-confirm-error', 'qsConfirmModal', url('migrateShared', current.id), { remove_old: removeOld }, {
+                    title: 'Migrating ' + current.name + ' to the shared database', hint: 'Stopping QScheduler, copying the database, switching...',
+                    successTitle: 'Migrated to the shared database',
+                    details: (r, esc) => 'Schema: ' + esc(r.schema) + '<br>Backup of the old database: ' + esc(r.backup) }), false);
+        } else if (action === 'undeploy') {
+            const managed = current.kind === 'managed';
+            if (current.assignments.length) {
+                askConfirm((managed ? 'Undeploy ' : 'Unregister ') + current.name,
+                    'Unassign these HEAppE instances first: <strong>' + current.assignments.map(a => U.esc(a.heappe_instance)).join(', ') + '</strong>.',
+                    'OK', null, () => modal('qsConfirmModal').hide(), false);
+                return;
+            }
+            const shared = managed && current.db_kind === 'shared';
+            askConfirm((managed ? 'Undeploy ' : 'Unregister ') + current.name,
+                managed ? (shared ? 'Removes the QScheduler container and its DB network, and disconnects the shared database. The image is kept.'
+                                  : 'Removes the QScheduler container, its PostgreSQL container and DB network. The image is kept.')
+                        : 'Removes the instance from HEAppE Management only; the QScheduler service is left running.',
+                managed ? 'Undeploy' : 'Unregister',
+                managed ? (shared ? 'Also drop its schema and role in the shared database (machines, notifiers, projects, task history)'
+                                  : 'Also delete the database volume (machines, notifiers, projects, task history)') : null,
+                (btn, removeData) => submitOperation(btn, 'qs-confirm-error', 'qsConfirmModal', url('undeploy', current.id), { remove_data: removeData }, {
+                    title: (managed ? 'Undeploying ' : 'Unregistering ') + current.name, successTitle: 'Done', details: (r, esc) => 'Removed: ' + esc(r.name) }),
+                undefined, shared);
+        } else if (action === 'assign' || action === 'edit_assignment') {
+            editing = action === 'edit_assignment' ? current.assignments.find(a => String(a.id) === b.dataset.asg) : null;
+            hideErr('qs-asg-error');
+            document.getElementById('qs-asg-title').textContent = (editing ? 'Edit assignment: ' + editing.heappe_instance : 'Assign HEAppE instance') + ' → ' + current.name;
+            const assignedIds = current.assignments.map(a => a.heappe_instance_id);
+            const options = editing ? heappes.filter(h => h.id === editing.heappe_instance_id) : heappes.filter(h => !assignedIds.includes(h.id));
+            asgForm.heappe_instance_id.innerHTML = options.map(h => '<option value="' + h.id + '"' + (h.instance_name === chosen ? ' selected' : '') + '>' + U.esc(h.instance_name) + '</option>').join('');
+            asgForm.heappe_instance_id.disabled = !!editing;
+            asgForm.notifications_enabled.checked = editing ? editing.notifications_enabled : false;
+            asgForm.callback_url.value = editing ? editing.callback_url : '';
+            asgForm.rotate_tokens.checked = false;
+            document.getElementById('qsAssignBtn').disabled = !options.length;
+            if (!options.length) showErr('qs-asg-error', 'All HEAppE instances are already assigned to this QScheduler.');
+            asgToggle();
+            loadHeappeInfo();
+            modal('qsAssignModal').show();
+        } else if (action === 'unassign') {
+            const a = current.assignments.find(x => String(x.id) === b.dataset.asg);
+            askConfirm('Unassign ' + a.heappe_instance,
+                'Removes its network access to <strong>' + U.esc(current.name) + '</strong> and any leftover notifiers of this HEAppE. ' +
+                'Refused while the HEAppE instance still has clusters on this QScheduler &mdash; remove them first on its Clusters page.',
+                'Unassign', 'Force: unassign even if the HEAppE API cannot be reached to check its clusters',
+                (btn, force) => submitOperation(btn, 'qs-confirm-error', 'qsConfirmModal', url('unassign', a.id), { force: force }, {
+                    title: 'Unassigning ' + a.heappe_instance, successTitle: 'HEAppE instance unassigned',
+                    details: (r, esc) => esc(r.heappe_instance) + ' → ' + esc(r.name) }));
+        }
+    }));
+});
+</script>
+{% endblock %}

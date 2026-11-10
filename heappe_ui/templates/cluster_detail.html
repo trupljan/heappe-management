@@ -46,6 +46,10 @@
                         <div class="d-flex align-items-center gap-2">
                             <i class="bi bi-gear text-primary fs-5"></i>
                             <h5 class="h6 mb-0 fw-bold text-dark">Cluster Configuration</h5>
+                            <span id="qs-cluster-badge" class="badge bg-primary-subtle text-primary-emphasis border border-primary-subtle fw-semibold{% if cluster.scheduler_type != 32 %} d-none{% endif %}"
+                                  role="note" title="This cluster is scheduled by QScheduler (quantum task scheduler)">
+                                <i class="bi bi-cpu-fill me-1"></i>QScheduler cluster
+                            </span>
                         </div>
                         <div class="d-flex gap-2">
                             {% if cluster.id %}
@@ -61,6 +65,25 @@
                         </div>
                     </div>
                     <div class="card-body p-4">
+                        {% if cluster.id and cluster.scheduler_type == 32 %}
+                        <div class="border border-primary-subtle rounded-3 p-3 mb-4 bg-primary-subtle bg-opacity-25" id="qs-cluster-status"
+                             data-status-url="{% url 'qscheduler_cluster_status' cluster.id %}"
+                             data-recreate-url="{% url 'qscheduler_cluster_recreate_notifier' cluster.id %}"
+                             data-recover-url="{% url 'qscheduler_cluster_recover_machine' cluster.id %}"
+                             data-move-url="{% url 'qscheduler_cluster_move' cluster.id %}"
+                             data-cluster-id="{{ cluster.id }}"
+                             data-suspension-url="{% url 'qscheduler_cluster_suspension' cluster.id %}"
+                             data-rename-url="{% url 'qscheduler_cluster_rename' cluster.id %}"
+                             data-time-limits-url="{% url 'qscheduler_cluster_time_limits' cluster.id %}"
+                             data-machines-url="{% url 'qscheduler_machine_list' 0 %}"
+                             data-qs-page-url="{% url 'qscheduler_page' %}">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-bold small text-primary"><i class="bi bi-cpu me-1"></i>QScheduler</div>
+                                <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="qs-cs-refresh" title="Check again"><i class="bi bi-arrow-clockwise"></i></button>
+                            </div>
+                            <div class="small" id="qs-cs-body"><span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Checking the QScheduler instance...</div>
+                        </div>
+                        {% endif %}
                         <form method="post">
                             {% csrf_token %}
                             <div class="row g-3">
@@ -96,6 +119,8 @@
                                         <option value="8" {% if cluster.scheduler_type == 8 %}selected{% endif %}>HyperQueue</option>
                                         {% if is_v6_4_0_plus %}
                                         <option value="16" {% if cluster.scheduler_type == 16 %}selected{% endif %}>FirecREST (Slurm)</option>
+                                        {% endif %}
+                                        {% if is_v6_6_0_plus or cluster.scheduler_type == 32 %}
                                         <option value="32" {% if cluster.scheduler_type == 32 %}selected{% endif %}>QScheduler</option>
                                         {% endif %}
                                     </select>
@@ -184,18 +209,41 @@
                                                         <label class="form-check-label small text-dark fw-medium" for="cb-EnableCallback">Enable Callback Notifications</label>
                                                     </div>
                                                 </div>
-                                                <div class="col-md-6">
+                                                <div class="col-md-6 cb-generic-only">
                                                     <label class="form-label small text-muted fw-semibold mb-1" for="cb-CallbackUrl">Callback URL</label>
                                                     <input type="url" class="form-control form-control-sm border-light-subtle bg-white" id="cb-CallbackUrl" placeholder="e.g. https://my-service.com/heappe-webhook">
                                                     <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Push notification endpoint replacing SSH polling for job status updates.</div>
                                                 </div>
+                                                <div class="col-md-6 cb-qs-only d-none">
+                                                    <div class="form-text text-muted mt-0" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>QScheduler sends task and session events to the notifier below; HEAppE stops polling task state.</div>
+                                                </div>
+                                                <div class="col-md-6 mt-2 cb-qs-only d-none">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="cb-QSchedulerNotifier">QScheduler Notifier</label>
+                                                    <input type="text" class="form-control form-control-sm border-light-subtle bg-white font-monospace" id="cb-QSchedulerNotifier" placeholder="e.g. heappe-dev.SimulatorMachine" maxlength="512">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Name of this cluster's notifier registered in QScheduler (<code>QSchedulerNotifier</code>). Sent as <code>notify=</code> with tasks and sessions.</div>
+                                                </div>
+                                                <div class="col-md-6 mt-2 cb-qs-only d-none">
+                                                    <label class="form-label small text-muted fw-semibold mb-1" for="cb-QSchedulerNotifyToken">
+                                                        QScheduler Notify Token
+                                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-1" style="font-size: 0.65rem;"><i class="bi bi-shield-lock me-1"></i>Vault</span>
+                                                    </label>
+                                                    <input type="password" class="form-control form-control-sm border-light-subtle bg-white" id="cb-QSchedulerNotifyToken" placeholder="********" autocomplete="new-password">
+                                                    <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Must match the token of the notifier in QScheduler (<code>QSchedulerNotifyToken</code>). Always stored in HashiCorp Vault. Leave '********' to keep it, clear it to remove it.</div>
+                                                </div>
+                                                <div class="col-12 mt-2 cb-qs-only d-none">
+                                                    <div class="alert alert-light border small py-2 px-3 mb-0" style="font-size: 0.75rem;">
+                                                        <i class="bi bi-link-45deg me-1"></i>The notifier URL (HEAppE TaskCallback endpoint QScheduler sends events to) is stored in QScheduler, not in this cluster.
+                                                        To change it, open the <a href="{% url 'qscheduler_page' %}" class="fw-semibold">QScheduler</a> page, find this HEAppE instance under the QScheduler instance's assignments,
+                                                        click <i class="bi bi-pencil"></i> <strong>Edit</strong> and set <strong>Callback URL</strong>. Saving recreates the notifiers of all clusters of this HEAppE on that QScheduler with new tokens (QScheduler &lt; 0.2.1 is restarted).
+                                                    </div>
+                                                </div>
                                                 {% if is_v6_5_0_plus %}
-                                                <div class="col-md-8 mt-2">
+                                                <div class="col-md-8 mt-2 cb-generic-only">
                                                     <label class="form-label small text-muted fw-semibold mb-1" for="cb-ClusterCallbackNotifyToken">Cluster Callback Notify Token</label>
                                                     <input type="password" class="form-control form-control-sm border-light-subtle bg-white" id="cb-ClusterCallbackNotifyToken" placeholder="********">
                                                     <div class="form-text text-muted" style="font-size: 0.72rem;"><i class="bi bi-info-circle me-1"></i>Token used for verifying secure callbacks from cluster. Leave as is (or '********') to keep unchanged.</div>
                                                 </div>
-                                                <div class="col-md-4 mt-2 d-flex align-items-center pt-3">
+                                                <div class="col-md-4 mt-2 d-flex align-items-center pt-3 cb-generic-only">
                                                     <div class="form-check">
                                                         <input class="form-check-input border-secondary-subtle shadow-none" type="checkbox" id="cb-StoreInVault">
                                                         <label class="form-check-label small text-dark fw-medium" for="cb-StoreInVault">Store token in HashiCorp Vault</label>
@@ -416,6 +464,10 @@
                                           const cbCallbackUrl = document.getElementById('cb-CallbackUrl');
                                           const cbClusterCallbackNotifyToken = document.getElementById('cb-ClusterCallbackNotifyToken');
                                           const cbStoreInVault = document.getElementById('cb-StoreInVault');
+                                          const cbQSchedulerNotifier = document.getElementById('cb-QSchedulerNotifier');
+                                          const cbQSchedulerNotifyToken = document.getElementById('cb-QSchedulerNotifyToken');
+                                          const qsClusterBadge = document.getElementById('qs-cluster-badge');
+                                          let qsTokenExisted = false;   // the cluster already has a QSchedulerNotifyToken (Vault)
 
                                           const gtSettingsSection = document.getElementById('gt-settings-section');
                                           const gtEnableGracefulTimeout = document.getElementById('gt-EnableGracefulTimeout');
@@ -441,7 +493,7 @@
                                           
                                           if (!customConfigTextarea || !schedulerSelect) return;
 
-                                          const RESERVED_CB_KEYS = ['EnableCallback', 'CallbackUrl', 'ClusterCallbackNotifyToken'];
+                                          const RESERVED_CB_KEYS = ['EnableCallback', 'CallbackUrl', 'ClusterCallbackNotifyToken', 'QSchedulerNotifier', 'QSchedulerNotifyToken'];
                                           const RESERVED_FC_KEYS = ['IdpUrl', 'ExpirioSecretName', 'HomeDirectoryTemplate', 'FirecrestUrl', 'ClientId', 'ClientSecret', 'ClusterName'];
                                           const RESERVED_QS_KEYS = ['QSchedulerPort', 'QSchedulerHost', 'QSchedulerUseSessions'];
                                           const RESERVED_GROUP_KEYS = [
@@ -710,6 +762,12 @@
                                               if (cbStoreInVault) {
                                                   cbStoreInVault.checked = !!vaultToggles['ClusterCallbackNotifyToken'];
                                               }
+                                              if (cbQSchedulerNotifier) cbQSchedulerNotifier.value = data['QSchedulerNotifier'] || '';
+                                              qsTokenExisted = Object.prototype.hasOwnProperty.call(data, 'QSchedulerNotifyToken');
+                                              if (cbQSchedulerNotifyToken) {
+                                                  // Vault-stored values come back masked ('********'), or empty from older HEAppE versions
+                                                  cbQSchedulerNotifyToken.value = data['QSchedulerNotifyToken'] || (vaultToggles['QSchedulerNotifyToken'] ? '********' : '');
+                                              }
 
                                               // Graceful Timeout
                                               if (gtEnableGracefulTimeout) gtEnableGracefulTimeout.checked = data['EnableGracefulTimeout'] === 'true' || data['EnableGracefulTimeout'] === true;
@@ -779,6 +837,17 @@
                                                       data['HomeDirectoryTemplate'] = fcHomeDirectoryTemplate.value.trim() || '/users/{username}';
                                                   }
                                               } else if (st === '32') {
+                                                  // Webhook & Callback section: QScheduler notifier of this cluster
+                                                  if (cbQSchedulerNotifier && cbQSchedulerNotifier.value.trim()) {
+                                                      data['QSchedulerNotifier'] = cbQSchedulerNotifier.value.trim();
+                                                  }
+                                                  if (cbQSchedulerNotifyToken) {
+                                                      const tok = cbQSchedulerNotifyToken.value;
+                                                      if (tok || qsTokenExisted) {
+                                                          data['QSchedulerNotifyToken'] = tok;          // '' removes it from Vault
+                                                          vaultToggles['QSchedulerNotifyToken'] = true;  // always kept in Vault
+                                                      }
+                                                  }
                                                   if (qsQSchedulerPort) {
                                                       data['QSchedulerPort'] = qsQSchedulerPort.value.trim() || '3000';
                                                   }
@@ -892,6 +961,11 @@
                                                   scSettingsSection.style.display = 'block';
                                               }
 
+                                              const isQs = st === '32';
+                                              document.querySelectorAll('#cb-settings-section .cb-qs-only').forEach(el => el.classList.toggle('d-none', !isQs));
+                                              document.querySelectorAll('#cb-settings-section .cb-generic-only').forEach(el => el.classList.toggle('d-none', isQs));
+                                              if (qsClusterBadge) qsClusterBadge.classList.toggle('d-none', !isQs);
+
                                               updatePredefinedKeysSelect(st);
                                               serializeToJSON();
                                           }
@@ -900,6 +974,7 @@
                                           
                                           const inputListeners = [
                                               cbEnableCallback, cbCallbackUrl, cbClusterCallbackNotifyToken, cbStoreInVault,
+                                              cbQSchedulerNotifier, cbQSchedulerNotifyToken,
                                               gtEnableGracefulTimeout, gtGracefulTimeoutSeconds,
                                               scSshCommandPrefix, scSyncScriptsViaSftp,
                                               fcIdpUrl, fcExpirioSecretName, fcHomeDirectoryTemplate,
@@ -1465,4 +1540,417 @@
         </script>
     {% endif %}
 </div>
+{% if cluster.id and cluster.scheduler_type == 32 %}
+<!-- Recover the QScheduler machine of this cluster -->
+<div class="modal fade" id="qsRecoverModal" tabindex="-1" aria-labelledby="qsRecoverLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsRecoverForm" novalidate data-no-loading autocomplete="off">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsRecoverLabel"><i class="bi bi-motherboard"></i><span id="qs-rec-title">Recover machine</span> <code class="text-white" id="qs-rec-machine"></code></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="small text-secondary mb-3 qs-rec-recover-only">The cluster's queue uses a machine that does not exist in <strong id="qs-rec-instance"></strong>. Register it again, or move the cluster to an existing machine.
+                    Either way the cluster gets a notifier <code>&lt;identifier&gt;.&lt;machine&gt;</code> with a new token (if notifications are on); QScheduler &lt; 0.2.1 is restarted once.</p>
+                <div class="qs-rec-move-only d-none">
+                    <p class="small text-secondary mb-2">The cluster is <strong>kept</strong> (queues, projects, allocations and job history) and pointed to another QScheduler instance assigned to this HEAppE:
+                        its endpoint and file transfer methods are updated, it gets a machine there and a notifier <code>&lt;identifier&gt;.&lt;machine&gt;</code> with a new token (if notifications are on).
+                        Tasks still running on the old instance are not moved.</p>
+                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-qscheduler_id">Move to QScheduler instance</label>
+                    <select class="form-select form-select-sm mb-1" id="qs-rec-qscheduler_id" name="qscheduler_id"></select>
+                    <div class="form-text mb-3" style="font-size: 0.72rem;" id="qs-rec-target-info"></div>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="mode" id="qs-rec-mode-new" value="new" checked>
+                    <label class="form-check-label small fw-semibold" for="qs-rec-mode-new">Register a new machine with this name</label>
+                </div>
+                <div class="row g-2 ms-3 mb-3 qs-rec-new-only">
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-backend">Backend</label>
+                        <select class="form-select form-select-sm" id="qs-rec-backend" name="backend"><option value="test">test</option><option value="iqm">iqm</option></select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-queue_size">Queue size</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-rec-queue_size" name="queue_size" value="4" min="1">
+                    </div>
+                    <div class="col-md-6 qs-rec-iqm-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-iqm_url">IQM server URL</label>
+                        <input type="url" class="form-control form-control-sm" id="qs-rec-iqm_url" name="iqm_url" placeholder="https://...">
+                    </div>
+                    <div class="col-md-4 qs-rec-iqm-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-iqm_device">IQM device</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-rec-iqm_device" name="iqm_device" placeholder="e.g. star24">
+                    </div>
+                    <div class="col-md-5 qs-rec-iqm-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-iqm_token">IQM token</label>
+                        <input type="password" class="form-control form-control-sm" id="qs-rec-iqm_token" name="iqm_token" autocomplete="new-password">
+                    </div>
+                    <div class="col-md-3 qs-rec-iqm-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rec-iqm_poll_interval">Poll interval</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-rec-iqm_poll_interval" name="iqm_poll_interval" value="500ms">
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" id="qs-rec-pulse_access" name="pulse_access">
+                            <label class="form-check-label small" for="qs-rec-pulse_access">Allow pulse-level tasks <span class="text-muted">(QScheduler 0.2.2+)</span></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="mode" id="qs-rec-mode-existing" value="existing">
+                    <label class="form-check-label small fw-semibold" for="qs-rec-mode-existing">Use an existing machine (the cluster's queue is switched to it if the name differs)</label>
+                </div>
+                <div class="row g-2 ms-3 qs-rec-existing-only d-none">
+                    <div class="col-md-6">
+                        <select class="form-select form-select-sm" id="qs-rec-machine_name" name="machine_name"></select>
+                        <div class="form-text" style="font-size: 0.72rem;">Machines used by another cluster of this HEAppE on the same QScheduler are refused.</div>
+                    </div>
+                </div>
+                <div id="qs-rec-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsRecoverBtn"><i class="bi bi-wrench-adjustable me-1"></i>Recover</button>
+            </div>
+        </form>
+    </div>
+</div>
+<!-- Task time limits of the cluster's QScheduler machine (QScheduler 0.3.0+) -->
+<div class="modal fade" id="qsLimitsModal" tabindex="-1" aria-labelledby="qsLimitsLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content border-0 shadow-lg rounded-3" id="qsLimitsForm" novalidate>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsLimitsLabel"><i class="bi bi-stopwatch me-2"></i>Time limits of machine <span id="qs-lim-machine"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 small">
+                <div class="row g-2 mb-2">
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-lim-max">Max task time limit</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-lim-max" name="max_task_time_limit">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-lim-default">Default task time limit</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-lim-default" name="default_task_time_limit">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-lim-decay">Fair share decay half-time</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-lim-decay" name="decay_half_time">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-lim-token">IQM token</label>
+                        <input type="password" class="form-control form-control-sm" id="qs-lim-token" name="iqm_token" autocomplete="off">
+                    </div>
+                </div>
+                <div class="form-text mt-0 mb-2">Durations with a unit, e.g. <code>15m</code>, <code>2h</code>. The default applies to tasks that ask for no limit and must not exceed the max; tasks asking for more than the max are rejected. The IQM token is needed for an IQM backend (QScheduler never returns it); leave it empty for the test backend.</div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="qs-lim-fit" name="fit_queues" checked>
+                    <label class="form-check-label small" for="qs-lim-fit">Lower the walltime of this cluster's queues that exceed the new max</label>
+                </div>
+                <div class="alert alert-warning border-0 rounded-3 py-2 mb-0"><i class="bi bi-exclamation-triangle me-1"></i>QScheduler restarts the machine: queued tasks are kept, an open session is closed. The machine may be shared by other HEAppE instances.</div>
+                <div id="qs-lim-error" class="alert alert-danger border-0 rounded-3 mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsLimitsBtn"><i class="bi bi-check2 me-1"></i>Save limits</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% include 'partials/qscheduler_progress_modal.html' %}
+{% include 'partials/qscheduler_suspend_modal.html' %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const box = document.getElementById('qs-cluster-status');
+    if (!box) return;
+    const U = window.qsUtil;
+    const body = document.getElementById('qs-cs-body');
+    const esc = U.esc;
+    let status = null;
+    const line = (icon, cls, html) => '<div class="d-flex gap-2 mb-1"><i class="bi bi-' + icon + ' ' + cls + '"></i><div>' + html + '</div></div>';
+    const qsLink = name => '<a href="' + box.dataset.qsPageUrl + '" class="fw-semibold">' + esc(name) + '</a>';
+    let dialogMode = 'recover';
+    const moveHtml = d => !d.can_move ? '' : (d.move_candidates.length
+        ? '<div class="mt-2"><button type="button" class="btn btn-sm btn-outline-primary fw-semibold qs-cs-move"><i class="bi bi-arrow-left-right me-1"></i>Move to another QScheduler...</button>' +
+          ' <span class="text-muted" style="font-size: 0.72rem;">keeps the cluster, its projects and job history</span></div>'
+        : line('info-circle', 'text-secondary', 'To move this cluster to another QScheduler, assign this HEAppE instance to a healthy one on the ' + qsLink('QScheduler page') + ' first.'));
+
+    function render(d) {
+        status = d;
+        if (d.status !== 'success') { body.innerHTML = line('exclamation-triangle', 'text-danger', esc(d.message || 'Status unavailable.')); return; }
+        let html = '';
+        if (!d.instance) {
+            body.innerHTML = line('question-circle', 'text-warning', 'Endpoint <code>' + esc(d.endpoint) + '</code> is not a QScheduler instance registered in HEAppE Management (' + qsLink('QScheduler page') + ').') + moveHtml(d);
+            bindMove();
+            return;
+        }
+        html += line('hdd-network', 'text-primary', 'Attached to ' + qsLink(d.instance.name) + ' <span class="text-muted">(' + esc(d.instance.kind) + ', <code>' + esc(d.endpoint) + '</code>)</span>' +
+            (d.instance.archived ? ' <span class="badge bg-dark-subtle text-dark-emphasis border">archived</span>' : '') + ' &middot; machine <code>' + esc(d.machine) + '</code>');
+        if (!d.name_matches) {
+            html += line('exclamation-octagon', 'text-danger', 'The cluster is named <code>' + esc(d.cluster_name) + '</code>, but its machine is <code>' + esc(d.machine) +
+                '</code>: jobs on this cluster fail, because HEAppE uses the cluster name as the QScheduler machine.') +
+                '<button type="button" class="btn btn-sm btn-outline-danger fw-semibold mb-2" id="qs-cs-rename"><i class="bi bi-input-cursor-text me-1"></i>Rename cluster to ' + esc(d.machine) + '</button>';
+        }
+        if (d.instance.archived) {
+            html += line('archive', 'text-secondary', 'The instance is archived: restore it on the ' + qsLink('QScheduler page') + ' (this reassigns the cluster with a new notifier token), or move this cluster to another QScheduler.');
+            body.innerHTML = html + moveHtml(d); bindMove(); return;
+        }
+        if (!d.assigned) {
+            html += line('exclamation-triangle', 'text-warning', 'This HEAppE instance is not assigned to ' + esc(d.instance.name) + '. Assign it on the ' + qsLink('QScheduler page') + ' first.');
+            body.innerHTML = html; return;
+        }
+        if (d.error) {
+            body.innerHTML = html + line('exclamation-triangle', 'text-warning', esc(d.error)) + moveHtml(d);
+            bindMove();
+            return;
+        }
+
+        const n = d.notifications;
+        if (n.enabled) {
+            const facts = 'notifier <code>' + esc(n.configured || 'none') + '</code>, token ' + (n.token_set ? 'set (Vault)' : '<strong>missing</strong>') +
+                ', callbacks ' + (n.callbacks ? 'on' : '<strong>off</strong>') +
+                (n.registered === null ? ', registration in QScheduler not verified' : (n.registered ? ', registered in QScheduler' : ''));
+            if (n.ok) html += line('bell-fill', 'text-success', 'Notifications: ' + facts + '.');
+            else html += line('bell-slash', 'text-danger', 'Notifications are not set up properly: ' + facts + '.' +
+                (n.problems.length ? '<ul class="mb-1 ps-3">' + n.problems.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul>' : ''));
+            html += '<div class="text-muted mb-1" style="font-size: 0.72rem;">QScheduler does not expose notifier tokens, so the token itself cannot be compared; recreating generates a new one.</div>';
+        } else {
+            html += line(n.ok ? 'bell' : 'bell-slash', n.ok ? 'text-secondary' : 'text-danger',
+                'Notifications are off for this HEAppE on ' + esc(d.instance.name) + ' (HEAppE polls task state).' + (n.problems.length ? ' ' + esc(n.problems.join('; ')) + '.' : ''));
+        }
+        if (!n.ok) {
+            html += '<button type="button" class="btn btn-sm btn-outline-primary fw-semibold mb-2" id="qs-cs-recreate"><i class="bi bi-arrow-repeat me-1"></i>' +
+                (n.enabled ? 'Recreate notifier' : 'Disable callbacks') + '</button>';
+        }
+
+        const m = d.machine_status;
+        if (m.registered === true) {
+            html += line('motherboard', 'text-success', 'Machine <code>' + esc(d.machine) + '</code> is registered in QScheduler.');
+            html += '<div id="qs-cs-suspension" class="mb-1"></div>';
+        }
+        else if (m.registered === false) {
+            html += line('motherboard', 'text-danger', 'Machine <code>' + esc(d.machine) + '</code> does <strong>not exist</strong> in ' + esc(d.instance.name) + ': jobs on this cluster fail.');
+            html += '<button type="button" class="btn btn-sm btn-outline-danger fw-semibold" id="qs-cs-recover"><i class="bi bi-wrench-adjustable me-1"></i>Recover machine...</button>';
+        } else html += line('question-circle', 'text-warning', 'The machines of ' + esc(d.instance.name) + ' cannot be listed; machine <code>' + esc(d.machine) + '</code> is not verified.');
+
+        // Project prefix (HEAppE 6.7.0+ names projects and users "<prefix>.<name>")
+        const pr = d.prefix;
+        if (pr) {
+            if (pr.ok) html += line('tag-fill', 'text-success', 'Project prefix <code>' + esc(pr.configured) + '</code>: QScheduler projects and users are named <code>' + esc(pr.configured) + '.&lt;name&gt;</code>.');
+            else html += line('tag', pr.configured ? 'text-warning' : 'text-danger', 'Project prefix: ' + pr.problems.map(esc).join('; ') +
+                ' <a href="' + box.dataset.qsPageUrl + '" class="fw-semibold">QScheduler page</a>');
+        }
+        // Max task time limit of the machine vs. the walltime of the queues (QScheduler 0.3.0+)
+        const tl = d.time_limit;
+        if (tl) {
+            const editBtn = '<button type="button" class="btn btn-sm btn-outline-secondary fw-semibold qs-cs-tl" data-mode="edit"><i class="bi bi-sliders me-1"></i>Edit limits...</button>';
+            if (!tl.problems.length) html += line('stopwatch', 'text-success', 'Tasks may run up to <strong>' + esc(tl.max) + '</strong> (machine max task time limit; default ' + esc(tl.default) +
+                (tl.decay ? ', fair share decay half-time ' + esc(tl.decay) : '') + '); the queue walltime fits.') + '<div class="mb-2">' + editBtn + '</div>';
+            else {
+                html += line('stopwatch', 'text-danger', 'Task time limit: <ul class="mb-1 ps-3">' + tl.problems.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul>');
+                html += '<div class="d-flex flex-wrap gap-2 mb-2">' +
+                    '<button type="button" class="btn btn-sm btn-outline-primary fw-semibold qs-cs-tl" data-mode="queues"><i class="bi bi-arrow-down-circle me-1"></i>Lower queue walltime to ' + tl.max_walltime + ' s</button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary fw-semibold qs-cs-tl" data-mode="machine"><i class="bi bi-arrow-up-circle me-1"></i>Raise machine limit...</button>' + editBtn + '</div>';
+            }
+        }
+        body.innerHTML = html;
+        body.querySelectorAll('.qs-cs-tl').forEach(b => b.addEventListener('click', () => fixTimeLimits(b, b.dataset.mode)));
+
+        const rc = document.getElementById('qs-cs-recreate');
+        if (rc) rc.addEventListener('click', () => {
+            const text = n.enabled
+                ? 'Create notifier "' + n.expected + '" with a new token for this cluster (the old notifier of this cluster is removed if no other cluster uses it), store the token in Vault (QScheduler < 0.2.1 is restarted once)?'
+                : 'Notifications are off for this HEAppE: disable callbacks on this cluster, remove its notifier from QScheduler and restart it if needed?';
+            if (!confirm(text)) return;
+            start(rc, box.dataset.recreateUrl, {}, n.enabled ? 'Recreating notifier' : 'Disabling callbacks');
+        });
+        const rv = document.getElementById('qs-cs-recover');
+        if (rv) rv.addEventListener('click', () => openRecover('recover'));
+        if (document.getElementById('qs-cs-suspension')) loadSuspension();
+    }
+
+    // Machine state (online / suspended) with Suspend / Resume; the dialog warns when the machine is shared.
+    function loadSuspension() {
+        const el = document.getElementById('qs-cs-suspension');
+        el.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span><span class="text-muted">Checking the machine state...</span>';
+        U.getJson(box.dataset.suspensionUrl + '?users=0').then(s => {
+            if (s.status !== 'success' || !s.can_act) {
+                el.innerHTML = line('question-circle', 'text-secondary', esc((s && (s.error || s.message)) || 'The machine state is unknown.'));
+                return;
+            }
+            const sus = s.suspension;
+            const btn = sus
+                ? '<button type="button" class="btn btn-sm btn-outline-success fw-semibold" id="qs-cs-suspend" data-action="resume"><i class="bi bi-play-circle me-1"></i>Resume machine...</button>'
+                : '<button type="button" class="btn btn-sm btn-outline-warning fw-semibold" id="qs-cs-suspend" data-action="suspend"><i class="bi bi-pause-circle me-1"></i>Suspend machine...</button>';
+            let text;
+            if (sus) text = line('pause-circle-fill', 'text-warning', '<strong>Suspended</strong> since ' + esc(new Date(sus.suspended_at).toLocaleString()) +
+                ': <em>' + esc(sus.message) + '</em>. New tasks and sessions are rejected.');
+            else if (s.state === 'offline') text = line('wifi-off', 'text-danger', '<strong>Backend offline</strong>: ' + esc(s.online_reason));
+            else text = line('check-circle-fill', 'text-success', '<strong>Online</strong>: accepts tasks and sessions.');
+            let pulse = '';
+            if (s.pulse_access !== null && s.pulse_access !== undefined) {      // QScheduler 0.2.2+
+                pulse = '<div class="mt-2">' + line(s.pulse_access ? 'activity' : 'slash-circle', s.pulse_access ? 'text-primary' : 'text-secondary',
+                    'Pulse-level tasks: <strong>' + (s.pulse_access ? 'allowed' : 'not allowed') + '</strong> ' +
+                    '<span class="text-muted">(' + (s.pulse_access ? 'circuits and <code>kind=pulse</code> tasks' : 'circuits only') + ')</span>') +
+                    '<button type="button" class="btn btn-sm btn-outline-' + (s.pulse_access ? 'secondary' : 'primary') + ' fw-semibold qs-cs-machine-act" data-action="' +
+                    (s.pulse_access ? 'pulse_off' : 'pulse_on') + '"><i class="bi bi-' + (s.pulse_access ? 'slash-circle' : 'activity') + ' me-1"></i>' +
+                    (s.pulse_access ? 'Forbid pulse tasks...' : 'Allow pulse tasks...') + '</button></div>';
+            }
+            el.innerHTML = text + btn + pulse;
+            el.querySelectorAll('#qs-cs-suspend, .qs-cs-machine-act').forEach(b => b.addEventListener('click', ev =>
+                window.qsSuspend.open(Number(box.dataset.clusterId), ev.currentTarget.dataset.action, loadSuspension)));
+        }).catch(() => { el.innerHTML = line('question-circle', 'text-secondary', 'The machine state is unknown.'); });
+    }
+    function fixTimeLimits(btn, mode) {
+        const tl = status.time_limit;
+        if (mode !== 'queues') { openLimits(mode); return; }
+        if (!confirm('Set the max walltime of the queues of this cluster on machine "' + status.machine + '" to ' + tl.max_walltime + ' s (' + tl.max + ')? Jobs asking for more are then refused by HEAppE.')) return;
+        const restore = U.setButtonLoading(btn, 'Starting...');
+        U.postJson(box.dataset.timeLimitsUrl, { mode: 'queues' }).then(r => {
+            restore();
+            if (r.status !== 'success') { alert(r.message || 'Failed.'); return; }
+            trackLimits();
+        }).catch(err => { restore(); alert(err.message || 'Network error.'); });
+    }
+    function trackLimits() {
+        U.track({ title: 'Time limits of ' + status.machine, successTitle: 'Done',
+                  details: (res, e) => 'Cluster: ' + e(res.cluster) + '<br>Machine: ' + e(res.machine) + '<br>Max task time limit: ' + e(res.max_task_time_limit) +
+                      (res.queues && res.queues.length ? '<br>Queues lowered: ' + e(res.queues.length) : '') });
+    }
+    // Edit dialog; 'machine' (Raise machine limit) prefills the max with the longest queue walltime.
+    const limForm = document.getElementById('qsLimitsForm');
+    function openLimits(mode) {
+        const tl = status.time_limit;
+        document.getElementById('qs-lim-machine').textContent = status.machine;
+        document.getElementById('qs-lim-error').classList.add('d-none');
+        const longest = Math.max.apply(null, [0].concat(tl.queues.map(q => Number(q.max_walltime) || 0)));
+        limForm.max_task_time_limit.value = mode === 'machine' && longest ? Math.ceil(longest / 60) + 'm' : tl.max;
+        limForm.default_task_time_limit.value = tl.default || '';
+        limForm.decay_half_time.value = tl.decay || '';
+        limForm.decay_half_time.closest('.col-sm-6').classList.toggle('d-none', !tl.decay);
+        limForm.iqm_token.value = '';
+        limForm.fit_queues.checked = mode !== 'machine';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('qsLimitsModal')).show();
+    }
+    limForm.addEventListener('submit', ev => {
+        ev.preventDefault();
+        const tl = status.time_limit, data = { mode: 'edit', iqm_token: limForm.iqm_token.value.trim(), fit_queues: limForm.fit_queues.checked };
+        [['max_task_time_limit', tl.max], ['default_task_time_limit', tl.default], ['decay_half_time', tl.decay]].forEach(([k, was]) => {
+            const v = limForm[k].value.trim();
+            if (v && v !== was) data[k] = v;
+        });
+        const errEl = document.getElementById('qs-lim-error');
+        if (!data.max_task_time_limit && !data.default_task_time_limit && !data.decay_half_time && !data.fit_queues) {
+            errEl.textContent = 'Nothing changed.'; errEl.classList.remove('d-none'); return;
+        }
+        const btn = document.getElementById('qsLimitsBtn');
+        const restore = U.setButtonLoading(btn, 'Starting...');
+        U.postJson(box.dataset.timeLimitsUrl, data).then(r => {
+            restore();
+            if (r.status !== 'success') { errEl.textContent = r.message || 'Failed.'; errEl.classList.remove('d-none'); return; }
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('qsLimitsModal')).hide();
+            trackLimits();
+        }).catch(err => { restore(); errEl.textContent = err.message || 'Network error.'; errEl.classList.remove('d-none'); });
+    });
+    function bindMove() {
+        body.querySelectorAll('.qs-cs-move').forEach(b => b.addEventListener('click', () => openRecover('move')));
+    }
+
+    function start(btn, postUrl, data, title, errId) {
+        const restore = U.setButtonLoading(btn, 'Starting...');
+        return U.postJson(postUrl, data).then(r => {
+            restore();
+            if (r.status !== 'success') {
+                if (errId) { const e = document.getElementById(errId); e.textContent = r.message || 'Failed.'; e.classList.remove('d-none'); }
+                else alert(r.message || 'Failed.');
+                return;
+            }
+            if (errId) bootstrap.Modal.getOrCreateInstance(document.getElementById('qsRecoverModal')).hide();
+            U.track({ title: title + ' for ' + status.machine, successTitle: 'Done',
+                      details: (res, e) => 'Cluster: ' + e(res.cluster) + (res.qscheduler ? '<br>QScheduler: ' + e(res.from || '?') + ' &rarr; ' + e(res.qscheduler) : '') +
+                          (res.machine ? '<br>Machine: ' + e(res.machine) : '') + '<br>Notifier: ' + e(res.notifier || 'none (callbacks off)') });
+        }).catch(err => { restore(); alert(err.message || 'Network error.'); });
+    }
+
+    const recForm = document.getElementById('qsRecoverForm');
+    function recToggle() {
+        const existing = recForm.querySelector('input[name="mode"]:checked').value === 'existing';
+        recForm.querySelectorAll('.qs-rec-new-only').forEach(el => el.classList.toggle('d-none', existing));
+        recForm.querySelectorAll('.qs-rec-existing-only').forEach(el => el.classList.toggle('d-none', !existing));
+        recForm.querySelectorAll('.qs-rec-iqm-only').forEach(el => el.classList.toggle('d-none', recForm.backend.value !== 'iqm'));
+    }
+    recForm.querySelectorAll('input[name="mode"]').forEach(r => r.addEventListener('change', recToggle));
+    recForm.backend.addEventListener('change', recToggle);
+    function setMachines(names) {
+        recForm.machine_name.innerHTML = names.map(m => '<option value="' + esc(m) + '"' + (m === status.machine ? ' selected' : '') + '>' + esc(m) + '</option>').join('');
+        const existing = document.getElementById('qs-rec-mode-existing');
+        existing.disabled = !names.length;
+        if (existing.disabled && existing.checked) document.getElementById('qs-rec-mode-new').checked = true;
+        if (!existing.disabled && names.includes(status.machine)) existing.checked = true;   // same machine already there
+        recToggle();
+    }
+    function loadTargetMachines() {
+        const id = recForm.qscheduler_id.value;
+        const info = document.getElementById('qs-rec-target-info');
+        setMachines([]);
+        if (!id) return;
+        info.textContent = 'Loading machines...';
+        U.getJson(box.dataset.machinesUrl.replace('/0/', '/' + id + '/')).then(d => {
+            if (!d.machines) { info.textContent = 'Machines of this instance cannot be listed.'; return; }
+            info.textContent = d.machines.length ? 'Machines: ' + d.machines.map(m => m.name + ' (' + m.backend + ')').join(', ') : 'No machine registered yet.';
+            setMachines(d.machines.map(m => m.name));
+        }).catch(() => { info.textContent = 'Could not load machines.'; });
+    }
+    recForm.qscheduler_id.addEventListener('change', loadTargetMachines);
+    function openRecover(mode) {
+        dialogMode = mode;
+        const move = mode === 'move';
+        document.getElementById('qs-rec-error').classList.add('d-none');
+        document.getElementById('qs-rec-title').textContent = move ? 'Move cluster with machine' : 'Recover machine';
+        document.getElementById('qs-rec-machine').textContent = status.machine;
+        recForm.querySelectorAll('.qs-rec-move-only').forEach(el => el.classList.toggle('d-none', !move));
+        recForm.querySelectorAll('.qs-rec-recover-only').forEach(el => el.classList.toggle('d-none', move));
+        document.getElementById('qsRecoverBtn').innerHTML = move ? '<i class="bi bi-arrow-left-right me-1"></i>Move' : '<i class="bi bi-wrench-adjustable me-1"></i>Recover';
+        if (move) {
+            recForm.qscheduler_id.innerHTML = status.move_candidates.map(c => '<option value="' + c.id + '">' + esc(c.name) + ' (' + esc(c.endpoint) + ')</option>').join('');
+            loadTargetMachines();
+        } else {
+            document.getElementById('qs-rec-instance').textContent = status.instance.name;
+            setMachines(status.machine_status.machines);
+            document.getElementById('qs-rec-mode-new').checked = true;
+            recToggle();
+        }
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('qsRecoverModal')).show();
+    }
+    recForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const data = { current_machine: status.machine };
+        new FormData(recForm).forEach((v, k) => { data[k] = v; });
+        if (dialogMode !== 'move') delete data.qscheduler_id;
+        start(document.getElementById('qsRecoverBtn'), dialogMode === 'move' ? box.dataset.moveUrl : box.dataset.recoverUrl, data,
+              dialogMode === 'move' ? 'Moving cluster' : 'Recovering machine', 'qs-rec-error');
+    });
+
+    function load() {
+        body.innerHTML = '<span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Checking the QScheduler instance...';
+        U.getJson(box.dataset.statusUrl).then(render).catch(() => { body.textContent = 'Status unavailable.'; });
+    }
+    // Rename to the machine name (the button can appear in any state of the panel)
+    body.addEventListener('click', ev => {
+        const btn = ev.target.closest('#qs-cs-rename');
+        if (!btn || !status) return;
+        if (!confirm('Rename cluster "' + status.cluster_name + '" to "' + status.machine + '"? Its queues, projects, settings and job history are kept.')) return;
+        const restore = U.setButtonLoading(btn, 'Renaming...');
+        U.postJson(box.dataset.renameUrl, {}).then(r => {
+            restore();
+            if (r.status !== 'success') { alert(r.message || 'Renaming failed.'); return; }
+            location.reload();
+        }).catch(err => { restore(); alert(err.message || 'Network error.'); });
+    });
+    document.getElementById('qs-cs-refresh').addEventListener('click', load);
+    load();
+});
+</script>
+{% endif %}
 {% endblock %}

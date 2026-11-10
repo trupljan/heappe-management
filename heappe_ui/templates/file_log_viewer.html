@@ -149,6 +149,8 @@
         word-break: break-all;
         border-bottom: none;
         transition: background-color 0.1s ease;
+        content-visibility: auto;
+        contain-intrinsic-size: 0 22px;
     }
     .log-entry:hover {
         background-color: #f1f5f9;
@@ -415,6 +417,17 @@
                 <label class="filter-label">Search Text</label>
                 <input type="text" name="search" class="form-control form-control-custom w-100" placeholder="Filter..." value="{{ search_query }}">
             </div>
+
+            <div class="flex-grow-1" style="min-width: 105px; flex-basis: 0;">
+                <label class="filter-label">Max Lines</label>
+                <select name="limit" class="form-select form-control-custom w-100">
+                    <option value="300" {% if limit == 300 %}selected{% endif %}>300</option>
+                    <option value="500" {% if limit == 500 %}selected{% endif %}>500</option>
+                    <option value="1000" {% if limit == 1000 or not limit %}selected{% endif %}>1,000</option>
+                    <option value="2500" {% if limit == 2500 %}selected{% endif %}>2,500</option>
+                    <option value="5000" {% if limit == 5000 %}selected{% endif %}>5,000</option>
+                </select>
+            </div>
             
             <div class="d-flex gap-2 ms-auto" style="min-width: 160px; flex-basis: 0;">
                 <button type="submit" id="applyFilterBtn" class="btn btn-primary btn-filter-apply w-100">
@@ -499,7 +512,10 @@
 
 <script>
     let logOffset = 0;
-    let liveInterval = null;
+    let isLiveActive = false;
+    let isPolling = false;
+    let liveTimeoutId = null;
+    const MAX_CONSOLE_LINES = Math.max(3000, parseInt("{{ limit|default:1000 }}", 10) * 2);
     const logWindow = document.getElementById('logWindow');
     const consoleContent = document.getElementById('logConsole');
     const liveToggle = document.getElementById('liveStreamToggle');
@@ -508,8 +524,14 @@
     const headerLiveStatus = document.getElementById('headerLiveStatus');
     const entryCountDisplay = document.getElementById('entryCount');
 
-    function scrollToBottom() { 
-        logWindow.scrollTop = logWindow.scrollHeight; 
+    function isScrolledNearBottom() {
+        return (logWindow.scrollHeight - logWindow.scrollTop - logWindow.clientHeight) < 80;
+    }
+
+    function scrollToBottom(force = true) { 
+        if (force || isScrolledNearBottom()) {
+            logWindow.scrollTop = logWindow.scrollHeight; 
+        }
     }
 
     function escapeHtml(text) {
@@ -522,6 +544,9 @@
     }
 
     function syntaxHighlightJson(json) {
+        if (!json || json.length > 2500) {
+            return escapeHtml(json);
+        }
         json = escapeHtml(json);
         return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?)/g, function (match) {
             let cls = 'json-value-number';
@@ -545,49 +570,35 @@
     }
 
     function highlightJsonInText(text) {
-        let result = '';
-        let i = 0;
-        while (i < text.length) {
-            if (text[i] === '{') {
-                let braceCount = 1;
-                let j = i + 1;
-                let inString = false;
-                let escape = false;
-                while (j < text.length && braceCount > 0) {
-                    let char = text[j];
-                    if (escape) {
-                        escape = false;
-                    } else if (char === '\\') {
-                        escape = true;
-                    } else if (char === '"') {
-                        inString = !inString;
-                    } else if (!inString) {
-                        if (char === '{') braceCount++;
-                        else if (char === '}') braceCount--;
-                    }
-                    j++;
-                }
-                if (braceCount === 0) {
-                    let rawJson = text.substring(i, j);
-                    try {
-                        let parsed = JSON.parse(rawJson);
-                        let pretty = JSON.stringify(parsed);
-                        let highlighted = syntaxHighlightJson(pretty);
-                        result += `<span class="json-block">${highlighted}</span>`;
-                    } catch (e) {
-                        result += `<span class="json-raw">${escapeHtml(rawJson)}</span>`;
-                    }
-                    i = j;
-                } else {
-                    result += escapeHtml(text[i]);
-                    i++;
-                }
-            } else {
-                result += escapeHtml(text[i]);
-                i++;
+        if (!text || text.indexOf('{') === -1) {
+            return escapeHtml(text);
+        }
+        if (text.length > 8000) {
+            return escapeHtml(text);
+        }
+        const trimmed = text.trim();
+        if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                return `<span class="json-block">${syntaxHighlightJson(JSON.stringify(parsed, null, 2))}</span>`;
+            } catch (e) {
+                return escapeHtml(text);
             }
         }
-        return result;
+        const firstBrace = text.indexOf('{');
+        const lastBrace = text.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace > firstBrace) {
+            const potentialJson = text.substring(firstBrace, lastBrace + 1);
+            try {
+                const parsed = JSON.parse(potentialJson);
+                const before = escapeHtml(text.substring(0, firstBrace));
+                const after = escapeHtml(text.substring(lastBrace + 1));
+                return before + `<span class="json-block">${syntaxHighlightJson(JSON.stringify(parsed))}</span>` + after;
+            } catch (e) {
+                return escapeHtml(text);
+            }
+        }
+        return escapeHtml(text);
     }
 
     function getServiceBadge(service) {
@@ -621,29 +632,53 @@
         return `<span class="log-service ${badgeClass}">${escapeHtml(label)}</span>`;
     }
 
-    function formatLogEntry(content, level, service) {
-        const prefixRegex = /^(DEBUG|INFO|WARN|ERROR|FATAL)\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}(?:\s+[A-Z]+)?)\s+(\[[^\]]+\])\s+(.*?)\s+([a-zA-Z0-9._-]+)\s+-\s+([\s\S]*)$/;
-        const match = content.match(prefixRegex);
-        
+    function formatLogEntry(entry) {
+        const service = entry.service || 'API';
+        const level = (entry.level || 'INFO').toUpperCase();
         const serviceTag = getServiceBadge(service);
 
-        if (match) {
-            const matchedLevel = match[1];
-            const timestamp = match[2];
-            const connId = match[3];
-            const userInfo = match[4];
-            const logger = match[5];
-            const message = match[6];
-            
+        // Fast path: backend already provided parsed fields (zero regex backtracking, instant O(1))
+        if (entry.msg !== undefined) {
+            const timestamp = entry.timestamp_str || '';
+            const connId = entry.conn || '[-]';
+            const userInfo = entry.user || '-';
+            const logger = entry.logger || '';
+            const message = entry.msg || '';
+
             const highlightedMessage = highlightJsonInText(message);
-            
-            // Extract only the time part and append UTC if present in original timestamp
             const timeMatch = timestamp.match(/(\d{2}:\d{2}:\d{2})/);
             let timeOnly = timeMatch ? timeMatch[1] : timestamp;
             if (timestamp.includes('UTC')) {
                 timeOnly += ' UTC';
             }
-            
+
+            return serviceTag +
+                   `<span class="log-level log-level-${level.toLowerCase()}">${escapeHtml(level)}</span>` +
+                   `<span class="log-timestamp" title="${escapeHtml(timestamp)}">${escapeHtml(timeOnly)}</span>` +
+                   `<span class="log-conn">${escapeHtml(connId)}</span>` +
+                   `<span class="log-user">${escapeHtml(userInfo)}</span>` +
+                   `<span class="log-logger">${escapeHtml(logger)}</span>` +
+                   `<span class="log-msg-separator"> </span>` +
+                   `<span class="log-msg">${highlightedMessage}</span>`;
+        }
+
+        // Fast fallback for raw text strings without backtracking regex
+        const content = typeof entry === 'string' ? entry : (entry.content || '');
+        const dashIdx = content.indexOf(' - ');
+        if (dashIdx !== -1 && dashIdx < 200) {
+            const header = content.substring(0, dashIdx).trim();
+            const message = content.substring(dashIdx + 3);
+            const tokens = header.split(/\s+/);
+            const matchedLevel = tokens[0] || level;
+            const timestamp = tokens.length >= 3 ? `${tokens[1]} ${tokens[2]}` : (entry.timestamp_str || '');
+            const connId = tokens.find(t => t.startsWith('[') && t.endsWith(']')) || '[-]';
+            const userInfo = tokens.find(t => t.includes('(') && t.endsWith(')')) || '-';
+            const logger = tokens.find(t => t.includes('.') || t.includes('Controller')) || '';
+
+            const highlightedMessage = highlightJsonInText(message);
+            const timeMatch = timestamp.match(/(\d{2}:\d{2}:\d{2})/);
+            let timeOnly = timeMatch ? timeMatch[1] : timestamp;
+
             return serviceTag +
                    `<span class="log-level log-level-${matchedLevel.toLowerCase()}">${escapeHtml(matchedLevel)}</span>` +
                    `<span class="log-timestamp" title="${escapeHtml(timestamp)}">${escapeHtml(timeOnly)}</span>` +
@@ -652,31 +687,44 @@
                    `<span class="log-logger">${escapeHtml(logger)}</span>` +
                    `<span class="log-msg-separator"> </span>` +
                    `<span class="log-msg">${highlightedMessage}</span>`;
-        } else {
-            let highlighted = highlightJsonInText(content);
-            return serviceTag + `<span class="log-msg-fallback">${highlighted}</span>`;
         }
+
+        let highlighted = highlightJsonInText(content);
+        return serviceTag + `<span class="log-msg-fallback">${highlighted}</span>`;
     }
 
     function createLogEntryHtml(entry) {
         const levelLower = (entry.level || 'INFO').toLowerCase();
-        const formatted = formatLogEntry(entry.content, entry.level, entry.service);
+        const formatted = formatLogEntry(entry);
         return `<div class="log-entry log-entry-${levelLower}">${formatted}</div>`;
+    }
+
+    function trimConsoleDom(maxCount = MAX_CONSOLE_LINES) {
+        const children = consoleContent.children;
+        const toRemove = children.length - maxCount;
+        if (toRemove > 0) {
+            const range = document.createRange();
+            range.setStartBefore(children[0]);
+            range.setEndAfter(children[toRemove - 1]);
+            range.deleteContents();
+        }
     }
 
     function renderLogs(entries) {
         consoleContent.innerHTML = '';
+        if (!entries || entries.length === 0) {
+            consoleContent.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No matching logs found.</div>';
+            entryCountDisplay.textContent = '0';
+            return;
+        }
         let html = '';
-        for (const entry of entries) {
+        const toRender = entries.length > MAX_CONSOLE_LINES ? entries.slice(entries.length - MAX_CONSOLE_LINES) : entries;
+        for (const entry of toRender) {
             html += createLogEntryHtml(entry);
         }
-        if (html) {
-            consoleContent.insertAdjacentHTML('beforeend', html);
-        } else {
-            consoleContent.innerHTML = '<div class="text-center py-5 text-muted"><i class="bi bi-inbox fs-2 d-block mb-2"></i>No matching logs found.</div>';
-        }
+        consoleContent.insertAdjacentHTML('beforeend', html);
         scrollToBottom();
-        entryCountDisplay.textContent = consoleContent.querySelectorAll('.log-entry').length;
+        entryCountDisplay.textContent = consoleContent.children.length;
     }
 
     async function pullLogs() {
@@ -687,14 +735,17 @@
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
             const dateInput = document.querySelector('input[name="date"]');
             const dateVal = dateInput ? encodeURIComponent(dateInput.value) : '';
+            const timeFromInput = document.getElementById('timeFromInput');
+            const timeToInput = document.getElementById('timeToInput');
+            const timeFromVal = timeFromInput ? encodeURIComponent(timeFromInput.value) : '';
+            const timeToVal = timeToInput ? encodeURIComponent(timeToInput.value) : '';
             const offsetParam = typeof logOffset === 'object' ? encodeURIComponent(JSON.stringify(logOffset)) : logOffset;
 
-            const response = await fetch(`${baseUrl}?offset=${offsetParam}&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}`);
+            const response = await fetch(`${baseUrl}?offset=${offsetParam}&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}&time_from=${timeFromVal}&time_to=${timeToVal}`);
             if (!response.ok) return;
             const data = await response.json();
             
             if (data.entries && data.entries.length > 0) {
-                // Remove placeholder if present
                 const placeholder = consoleContent.querySelector('.text-muted');
                 if (placeholder) {
                     consoleContent.innerHTML = '';
@@ -704,20 +755,17 @@
                 for (const entry of data.entries) {
                     html += createLogEntryHtml(entry);
                 }
-                consoleContent.insertAdjacentHTML('beforeend', html);
                 logOffset = data.offset;
-                scrollToBottom();
                 
-                // Keep console memory clean (cap at 2000 lines)
-                const logEntries = consoleContent.querySelectorAll('.log-entry');
-                if (logEntries.length > 2000) {
-                    const toRemove = logEntries.length - 2000;
-                    for (let k = 0; k < toRemove; k++) {
-                        consoleContent.removeChild(logEntries[k]);
+                const shouldAutoScroll = isScrolledNearBottom();
+                window.requestAnimationFrame(() => {
+                    consoleContent.insertAdjacentHTML('beforeend', html);
+                    trimConsoleDom(MAX_CONSOLE_LINES);
+                    if (shouldAutoScroll) {
+                        logWindow.scrollTop = logWindow.scrollHeight;
                     }
-                }
-                
-                entryCountDisplay.textContent = consoleContent.querySelectorAll('.log-entry').length;
+                    entryCountDisplay.textContent = consoleContent.children.length;
+                });
             } else if (data.offset !== undefined) { 
                 logOffset = data.offset; 
             }
@@ -726,20 +774,40 @@
         }
     }
 
+    async function triggerLivePull() {
+        if (!isLiveActive) return;
+        if (!isPolling) {
+            isPolling = true;
+            try {
+                await pullLogs();
+            } finally {
+                isPolling = false;
+            }
+        }
+        if (isLiveActive) {
+            liveTimeoutId = setTimeout(triggerLivePull, 2000);
+        }
+    }
+
     function updateLiveState(checked) {
         if (liveToggle) liveToggle.checked = checked;
         if (headerLiveToggle) headerLiveToggle.checked = checked;
 
         if (checked) {
+            isLiveActive = true;
             const baseUrl = "{% url 'fetch_new_logs' %}";
             const levelVal = document.querySelector('select[name="level"]').value;
             const serviceVal = document.querySelector('select[name="service"]').value;
             const searchVal = encodeURIComponent(document.querySelector('input[name="search"]').value);
             const dateInput = document.querySelector('input[name="date"]');
             const dateVal = dateInput ? encodeURIComponent(dateInput.value) : '';
+            const timeFromInput = document.getElementById('timeFromInput');
+            const timeToInput = document.getElementById('timeToInput');
+            const timeFromVal = timeFromInput ? encodeURIComponent(timeFromInput.value) : '';
+            const timeToVal = timeToInput ? encodeURIComponent(timeToInput.value) : '';
 
             // Use offset=-1 to tail current file ends
-            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}`)
+            fetch(`${baseUrl}?offset=-1&level=${levelVal}&search=${searchVal}&service=${serviceVal}&date=${dateVal}&time_from=${timeFromVal}&time_to=${timeToVal}`)
                 .then(r => r.json())
                 .then(data => {
                     logOffset = data.offset !== undefined ? data.offset : {};
@@ -754,8 +822,8 @@
                         headerLiveStatus.className = "font-monospace small live-status-active text-success d-inline-flex align-items-center";
                     }
                     
-                    if (!liveInterval) {
-                        liveInterval = setInterval(pullLogs, 2000);
+                    if (!liveTimeoutId) {
+                        liveTimeoutId = setTimeout(triggerLivePull, 1000);
                     }
                 })
                 .catch(err => {
@@ -765,9 +833,10 @@
                     }
                 });
         } else {
-            if (liveInterval) {
-                clearInterval(liveInterval);
-                liveInterval = null;
+            isLiveActive = false;
+            if (liveTimeoutId) {
+                clearTimeout(liveTimeoutId);
+                liveTimeoutId = null;
             }
             if (liveStatus) {
                 liveStatus.innerHTML = 'Off';
@@ -779,6 +848,20 @@
             }
         }
     }
+
+    // Pause polling when browser tab is inactive / hidden; resume when user returns
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            if (liveTimeoutId) {
+                clearTimeout(liveTimeoutId);
+                liveTimeoutId = null;
+            }
+        } else {
+            if (isLiveActive && !liveTimeoutId && !isPolling) {
+                triggerLivePull();
+            }
+        }
+    });
 
     if (liveToggle) {
         liveToggle.addEventListener('change', function() {
@@ -805,6 +888,26 @@
         dateInputFilterEl.addEventListener('change', function() {
             if (headerLiveToggle && headerLiveToggle.checked) {
                 updateLiveState(true);
+            }
+        });
+    }
+
+    const timeFromInputEl = document.getElementById('timeFromInput');
+    const timeToInputEl = document.getElementById('timeToInput');
+    if (timeFromInputEl && timeToInputEl) {
+        timeFromInputEl.addEventListener('change', function() {
+            if (this.value && !timeToInputEl.value) {
+                const parts = this.value.split(':');
+                if (parts.length >= 2) {
+                    let h = parseInt(parts[0], 10);
+                    let m = parseInt(parts[1], 10) + 30;
+                    if (m >= 60) {
+                        h = (h + Math.floor(m / 60)) % 24;
+                        m = m % 60;
+                    }
+                    const pad = n => String(n).padStart(2, '0');
+                    timeToInputEl.value = `${pad(h)}:${pad(m)}`;
+                }
             }
         });
     }

@@ -1,0 +1,497 @@
+<!-- QScheduler instances whose service disappeared: resolve (archive / restore / delete), cascade deletion, restore.
+     Uses window.qsPage (helpers of qscheduler.html) and window.qsUtil (qscheduler_progress_modal.html). -->
+
+<!-- Resolve -->
+<div class="modal fade" id="qsResolveModal" tabindex="-1" aria-labelledby="qsResolveLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-warning text-dark border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsResolveLabel"><i class="bi bi-life-preserver"></i>Resolve <span id="qs-res-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="alert border-0 rounded-3 small mb-3" id="qs-res-state"></div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100 d-flex flex-column">
+                            <div class="fw-bold small mb-1"><i class="bi bi-archive me-1"></i>Archive</div>
+                            <div class="small text-secondary mb-2">Keeps the record, its assignments and all HEAppE clusters <strong>unchanged</strong>. Jobs on these clusters fail until the instance is restored.</div>
+                            <label class="form-label small text-muted fw-semibold mb-1" for="qs-res-reason">Reason</label>
+                            <input type="text" class="form-control form-control-sm mb-2" id="qs-res-reason" maxlength="255" placeholder="e.g. container removed manually">
+                            <button type="button" class="btn btn-sm btn-dark fw-semibold mt-auto" id="qsResArchiveBtn"><i class="bi bi-archive me-1"></i>Archive</button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-3 h-100 d-flex flex-column">
+                            <div class="fw-bold small mb-1"><i class="bi bi-arrow-counterclockwise me-1"></i>Restore</div>
+                            <div class="small text-secondary mb-2">Deploys QScheduler again on this Docker host (same or another branch / tag / image), registers the machines and reassigns all clusters with <strong>new notifier tokens</strong>.</div>
+                            <button type="button" class="btn btn-sm btn-success fw-semibold mt-auto" id="qsResRestoreBtn"><i class="bi bi-arrow-counterclockwise me-1"></i>Restore...</button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border border-danger-subtle rounded-3 p-3 h-100 d-flex flex-column">
+                            <div class="fw-bold small mb-1 text-danger"><i class="bi bi-trash me-1"></i>Delete with entities</div>
+                            <div class="small text-secondary mb-2">Deletes the HEAppE clusters on this instance and, as selected, their projects and queue groups; then forgets the instance.</div>
+                            <button type="button" class="btn btn-sm btn-outline-danger fw-semibold mt-auto" id="qsResDeleteBtn"><i class="bi bi-trash me-1"></i>Delete...</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="qs-res-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cascade deletion -->
+<div class="modal fade" id="qsCascadeModal" tabindex="-1" aria-labelledby="qsCascadeLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsCascadeForm" novalidate data-no-loading autocomplete="off">
+            <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsCascadeLabel"><i class="bi bi-trash"></i>Delete <span id="qs-cas-name"></span> with entities</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="small text-secondary mb-3">This cannot be undone. HEAppE instances are read first; an unreachable one stops the deletion before anything is deleted unless you skip it.</div>
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-list-check me-1"></i> What will be affected</div>
+                <div id="qs-cas-preview" class="small mb-3"></div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-ui-checks me-1"></i> Delete</div>
+                <div class="bg-light p-3 rounded border border-light-subtle mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="qs-cas-delete_clusters" name="delete_clusters" checked>
+                        <label class="form-check-label small" for="qs-cas-delete_clusters"><strong>HEAppE clusters</strong> on this instance (their queues, file transfer methods and notifier tokens in Vault). Off: clusters are kept and only the instance is forgotten.</label>
+                    </div>
+                    <div class="form-check ms-3">
+                        <input class="form-check-input" type="checkbox" id="qs-cas-delete_projects" name="delete_projects">
+                        <label class="form-check-label small" for="qs-cas-delete_projects">Projects used only by these clusters</label>
+                    </div>
+                    <div class="form-check ms-3">
+                        <input class="form-check-input" type="checkbox" id="qs-cas-delete_queue_groups" name="delete_queue_groups">
+                        <label class="form-check-label small" for="qs-cas-delete_queue_groups">Queue groups used only by these clusters (with their accounting formulas and project allocations)</label>
+                    </div>
+                    <div class="qs-cas-managed-only">
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="qs-cas-remove_db_container" name="remove_db_container" checked>
+                            <label class="form-check-label small" for="qs-cas-remove_db_container">Leftover PostgreSQL container (or link to the shared database) and database network on this Docker host</label>
+                        </div>
+                        <div class="form-check ms-3">
+                            <input class="form-check-input" type="checkbox" id="qs-cas-remove_db_volume" name="remove_db_volume">
+                            <label class="form-check-label small text-danger" for="qs-cas-remove_db_volume">Database volume or shared-database schema (machines, notifiers, task history)</label>
+                        </div>
+                    </div>
+                    <div class="form-check mt-2 d-none" id="qs-cas-skip-wrap">
+                        <input class="form-check-input" type="checkbox" id="qs-cas-skip_unreachable" name="skip_unreachable">
+                        <label class="form-check-label small text-warning-emphasis" for="qs-cas-skip_unreachable">Skip unreachable HEAppE instances (their clusters stay and point to the deleted instance)</label>
+                    </div>
+                </div>
+                <label class="form-label small text-muted fw-semibold mb-1" for="qs-cas-confirm_name">Type <code id="qs-cas-confirm-hint"></code> to confirm</label>
+                <input type="text" class="form-control form-control-sm font-monospace" id="qs-cas-confirm_name" name="confirm_name">
+                <div id="qs-cas-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsCascadeBtn" disabled><i class="bi bi-trash me-1"></i>Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Restore -->
+<div class="modal fade" id="qsRestoreModal" tabindex="-1" aria-labelledby="qsRestoreLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-xl modal-dialog-scrollable">
+        <form class="modal-content border-0 shadow-lg rounded-3 overflow-hidden" id="qsRestoreForm" novalidate data-no-loading autocomplete="off">
+            <div class="modal-header bg-success text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsRestoreLabel"><i class="bi bi-arrow-counterclockwise"></i>Restore <span id="qs-rst-name"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="small text-secondary mb-3">Deploys QScheduler on this Docker host like <em>Deploy New</em>, then registers the machines used by the clusters,
+                    creates one notifier per cluster with a <strong>new token</strong> (stored in HEAppE Vault) and points the clusters to the new endpoint.
+                    Was: <code id="qs-rst-old-endpoint"></code>.</p>
+                <div id="qs-rst-loading" class="small text-muted mb-3"><span class="spinner-border spinner-border-sm me-1"></span>Reading the clusters of the assigned HEAppE instances...</div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-box-seam me-1"></i> Image</div>
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-12">
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="source" id="qs-rst-src-git" value="git" checked>
+                            <label class="form-check-label small fw-semibold" for="qs-rst-src-git">Build from git (branch / tag)</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="source" id="qs-rst-src-image" value="image">
+                            <label class="form-check-label small fw-semibold" for="qs-rst-src-image">Image available on this host</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6 qs-git-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-repo">Git repository</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-rst-repo" name="repo">
+                    </div>
+                    <div class="col-md-3 qs-git-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-ref-select">Branch / tag</label>
+                        <select class="form-select form-select-sm d-none qs-ref-select" id="qs-rst-ref-select"></select>
+                        <input type="text" class="form-control form-control-sm qs-ref-input" id="qs-rst-ref" name="ref" aria-label="Branch / tag" placeholder="branch or tag">
+                        <div class="form-text qs-ref-status" style="font-size: 0.72rem;"></div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-image">Image</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-rst-image" name="image" list="qs-local-images" autocomplete="off">
+                    </div>
+                    <div class="col-12 qs-git-only">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-rst-rebuild_image" name="rebuild_image">
+                            <label class="form-check-label small" for="qs-rst-rebuild_image">Rebuild the image even if it already exists</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="qs-rst-no_cache" name="no_cache">
+                            <label class="form-check-label small" for="qs-rst-no_cache">Force a clean rebuild: no build cache, pull newer base images (<code>--no-cache --pull</code>, slower)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-hdd-stack me-1"></i> Service</div>
+                <div class="row g-2 mb-3 bg-light p-3 rounded border border-light-subtle">
+                    <div class="col-md-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-name-input">Container name</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-rst-name-input" name="name">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-port">Service port</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-rst-port" name="port" min="1" max="65535">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-host_port">Publish on host</label>
+                        <input type="number" class="form-control form-control-sm" id="qs-rst-host_port" name="host_port" placeholder="none" min="1" max="65535">
+                    </div>
+                    <div class="col-12 small text-muted" id="qs-rst-endpoint-note"></div>
+                    <div class="col-12">
+                        <label class="form-label small text-muted fw-semibold mb-1 d-block">Database</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-rst-db-shared" value="shared">
+                            <label class="form-check-label small" for="qs-rst-db-shared">Shared database (new schema) <span class="text-muted" id="qs-rst-shared-info"></span></label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-rst-db-new" value="new" checked>
+                            <label class="form-check-label small" for="qs-rst-db-new">Deploy new dedicated PostgreSQL <span class="text-danger d-none" id="qs-rst-new-warning"></span></label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-rst-db-reuse" value="reuse">
+                            <label class="form-check-label small" for="qs-rst-db-reuse">Reuse the old database <span class="text-muted" id="qs-rst-reuse-info"></span></label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="db_mode" id="qs-rst-db-existing" value="existing">
+                            <label class="form-check-label small" for="qs-rst-db-existing">Use existing database</label>
+                        </div>
+                    </div>
+                    <div class="col-md-4 qs-rst-db-net-only">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-network_prefix">Database network size</label>
+                        <select class="form-select form-select-sm" id="qs-rst-network_prefix" name="network_prefix"><option value="24">/24 (254 addresses)</option><option value="25">/25 (126 addresses)</option><option value="26">/26 (62 addresses)</option><option value="27">/27 (30 addresses)</option><option value="28">/28 (14 addresses)</option><option value="29">/29 (6 addresses, default)</option></select>
+                        <div class="form-text" style="font-size: 0.72rem;">Subnet of the internal <code>&lt;name&gt;_db_net</code>, taken from <code>QSCHEDULER_NETWORK_POOL</code>. Two containers use it.</div>
+                    </div>
+                    <div class="col-md-8 qs-rst-db-existing-only d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-database_url">DATABASE_URL <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control form-control-sm font-monospace" id="qs-rst-database_url" name="database_url" placeholder="postgres://user:pass@host:5432/db" autocomplete="off">
+                    </div>
+                    <div class="col-md-4 qs-rst-db-existing-only d-none">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-db_network">DB Docker network</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-rst-db_network" name="db_network" placeholder="optional">
+                    </div>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-hdd-network me-1"></i> QScheduler network and aliases</div>
+                <div class="small text-muted mb-2 d-none" id="qs-rst-net-kept"><i class="bi bi-info-circle me-1"></i>The QScheduler network <code></code> still exists and is reused (same subnet and address) when the name is kept.</div>
+                <div class="row g-2 mb-2 bg-light p-3 rounded border border-light-subtle qs-net-fields">
+                    <div class="col-md-5">
+                        <label class="form-label small text-muted fw-semibold mb-1">Subnet</label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" class="form-control font-monospace qs-net-subnet" name="qs_subnet" placeholder="proposed automatically" autocomplete="off" aria-label="QScheduler network subnet">
+                            <button type="button" class="btn btn-outline-secondary qs-net-propose" title="Propose a free subnet"><i class="bi bi-magic"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted fw-semibold mb-1">Size</label>
+                        <select class="form-select form-select-sm qs-net-prefix" name="qs_prefix" aria-label="QScheduler network size">{% for p in qs_network_prefixes %}<option value="{{ p }}"{% if p == qs_network_default_prefix %} selected{% endif %}>/{{ p }}{% if p == qs_network_default_prefix %} (default){% endif %}</option>{% endfor %}</select>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end"><div class="form-text small m-0 qs-net-status"></div></div>
+                    <div class="col-12">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-rst-aliases">Aliases</label>
+                        <input type="text" class="form-control form-control-sm font-monospace" id="qs-rst-aliases" name="aliases" autocomplete="off" placeholder="{{ alias_example }}">
+                        <div class="form-text" style="font-size: 0.72rem;">Kept from the instance; clusters using an alias keep it as their host name.</div>
+                    </div>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-motherboard me-1"></i> Machines used by the clusters</div>
+                <div class="small text-muted mb-2">A new database has no machines: define each backend. The IQM token is never stored and must be entered again. Machines that already exist in a reused database are kept.</div>
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm small align-middle mb-0">
+                        <thead class="text-muted"><tr><th>Machine</th><th>Register</th><th>Backend</th><th>Queue size</th><th>IQM URL</th><th>IQM device</th><th>IQM token</th><th>Poll interval</th></tr></thead>
+                        <tbody id="qs-rst-machines"></tbody>
+                    </table>
+                </div>
+
+                <div class="fw-bold small text-primary mb-2"><i class="bi bi-diagram-3 me-1"></i> HEAppE clusters to reassign</div>
+                <div id="qs-rst-heappes" class="small mb-2"></div>
+                <div class="form-check d-none" id="qs-rst-skip-wrap">
+                    <input class="form-check-input" type="checkbox" id="qs-rst-skip_unreachable" name="skip_unreachable">
+                    <label class="form-check-label small text-warning-emphasis" for="qs-rst-skip_unreachable">Skip unreachable HEAppE instances (their clusters keep pointing to the old endpoint)</label>
+                </div>
+                <div id="qs-rst-error" class="alert alert-danger border-0 rounded-3 small mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-success btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsRestoreBtn" disabled><i class="bi bi-arrow-counterclockwise me-1"></i>Restore</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const U = window.qsUtil;
+    const P = () => window.qsPage;       // defined by the page script (runs after this one)
+    const urls = {
+        archive: "{% url 'qscheduler_archive' 0 %}", unarchive: "{% url 'qscheduler_unarchive' 0 %}",
+        preview: "{% url 'qscheduler_cascade_preview' 0 %}", cascade: "{% url 'qscheduler_cascade_delete' 0 %}",
+        restoreInfo: "{% url 'qscheduler_restore_info' 0 %}", restore: "{% url 'qscheduler_restore' 0 %}",
+    };
+    const url = (key, id) => urls[key].replace('/0/', '/' + id + '/');
+    const list = items => items.length ? items.map(x => '<code>' + U.esc(x) + '</code>').join(', ') : '<span class="text-muted">none</span>';
+    let inst = null;
+
+    // ---- resolve ----
+    function openResolve() {
+        P().hideErr('qs-res-error');
+        document.getElementById('qs-res-name').textContent = inst.name;
+        const state = document.getElementById('qs-res-state');
+        const missing = inst.presence === 'missing';
+        state.className = 'alert border-0 rounded-3 small mb-3 ' + (missing ? 'alert-danger' : 'alert-warning');
+        state.innerHTML = missing
+            ? '<strong>The QScheduler service is gone</strong> (' + U.esc(inst.presence_detail || 'container not found') + '), probably removed without HEAppE Management.'
+            : '<strong>QScheduler does not answer</strong> (' + U.esc(inst.presence_detail || 'unreachable') + '). It may only be down: check the host before restoring or deleting anything.';
+        document.getElementById('qs-res-reason').value = missing ? 'Container removed outside HEAppE Management' : '';
+        P().modal('qsResolveModal').show();
+    }
+    document.getElementById('qsResArchiveBtn').addEventListener('click', function () {
+        const restore = U.setButtonLoading(this, 'Archiving...');
+        U.postJson(url('archive', inst.id), { reason: document.getElementById('qs-res-reason').value }).then(d => {
+            restore();
+            if (d.status !== 'success') { P().showErr('qs-res-error', d.message || 'Failed.'); return; }
+            location.reload();
+        }).catch(err => { restore(); P().showErr('qs-res-error', err.message || 'Network error.'); });
+    });
+    document.getElementById('qsResRestoreBtn').addEventListener('click', () => { P().modal('qsResolveModal').hide(); openRestore(); });
+    document.getElementById('qsResDeleteBtn').addEventListener('click', () => { P().modal('qsResolveModal').hide(); openCascade(); });
+
+    // ---- cascade deletion ----
+    const casForm = document.getElementById('qsCascadeForm');
+    function casToggle() {
+        const clusters = casForm.delete_clusters.checked;
+        ['delete_projects', 'delete_queue_groups'].forEach(k => { casForm[k].disabled = !clusters; if (!clusters) casForm[k].checked = false; });
+        casForm.remove_db_volume.disabled = !casForm.remove_db_container.checked;
+        if (casForm.remove_db_volume.disabled) casForm.remove_db_volume.checked = false;
+        document.getElementById('qsCascadeBtn').disabled = casForm.confirm_name.value !== inst.name;
+    }
+    ['delete_clusters', 'remove_db_container'].forEach(k => casForm[k].addEventListener('change', casToggle));
+    casForm.confirm_name.addEventListener('input', casToggle);
+    function openCascade() {
+        P().hideErr('qs-cas-error');
+        casForm.reset();
+        document.getElementById('qs-cas-name').textContent = inst.name;
+        document.getElementById('qs-cas-confirm-hint').textContent = inst.name;
+        casForm.querySelectorAll('.qs-cas-managed-only').forEach(el => el.classList.toggle('d-none', inst.kind !== 'managed'));
+        const preview = document.getElementById('qs-cas-preview');
+        preview.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Reading the assigned HEAppE instances...';
+        document.getElementById('qs-cas-skip-wrap').classList.add('d-none');
+        casToggle();
+        P().modal('qsCascadeModal').show();
+        U.getJson(url('preview', inst.id)).then(d => {
+            if (d.status !== 'success') { preview.textContent = d.message || 'Preview failed.'; return; }
+            const rows = d.heappes.map(h => h.reachable
+                ? '<tr><td class="fw-semibold">' + U.esc(h.heappe_instance) + '</td><td>' + list(h.clusters.map(c => c.name + ' (' + c.machine + ')')) +
+                  '</td><td>' + list(h.projects.map(p => p.name)) + '</td><td>' + list(h.queue_groups.map(g => g.name)) + '</td></tr>'
+                : '<tr><td class="fw-semibold">' + U.esc(h.heappe_instance) + '</td><td colspan="3" class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>not reachable</td></tr>');
+            const left = Object.values(d.leftovers || {});
+            preview.innerHTML = (rows.length
+                ? '<div class="table-responsive"><table class="table table-sm small mb-2"><thead class="text-muted"><tr><th>HEAppE</th><th>Clusters</th><th>Projects only used by them</th><th>Queue groups only used by them</th></tr></thead><tbody>' + rows.join('') + '</tbody></table></div>'
+                : '<div class="text-muted mb-2">No HEAppE instance is assigned.</div>') +
+                (d.kind === 'managed' ? '<div>Leftover Docker resources: ' + list(left) + '</div>' : '');
+            document.getElementById('qs-cas-skip-wrap').classList.toggle('d-none', !d.heappes.some(h => !h.reachable));
+        }).catch(() => { preview.textContent = 'Preview failed.'; });
+    }
+    casForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const data = P().formData(casForm, ['delete_clusters', 'delete_projects', 'delete_queue_groups', 'remove_db_container', 'remove_db_volume', 'skip_unreachable']);
+        P().submitOperation(document.getElementById('qsCascadeBtn'), 'qs-cas-error', 'qsCascadeModal', url('cascade', inst.id), data, {
+            title: 'Deleting ' + inst.name + ' with its entities',
+            hint: 'Reading the HEAppE instances, deleting clusters and the selected entities...',
+            successTitle: 'Instance deleted',
+            details: (r, esc) => 'Clusters: ' + esc((r.deleted_clusters || []).join(', ') || 'none') +
+                '<br>Projects: ' + esc((r.deleted_projects || []).join(', ') || 'none') +
+                '<br>Queue groups: ' + esc((r.deleted_queue_groups || []).join(', ') || 'none') +
+                ((r.skipped_heappe || []).length ? '<br>Skipped HEAppE: ' + esc(r.skipped_heappe.join(', ')) : ''),
+        });
+    });
+
+    // ---- restore ----
+    const rstForm = document.getElementById('qsRestoreForm');
+    let rstRefs = null, rstInfo = null, rstNet = null;
+    function rstDbToggle() {
+        const mode = rstForm.querySelector('input[name="db_mode"]:checked').value;
+        rstForm.querySelectorAll('.qs-rst-db-existing-only').forEach(el => el.classList.toggle('d-none', mode !== 'existing'));
+        // A database network is created for a new database, and for a reused one whose network is gone
+        rstForm.querySelectorAll('.qs-rst-db-net-only').forEach(el => el.classList.toggle('d-none', mode === 'existing'));
+        rstForm.querySelectorAll('.qs-rst-mode').forEach(sel => {
+            const skip = sel.querySelector('option[value="skip"]');
+            skip.disabled = mode !== 'reuse';
+            if (mode !== 'reuse' && sel.value === 'skip') sel.value = 'register';
+            rstMachineToggle(sel.closest('tr'));
+        });
+    }
+    function rstEndpointNote() {
+        if (!rstInfo) return;
+        const endpoint = rstForm.name.value.trim() + ':' + rstForm.port.value;
+        const same = endpoint === rstInfo.old_endpoint;
+        document.getElementById('qs-rst-endpoint-note').innerHTML = same
+            ? 'Same endpoint as before: clusters keep their host and port.'
+            : '<i class="bi bi-arrow-right-circle me-1"></i>New endpoint <code>' + U.esc(endpoint) + '</code>: the clusters and their file transfer methods are repointed from <code>' + U.esc(rstInfo.old_endpoint) + '</code>.';
+        const reuse = document.getElementById('qs-rst-db-reuse');
+        reuse.disabled = !rstInfo.reusable_database || rstForm.name.value.trim() !== rstInfo.name;
+        if (reuse.disabled && reuse.checked) { document.getElementById('qs-rst-db-new').checked = true; rstDbToggle(); }
+    }
+    function rstMachineToggle(tr) {
+        const register = tr.querySelector('.qs-rst-mode').value === 'register';
+        const iqm = tr.querySelector('.qs-rst-backend').value === 'iqm';
+        tr.querySelectorAll('.qs-rst-field').forEach(el => { el.disabled = !register; });
+        tr.querySelectorAll('.qs-rst-iqm').forEach(el => { el.disabled = !register || !iqm; });
+    }
+    function machineRow(m, defs) {
+        const o = Object.assign({}, defs, (m.stored && m.stored.options) || {});
+        const backend = (m.stored && m.stored.backend) || 'test';
+        const tr = document.createElement('tr');
+        tr.dataset.machine = m.name;
+        tr.dataset.options = JSON.stringify(o);
+        tr.innerHTML =
+            '<td><code>' + U.esc(m.name) + '</code><div class="text-muted" style="font-size: 0.7rem;">' + U.esc(m.clusters.join(', ')) +
+                (m.stored ? '' : '<br><span class="text-warning-emphasis">no stored definition</span>') + '</div></td>' +
+            '<td><select class="form-select form-select-sm qs-rst-mode"><option value="register">register</option><option value="skip">exists in reused DB</option></select></td>' +
+            '<td><select class="form-select form-select-sm qs-rst-backend qs-rst-field"><option value="test">test</option><option value="iqm">iqm</option></select></td>' +
+            '<td><input type="number" class="form-control form-control-sm qs-rst-field qs-rst-queue" min="1" style="width: 5rem;"></td>' +
+            '<td><input type="url" class="form-control form-control-sm qs-rst-field qs-rst-iqm qs-rst-iqm_url" placeholder="https://..."></td>' +
+            '<td><input type="text" class="form-control form-control-sm qs-rst-field qs-rst-iqm qs-rst-iqm_device" placeholder="e.g. star24" style="width: 7rem;"></td>' +
+            '<td><input type="password" class="form-control form-control-sm qs-rst-field qs-rst-iqm qs-rst-iqm_token" autocomplete="new-password"></td>' +
+            '<td><input type="text" class="form-control form-control-sm qs-rst-field qs-rst-iqm qs-rst-poll" style="width: 5.5rem;"></td>';
+        tr.querySelector('.qs-rst-backend').value = backend;
+        tr.querySelector('.qs-rst-queue').value = o.queue_size;
+        tr.querySelector('.qs-rst-iqm_url').value = o.iqm_url || '';
+        tr.querySelector('.qs-rst-iqm_device').value = o.iqm_device || '';
+        tr.querySelector('.qs-rst-poll').value = o.iqm_poll_interval || '500ms';
+        tr.querySelector('.qs-rst-mode').addEventListener('change', () => rstMachineToggle(tr));
+        tr.querySelector('.qs-rst-backend').addEventListener('change', () => rstMachineToggle(tr));
+        return tr;
+    }
+    function openRestore() {
+        P().hideErr('qs-rst-error');
+        if (!rstRefs) {
+            rstRefs = P().refPicker(rstForm);
+            rstForm.querySelectorAll('input[name="source"]').forEach(r => r.addEventListener('change', () => P().sourceToggle(rstForm)));
+            rstForm.querySelectorAll('input[name="db_mode"]').forEach(r => r.addEventListener('change', rstDbToggle));
+            ['name', 'port'].forEach(k => rstForm[k].addEventListener('input', rstEndpointNote));
+        }
+        rstInfo = null;
+        document.getElementById('qs-rst-name').textContent = inst.name;
+        document.getElementById('qs-rst-old-endpoint').textContent = inst.service_host + ':' + inst.port;
+        document.getElementById('qs-rst-loading').classList.remove('d-none');
+        document.getElementById('qs-rst-machines').innerHTML = '';
+        document.getElementById('qs-rst-heappes').innerHTML = '';
+        document.getElementById('qsRestoreBtn').disabled = true;
+        P().modal('qsRestoreModal').show();
+        P().loadLocalDocker();
+        U.getJson(url('restoreInfo', inst.id)).then(d => {
+            document.getElementById('qs-rst-loading').classList.add('d-none');
+            if (d.status !== 'success') { P().showErr('qs-rst-error', d.message || 'Could not load the restore data.'); return; }
+            rstInfo = d;
+            const df = d.defaults;
+            rstForm.querySelector('input[name="source"][value="' + df.source + '"]').checked = true;
+            rstForm.repo.value = df.repo; rstForm.ref.value = df.ref; rstForm.image.value = df.image;
+            rstForm.name.value = df.name; rstForm.port.value = df.port; rstForm.host_port.value = '';
+            rstForm.rebuild_image.checked = false; rstForm.no_cache.checked = false;
+            rstForm.network_prefix.value = String(d.network_prefix || 29);
+            if (!rstNet) rstNet = P().netPicker(rstForm.querySelector('.qs-net-fields'));
+            const kept = document.getElementById('qs-rst-net-kept');
+            kept.classList.toggle('d-none', !d.qs_network_kept);
+            kept.querySelector('code').textContent = d.qs_network_kept || '';
+            rstForm.aliases.value = (d.aliases || []).join(', ');
+            if (d.qs_network_kept) { rstForm.qs_subnet.value = d.qs_subnet || ''; } else { rstNet.reset(d.qs_subnet || ''); }
+            P().sourceToggle(rstForm);
+            rstRefs.load();
+            document.getElementById('qs-rst-reuse-info').textContent = d.reusable_database ? '(' + d.reusable_database + ')' : '(not available)';
+            const left = Object.entries(d.leftovers || {}).filter(([k]) => k !== 'service' && k !== 'qs_network').map(([, v]) => v);
+            const warn = document.getElementById('qs-rst-new-warning');
+            warn.textContent = left.length ? '(removes the old ' + left.join(', ') + ')' : '';
+            warn.classList.toggle('d-none', !left.length);
+            const sharedRadio = document.getElementById('qs-rst-db-shared');
+            sharedRadio.disabled = !d.shared_db_deployed;
+            document.getElementById('qs-rst-shared-info').textContent = d.shared_db_deployed ? '' : '(deploy the shared database first)';
+            document.getElementById(d.reusable_database ? 'qs-rst-db-reuse' : (d.shared_db_deployed ? 'qs-rst-db-shared' : 'qs-rst-db-new')).checked = true;
+            const tbody = document.getElementById('qs-rst-machines');
+            d.machines.forEach(m => tbody.appendChild(machineRow(m, d.machine_defaults)));
+            if (!d.machines.length) tbody.innerHTML = '<tr><td colspan="8" class="text-muted">No cluster uses a machine of this instance.</td></tr>';
+            document.getElementById('qs-rst-heappes').innerHTML = d.heappes.length ? d.heappes.map(h => h.reachable
+                ? '<div><strong>' + U.esc(h.heappe_instance) + '</strong>: ' + list(h.clusters.map(c => c.name + ' (' + c.machine + ')')) +
+                  ' &middot; ' + (h.notifications_enabled ? 'new notifier and token per cluster' : 'notifications off') + '</div>'
+                : '<div class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i><strong>' + U.esc(h.heappe_instance) + '</strong>: not reachable</div>').join('')
+                : '<span class="text-muted">No HEAppE instance is assigned.</span>';
+            document.getElementById('qs-rst-skip-wrap').classList.toggle('d-none', !d.heappes.some(h => !h.reachable));
+            rstEndpointNote();
+            rstDbToggle();
+            document.getElementById('qsRestoreBtn').disabled = false;
+        }).catch(err => {
+            document.getElementById('qs-rst-loading').classList.add('d-none');
+            P().showErr('qs-rst-error', err.message || 'Could not load the restore data.');
+        });
+    }
+    rstForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const data = P().formData(rstForm, ['rebuild_image', 'no_cache', 'skip_unreachable']);
+        data.machines = Array.from(document.querySelectorAll('#qs-rst-machines tr[data-machine]')).map(tr => {
+            const o = JSON.parse(tr.dataset.options || '{}');
+            return Object.assign(o, {
+                name: tr.dataset.machine,
+                mode: tr.querySelector('.qs-rst-mode').value,
+                backend: tr.querySelector('.qs-rst-backend').value,
+                queue_size: tr.querySelector('.qs-rst-queue').value,
+                iqm_url: tr.querySelector('.qs-rst-iqm_url').value.trim(),
+                iqm_device: tr.querySelector('.qs-rst-iqm_device').value.trim(),
+                iqm_token: tr.querySelector('.qs-rst-iqm_token').value,
+                iqm_poll_interval: tr.querySelector('.qs-rst-poll').value.trim(),
+            });
+        });
+        P().submitOperation(document.getElementById('qsRestoreBtn'), 'qs-rst-error', 'qsRestoreModal', url('restore', inst.id), data, {
+            title: 'Restoring ' + inst.name,
+            hint: 'Deploying QScheduler, registering machines, recreating notifiers with new tokens and updating the HEAppE clusters...',
+            successTitle: 'QScheduler restored',
+            details: (r, esc) => 'Instance: ' + esc(r.name) + '<br>Reassigned clusters: ' + esc((r.updated_clusters || []).join(', ') || 'none') +
+                '<br>Machines: ' + esc((r.machines || []).join(', ') || 'none'),
+        });
+    });
+
+    // ---- actions ----
+    document.querySelectorAll('.qs-recovery-action').forEach(b => b.addEventListener('click', () => {
+        inst = P().byId[b.dataset.id];
+        const action = b.dataset.action;
+        if (action === 'resolve') openResolve();
+        else if (action === 'restore') openRestore();
+        else if (action === 'cascade') openCascade();
+        else if (action === 'unarchive') {
+            P().askConfirm('Unarchive ' + inst.name, 'The QScheduler service answers again: manage this instance as before (no changes are made to QScheduler or HEAppE).',
+                'Unarchive', null, (btn) => {
+                    const restore = U.setButtonLoading(btn, 'Unarchiving...');
+                    U.postJson(url('unarchive', inst.id), {}).then(d => {
+                        restore();
+                        if (d.status !== 'success') { P().showErr('qs-confirm-error', d.message || 'Failed.'); return; }
+                        location.reload();
+                    }).catch(err => { restore(); P().showErr('qs-confirm-error', err.message || 'Network error.'); });
+                }, false);
+        }
+    }));
+});
+</script>

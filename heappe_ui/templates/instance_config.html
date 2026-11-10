@@ -88,6 +88,9 @@
                         <button type="button" class="btn btn-outline-primary" id="btn-mode-tree"><i class="bi bi-diagram-3"></i> Tree Editor</button>
                         <button type="button" class="btn btn-outline-primary" id="btn-mode-split"><i class="bi bi-columns-gap"></i> Split View</button>
                         <button type="button" class="btn btn-outline-primary" id="btn-mode-code"><i class="bi bi-code-slash"></i> Raw JSON</button>
+                        {% if selected_file == 'appsettings.json' %}
+                        <button type="button" class="btn btn-outline-primary" id="btn-mode-auth-builder"><i class="bi bi-shield-lock"></i> Auth &amp; Token Exchange Builder</button>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="d-flex align-items-center gap-2 text-warning small fw-bold">
@@ -125,6 +128,465 @@
                         <div class="editor-container h-100">
                             <div id="editor-gutter">1</div>
                             <textarea id="file-content" class="form-control font-monospace"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Auth & Token Exchange Builder Workspace -->
+                    <div id="auth-builder-wrapper" class="flex-grow-1 h-100 overflow-auto border rounded bg-white p-3" style="display: none; min-width: 0;">
+                        <!-- Builder Header & Presets -->
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 pb-2 border-bottom">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fw-bold text-dark"><i class="bi bi-shield-lock text-primary me-1"></i>Authentication &amp; Token Exchange Builder</span>
+                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">HEAppE 6.6+</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <div class="input-group input-group-sm" style="width: auto;">
+                                    <label class="input-group-text bg-light text-secondary"><i class="bi bi-sliders me-1"></i>Preset</label>
+                                    <select class="form-select form-select-sm" id="auth-preset-select" style="min-width: 220px;">
+                                        <option value="">-- Choose a template --</option>
+                                        <option value="disabled">Disabled / Local Authentication</option>
+                                        <option value="keycloak-oidc">Standard Keycloak OIDC</option>
+                                        <option value="efp-flow">EFP Flow (LEXIS &rarr; Expirio &rarr; FIP &rarr; SSH CA)</option>
+                                        <option value="keycloak-broker">Keycloak Broker + SSH CA</option>
+                                        <option value="sshca-rfc8693">Direct SSH CA (RFC 8693)</option>
+                                    </select>
+                                    <button class="btn btn-outline-secondary" type="button" id="btn-apply-preset" title="Load selected template into the builder">Apply Preset</button>
+                                </div>
+                                <button class="btn btn-sm btn-outline-info" type="button" id="btn-open-oidc-test-modal" title="Test Keycloak Authority connectivity">
+                                    <i class="bi bi-broadcast me-1"></i>Test OIDC Connection
+                                </button>
+                                <button class="btn btn-sm btn-success fw-bold shadow-sm" type="button" id="btn-apply-auth-builder">
+                                    <i class="bi bi-check-circle me-1"></i>Apply to Configuration
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Inner Builder Nav Tabs -->
+                        <ul class="nav nav-tabs mb-3" id="auth-builder-tabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active py-2 px-3 fw-semibold" id="tab-btn-kc" data-bs-toggle="tab" data-bs-target="#tab-pane-kc" type="button" role="tab">
+                                    <i class="bi bi-key me-1"></i>Keycloak &amp; OIDC Core
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-2 px-3 fw-semibold" id="tab-btn-exchange" data-bs-toggle="tab" data-bs-target="#tab-pane-exchange" type="button" role="tab">
+                                    <i class="bi bi-arrow-left-right me-1"></i>Token Exchange Targets <span class="badge bg-secondary ms-1" id="badge-targets-count">0</span>
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-2 px-3 fw-semibold" id="tab-btn-integrations" data-bs-toggle="tab" data-bs-target="#tab-pane-integrations" type="button" role="tab">
+                                    <i class="bi bi-hdd-network me-1"></i>Downstream Integrations (SSH CA / Expirio / UserOrg)
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-2 px-3 fw-semibold" id="tab-btn-diagram" data-bs-toggle="tab" data-bs-target="#tab-pane-diagram" type="button" role="tab">
+                                    <i class="bi bi-diagram-3 me-1"></i>Pipeline Diagram &amp; JSON Preview
+                                </button>
+                            </li>
+                        </ul>
+
+                        <!-- Inner Builder Tab Contents -->
+                        <div class="tab-content" id="auth-builder-tab-contents">
+                            <!-- TAB 1: Keycloak & OIDC Core -->
+                            <div class="tab-pane fade show active" id="tab-pane-kc" role="tabpanel">
+                                <div class="row g-3">
+                                    <div class="col-12">
+                                        <div class="card border bg-light-subtle shadow-sm">
+                                            <div class="card-body p-3">
+                                                <div class="form-check form-switch fs-6 mb-0">
+                                                    <input class="form-check-input" type="checkbox" id="b-kc-enabled" checked>
+                                                    <label class="form-check-label fw-bold text-dark" for="b-kc-enabled">
+                                                        Enable External Authentication &amp; JWT Introspection
+                                                    </label>
+                                                    <div class="text-muted small">Activates Keycloak authentication and OAuth2/JWT token validation middleware in HEAppE Core.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="card border h-100 shadow-sm">
+                                            <div class="card-header bg-white fw-bold py-2 border-bottom">
+                                                <i class="bi bi-server me-1 text-primary"></i>Keycloak Server Connection
+                                            </div>
+                                            <div class="card-body p-3">
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">Keycloak Base URL</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-kc-baseurl" placeholder="https://keycloak.example.com/auth">
+                                                    <div class="form-text small">Base URL of Keycloak instance (e.g. https://keycloak.example.com/auth).</div>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">Realm Name</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-kc-realm" placeholder="HEAppE">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                                        <label class="form-label small fw-semibold text-secondary mb-0">Authority URL</label>
+                                                        <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="btn-derive-authority" style="font-size: 0.75rem;">
+                                                            <i class="bi bi-magic me-1"></i>Derive from Base URL + Realm
+                                                        </button>
+                                                    </div>
+                                                    <input type="text" class="form-control form-control-sm" id="b-kc-authority" placeholder="https://keycloak.example.com/auth/realms/HEAppE">
+                                                    <div class="form-text small">OIDC Authority for discovery (e.g. /.well-known/openid-configuration).</div>
+                                                </div>
+                                                <div class="mb-0">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">User Prefix in HEAppE Database</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-kc-user-prefix" value="Open-Id_">
+                                                    <div class="form-text small">Prefix prepended to usernames created from Keycloak tokens.</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="card border h-100 shadow-sm">
+                                            <div class="card-header bg-white fw-bold py-2 border-bottom">
+                                                <i class="bi bi-shield-check me-1 text-primary"></i>Client Credentials &amp; Validation
+                                            </div>
+                                            <div class="card-body p-3">
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">Client ID</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-kc-clientid" placeholder="heappe">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">Client Secret</label>
+                                                    <input type="password" class="form-control form-control-sm" id="b-kc-secret" placeholder="Client secret (or leave empty if public)">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">Allowed Client IDs</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-kc-allowed-clients" placeholder="heappe-web, heappe-cli (comma-separated)">
+                                                    <div class="form-text small">List of accepted authorized audience / client IDs.</div>
+                                                </div>
+                                                <div class="border-top pt-2 mt-2">
+                                                    <div class="form-check form-switch mb-2">
+                                                        <input class="form-check-input" type="checkbox" id="b-kc-require-https" checked>
+                                                        <label class="form-check-label small" for="b-kc-require-https">Require HTTPS</label>
+                                                    </div>
+                                                    <div class="form-check form-switch mb-2">
+                                                        <input class="form-check-input" type="checkbox" id="b-kc-validate-issuer">
+                                                        <label class="form-check-label small" for="b-kc-validate-issuer">Validate Issuer Name</label>
+                                                    </div>
+                                                    <div class="form-check form-switch mb-0">
+                                                        <input class="form-check-input" type="checkbox" id="b-kc-validate-endpoints">
+                                                        <label class="form-check-label small" for="b-kc-validate-endpoints">Validate Endpoints</label>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Role Mapping Table -->
+                                    <div class="col-12">
+                                        <div class="card border shadow-sm">
+                                            <div class="card-header bg-white d-flex justify-content-between align-items-center py-2 border-bottom">
+                                                <span class="fw-bold"><i class="bi bi-people me-1 text-primary"></i>Role Mapping</span>
+                                                <button type="button" class="btn btn-sm btn-outline-primary" id="btn-add-role-mapping">
+                                                    <i class="bi bi-plus-lg me-1"></i>Add Role Mapping
+                                                </button>
+                                            </div>
+                                            <div class="card-body p-3">
+                                                <div class="table-responsive">
+                                                    <table class="table table-sm table-bordered align-middle mb-0" id="table-role-mapping">
+                                                        <thead class="table-light">
+                                                            <tr>
+                                                                <th style="width: 45%;">Keycloak / OIDC Role Name</th>
+                                                                <th style="width: 45%;">HEAppE Internal Role</th>
+                                                                <th style="width: 10%; text-align: center;">Action</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="tbody-role-mapping">
+                                                            <!-- Dynamic rows -->
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- TAB 2: Token Exchange Targets -->
+                            <div class="tab-pane fade" id="tab-pane-exchange" role="tabpanel">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h6 class="fw-bold mb-1">Unified Token Exchange Targets</h6>
+                                        <p class="text-muted small mb-0">Configure downstream token exchange pipelines (RFC 8693, Keycloak Broker, Expirio, Client Credentials, Introspection) with topological chaining.</p>
+                                    </div>
+                                    <button type="button" class="btn btn-sm btn-primary shadow-sm" id="btn-add-target">
+                                        <i class="bi bi-plus-lg me-1"></i>Add Exchange Target
+                                    </button>
+                                </div>
+
+                                <div id="auth-targets-container" class="d-flex flex-column gap-3">
+                                    <!-- Dynamic target cards rendered by JS -->
+                                </div>
+                            </div>
+
+                            <!-- TAB 3: Downstream Integrations -->
+                            <div class="tab-pane fade" id="tab-pane-integrations" role="tabpanel">
+                                <div class="row g-3">
+                                    <!-- HEAppE Identifier & NEXUS Routing Card -->
+                                    <div class="col-12">
+                                        <div class="card border shadow-sm border-primary">
+                                            <div class="card-header bg-white fw-bold py-2 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                                <div>
+                                                    <i class="bi bi-fingerprint me-1 text-primary"></i>HEAppE Instance Identifier &amp; NEXUS Routing
+                                                    <span class="badge bg-light text-primary border border-primary-subtle font-monospace ms-1">ScriptsSettings.InstanceIdentifierPath</span>
+                                                </div>
+                                                <div class="d-flex align-items-center gap-1.5">
+                                                    <span class="badge bg-secondary-subtle text-secondary border font-monospace small" id="cfg-ident-preview-badge">core_dev_it4i_develop</span>
+                                                </div>
+                                            </div>
+                                            <div class="card-body p-3">
+                                                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <button type="button" class="btn btn-outline-primary active btn-cfg-ident-mode" data-mode="formula">
+                                                            <i class="bi bi-magic me-1"></i>Formula Builder
+                                                        </button>
+                                                        <button type="button" class="btn btn-outline-primary btn-cfg-ident-mode" data-mode="manual">
+                                                            <i class="bi bi-pencil me-1"></i>Manual Edit
+                                                        </button>
+                                                    </div>
+                                                    <div class="d-flex align-items-center gap-1">
+                                                        <span class="small text-muted me-1">Quick Presets:</span>
+                                                        <button type="button" class="btn btn-xs btn-outline-secondary cfg-ident-preset py-0 px-2" style="font-size: 0.72rem;" data-scope="core" data-env="dev" data-provider="it4i" data-instance="develop">core_dev_it4i_develop</button>
+                                                        <button type="button" class="btn btn-xs btn-outline-secondary cfg-ident-preset py-0 px-2" style="font-size: 0.72rem;" data-scope="core" data-env="dev" data-provider="it4i" data-instance="inference">core_dev_it4i_inference</button>
+                                                        <button type="button" class="btn btn-xs btn-outline-secondary cfg-ident-preset py-0 px-2" style="font-size: 0.72rem;" data-scope="efp" data-env="prod" data-provider="it4i" data-instance="cluster">efp_prod_it4i_cluster</button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Formula Mode Inputs -->
+                                                <div id="cfg-ident-formula-block">
+                                                    <div class="row g-2 align-items-end mb-2">
+                                                        <div class="col-md-3">
+                                                            <label class="form-label small fw-semibold text-secondary mb-1">1. Scope</label>
+                                                            <input type="text" class="form-control form-control-sm font-monospace cfg-f-input" id="b-cfg-f-scope" placeholder="core / efp" value="core">
+                                                        </div>
+                                                        <div class="col-md-3">
+                                                            <label class="form-label small fw-semibold text-secondary mb-1">2. Environment</label>
+                                                            <input type="text" class="form-control form-control-sm font-monospace cfg-f-input" id="b-cfg-f-env" placeholder="dev / stage / prod" value="dev">
+                                                        </div>
+                                                        <div class="col-md-3">
+                                                            <label class="form-label small fw-semibold text-secondary mb-1">3. Provider / HE Name</label>
+                                                            <input type="text" class="form-control form-control-sm font-monospace cfg-f-input" id="b-cfg-f-provider" placeholder="it4i / cesnet" value="it4i">
+                                                        </div>
+                                                        <div class="col-md-3">
+                                                            <label class="form-label small fw-semibold text-secondary mb-1">4. Instance Name</label>
+                                                            <input type="text" class="form-control form-control-sm font-monospace cfg-f-input" id="b-cfg-f-instance" placeholder="develop / inference" value="develop">
+                                                        </div>
+                                                    </div>
+                                                    <div class="text-muted small mb-3" style="font-size: 0.75rem;">
+                                                        <i class="bi bi-info-circle me-1"></i>Formula: <code>&lt;core/efp/..&gt;_&lt;environment&gt;_&lt;he_name/provider_name&gt;_&lt;HEAppE_instance_name&gt;</code>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Final Identifier Display / Manual Edit -->
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">
+                                                        HEAppE Identifier (<span class="font-monospace">InstanceIdentifierPath</span>)
+                                                    </label>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text bg-light"><i class="bi bi-key-fill text-primary"></i></span>
+                                                        <input type="text" class="form-control font-monospace fw-bold text-primary" id="b-heappe-instance-identifier" placeholder="core_dev_it4i_develop" readonly>
+                                                        <button class="btn btn-outline-secondary" type="button" id="btn-copy-cfg-ident" title="Copy to clipboard">
+                                                            <i class="bi bi-clipboard"></i> Copy
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Collapsible NEXUS 5-step process guide -->
+                                                <div class="border rounded-2 p-2 bg-light bg-opacity-50">
+                                                    <a class="text-decoration-none d-flex justify-content-between align-items-center text-dark fw-semibold small" data-bs-toggle="collapse" href="#cfgNexusGuideCollapse" role="button" aria-expanded="false" aria-controls="cfgNexusGuideCollapse">
+                                                        <span><i class="bi bi-shield-check text-success me-1"></i>NEXUS / AAI Integration &amp; Registration Workflow (5 kroků)</span>
+                                                        <i class="bi bi-chevron-down small"></i>
+                                                    </a>
+                                                    <div class="collapse mt-2" id="cfgNexusGuideCollapse">
+                                                        <div class="table-responsive">
+                                                            <table class="table table-sm table-bordered bg-white mb-1 small">
+                                                                <thead class="table-light">
+                                                                    <tr>
+                                                                        <th style="width: 50px;">Krok</th>
+                                                                        <th>Proces tvorby a registrace</th>
+                                                                        <th style="width: 140px;">Komponenta / Tým</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    <tr class="table-success table-opacity-25">
+                                                                        <td class="text-center fw-bold">1</td>
+                                                                        <td>Vytvoření HEAppE identifikátoru dle formule</td>
+                                                                        <td><span class="badge bg-primary text-white">HEAppE</span></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td class="text-center fw-bold">2</td>
+                                                                        <td>Předat HEAppE Identifikátor AAI týmu</td>
+                                                                        <td><span class="badge bg-secondary text-white">HEAppE &rarr; AAI</span></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td class="text-center fw-bold">3</td>
+                                                                        <td>Předat HEAppE Identifikátor / URL UserOrg týmu</td>
+                                                                        <td><span class="badge bg-secondary text-white">HEAppE &rarr; UserOrg</span></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td class="text-center fw-bold">4</td>
+                                                                        <td>Vytvoření Client_id pro HEAppE instanci pro identifikátor a doplnění do NEXUS mapy</td>
+                                                                        <td><span class="badge bg-info text-dark">KeyCloak</span></td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td class="text-center fw-bold">5</td>
+                                                                        <td>Přidání mapování HEAppE identifikátoru / HEAppE URL do NEXUS API Proxy</td>
+                                                                        <td><span class="badge bg-warning text-dark">NEXUS API</span></td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- SSH CA Settings -->
+                                    <div class="col-md-6">
+                                        <div class="card border h-100 shadow-sm">
+                                            <div class="card-header bg-white fw-bold py-2 border-bottom">
+                                                <i class="bi bi-terminal me-1 text-primary"></i>SSH Certificate Authority (SshCaSettings)
+                                            </div>
+                                            <div class="card-body p-3">
+                                                <div class="form-check form-switch mb-3">
+                                                    <input class="form-check-input" type="checkbox" id="b-sshca-enabled">
+                                                    <label class="form-check-label fw-bold small" for="b-sshca-enabled">Use Certificate Authority for Authentication</label>
+                                                    <div class="text-muted small">Enables automatic SSH CA user certificate signing for HPC cluster jobs.</div>
+                                                </div>
+                                                <div class="form-check form-switch mb-3">
+                                                    <input class="form-check-input" type="checkbox" id="b-sshca-posix" checked>
+                                                    <label class="form-check-label small" for="b-sshca-posix">Use POSIX Account From Certificate</label>
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">SSH CA Base URI</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-sshca-baseuri" placeholder="https://ssh.ca.api.heappe.eu">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">CA Name</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-sshca-caname" placeholder="it4i-ca">
+                                                </div>
+                                                <div class="mb-0">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">Connection Timeout (Seconds)</label>
+                                                    <input type="number" class="form-control form-control-sm" id="b-sshca-timeout" value="15">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Expirio Settings -->
+                                    <div class="col-md-6">
+                                        <div class="card border h-100 shadow-sm">
+                                            <div class="card-header bg-white fw-bold py-2 border-bottom">
+                                                <i class="bi bi-clock-history me-1 text-primary"></i>Expirio Service Settings (ExpirioSettings)
+                                            </div>
+                                            <div class="card-body p-3">
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">Expirio Base URL</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-expirio-baseurl" placeholder="https://expirio.heappe.eu/api">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">Provider Name</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-expirio-provider" placeholder="efp">
+                                                </div>
+                                                <div class="mb-3">
+                                                    <label class="form-label small fw-semibold text-secondary mb-1">Token Name</label>
+                                                    <input type="text" class="form-control form-control-sm" id="b-expirio-tokenname" placeholder="fip_token">
+                                                </div>
+                                                <div class="row g-2">
+                                                    <div class="col-6">
+                                                        <label class="form-label small fw-semibold text-secondary mb-1">Timeout (s)</label>
+                                                        <input type="number" class="form-control form-control-sm" id="b-expirio-timeout" value="30">
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <label class="form-label small fw-semibold text-secondary mb-1">Max Retries</label>
+                                                        <input type="number" class="form-control form-control-sm" id="b-expirio-retries" value="3">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- UserOrg / LEXIS Integration -->
+                                    <div class="col-12">
+                                        <div class="card border shadow-sm">
+                                            <div class="card-header bg-white fw-bold py-2 border-bottom">
+                                                <i class="bi bi-diagram-2 me-1 text-primary"></i>LEXIS &amp; UserOrg Authentication Configuration
+                                            </div>
+                                            <div class="card-body p-3">
+                                                <div class="row g-3">
+                                                    <div class="col-md-4">
+                                                        <div class="form-check form-switch mb-2">
+                                                            <input class="form-check-input" type="checkbox" id="b-lexis-bearer">
+                                                            <label class="form-check-label small fw-bold" for="b-lexis-bearer">Use Bearer Auth</label>
+                                                        </div>
+                                                        <div class="form-check form-switch mb-0">
+                                                            <input class="form-check-input" type="checkbox" id="b-lexis-check-perms">
+                                                            <label class="form-check-label small" for="b-lexis-check-perms">Check Command Template Permissions</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label small fw-semibold text-secondary mb-1">UserOrg Base Address</label>
+                                                        <input type="text" class="form-control form-control-sm" id="b-lexis-baseaddress" placeholder="https://userorg.example.com">
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <label class="form-label small fw-semibold text-secondary mb-1">API Version</label>
+                                                        <select class="form-select form-select-sm" id="b-lexis-apiversion">
+                                                            <option value="auto">auto (detect V1/V2)</option>
+                                                            <option value="v2">v2 (HEAppE 6.6+ UserOrg V2)</option>
+                                                            <option value="v1">v1 (Legacy)</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-semibold text-secondary mb-1">Extended User Info V1 Endpoint</label>
+                                                        <input type="text" class="form-control form-control-sm" id="b-lexis-userinfo-endpoint" value="/api/UserInfo/Extended">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-semibold text-secondary mb-1">Extended User Info V2 Endpoint</label>
+                                                        <input type="text" class="form-control form-control-sm" id="b-lexis-userinfo-v2-endpoint" value="/api/v2/UserInfo/Extended">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-semibold text-secondary mb-1">Command Template Permissions V1</label>
+                                                        <input type="text" class="form-control form-control-sm" id="b-lexis-cmd-endpoint" value="/api/Heappe/CommandTemplatePermissions/">
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small fw-semibold text-secondary mb-1">Command Template Permissions V2</label>
+                                                        <input type="text" class="form-control form-control-sm" id="b-lexis-cmd-v2-endpoint" value="/api/Heappe/CommandTemplatePermissions/">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- TAB 4: Pipeline Diagram & JSON Preview -->
+                            <div class="tab-pane fade" id="tab-pane-diagram" role="tabpanel">
+                                <div class="card border mb-3 shadow-sm">
+                                    <div class="card-header bg-white fw-bold py-2 border-bottom">
+                                        <i class="bi bi-diagram-3 me-1 text-primary"></i>Visual Token Pipeline Flow
+                                    </div>
+                                    <div class="card-body p-4 bg-light-subtle">
+                                        <div id="flow-diagram-container" class="d-flex flex-column align-items-center gap-3">
+                                            <!-- Dynamically generated flow graph -->
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="card border shadow-sm">
+                                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-2 border-bottom">
+                                        <span class="fw-bold"><i class="bi bi-code-square me-1 text-primary"></i>Generated Configuration Preview</span>
+                                        <span class="badge bg-light text-secondary border">Live JSON Preview</span>
+                                    </div>
+                                    <div class="card-body p-2 bg-dark">
+                                        <pre class="mb-0 text-light p-2 font-monospace small" id="auth-builder-preview-code" style="max-height: 280px; overflow-y: auto; font-size: 12px;"></pre>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -471,6 +933,7 @@ $(document).ready(function() {
         $('#json-form-wrapper').hide();
         $('#json-tree-wrapper').hide();
         $('#json-code-wrapper').hide();
+        $('#auth-builder-wrapper').hide();
 
         if (mode === 'form') {
             $('#btn-mode-form').addClass('active');
@@ -493,6 +956,14 @@ $(document).ready(function() {
             if (syncCodeToTree()) {
                 $('#json-tree-wrapper').show();
                 $('#json-code-wrapper').show();
+            } else {
+                $('#btn-mode-code').addClass('active');
+                $('#json-code-wrapper').show();
+            }
+        } else if (mode === 'auth-builder') {
+            $('#btn-mode-auth-builder').addClass('active');
+            if (syncCodeToAuthBuilder()) {
+                $('#auth-builder-wrapper').show();
             } else {
                 $('#btn-mode-code').addClass('active');
                 $('#json-code-wrapper').show();
@@ -539,6 +1010,1293 @@ $(document).ready(function() {
     });
     $(document).on('click', '#btn-mode-code', function() {
         switchEditorMode('code');
+    });
+    $(document).on('click', '#btn-mode-auth-builder', function() {
+        switchEditorMode('auth-builder');
+    });
+
+    // =========================================================================
+    // AUTH & TOKEN EXCHANGE BUILDER CONTROLLER (HEAppE 6.6+)
+    // =========================================================================
+
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    function parseFormulaIdentifier(val) {
+        if (!val || typeof val !== 'string') {
+            return { scope: 'core', env: 'dev', provider: 'it4i', instance: 'develop' };
+        }
+        const parts = val.split('_');
+        if (parts.length >= 4) {
+            return {
+                scope: parts[0],
+                env: parts[1],
+                provider: parts[2],
+                instance: parts.slice(3).join('_')
+            };
+        }
+        return { scope: 'core', env: 'dev', provider: 'it4i', instance: val };
+    }
+
+    let currentAuthData = {
+        instanceIdentifier: '',
+        kcEnabled: true,
+        baseUrl: '',
+        realmName: '',
+        authority: '',
+        clientId: 'heappe',
+        secretId: '',
+        allowedClients: '',
+        userPrefix: 'Open-Id_',
+        requireHttps: true,
+        validateIssuer: false,
+        validateEndpoints: false,
+        roleMappings: [],
+        targets: [],
+        sshca: {
+            enabled: false,
+            posix: true,
+            baseUri: '',
+            caName: '',
+            timeout: 15
+        },
+        expirio: {
+            baseUrl: 'https://expirio.heappe.eu/api',
+            provider: 'efp',
+            tokenName: 'fip_token',
+            timeout: 30,
+            retries: 3
+        },
+        lexis: {
+            bearer: false,
+            checkPerms: false,
+            baseAddress: '',
+            apiVersion: 'auto',
+            userinfoEndpoint: '/api/UserInfo/Extended',
+            userinfoV2Endpoint: '/api/v2/UserInfo/Extended',
+            cmdEndpoint: '/api/Heappe/CommandTemplatePermissions/',
+            cmdV2Endpoint: '/api/Heappe/CommandTemplatePermissions/'
+        }
+    };
+
+    function syncCodeToAuthBuilder() {
+        const rawCode = $('#file-content').val();
+        let json;
+        try {
+            json = JSON.parse(rawCode);
+        } catch (e) {
+            alert(`Cannot open Auth Builder: The JSON configuration contains syntax errors.\n\nError: ${e.message}`);
+            return false;
+        }
+
+        const extAuth = json.ExternalAuthenticationSettings || {};
+        const jwtIntro = extAuth.JwtTokenIntrospectionConfiguration || json.JwtTokenIntrospectionConfiguration || {};
+        const lexisCfg = extAuth.LexisAuthenticationConfiguration || {};
+        const sshcaCfg = json.SshCaSettings || {};
+        const expirioCfg = json.ExpirioSettings || {};
+        const rawTargets = json.TokenExchangeTargets || [];
+        const hpcSettings = json.HPCConnectionFrameworkSettings || {};
+        const scriptsSettings = hpcSettings.ScriptsSettings || {};
+        const instanceIdent = scriptsSettings.InstanceIdentifierPath || (json.ApplicationAPISettings && json.ApplicationAPISettings.DeploymentSettings && json.ApplicationAPISettings.DeploymentSettings.Name) || '';
+
+        // Targets normalization
+        const targets = Array.isArray(rawTargets) ? rawTargets.map(t => ({
+            Name: t.Name || '',
+            IsEnabled: t.IsEnabled !== undefined ? Boolean(t.IsEnabled) : true,
+            Strategy: t.Strategy || 'Rfc8693',
+            Authority: t.Authority || '',
+            TokenEndpoint: t.TokenEndpoint || '',
+            ClientId: t.ClientId || '',
+            ClientSecret: t.ClientSecret || '',
+            GrantType: t.GrantType || 'urn:ietf:params:oauth:grant-type:token-exchange',
+            SubjectTokenType: t.SubjectTokenType || 'urn:ietf:params:oauth:token-type:access_token',
+            RequestedTokenType: t.RequestedTokenType || 'urn:ietf:params:oauth:token-type:access_token',
+            Audience: t.Audience || '',
+            Scope: t.Scope || '',
+            ExpirioProviderName: t.ExpirioProviderName || '',
+            ExpirioClientName: t.ExpirioClientName || '',
+            BrokerAlias: t.BrokerAlias || '',
+            SubjectTokenSource: t.SubjectTokenSource || 'incoming',
+            StoreAs: t.StoreAs || '',
+            AutoExchange: t.AutoExchange !== undefined ? Boolean(t.AutoExchange) : true,
+            AutoExchangePhase: t.AutoExchangePhase || 'PostAuth',
+            AutoExchangeCondition: t.AutoExchangeCondition || '',
+            ConnectionTimeoutSeconds: t.ConnectionTimeoutSeconds !== undefined ? t.ConnectionTimeoutSeconds : 15,
+            IntrospectSubjectToken: Boolean(t.IntrospectSubjectToken),
+            IntrospectionAuthority: t.IntrospectionAuthority || '',
+            IntrospectionEndpoint: t.IntrospectionEndpoint || '',
+            IntrospectionClientId: t.IntrospectionClientId || '',
+            IntrospectionClientSecret: t.IntrospectionClientSecret || ''
+        })) : [];
+
+        // Role mappings normalization
+        const rawRoles = extAuth.RoleMapping || {};
+        const roleMappings = Object.keys(rawRoles).map(k => ({
+            oidcRole: k,
+            heappeRole: rawRoles[k]
+        }));
+
+        currentAuthData = {
+            instanceIdentifier: instanceIdent,
+            kcEnabled: jwtIntro.IsEnabled !== undefined ? Boolean(jwtIntro.IsEnabled) : false,
+            baseUrl: extAuth.BaseUrl || '',
+            realmName: extAuth.RealmName || '',
+            authority: jwtIntro.Authority || extAuth.Authority || '',
+            clientId: extAuth.ClientId || jwtIntro.ClientId || '',
+            secretId: extAuth.SecretId || jwtIntro.ClientSecret || '',
+            allowedClients: Array.isArray(extAuth.AllowedClientIds) ? extAuth.AllowedClientIds.join(', ') : (extAuth.AllowedClientIds || ''),
+            userPrefix: extAuth.HEAppEUserPrefix || 'Open-Id_',
+            requireHttps: jwtIntro.RequireHttps !== undefined ? Boolean(jwtIntro.RequireHttps) : true,
+            validateIssuer: jwtIntro.ValidateIssuerName !== undefined ? Boolean(jwtIntro.ValidateIssuerName) : false,
+            validateEndpoints: jwtIntro.ValidateEndpoints !== undefined ? Boolean(jwtIntro.ValidateEndpoints) : false,
+            roleMappings: roleMappings,
+            targets: targets,
+            sshca: {
+                enabled: Boolean(sshcaCfg.UseCertificateAuthorityForAuthentication),
+                posix: sshcaCfg.UsePosixAccountFromCertificate !== undefined ? Boolean(sshcaCfg.UsePosixAccountFromCertificate) : true,
+                baseUri: sshcaCfg.BaseUri || '',
+                caName: sshcaCfg.CAName || '',
+                timeout: sshcaCfg.ConnectionTimeoutInSeconds !== undefined ? sshcaCfg.ConnectionTimeoutInSeconds : 15
+            },
+            expirio: {
+                baseUrl: expirioCfg.BaseUrl || 'https://expirio.heappe.eu/api',
+                provider: expirioCfg.ProviderName || 'efp',
+                tokenName: expirioCfg.TokenName || 'fip_token',
+                timeout: expirioCfg.TimeoutSeconds !== undefined ? expirioCfg.TimeoutSeconds : 30,
+                retries: expirioCfg.MaxRetries !== undefined ? expirioCfg.MaxRetries : 3
+            },
+            lexis: {
+                bearer: Boolean(lexisCfg.UseBearerAuth),
+                checkPerms: Boolean(lexisCfg.CheckCommandTemplatePermissions),
+                baseAddress: lexisCfg.BaseAddress || '',
+                apiVersion: lexisCfg.ApiVersion || 'auto',
+                userinfoEndpoint: lexisCfg.ExtendedUserInfoEndpoint || '/api/UserInfo/Extended',
+                userinfoV2Endpoint: lexisCfg.ExtendedUserInfoV2Endpoint || '/api/v2/UserInfo/Extended',
+                cmdEndpoint: lexisCfg.CommandTemplatePermissions || '/api/Heappe/CommandTemplatePermissions/',
+                cmdV2Endpoint: lexisCfg.CommandTemplatePermissionsV2Endpoint || '/api/Heappe/CommandTemplatePermissions/'
+            }
+        };
+
+        populateAuthBuilderInputs();
+        renderRoleMappings();
+        renderTargetsList();
+        updatePipelineDiagram();
+        return true;
+    }
+
+    function populateAuthBuilderInputs() {
+        const ident = currentAuthData.instanceIdentifier || '';
+        $('#b-heappe-instance-identifier').val(ident);
+        $('#cfg-ident-preview-badge').text(ident || 'none');
+        const parsed = parseFormulaIdentifier(ident);
+        $('#b-cfg-f-scope').val(parsed.scope);
+        $('#b-cfg-f-env').val(parsed.env);
+        $('#b-cfg-f-provider').val(parsed.provider);
+        $('#b-cfg-f-instance').val(parsed.instance);
+
+        $('#b-kc-enabled').prop('checked', currentAuthData.kcEnabled);
+        $('#b-kc-baseurl').val(currentAuthData.baseUrl);
+        $('#b-kc-realm').val(currentAuthData.realmName);
+        $('#b-kc-authority').val(currentAuthData.authority);
+        $('#b-kc-clientid').val(currentAuthData.clientId);
+        $('#b-kc-secret').val(currentAuthData.secretId);
+        $('#b-kc-allowed-clients').val(currentAuthData.allowedClients);
+        $('#b-kc-user-prefix').val(currentAuthData.userPrefix);
+        $('#b-kc-require-https').prop('checked', currentAuthData.requireHttps);
+        $('#b-kc-validate-issuer').prop('checked', currentAuthData.validateIssuer);
+        $('#b-kc-validate-endpoints').prop('checked', currentAuthData.validateEndpoints);
+
+        $('#b-sshca-enabled').prop('checked', currentAuthData.sshca.enabled);
+        $('#b-sshca-posix').prop('checked', currentAuthData.sshca.posix);
+        $('#b-sshca-baseuri').val(currentAuthData.sshca.baseUri);
+        $('#b-sshca-caname').val(currentAuthData.sshca.caName);
+        $('#b-sshca-timeout').val(currentAuthData.sshca.timeout);
+
+        $('#b-expirio-baseurl').val(currentAuthData.expirio.baseUrl);
+        $('#b-expirio-provider').val(currentAuthData.expirio.provider);
+        $('#b-expirio-tokenname').val(currentAuthData.expirio.tokenName);
+        $('#b-expirio-timeout').val(currentAuthData.expirio.timeout);
+        $('#b-expirio-retries').val(currentAuthData.expirio.retries);
+
+        $('#b-lexis-bearer').prop('checked', currentAuthData.lexis.bearer);
+        $('#b-lexis-check-perms').prop('checked', currentAuthData.lexis.checkPerms);
+        $('#b-lexis-baseaddress').val(currentAuthData.lexis.baseAddress);
+        $('#b-lexis-apiversion').val(currentAuthData.lexis.apiVersion);
+        $('#b-lexis-userinfo-endpoint').val(currentAuthData.lexis.userinfoEndpoint);
+        $('#b-lexis-userinfo-v2-endpoint').val(currentAuthData.lexis.userinfoV2Endpoint);
+        $('#b-lexis-cmd-endpoint').val(currentAuthData.lexis.cmdEndpoint);
+        $('#b-lexis-cmd-v2-endpoint').val(currentAuthData.lexis.cmdV2Endpoint);
+    }
+
+    function gatherAuthBuilderInputs() {
+        currentAuthData.instanceIdentifier = $('#b-heappe-instance-identifier').val().trim();
+        currentAuthData.kcEnabled = $('#b-kc-enabled').is(':checked');
+        currentAuthData.baseUrl = $('#b-kc-baseurl').val().trim();
+        currentAuthData.realmName = $('#b-kc-realm').val().trim();
+        currentAuthData.authority = $('#b-kc-authority').val().trim();
+        currentAuthData.clientId = $('#b-kc-clientid').val().trim();
+        currentAuthData.secretId = $('#b-kc-secret').val().trim();
+        currentAuthData.allowedClients = $('#b-kc-allowed-clients').val().trim();
+        currentAuthData.userPrefix = $('#b-kc-user-prefix').val().trim() || 'Open-Id_';
+        currentAuthData.requireHttps = $('#b-kc-require-https').is(':checked');
+        currentAuthData.validateIssuer = $('#b-kc-validate-issuer').is(':checked');
+        currentAuthData.validateEndpoints = $('#b-kc-validate-endpoints').is(':checked');
+
+        currentAuthData.sshca.enabled = $('#b-sshca-enabled').is(':checked');
+        currentAuthData.sshca.posix = $('#b-sshca-posix').is(':checked');
+        currentAuthData.sshca.baseUri = $('#b-sshca-baseuri').val().trim();
+        currentAuthData.sshca.caName = $('#b-sshca-caname').val().trim();
+        currentAuthData.sshca.timeout = parseFloat($('#b-sshca-timeout').val()) || 15;
+
+        currentAuthData.expirio.baseUrl = $('#b-expirio-baseurl').val().trim();
+        currentAuthData.expirio.provider = $('#b-expirio-provider').val().trim();
+        currentAuthData.expirio.tokenName = $('#b-expirio-tokenname').val().trim();
+        currentAuthData.expirio.timeout = parseFloat($('#b-expirio-timeout').val()) || 30;
+        currentAuthData.expirio.retries = parseInt($('#b-expirio-retries').val(), 10) || 3;
+
+        currentAuthData.lexis.bearer = $('#b-lexis-bearer').is(':checked');
+        currentAuthData.lexis.checkPerms = $('#b-lexis-check-perms').is(':checked');
+        currentAuthData.lexis.baseAddress = $('#b-lexis-baseaddress').val().trim();
+        currentAuthData.lexis.apiVersion = $('#b-lexis-apiversion').val();
+        currentAuthData.lexis.userinfoEndpoint = $('#b-lexis-userinfo-endpoint').val().trim();
+        currentAuthData.lexis.userinfoV2Endpoint = $('#b-lexis-userinfo-v2-endpoint').val().trim();
+        currentAuthData.lexis.cmdEndpoint = $('#b-lexis-cmd-endpoint').val().trim();
+        currentAuthData.lexis.cmdV2Endpoint = $('#b-lexis-cmd-v2-endpoint').val().trim();
+
+        // Gather role mappings
+        const updatedRoles = [];
+        $('#tbody-role-mapping tr').each(function() {
+            const oidc = $(this).find('.role-map-key').val()?.trim();
+            const heappe = $(this).find('.role-map-val').val()?.trim();
+            if (oidc && heappe) {
+                updatedRoles.push({ oidcRole: oidc, heappeRole: heappe });
+            }
+        });
+        currentAuthData.roleMappings = updatedRoles;
+
+        // Targets inputs are bound directly into currentAuthData.targets via change handlers
+    }
+
+    function renderRoleMappings() {
+        const tbody = $('#tbody-role-mapping');
+        tbody.empty();
+
+        if (currentAuthData.roleMappings.length === 0) {
+            tbody.append(`
+                <tr id="row-empty-roles">
+                    <td colspan="3" class="text-center text-muted py-2 small">
+                        No role mappings defined. Click "Add Role Mapping" to map Keycloak roles to HEAppE internal roles.
+                    </td>
+                </tr>
+            `);
+            return;
+        }
+
+        const rolesOptions = ['Submitter', 'Manager', 'Maintainer', 'Reporter', 'Administrator', 'ManagementAdmin'];
+
+        currentAuthData.roleMappings.forEach((m, idx) => {
+            let optionsHtml = '';
+            rolesOptions.forEach(r => {
+                optionsHtml += `<option value="${r}" ${r === m.heappeRole ? 'selected' : ''}>${r}</option>`;
+            });
+
+            tbody.append(`
+                <tr data-idx="${idx}">
+                    <td>
+                        <input type="text" class="form-control form-control-sm role-map-key" value="${escapeHtml(m.oidcRole)}" placeholder="e.g. prj_write, sys_admin">
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm role-map-val">
+                            ${optionsHtml}
+                        </select>
+                    </td>
+                    <td class="text-center">
+                        <button type="button" class="btn btn-sm btn-outline-danger btn-del-role-map py-1 px-2" data-idx="${idx}" title="Remove mapping">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `);
+        });
+    }
+
+    $(document).on('click', '#btn-add-role-mapping', function() {
+        currentAuthData.roleMappings.push({ oidcRole: '', heappeRole: 'Submitter' });
+        renderRoleMappings();
+        updatePipelineDiagram();
+    });
+
+    $(document).on('click', '.btn-del-role-map', function() {
+        const idx = parseInt($(this).data('idx'), 10);
+        if (!isNaN(idx)) {
+            currentAuthData.roleMappings.splice(idx, 1);
+            renderRoleMappings();
+            updatePipelineDiagram();
+        }
+    });
+
+    $(document).on('input change', '.role-map-key, .role-map-val', function() {
+        gatherAuthBuilderInputs();
+        updatePipelineDiagram();
+    });
+
+    // --- TARGETS LIST RENDERING ---
+    function renderTargetsList() {
+        const container = $('#auth-targets-container');
+        container.empty();
+
+        const targets = currentAuthData.targets;
+        $('#badge-targets-count').text(targets.length);
+
+        if (targets.length === 0) {
+            container.append(`
+                <div class="alert alert-secondary py-4 text-center border-dashed rounded-3">
+                    <i class="bi bi-diagram-3 fs-3 d-block mb-2 text-secondary"></i>
+                    <h6 class="fw-bold mb-1">No Token Exchange Targets configured</h6>
+                    <p class="small text-muted mb-3">Incoming user tokens will not be exchanged for downstream components. Click below or choose a preset to add targets.</p>
+                    <button type="button" class="btn btn-sm btn-primary" id="btn-add-target-empty">
+                        <i class="bi bi-plus-lg me-1"></i>Add First Exchange Target
+                    </button>
+                </div>
+            `);
+            return;
+        }
+
+        const targetNames = targets.map(t => t.Name.trim()).filter(n => n.length > 0);
+
+        targets.forEach((target, idx) => {
+            // Options for SubjectTokenSource
+            let sourceOptionsHtml = `<option value="incoming" ${target.SubjectTokenSource === 'incoming' ? 'selected' : ''}>incoming (Request Bearer Token)</option>`;
+            targetNames.forEach(n => {
+                if (n !== target.Name) {
+                    sourceOptionsHtml += `<option value="${escapeHtml(n)}" ${target.SubjectTokenSource === n ? 'selected' : ''}>target: ${escapeHtml(n)}</option>`;
+                }
+            });
+
+            // Strategy badge class
+            const strategyBadges = {
+                'Rfc8693': 'bg-primary',
+                'KeycloakBroker': 'bg-info text-dark',
+                'Expirio': 'bg-success',
+                'ClientCredentials': 'bg-warning text-dark',
+                'Introspection': 'bg-secondary'
+            };
+            const badgeClass = strategyBadges[target.Strategy] || 'bg-dark';
+
+            const card = $(`
+                <div class="card border shadow-sm target-card" data-idx="${idx}">
+                    <div class="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2 border-bottom">
+                        <div class="d-flex align-items-center gap-2 flex-grow-1 min-w-0" style="max-width: 480px;">
+                            <span class="badge bg-light text-secondary border">#${idx + 1}</span>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light text-secondary small">Target Name</span>
+                                <input type="text" class="form-control form-control-sm fw-bold target-name-input" data-idx="${idx}" value="${escapeHtml(target.Name)}" placeholder="e.g. idp, sshca, userorg">
+                            </div>
+                            <span class="badge ${badgeClass} target-strategy-badge">${escapeHtml(target.Strategy)}</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input target-enabled-switch" type="checkbox" data-idx="${idx}" id="target-enabled-${idx}" ${target.IsEnabled ? 'checked' : ''}>
+                                <label class="form-check-label small" for="target-enabled-${idx}">Enabled</label>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-del-target py-1 px-2" data-idx="${idx}" title="Delete target">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold text-secondary mb-1">Strategy</label>
+                                <select class="form-select form-select-sm target-strategy-select" data-idx="${idx}">
+                                    <option value="Rfc8693" ${target.Strategy === 'Rfc8693' ? 'selected' : ''}>Rfc8693 (Standard Token Exchange)</option>
+                                    <option value="KeycloakBroker" ${target.Strategy === 'KeycloakBroker' ? 'selected' : ''}>KeycloakBroker (IdP Broker /token)</option>
+                                    <option value="Expirio" ${target.Strategy === 'Expirio' ? 'selected' : ''}>Expirio (Expirio Service)</option>
+                                    <option value="ClientCredentials" ${target.Strategy === 'ClientCredentials' ? 'selected' : ''}>ClientCredentials (OAuth2)</option>
+                                    <option value="Introspection" ${target.Strategy === 'Introspection' ? 'selected' : ''}>Introspection (RFC 7662 Validation)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold text-secondary mb-1">Subject Token Source</label>
+                                <select class="form-select form-select-sm target-source-select" data-idx="${idx}">
+                                    ${sourceOptionsHtml}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold text-secondary mb-1">Store As Key</label>
+                                <input type="text" class="form-control form-control-sm target-store-as-input" data-idx="${idx}" value="${escapeHtml(target.StoreAs)}" placeholder="(Defaults to Name: ${escapeHtml(target.Name)})">
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold text-secondary mb-1">Pipeline Phase</label>
+                                <select class="form-select form-select-sm target-phase-select" data-idx="${idx}">
+                                    <option value="PreAuth" ${target.AutoExchangePhase === 'PreAuth' ? 'selected' : ''}>PreAuth (Before HEAppE Authentication)</option>
+                                    <option value="PostAuth" ${target.AutoExchangePhase === 'PostAuth' ? 'selected' : ''}>PostAuth (After Authentication / SSH CA)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-4">
+                                <div class="form-check form-switch mt-1">
+                                    <input class="form-check-input target-auto-exchange-switch" type="checkbox" data-idx="${idx}" id="target-auto-${idx}" ${target.AutoExchange ? 'checked' : ''}>
+                                    <label class="form-check-label small fw-bold" for="target-auto-${idx}">Auto-Execute in Auth Pipeline</label>
+                                </div>
+                            </div>
+                            <div class="col-md-5">
+                                <input type="text" class="form-control form-control-sm target-condition-input" data-idx="${idx}" value="${escapeHtml(target.AutoExchangeCondition)}" placeholder="Condition key (e.g. SshCaSettings:UseCertificateAuthorityForAuthentication)">
+                            </div>
+                            <div class="col-md-3">
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-light text-secondary">Timeout</span>
+                                    <input type="number" class="form-control form-control-sm target-timeout-input" data-idx="${idx}" value="${target.ConnectionTimeoutSeconds}">
+                                    <span class="input-group-text bg-light text-secondary">s</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Strategy Specific Fields -->
+                        <div class="strategy-fields-box border rounded p-2.5 bg-light-subtle mb-2">
+                            <!-- Fields for RFC 8693 -->
+                            <div class="fields-rfc8693" style="${target.Strategy === 'Rfc8693' ? '' : 'display: none;'}">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Authority URL (OIDC Discovery)</label>
+                                        <input type="text" class="form-control form-control-sm target-authority-input" data-idx="${idx}" value="${escapeHtml(target.Authority)}" placeholder="e.g. https://aai.my-eurohpc.eu/proxy">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Explicit Token Endpoint (Optional)</label>
+                                        <input type="text" class="form-control form-control-sm target-token-endpoint-input" data-idx="${idx}" value="${escapeHtml(target.TokenEndpoint)}" placeholder="Discovered from Authority if left blank">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Client ID</label>
+                                        <input type="text" class="form-control form-control-sm target-clientid-input" data-idx="${idx}" value="${escapeHtml(target.ClientId)}" placeholder="e.g. fip-client">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Client Secret</label>
+                                        <input type="password" class="form-control form-control-sm target-secret-input" data-idx="${idx}" value="${escapeHtml(target.ClientSecret)}" placeholder="Client Secret">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Target Audience</label>
+                                        <input type="text" class="form-control form-control-sm target-audience-input" data-idx="${idx}" value="${escapeHtml(target.Audience)}" placeholder="e.g. ssh-ca-service, userorg-service">
+                                    </div>
+                                    <div class="col-md-12">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Requested Scope (Optional)</label>
+                                        <input type="text" class="form-control form-control-sm target-scope-input" data-idx="${idx}" value="${escapeHtml(target.Scope)}" placeholder="e.g. openid profile email">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Fields for KeycloakBroker -->
+                            <div class="fields-keycloakbroker" style="${target.Strategy === 'KeycloakBroker' ? '' : 'display: none;'}">
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Keycloak Broker Alias</label>
+                                        <input type="text" class="form-control form-control-sm target-broker-alias-input" data-idx="${idx}" value="${escapeHtml(target.BrokerAlias)}" placeholder="e.g. target-idp, EFP">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Authority URL</label>
+                                        <input type="text" class="form-control form-control-sm target-authority-input" data-idx="${idx}" value="${escapeHtml(target.Authority)}" placeholder="e.g. https://keycloak.example.com/auth/realms/HEAppE">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Client ID</label>
+                                        <input type="text" class="form-control form-control-sm target-clientid-input" data-idx="${idx}" value="${escapeHtml(target.ClientId)}" placeholder="heappe">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Fields for Expirio -->
+                            <div class="fields-expirio" style="${target.Strategy === 'Expirio' ? '' : 'display: none;'}">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Expirio Provider Name</label>
+                                        <input type="text" class="form-control form-control-sm target-expirio-provider-input" data-idx="${idx}" value="${escapeHtml(target.ExpirioProviderName)}" placeholder="e.g. efp">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Expirio Client Name (Optional)</label>
+                                        <input type="text" class="form-control form-control-sm target-expirio-client-input" data-idx="${idx}" value="${escapeHtml(target.ExpirioClientName)}" placeholder="Client name override if any">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Fields for ClientCredentials -->
+                            <div class="fields-clientcredentials" style="${target.Strategy === 'ClientCredentials' ? '' : 'display: none;'}">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Authority URL</label>
+                                        <input type="text" class="form-control form-control-sm target-authority-input" data-idx="${idx}" value="${escapeHtml(target.Authority)}" placeholder="https://oauth.example.com">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Token Endpoint</label>
+                                        <input type="text" class="form-control form-control-sm target-token-endpoint-input" data-idx="${idx}" value="${escapeHtml(target.TokenEndpoint)}" placeholder="https://oauth.example.com/oauth/token">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Client ID</label>
+                                        <input type="text" class="form-control form-control-sm target-clientid-input" data-idx="${idx}" value="${escapeHtml(target.ClientId)}" placeholder="Service account client ID">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Client Secret</label>
+                                        <input type="password" class="form-control form-control-sm target-secret-input" data-idx="${idx}" value="${escapeHtml(target.ClientSecret)}" placeholder="Service account secret">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Fields for Introspection -->
+                            <div class="fields-introspection" style="${target.Strategy === 'Introspection' ? '' : 'display: none;'}">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Introspection Authority URL</label>
+                                        <input type="text" class="form-control form-control-sm target-intro-auth-input" data-idx="${idx}" value="${escapeHtml(target.IntrospectionAuthority)}" placeholder="https://keycloak.example.com/auth/realms/LEXIS_AAI">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Introspection Endpoint URL</label>
+                                        <input type="text" class="form-control form-control-sm target-intro-ep-input" data-idx="${idx}" value="${escapeHtml(target.IntrospectionEndpoint)}" placeholder="Explicit endpoint if not discovered">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Pre-Exchange Introspection Accordion -->
+                        <div class="border rounded p-2 bg-white">
+                            <div class="form-check form-switch mb-0">
+                                <input class="form-check-input target-introspect-switch" type="checkbox" data-idx="${idx}" id="target-intro-switch-${idx}" ${target.IntrospectSubjectToken ? 'checked' : ''}>
+                                <label class="form-check-label small fw-semibold" for="target-intro-switch-${idx}">
+                                    Introspect Subject Token Before Exchange (Pre-Validation)
+                                </label>
+                            </div>
+                            <div class="target-intro-fields mt-2" style="${target.IntrospectSubjectToken ? '' : 'display: none;'}">
+                                <div class="row g-2">
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Introspection Authority URL</label>
+                                        <input type="text" class="form-control form-control-sm target-intro-auth-input" data-idx="${idx}" value="${escapeHtml(target.IntrospectionAuthority)}" placeholder="e.g. https://lexis/auth/realms/LEXIS_AAI">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Introspection Endpoint (Optional)</label>
+                                        <input type="text" class="form-control form-control-sm target-intro-ep-input" data-idx="${idx}" value="${escapeHtml(target.IntrospectionEndpoint)}" placeholder="Auto-discovered if left blank">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Introspection Client ID</label>
+                                        <input type="text" class="form-control form-control-sm target-intro-client-input" data-idx="${idx}" value="${escapeHtml(target.IntrospectionClientId)}" placeholder="Client ID for introspection">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label small fw-semibold text-secondary mb-1">Introspection Client Secret</label>
+                                        <input type="password" class="form-control form-control-sm target-intro-secret-input" data-idx="${idx}" value="${escapeHtml(target.IntrospectionClientSecret)}" placeholder="Client Secret for introspection">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+            container.append(card);
+        });
+    }
+
+    // --- TARGET HANDLERS ---
+    $(document).on('click', '#btn-add-target, #btn-add-target-empty', function() {
+        const newTarget = {
+            Name: `target_${currentAuthData.targets.length + 1}`,
+            IsEnabled: true,
+            Strategy: 'Rfc8693',
+            Authority: currentAuthData.authority || '',
+            TokenEndpoint: '',
+            ClientId: '',
+            ClientSecret: '',
+            GrantType: 'urn:ietf:params:oauth:grant-type:token-exchange',
+            SubjectTokenType: 'urn:ietf:params:oauth:token-type:access_token',
+            RequestedTokenType: 'urn:ietf:params:oauth:token-type:access_token',
+            Audience: '',
+            Scope: '',
+            ExpirioProviderName: '',
+            ExpirioClientName: '',
+            BrokerAlias: '',
+            SubjectTokenSource: currentAuthData.targets.length > 0 ? currentAuthData.targets[0].Name : 'incoming',
+            StoreAs: '',
+            AutoExchange: true,
+            AutoExchangePhase: 'PostAuth',
+            AutoExchangeCondition: '',
+            ConnectionTimeoutSeconds: 15,
+            IntrospectSubjectToken: false,
+            IntrospectionAuthority: '',
+            IntrospectionEndpoint: '',
+            IntrospectionClientId: '',
+            IntrospectionClientSecret: ''
+        };
+        currentAuthData.targets.push(newTarget);
+        renderTargetsList();
+        updatePipelineDiagram();
+    });
+
+    $(document).on('click', '.btn-del-target', function() {
+        const idx = parseInt($(this).data('idx'), 10);
+        if (!isNaN(idx)) {
+            currentAuthData.targets.splice(idx, 1);
+            renderTargetsList();
+            updatePipelineDiagram();
+        }
+    });
+
+    $(document).on('input', '.target-name-input', function() {
+        const idx = parseInt($(this).data('idx'), 10);
+        if (!isNaN(idx) && currentAuthData.targets[idx]) {
+            currentAuthData.targets[idx].Name = $(this).val().trim();
+            updatePipelineDiagram();
+        }
+    });
+
+    $(document).on('change', '.target-enabled-switch', function() {
+        const idx = parseInt($(this).data('idx'), 10);
+        if (!isNaN(idx) && currentAuthData.targets[idx]) {
+            currentAuthData.targets[idx].IsEnabled = $(this).is(':checked');
+            updatePipelineDiagram();
+        }
+    });
+
+    $(document).on('change', '.target-strategy-select', function() {
+        const idx = parseInt($(this).data('idx'), 10);
+        const strat = $(this).val();
+        if (!isNaN(idx) && currentAuthData.targets[idx]) {
+            currentAuthData.targets[idx].Strategy = strat;
+            const card = $(this).closest('.target-card');
+            card.find('.target-strategy-badge').text(strat);
+
+            card.find('.fields-rfc8693, .fields-keycloakbroker, .fields-expirio, .fields-clientcredentials, .fields-introspection').hide();
+            card.find(`.fields-${strat.toLowerCase()}`).show();
+            updatePipelineDiagram();
+        }
+    });
+
+    $(document).on('change', '.target-source-select', function() {
+        const idx = parseInt($(this).data('idx'), 10);
+        if (!isNaN(idx) && currentAuthData.targets[idx]) {
+            currentAuthData.targets[idx].SubjectTokenSource = $(this).val();
+            updatePipelineDiagram();
+        }
+    });
+
+    $(document).on('change', '.target-phase-select', function() {
+        const idx = parseInt($(this).data('idx'), 10);
+        if (!isNaN(idx) && currentAuthData.targets[idx]) {
+            currentAuthData.targets[idx].AutoExchangePhase = $(this).val();
+            updatePipelineDiagram();
+        }
+    });
+
+    $(document).on('change', '.target-auto-exchange-switch', function() {
+        const idx = parseInt($(this).data('idx'), 10);
+        if (!isNaN(idx) && currentAuthData.targets[idx]) {
+            currentAuthData.targets[idx].AutoExchange = $(this).is(':checked');
+            updatePipelineDiagram();
+        }
+    });
+
+    $(document).on('change', '.target-introspect-switch', function() {
+        const idx = parseInt($(this).data('idx'), 10);
+        const isChecked = $(this).is(':checked');
+        if (!isNaN(idx) && currentAuthData.targets[idx]) {
+            currentAuthData.targets[idx].IntrospectSubjectToken = isChecked;
+            $(this).closest('.target-card').find('.target-intro-fields').toggle(isChecked);
+            updatePipelineDiagram();
+        }
+    });
+
+    $(document).on('input change', '.target-store-as-input, .target-condition-input, .target-timeout-input, .target-authority-input, .target-token-endpoint-input, .target-clientid-input, .target-secret-input, .target-audience-input, .target-scope-input, .target-broker-alias-input, .target-expirio-provider-input, .target-expirio-client-input, .target-intro-auth-input, .target-intro-ep-input, .target-intro-client-input, .target-intro-secret-input', function() {
+        const card = $(this).closest('.target-card');
+        const idx = parseInt(card.data('idx'), 10);
+        if (isNaN(idx) || !currentAuthData.targets[idx]) return;
+
+        const t = currentAuthData.targets[idx];
+        t.StoreAs = card.find('.target-store-as-input').val().trim();
+        t.AutoExchangeCondition = card.find('.target-condition-input').val().trim();
+        t.ConnectionTimeoutSeconds = parseFloat(card.find('.target-timeout-input').val()) || 15;
+        t.Authority = card.find('.target-authority-input').val()?.trim() || '';
+        t.TokenEndpoint = card.find('.target-token-endpoint-input').val()?.trim() || '';
+        t.ClientId = card.find('.target-clientid-input').val()?.trim() || '';
+        t.ClientSecret = card.find('.target-secret-input').val()?.trim() || '';
+        t.Audience = card.find('.target-audience-input').val()?.trim() || '';
+        t.Scope = card.find('.target-scope-input').val()?.trim() || '';
+        t.BrokerAlias = card.find('.target-broker-alias-input').val()?.trim() || '';
+        t.ExpirioProviderName = card.find('.target-expirio-provider-input').val()?.trim() || '';
+        t.ExpirioClientName = card.find('.target-expirio-client-input').val()?.trim() || '';
+        t.IntrospectionAuthority = card.find('.target-intro-auth-input').val()?.trim() || '';
+        t.IntrospectionEndpoint = card.find('.target-intro-ep-input').val()?.trim() || '';
+        t.IntrospectionClientId = card.find('.target-intro-client-input').val()?.trim() || '';
+        t.IntrospectionClientSecret = card.find('.target-intro-secret-input').val()?.trim() || '';
+
+        updatePipelineDiagram();
+    });
+
+    // Helper: derive authority from baseurl + realm
+    $(document).on('click', '#btn-derive-authority', function() {
+        const base = $('#b-kc-baseurl').val().trim().replace(/\/+$/, '');
+        const realm = $('#b-kc-realm').val().trim();
+        if (base && realm) {
+            const derived = `${base}/realms/${realm}`;
+            $('#b-kc-authority').val(derived);
+            currentAuthData.authority = derived;
+            updatePipelineDiagram();
+        } else {
+            alert('Please specify both Keycloak Base URL and Realm Name.');
+        }
+    });
+
+    // Update diagram and preview
+    function updatePipelineDiagram() {
+        gatherAuthBuilderInputs();
+
+        const container = $('#flow-diagram-container');
+        container.empty();
+
+        const activeTargets = currentAuthData.targets.filter(t => t.IsEnabled);
+        const preAuthTargets = activeTargets.filter(t => t.AutoExchangePhase === 'PreAuth');
+        const postAuthTargets = activeTargets.filter(t => t.AutoExchangePhase === 'PostAuth');
+
+        // Step 1: Incoming Request
+        container.append(`
+            <div class="card border border-primary text-center px-4 py-2 bg-white shadow-sm" style="min-width: 320px;">
+                <div class="fw-bold text-primary"><i class="bi bi-box-arrow-in-right me-1"></i>Incoming HTTP Request</div>
+                <div class="small text-muted font-monospace">Authorization: Bearer &lt;subject_token&gt;</div>
+            </div>
+            <div class="text-secondary fs-5 my-0"><i class="bi bi-arrow-down"></i></div>
+        `);
+
+        // Step 2: PreAuth
+        if (preAuthTargets.length > 0) {
+            let preHtml = '';
+            preAuthTargets.forEach(t => {
+                const introBadge = t.IntrospectSubjectToken ? '<span class="badge bg-secondary ms-1">Introspected</span>' : '';
+                preHtml += `
+                    <div class="p-2 border rounded bg-light mb-1 d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${escapeHtml(t.Name)}</strong>
+                            <span class="badge bg-info text-dark ms-1">${escapeHtml(t.Strategy)}</span>
+                            ${introBadge}
+                        </div>
+                        <div class="small text-muted font-monospace">Source: ${escapeHtml(t.SubjectTokenSource)} &rarr; StoreAs: ${escapeHtml(t.StoreAs || t.Name)}</div>
+                    </div>
+                `;
+            });
+            container.append(`
+                <div class="card border border-info px-4 py-2 bg-white shadow-sm" style="min-width: 440px;">
+                    <div class="fw-bold text-info mb-1"><i class="bi bi-arrow-repeat me-1"></i>Pre-Auth Token Exchanges</div>
+                    ${preHtml}
+                </div>
+                <div class="text-secondary fs-5 my-0"><i class="bi bi-arrow-down"></i></div>
+            `);
+        }
+
+        // Step 3: Core HEAppE Authentication
+        const kcStatusText = currentAuthData.kcEnabled
+            ? `Keycloak OIDC Enabled &bull; Realm: ${escapeHtml(currentAuthData.realmName || 'Default')} &bull; Roles: ${currentAuthData.roleMappings.length} mappings`
+            : 'Keycloak OIDC Disabled (Local Authentication)';
+        const kcBorderClass = currentAuthData.kcEnabled ? 'border-success' : 'border-secondary';
+        const kcTextClass = currentAuthData.kcEnabled ? 'text-success' : 'text-secondary';
+        const kcIcon = currentAuthData.kcEnabled ? 'bi-shield-check' : 'bi-shield-slash';
+        const identBadge = currentAuthData.instanceIdentifier
+            ? `<div class="mt-1"><span class="badge bg-primary text-white font-monospace" style="font-size: 0.72rem;"><i class="bi bi-fingerprint me-1"></i>${escapeHtml(currentAuthData.instanceIdentifier)}</span></div>`
+            : '';
+
+        container.append(`
+            <div class="card border ${kcBorderClass} text-center px-4 py-2 bg-white shadow-sm" style="min-width: 380px;">
+                <div class="fw-bold ${kcTextClass}"><i class="bi ${kcIcon} me-1"></i>HEAppE Core Authentication Pipeline</div>
+                <div class="small text-muted">${kcStatusText}</div>
+                ${identBadge}
+            </div>
+            <div class="text-secondary fs-5 my-0"><i class="bi bi-arrow-down"></i></div>
+        `);
+
+        // Step 4: PostAuth
+        if (postAuthTargets.length > 0) {
+            let postHtml = '';
+            postAuthTargets.forEach(t => {
+                const condBadge = t.AutoExchangeCondition ? `<div class="small text-muted">Condition: <code>${escapeHtml(t.AutoExchangeCondition)}</code></div>` : '';
+                postHtml += `
+                    <div class="p-2 border rounded bg-light mb-1 d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${escapeHtml(t.Name)}</strong>
+                            <span class="badge bg-warning text-dark ms-1">${escapeHtml(t.Strategy)}</span>
+                            ${condBadge}
+                        </div>
+                        <div class="small text-muted font-monospace">Source: ${escapeHtml(t.SubjectTokenSource)} &rarr; StoreAs: ${escapeHtml(t.StoreAs || t.Name)}</div>
+                    </div>
+                `;
+            });
+            container.append(`
+                <div class="card border border-warning px-4 py-2 bg-white shadow-sm" style="min-width: 440px;">
+                    <div class="fw-bold text-warning-emphasis mb-1"><i class="bi bi-arrow-repeat me-1"></i>Post-Auth Token Exchanges</div>
+                    ${postHtml}
+                </div>
+                <div class="text-secondary fs-5 my-0"><i class="bi bi-arrow-down"></i></div>
+            `);
+        }
+
+        // Step 5: Downstream Services
+        const sshcaText = currentAuthData.sshca.enabled
+            ? `SSH CA: ${escapeHtml(currentAuthData.sshca.baseUri || 'Active')}`
+            : 'SSH CA Disabled';
+        container.append(`
+            <div class="card border border-dark text-center px-4 py-2 bg-white shadow-sm" style="min-width: 320px;">
+                <div class="fw-bold text-dark"><i class="bi bi-hdd-network me-1"></i>Downstream Services &amp; Cluster Access</div>
+                <div class="small text-muted">${sshcaText} &bull; HPC Job Executions</div>
+            </div>
+        `);
+
+        // Generate clean preview JSON
+        try {
+            const rawCode = $('#file-content').val();
+            const baseJson = JSON.parse(rawCode);
+            const previewJson = buildJsonFromAuthBuilder(JSON.parse(JSON.stringify(baseJson)));
+            const previewSection = {
+                InstanceIdentifier: previewJson.HPCConnectionFrameworkSettings?.ScriptsSettings?.InstanceIdentifierPath,
+                ExternalAuthenticationSettings: previewJson.ExternalAuthenticationSettings,
+                TokenExchangeTargets: previewJson.TokenExchangeTargets,
+                SshCaSettings: previewJson.SshCaSettings,
+                ExpirioSettings: previewJson.ExpirioSettings
+            };
+            $('#auth-builder-preview-code').text(JSON.stringify(previewSection, null, 2));
+        } catch (e) {
+            // Ignore preview render error if JSON parsing is in flux
+        }
+    }
+
+    function cleanTargetForOutput(t) {
+        const cleaned = {
+            Name: t.Name,
+            IsEnabled: t.IsEnabled,
+            Strategy: t.Strategy
+        };
+
+        if (t.Strategy === 'Rfc8693') {
+            if (t.Authority) cleaned.Authority = t.Authority;
+            if (t.TokenEndpoint) cleaned.TokenEndpoint = t.TokenEndpoint;
+            cleaned.ClientId = t.ClientId;
+            cleaned.ClientSecret = t.ClientSecret;
+            if (t.Audience) cleaned.Audience = t.Audience;
+            if (t.Scope) cleaned.Scope = t.Scope;
+            cleaned.GrantType = t.GrantType || "urn:ietf:params:oauth:grant-type:token-exchange";
+            cleaned.SubjectTokenType = t.SubjectTokenType || "urn:ietf:params:oauth:token-type:access_token";
+        } else if (t.Strategy === 'KeycloakBroker') {
+            cleaned.BrokerAlias = t.BrokerAlias;
+            if (t.Authority) cleaned.Authority = t.Authority;
+            cleaned.ClientId = t.ClientId;
+            cleaned.ClientSecret = t.ClientSecret;
+        } else if (t.Strategy === 'Expirio') {
+            cleaned.ExpirioProviderName = t.ExpirioProviderName;
+            if (t.ExpirioClientName) cleaned.ExpirioClientName = t.ExpirioClientName;
+        } else if (t.Strategy === 'ClientCredentials') {
+            if (t.Authority) cleaned.Authority = t.Authority;
+            if (t.TokenEndpoint) cleaned.TokenEndpoint = t.TokenEndpoint;
+            cleaned.ClientId = t.ClientId;
+            cleaned.ClientSecret = t.ClientSecret;
+            if (t.Audience) cleaned.Audience = t.Audience;
+            if (t.Scope) cleaned.Scope = t.Scope;
+        } else if (t.Strategy === 'Introspection') {
+            if (t.IntrospectionAuthority) cleaned.IntrospectionAuthority = t.IntrospectionAuthority;
+            if (t.IntrospectionEndpoint) cleaned.IntrospectionEndpoint = t.IntrospectionEndpoint;
+            cleaned.IntrospectionClientId = t.IntrospectionClientId;
+            cleaned.IntrospectionClientSecret = t.IntrospectionClientSecret;
+        }
+
+        if (t.IntrospectSubjectToken) {
+            cleaned.IntrospectSubjectToken = true;
+            if (t.IntrospectionAuthority) cleaned.IntrospectionAuthority = t.IntrospectionAuthority;
+            if (t.IntrospectionEndpoint) cleaned.IntrospectionEndpoint = t.IntrospectionEndpoint;
+            if (t.IntrospectionClientId) cleaned.IntrospectionClientId = t.IntrospectionClientId;
+            if (t.IntrospectionClientSecret) cleaned.IntrospectionClientSecret = t.IntrospectionClientSecret;
+        }
+
+        cleaned.SubjectTokenSource = t.SubjectTokenSource || 'incoming';
+        if (t.StoreAs) cleaned.StoreAs = t.StoreAs;
+        cleaned.AutoExchange = Boolean(t.AutoExchange);
+        cleaned.AutoExchangePhase = t.AutoExchangePhase || 'PostAuth';
+        if (t.AutoExchangeCondition) cleaned.AutoExchangeCondition = t.AutoExchangeCondition;
+        cleaned.ConnectionTimeoutSeconds = parseFloat(t.ConnectionTimeoutSeconds) || 15;
+
+        return cleaned;
+    }
+
+    function buildJsonFromAuthBuilder(baseJson) {
+        gatherAuthBuilderInputs();
+
+        // 1. ExternalAuthenticationSettings
+        baseJson.ExternalAuthenticationSettings = baseJson.ExternalAuthenticationSettings || {};
+        const ext = baseJson.ExternalAuthenticationSettings;
+        ext.BaseUrl = currentAuthData.baseUrl;
+        ext.Protocol = "openid-connect";
+        ext.RealmName = currentAuthData.realmName;
+        ext.ClientId = currentAuthData.clientId;
+        ext.SecretId = currentAuthData.secretId;
+        ext.ConnectionTimeout = 15;
+
+        const allowedClientsArr = currentAuthData.allowedClients.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        ext.AllowedClientIds = allowedClientsArr;
+        ext.HEAppEUserPrefix = currentAuthData.userPrefix;
+
+        // Role mapping
+        const roleMapObj = {};
+        currentAuthData.roleMappings.forEach(r => {
+            if (r.oidcRole.trim()) {
+                roleMapObj[r.oidcRole.trim()] = r.heappeRole;
+            }
+        });
+        ext.RoleMapping = roleMapObj;
+
+        // LexisAuthenticationConfiguration
+        ext.LexisAuthenticationConfiguration = ext.LexisAuthenticationConfiguration || {};
+        const lex = ext.LexisAuthenticationConfiguration;
+        lex.UseBearerAuth = currentAuthData.lexis.bearer;
+        lex.CheckCommandTemplatePermissions = currentAuthData.lexis.checkPerms;
+        lex.BaseAddress = currentAuthData.lexis.baseAddress;
+        lex.ApiVersion = currentAuthData.lexis.apiVersion;
+        lex.EndpointPrefix = "userorg";
+        lex.ExtendedUserInfoEndpoint = currentAuthData.lexis.userinfoEndpoint;
+        lex.ExtendedUserInfoV2Endpoint = currentAuthData.lexis.userinfoV2Endpoint;
+        lex.CommandTemplatePermissions = currentAuthData.lexis.cmdEndpoint;
+        lex.CommandTemplatePermissionsV2Endpoint = currentAuthData.lexis.cmdV2Endpoint;
+
+        // JwtTokenIntrospectionConfiguration
+        ext.JwtTokenIntrospectionConfiguration = ext.JwtTokenIntrospectionConfiguration || {};
+        const jwt = ext.JwtTokenIntrospectionConfiguration;
+        jwt.IsEnabled = currentAuthData.kcEnabled;
+        jwt.Authority = currentAuthData.authority;
+        jwt.ClientId = currentAuthData.clientId;
+        jwt.ClientSecret = currentAuthData.secretId;
+        jwt.RequireHttps = currentAuthData.requireHttps;
+        jwt.ValidateIssuerName = currentAuthData.validateIssuer;
+        jwt.ValidateEndpoints = currentAuthData.validateEndpoints;
+
+        // 2. TokenExchangeTargets
+        baseJson.TokenExchangeTargets = currentAuthData.targets.map(cleanTargetForOutput);
+
+        // 3. SshCaSettings
+        baseJson.SshCaSettings = baseJson.SshCaSettings || {};
+        baseJson.SshCaSettings.UseCertificateAuthorityForAuthentication = currentAuthData.sshca.enabled;
+        baseJson.SshCaSettings.UsePosixAccountFromCertificate = currentAuthData.sshca.posix;
+        baseJson.SshCaSettings.BaseUri = currentAuthData.sshca.baseUri;
+        baseJson.SshCaSettings.CAName = currentAuthData.sshca.caName;
+        baseJson.SshCaSettings.ConnectionTimeoutInSeconds = currentAuthData.sshca.timeout;
+
+        // 4. ExpirioSettings
+        baseJson.ExpirioSettings = baseJson.ExpirioSettings || {};
+        baseJson.ExpirioSettings.BaseUrl = currentAuthData.expirio.baseUrl;
+        baseJson.ExpirioSettings.ProviderName = currentAuthData.expirio.provider;
+        baseJson.ExpirioSettings.TokenName = currentAuthData.expirio.tokenName;
+        baseJson.ExpirioSettings.TimeoutSeconds = currentAuthData.expirio.timeout;
+        baseJson.ExpirioSettings.MaxRetries = currentAuthData.expirio.retries;
+
+        // 5. HEAppE Instance Identifier
+        if (currentAuthData.instanceIdentifier) {
+            baseJson.HPCConnectionFrameworkSettings = baseJson.HPCConnectionFrameworkSettings || {};
+            baseJson.HPCConnectionFrameworkSettings.ScriptsSettings = baseJson.HPCConnectionFrameworkSettings.ScriptsSettings || {};
+            baseJson.HPCConnectionFrameworkSettings.ScriptsSettings.InstanceIdentifierPath = currentAuthData.instanceIdentifier;
+            if (baseJson.ApplicationAPISettings && baseJson.ApplicationAPISettings.DeploymentSettings) {
+                baseJson.ApplicationAPISettings.DeploymentSettings.Name = currentAuthData.instanceIdentifier;
+            }
+        }
+
+        return baseJson;
+    }
+
+    // Apply button
+    $(document).on('click', '#btn-apply-auth-builder', function() {
+        try {
+            const rawCode = $('#file-content').val();
+            const baseJson = JSON.parse(rawCode);
+            const updatedJson = buildJsonFromAuthBuilder(baseJson);
+            const formatted = JSON.stringify(updatedJson, null, 2);
+
+            $('#file-content').val(formatted);
+            updateGutter();
+            validateCurrentFile();
+            if (treeEditor) treeEditor.set(updatedJson);
+
+            alert("Authentication and Token Exchange settings applied to the active configuration.\n\nRemember to click 'Save Settings' and then 'Restart Instance' to commit your changes.");
+        } catch (e) {
+            alert(`Failed to apply configuration: ${e.message}`);
+        }
+    });
+
+    // Preset selection
+    $(document).on('click', '#btn-apply-preset', function() {
+        const preset = $('#auth-preset-select').val();
+        if (!preset) {
+            alert('Please select a preset template first.');
+            return;
+        }
+
+        const confirmApply = confirm(`Are you sure you want to apply the '${preset}' template? This will replace your current Auth & Token Exchange form inputs.`);
+        if (!confirmApply) return;
+
+        if (preset === 'disabled') {
+            currentAuthData.kcEnabled = false;
+            currentAuthData.targets = [];
+            currentAuthData.sshca.enabled = false;
+        } else if (preset === 'keycloak-oidc') {
+            currentAuthData.kcEnabled = true;
+            currentAuthData.targets = [];
+            currentAuthData.roleMappings = [
+                { oidcRole: 'prj_write', heappeRole: 'Submitter' },
+                { oidcRole: 'prj_read', heappeRole: 'Reporter' },
+                { oidcRole: 'prj_list', heappeRole: 'Maintainer' },
+                { oidcRole: 'admin', heappeRole: 'Administrator' }
+            ];
+        } else if (preset === 'efp-flow') {
+            currentAuthData.kcEnabled = true;
+            currentAuthData.targets = [
+                {
+                    Name: 'idp',
+                    IsEnabled: true,
+                    Strategy: 'Expirio',
+                    ExpirioProviderName: 'efp',
+                    ExpirioClientName: '',
+                    IntrospectSubjectToken: true,
+                    IntrospectionAuthority: 'https://lexis/auth/realms/LEXIS_AAI',
+                    IntrospectionEndpoint: '',
+                    IntrospectionClientId: '<LEXIS_KEYCLOAK_CLIENT_ID>',
+                    IntrospectionClientSecret: '<LEXIS_KEYCLOAK_CLIENT_SECRET>',
+                    SubjectTokenSource: 'incoming',
+                    StoreAs: 'idp',
+                    AutoExchange: true,
+                    AutoExchangePhase: 'PreAuth',
+                    ConnectionTimeoutSeconds: 15
+                },
+                {
+                    Name: 'sshca',
+                    IsEnabled: true,
+                    Strategy: 'Rfc8693',
+                    Authority: 'https://aai.my-eurohpc.eu/proxy',
+                    ClientId: '<FIP_CLIENT_ID>',
+                    ClientSecret: '<FIP_CLIENT_SECRET>',
+                    GrantType: 'urn:ietf:params:oauth:grant-type:token-exchange',
+                    SubjectTokenType: 'urn:ietf:params:oauth:token-type:access_token',
+                    Audience: '<FIP_AUDIENCE>',
+                    SubjectTokenSource: 'idp',
+                    StoreAs: 'sshca',
+                    AutoExchange: true,
+                    AutoExchangePhase: 'PostAuth',
+                    AutoExchangeCondition: 'SshCaSettings:UseCertificateAuthorityForAuthentication',
+                    ConnectionTimeoutSeconds: 15
+                },
+                {
+                    Name: 'userorg',
+                    IsEnabled: false,
+                    Strategy: 'Rfc8693',
+                    ClientId: '',
+                    ClientSecret: '',
+                    Audience: 'userorg-service',
+                    SubjectTokenSource: 'idp',
+                    StoreAs: 'userorg',
+                    AutoExchange: true,
+                    AutoExchangePhase: 'PostAuth',
+                    ConnectionTimeoutSeconds: 15
+                }
+            ];
+            currentAuthData.sshca.enabled = true;
+            currentAuthData.expirio.baseUrl = 'https://expirio.heappe.eu/api';
+            currentAuthData.expirio.provider = 'efp';
+            currentAuthData.lexis.apiVersion = 'v2';
+        } else if (preset === 'keycloak-broker') {
+            currentAuthData.kcEnabled = true;
+            currentAuthData.targets = [
+                {
+                    Name: 'idp',
+                    IsEnabled: true,
+                    Strategy: 'KeycloakBroker',
+                    Authority: currentAuthData.authority || '',
+                    ClientId: 'heappe',
+                    ClientSecret: '',
+                    BrokerAlias: 'target-idp',
+                    SubjectTokenSource: 'incoming',
+                    StoreAs: 'idp',
+                    AutoExchange: true,
+                    AutoExchangePhase: 'PreAuth',
+                    ConnectionTimeoutSeconds: 15
+                },
+                {
+                    Name: 'sshca',
+                    IsEnabled: true,
+                    Strategy: 'Rfc8693',
+                    Authority: currentAuthData.authority || '',
+                    ClientId: 'heappe',
+                    ClientSecret: '',
+                    Audience: 'ssh-ca-service',
+                    SubjectTokenSource: 'idp',
+                    StoreAs: 'sshca',
+                    AutoExchange: true,
+                    AutoExchangePhase: 'PostAuth',
+                    AutoExchangeCondition: 'SshCaSettings:UseCertificateAuthorityForAuthentication',
+                    ConnectionTimeoutSeconds: 15
+                }
+            ];
+            currentAuthData.sshca.enabled = true;
+        } else if (preset === 'sshca-rfc8693') {
+            currentAuthData.kcEnabled = true;
+            currentAuthData.targets = [
+                {
+                    Name: 'sshca',
+                    IsEnabled: true,
+                    Strategy: 'Rfc8693',
+                    Authority: currentAuthData.authority || '',
+                    ClientId: currentAuthData.clientId || 'heappe',
+                    ClientSecret: currentAuthData.secretId || '',
+                    Audience: 'ssh-ca-service',
+                    SubjectTokenSource: 'incoming',
+                    StoreAs: 'sshca',
+                    AutoExchange: true,
+                    AutoExchangePhase: 'PostAuth',
+                    AutoExchangeCondition: 'SshCaSettings:UseCertificateAuthorityForAuthentication',
+                    ConnectionTimeoutSeconds: 15
+                }
+            ];
+            currentAuthData.sshca.enabled = true;
+        }
+
+        populateAuthBuilderInputs();
+        renderRoleMappings();
+        renderTargetsList();
+        updatePipelineDiagram();
+    });
+
+    // Test OIDC Modal trigger
+    $(document).on('click', '#btn-open-oidc-test-modal', function() {
+        gatherAuthBuilderInputs();
+        const authority = currentAuthData.authority || currentAuthData.baseUrl;
+        $('#modal-oidc-authority').val(authority);
+        $('#modal-oidc-result').hide().empty();
+        const modal = new bootstrap.Modal(document.getElementById('modal-test-oidc'));
+        modal.show();
+    });
+
+    $(document).on('click', '#btn-run-oidc-test', function() {
+        const authority = $('#modal-oidc-authority').val().trim();
+        const insecure = $('#modal-oidc-insecure').is(':checked');
+        const resDiv = $('#modal-oidc-result');
+
+        if (!authority) {
+            resDiv.html('<div class="alert alert-danger py-2 small">Authority URL is required.</div>').show();
+            return;
+        }
+
+        $('#test-spinner').show();
+        $('#btn-run-oidc-test').prop('disabled', true);
+        resDiv.hide().empty();
+
+        $.ajax({
+            url: window.location.href,
+            type: 'POST',
+            data: {
+                action: 'test_oidc',
+                authority: authority,
+                allow_insecure: insecure,
+                csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').first().val()
+            },
+            success: function(resp) {
+                $('#test-spinner').hide();
+                $('#btn-run-oidc-test').prop('disabled', false);
+
+                if (resp.status === 'success') {
+                    const d = resp.details || {};
+                    resDiv.html(`
+                        <div class="alert alert-success py-2 px-3 small border-0 shadow-sm mt-3">
+                            <div class="fw-bold mb-1"><i class="bi bi-check-circle me-1"></i>${escapeHtml(resp.message)}</div>
+                            <div class="mt-2 text-dark font-monospace" style="font-size: 11px;">
+                                <div><strong>Issuer:</strong> ${escapeHtml(d.issuer || 'N/A')}</div>
+                                <div><strong>Token Endpoint:</strong> ${escapeHtml(d.token_endpoint || 'N/A')}</div>
+                                <div><strong>UserInfo:</strong> ${escapeHtml(d.userinfo_endpoint || 'N/A')}</div>
+                                <div><strong>Introspection:</strong> ${escapeHtml(d.introspection_endpoint || 'N/A')}</div>
+                            </div>
+                        </div>
+                    `).show();
+                } else {
+                    resDiv.html(`
+                        <div class="alert alert-danger py-2 px-3 small border-0 shadow-sm mt-3">
+                            <i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(resp.message)}
+                        </div>
+                    `).show();
+                }
+            },
+            error: function(xhr) {
+                $('#test-spinner').hide();
+                $('#btn-run-oidc-test').prop('disabled', false);
+                const msg = xhr.responseJSON?.message || xhr.responseText || 'Server error';
+                resDiv.html(`
+                    <div class="alert alert-danger py-2 px-3 small border-0 shadow-sm mt-3">
+                        <i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(msg)}
+                    </div>
+                `).show();
+            }
+        });
+    });
+
+    // --- HEAppE Identifier Builder & NEXUS Routing Handlers ---
+    $(document).on('click', '.btn-cfg-ident-mode', function() {
+        $('.btn-cfg-ident-mode').removeClass('active');
+        $(this).addClass('active');
+        const mode = $(this).data('mode');
+        if (mode === 'formula') {
+            $('#cfg-ident-formula-block').slideDown(150);
+            $('#b-heappe-instance-identifier').prop('readonly', true);
+        } else {
+            $('#cfg-ident-formula-block').slideUp(150);
+            $('#b-heappe-instance-identifier').prop('readonly', false).focus();
+        }
+    });
+
+    $(document).on('input change', '.cfg-f-input', function() {
+        const s = $('#b-cfg-f-scope').val().trim() || 'core';
+        const e = $('#b-cfg-f-env').val().trim() || 'dev';
+        const p = $('#b-cfg-f-provider').val().trim() || 'it4i';
+        const i = $('#b-cfg-f-instance').val().trim() || 'develop';
+        const combined = `${s}_${e}_${p}_${i}`;
+        $('#b-heappe-instance-identifier').val(combined);
+        $('#cfg-ident-preview-badge').text(combined);
+        currentAuthData.instanceIdentifier = combined;
+        updatePipelineDiagram();
+    });
+
+    $(document).on('input change', '#b-heappe-instance-identifier', function() {
+        const val = $(this).val().trim();
+        $('#cfg-ident-preview-badge').text(val || 'none');
+        currentAuthData.instanceIdentifier = val;
+        const parsed = parseFormulaIdentifier(val);
+        $('#b-cfg-f-scope').val(parsed.scope);
+        $('#b-cfg-f-env').val(parsed.env);
+        $('#b-cfg-f-provider').val(parsed.provider);
+        $('#b-cfg-f-instance').val(parsed.instance);
+        updatePipelineDiagram();
+    });
+
+    $(document).on('click', '.cfg-ident-preset', function() {
+        const s = $(this).data('scope');
+        const e = $(this).data('env');
+        const p = $(this).data('provider');
+        const i = $(this).data('instance');
+        $('#b-cfg-f-scope').val(s);
+        $('#b-cfg-f-env').val(e);
+        $('#b-cfg-f-provider').val(p);
+        $('#b-cfg-f-instance').val(i);
+        const combined = `${s}_${e}_${p}_${i}`;
+        $('#b-heappe-instance-identifier').val(combined);
+        $('#cfg-ident-preview-badge').text(combined);
+        currentAuthData.instanceIdentifier = combined;
+        updatePipelineDiagram();
+    });
+
+    $(document).on('click', '#btn-copy-cfg-ident', function() {
+        const val = $('#b-heappe-instance-identifier').val().trim();
+        if (!val) return;
+        navigator.clipboard.writeText(val).then(() => {
+            const btn = $(this);
+            const origHtml = btn.html();
+            btn.html('<i class="bi bi-check-lg text-success"></i> Copied!');
+            setTimeout(() => btn.html(origHtml), 2000);
+        });
     });
 
     // Custom click handler for form tabs to ensure clickability on dynamic elements
@@ -765,7 +2523,7 @@ $(document).ready(function() {
                         } else if (status === 'done') {
                             $('#startup-phase').text('Waiting for HEAppE to come online…');
 
-                            const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                            const heappe = data.containers.find(c => c.service === 'heappe');
                             const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                             if (heappe) {
                                 $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
@@ -786,7 +2544,7 @@ $(document).ready(function() {
                     }
 
                     // Fallback to container-only polling
-                    const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                    const heappe = data.containers.find(c => c.service === 'heappe');
                     const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                     if (heappe) {
                         $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
@@ -952,10 +2710,57 @@ $(document).ready(function() {
     #form-tabs-list .nav-link.active:hover i {
         color: #fff !important;
     }
-    .btn-xs {
-        padding: 0.125rem 0.375rem;
-        font-size: 0.75rem;
-        border-radius: 0.25rem;
+    /* Auth & Token Exchange Builder Styles */
+    .target-card {
+        border-radius: 8px;
+        transition: box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    .target-card:hover {
+        border-color: #b6d4fe !important;
+        box-shadow: 0 4px 12px rgba(13, 110, 253, 0.08) !important;
+    }
+    .border-dashed {
+        border-style: dashed !important;
+    }
+    #auth-builder-tabs .nav-link {
+        color: #495057;
+        font-weight: 500;
+        border-radius: 6px 6px 0 0;
+    }
+    #auth-builder-tabs .nav-link.active {
+        color: #0d6efd;
+        border-bottom-color: #fff;
     }
 </style>
+
+<!-- Test OIDC Modal -->
+<div class="modal fade" id="modal-test-oidc" tabindex="-1" aria-labelledby="modalTestOidcLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-bottom py-2.5">
+                <h5 class="modal-title fs-6 fw-bold" id="modalTestOidcLabel"><i class="bi bi-broadcast me-2 text-info"></i>Test OIDC Discovery Connection</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold text-secondary mb-1">Authority URL</label>
+                    <input type="text" class="form-control form-control-sm" id="modal-oidc-authority" placeholder="https://keycloak.example.com/auth/realms/HEAppE">
+                    <div class="form-text small">Endpoint will test reaching <code>/.well-known/openid-configuration</code>.</div>
+                </div>
+                <div class="form-check form-switch mb-3">
+                    <input class="form-check-input" type="checkbox" id="modal-oidc-insecure">
+                    <label class="form-check-label small" for="modal-oidc-insecure">Allow Insecure / Self-Signed SSL Certificates</label>
+                </div>
+                <div id="modal-oidc-result" style="display: none;"></div>
+            </div>
+            <div class="modal-footer border-top py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-sm btn-info fw-bold" id="btn-run-oidc-test">
+                    <span id="test-spinner" class="spinner-border spinner-border-sm me-1" style="display: none;"></span>
+                    <i class="bi bi-send me-1"></i>Run Connection Test
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock content %}

@@ -3,12 +3,33 @@ from heappe_ui.view.imports import *
 from heappe_ui.view.utils import *
 from heappe_ui.view.utils import _create_payload, _handle_api_call
 from heappe_ui.view.clusters import *
-from heappe_ui.view.qscheduler_deploy import setup_qscheduler_view, setup_qscheduler_status_view, setup_qscheduler_defaults_view, qscheduler_manage_view
+from heappe_ui.view.qscheduler_deploy import (qscheduler_page, qscheduler_local_docker_api, qscheduler_git_refs_api, qscheduler_operation_status_api,
+                                              qscheduler_deploy_api, qscheduler_register_api, qscheduler_heappe_info_api,
+                                              qscheduler_live_api, qscheduler_update_api, qscheduler_restart_api,
+                                              qscheduler_undeploy_api, qscheduler_assign_api, qscheduler_unassign_api,
+                                              qscheduler_notifier_remove_api, qscheduler_admin_token_api,
+                                              qscheduler_shared_db_api, qscheduler_backups_api,
+                                              qscheduler_migrate_to_shared_api, qscheduler_network_proposal_api,
+                                              qscheduler_migrate_network_api, qscheduler_aliases_api,
+                                              qscheduler_log_level_api, qscheduler_serve_options_api,
+                                              qscheduler_users_api)
+from heappe_ui.view.qscheduler_prefix import qscheduler_prefix_plan_api, qscheduler_prefix_migrate_api
+from heappe_ui.view.qscheduler_recovery import (qscheduler_archive_api, qscheduler_unarchive_api,
+                                                qscheduler_cascade_preview_api, qscheduler_cascade_delete_api,
+                                                qscheduler_restore_info_api, qscheduler_restore_api)
+from heappe_ui.view.qscheduler_cluster_health import (qscheduler_cluster_status_api, qscheduler_cluster_recreate_notifier_api,
+                                                      qscheduler_cluster_recover_machine_api, qscheduler_cluster_move_api,
+                                                      qscheduler_cluster_rename_api, qscheduler_cluster_time_limits_api)
+from heappe_ui.view.qscheduler_machines import (qscheduler_machine_defaults_api, qscheduler_machine_list_api,
+                                                qscheduler_machine_add_api, qscheduler_machine_remove_api)
+from heappe_ui.view.qscheduler_suspension import (dashboard_qscheduler_machines_api, qscheduler_cluster_suspension_api,
+                                                  qscheduler_cluster_pulse_api)
 from heappe_ui.view.queue import *
 from heappe_ui.view.file_transfer_method import *
 from heappe_ui.view.project import *
 from heappe_ui.view.accounting import *
 from heappe_ui.view.deploy import *
+from heappe_ui.view.extra_hosts import instance_extra_hosts_view
 from heappe_ui.view.command_template import *
 from heappe_ui.view.adaptor_user import *
 from heappe_ui.view.backups import *
@@ -889,19 +910,35 @@ def instance_credentials_list(request, pk=None):
         action = request.POST.get("action")
         if action == "bulk_delete":
             selected_ids = request.POST.getlist("selected_ids")
+            stop_containers = request.POST.get('stop_containers', 'true') in ['true', '1', 'on', True]
+            delete_files = request.POST.get('delete_files', 'true') in ['true', '1', 'on', True]
             success_count = 0
             for cid in selected_ids:
                 try:
                     instance = InstanceCredentials.objects.get(pk=int(cid))
-                    if request.session.get("chosen_instance") == instance.instance_name:
+                    inst_name = instance.instance_name
+                    if request.session.get("chosen_instance") == inst_name:
                         request.session.pop("chosen_instance", None)
                         request.session.pop("heappe_session_code", None)
+                        request.session.pop("heappe_host", None)
+                        request.session.pop("heappe_host_url", None)
+                        request.session.pop("heappe_use_api_key", None)
+                        request.session.pop("heappe_last_auth", None)
+                        request.session.pop("heappe_last_failed_auth", None)
+                    teardown_instance(
+                        instance_name=inst_name,
+                        stop_containers=stop_containers,
+                        delete_files=delete_files
+                    )
                     instance.delete()
                     success_count += 1
                 except Exception as e:
                     print(f"Error deleting credential {cid}: {e}")
             if success_count > 0:
-                messages.success(request, f"Successfully deleted {success_count} instance credential(s).")
+                msg = f"Successfully deleted {success_count} instance credential(s)."
+                if stop_containers:
+                    msg += " Associated Docker containers were stopped and shut down."
+                messages.success(request, msg)
             if len(selected_ids) > success_count:
                 messages.error(request, f"Failed to delete {len(selected_ids) - success_count} instance credential(s).")
             return redirect("instance_credentials_list")
@@ -969,8 +1006,32 @@ def instance_credentials_delete(request, pk):
     instance = get_object_or_404(InstanceCredentials, pk=pk)
     if request.method == 'POST':
         instance_name = instance.instance_name
+        stop_containers = request.POST.get('stop_containers', 'true') in ['true', '1', 'on', True]
+        delete_files = request.POST.get('delete_files', 'true') in ['true', '1', 'on', True]
+
+        teardown_result = teardown_instance(
+            instance_name=instance_name,
+            stop_containers=stop_containers,
+            delete_files=delete_files
+        )
+
+        if request.session.get("chosen_instance") == instance_name:
+            request.session.pop("chosen_instance", None)
+            request.session.pop("heappe_session_code", None)
+            request.session.pop("heappe_host", None)
+            request.session.pop("heappe_host_url", None)
+            request.session.pop("heappe_use_api_key", None)
+            request.session.pop("heappe_last_auth", None)
+            request.session.pop("heappe_last_failed_auth", None)
+
         instance.delete()
-        messages.success(request, f"Instance '{instance_name}' deleted successfully.")
+
+        msg = f"Instance '{instance_name}' deleted successfully."
+        if stop_containers:
+            msg += " Associated Docker containers were stopped and shut down."
+        if delete_files and teardown_result.get("files_removed"):
+            msg += " Deployment files on disk were cleaned up."
+        messages.success(request, msg)
         return redirect('instance_credentials_list')
     return render(request, 'instance_credentials.html', {'object_list': InstanceCredentials.objects.all()})
 
@@ -1019,7 +1080,18 @@ def instance_health_check_api(request, pk):
         instance_identifier = "unknown"
         if health_info and hasattr(health_info, 'instance_identifier') and health_info.instance_identifier:
             instance_identifier = health_info.instance_identifier
-            
+
+        if instance_identifier in ("unknown", "", None):
+            try:
+                base_path = "/opt/heappe-deployment/"
+                appsettings_path = os.path.join(base_path, instance.instance_name, "app", "confs", "appsettings.json")
+                if os.path.exists(appsettings_path):
+                    with open(appsettings_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                    instance_identifier = cfg.get("HPCConnectionFrameworkSettings", {}).get("ScriptsSettings", {}).get("InstanceIdentifierPath") or instance.instance_name
+            except Exception:
+                pass
+
         return JsonResponse({
             "status": "online",
             "version": version,
@@ -1030,10 +1102,21 @@ def instance_health_check_api(request, pk):
             "message": "Healthy"
         })
     except Exception as e:
+        instance_identifier = None
+        try:
+            base_path = "/opt/heappe-deployment/"
+            appsettings_path = os.path.join(base_path, instance.instance_name, "app", "confs", "appsettings.json")
+            if os.path.exists(appsettings_path):
+                with open(appsettings_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                instance_identifier = cfg.get("HPCConnectionFrameworkSettings", {}).get("ScriptsSettings", {}).get("InstanceIdentifierPath") or instance.instance_name
+        except Exception:
+            pass
+
         return JsonResponse({
             "status": "offline",
             "version": None,
-            "instance_identifier": None,
+            "instance_identifier": instance_identifier,
             "database_healthy": False,
             "vault_healthy": False,
             "latency_ms": None,
@@ -1373,6 +1456,62 @@ def trigger_deployment_direct(request):
         return JsonResponse({"status": "error", "message": f"Fatal error launching script: {e}"}, status=500)
 
 
+@require_http_methods(["GET"])
+def system_update_status_api(request):
+    """API endpoint to poll the status of the admin panel deployment/update."""
+    log_file_paths = [
+        "/var/log/deploy_adminpanel.log",
+        os.path.join(settings.BASE_DIR, "deploy_adminpanel.log"),
+    ]
+
+    log_content = ""
+    for path in log_file_paths:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = f.readlines()
+                    log_content = "".join(lines[-300:])
+                break
+            except Exception:
+                pass
+
+    last_start_idx = log_content.rfind("=== START DEPLOYMENT")
+    current_run = log_content[last_start_idx:] if last_start_idx != -1 else log_content
+
+    is_process_running = False
+    try:
+        ps_out = subprocess.check_output(["pgrep", "-f", "deploy.sh"]).decode().strip()
+        is_process_running = bool(ps_out)
+    except Exception:
+        is_process_running = False
+
+    if is_process_running:
+        is_running = True
+        is_success = False
+        is_failed = False
+    else:
+        is_failed = ("FAILED" in current_run) or ("ERROR: Step failed" in current_run)
+        is_success = not is_failed and (
+            ("=== SUCCESS ===" in current_run)
+            or ("static files copied" in current_run)
+            or ("collectstatic" in current_run)
+        )
+        is_running = False
+
+    response = JsonResponse({
+        "status": "ok",
+        "is_running": is_running,
+        "is_success": is_success,
+        "is_failed": is_failed,
+        "logs": current_run,
+        "current_commit": getattr(settings, "GIT_VERSION", ""),
+    })
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    return response
+
+
 import os
 import re
 from datetime import datetime
@@ -1436,43 +1575,97 @@ def get_lines_backwards(file_path):
 
 
 def parse_json_log_line(line, service="API"):
+    if not line or line[0] != '{' or line[-1] != '}':
+        return None
     try:
         data = json.loads(line)
         if not isinstance(data, dict):
             return None
         
-        timestamp_str = data.get('timestamp')
-        if timestamp_str:
-            timestamp_str = timestamp_str.replace('T', ' ').split('.')[0].rstrip('Z')
+        # Support various casing and Serilog/OTel timestamp keys
+        raw_ts = (
+            data.get('timestamp') or 
+            data.get('Timestamp') or 
+            data.get('@t') or 
+            data.get('time') or 
+            data.get('Time') or 
+            data.get('date') or 
+            data.get('Date')
+        )
+        timestamp_str = None
+        if raw_ts and isinstance(raw_ts, str):
+            cleaned_ts = raw_ts.replace('T', ' ').rstrip('Z')
+            if '.' in cleaned_ts:
+                cleaned_ts = cleaned_ts.split('.')[0]
+            if '+' in cleaned_ts:
+                cleaned_ts = cleaned_ts.split('+')[0]
+            timestamp_str = cleaned_ts.strip()
             
-        level = data.get('level', 'INFO').upper()
+        raw_level = (
+            data.get('level') or 
+            data.get('Level') or 
+            data.get('@l') or 
+            data.get('severity') or 
+            'INFO'
+        )
+        level = str(raw_level).upper()
+        if 'INFO' in level:
+            level = 'INFO'
+        elif 'WARN' in level:
+            level = 'WARN'
+        elif 'ERR' in level or 'CRIT' in level or 'FATAL' in level:
+            level = 'ERROR'
+        elif 'DEBUG' in level or 'TRACE' in level or 'VERBOSE' in level:
+            level = 'DEBUG'
         
-        request_id = data.get('requestId')
+        request_id = (
+            data.get('requestId') or 
+            data.get('RequestId') or 
+            data.get('TraceId') or 
+            data.get('traceId')
+        )
+        if not request_id and isinstance(data.get('Properties'), dict):
+            request_id = data['Properties'].get('RequestId') or data['Properties'].get('TraceId')
         conn_str = f"[{request_id}]" if request_id else "[-]"
         
-        user_name = data.get('userName')
-        user_id = data.get('userId')
+        user_name = data.get('userName') or data.get('UserName')
+        user_id = data.get('userId') or data.get('UserId')
+        if not (user_name or user_id) and isinstance(data.get('Properties'), dict):
+            user_name = data['Properties'].get('UserName')
+            user_id = data['Properties'].get('UserId')
         if user_name or user_id:
             user_str = f"{user_name or ''}({user_id or ''})".strip()
         else:
             user_str = "-"
             
-        logger = data.get('logger', '')
-        message = data.get('message', '')
-        exception = data.get('exception', '')
+        logger = data.get('logger') or data.get('Logger') or data.get('SourceContext') or ''
+        message = (
+            data.get('message') or 
+            data.get('Message') or 
+            data.get('@m') or 
+            data.get('messageTemplate') or 
+            data.get('MessageTemplate') or 
+            data.get('@mt') or 
+            ''
+        )
+        exception = data.get('exception') or data.get('Exception') or ''
         
         if exception:
-            full_msg = f"{message}\n{exception}"
+            full_msg = f"{message}\n{exception}" if message else str(exception)
         else:
-            full_msg = message
+            full_msg = str(message)
             
-        formatted_content = f"{level}  {timestamp_str}  {conn_str}  {user_str}  {logger} - {full_msg}"
+        formatted_content = f"{level}  {timestamp_str or ''}  {conn_str}  {user_str}  {logger} - {full_msg}"
         
         return {
             'timestamp_str': timestamp_str,
             'level': level,
             'service': service,
-            'content': formatted_content
+            'content': formatted_content,
+            'conn': conn_str,
+            'user': user_str,
+            'logger': logger,
+            'msg': full_msg
         }
     except Exception:
         return None
@@ -1485,12 +1678,20 @@ def parse_log_line(line, service="API"):
         if parsed_json:
             return parsed_json
 
-    timestamp_match = re.search(r'(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})', line)
-    timestamp_str = timestamp_match.group(1) if timestamp_match else None
+    ts_match = re.search(r'(\d{4}[-_/]\d{2}[-_/]\d{2}[T\s]\d{2}:\d{2}:\d{2})', line)
+    if ts_match:
+        timestamp_str = ts_match.group(1).replace('T', ' ').replace('/', '-').replace('_', '-')
+    else:
+        time_only_match = re.search(r'\b(\d{2}:\d{2}:\d{2})\b', line)
+        if time_only_match:
+            timestamp_str = time_only_match.group(1)
+        else:
+            timestamp_str = None
 
     level = "INFO"
-    if timestamp_match:
-        prefix = line[:timestamp_match.start()].strip().upper()
+    if ts_match or timestamp_str:
+        prefix_end = ts_match.start() if ts_match else line.find(timestamp_str)
+        prefix = line[:prefix_end].strip().upper() if prefix_end > 0 else ""
         if "ERROR" in prefix or "ERR" in prefix:
             level = "ERROR"
         elif "WARN" in prefix:
@@ -1500,55 +1701,127 @@ def parse_log_line(line, service="API"):
         elif "INFO" in prefix:
             level = "INFO"
         else:
-            if "ERROR" in line or "Exception" in line:
+            upper_line = line.upper()
+            if "ERROR" in upper_line or "EXCEPTION" in upper_line:
                 level = "ERROR"
-            elif "WARN" in line:
+            elif "WARN" in upper_line:
                 level = "WARN"
-            elif "DEBUG" in line:
+            elif "DEBUG" in upper_line:
                 level = "DEBUG"
     else:
-        if "ERROR" in line or "Exception" in line:
+        upper_line = line.upper()
+        if "ERROR" in upper_line or "EXCEPTION" in upper_line:
             level = "ERROR"
-        elif "WARN" in line:
+        elif "WARN" in upper_line:
             level = "WARN"
-        elif "DEBUG" in line:
+        elif "DEBUG" in upper_line:
             level = "DEBUG"
 
     svc = service
     if "datastaging" in line.lower():
         svc = "DATASTAGING"
 
+    dash_idx = line.find(' - ')
+    if dash_idx != -1 and dash_idx < 150:
+        msg = line[dash_idx + 3:]
+        header = line[:dash_idx]
+    else:
+        header = line
+        msg = line
+
+    tokens = header.split()
+    conn_str = "[-]"
+    user_str = "-"
+    logger = ""
+    for t in tokens:
+        if t.startswith('[') and t.endswith(']'):
+            conn_str = t
+        elif '(' in t and t.endswith(')'):
+            user_str = t
+        elif '.' in t or 'Controller' in t:
+            logger = t
+
+    if dash_idx == -1 and conn_str != "[-]":
+        conn_idx = line.find(conn_str)
+        if conn_idx != -1:
+            candidate_msg = line[conn_idx + len(conn_str):].strip()
+            if candidate_msg:
+                msg = candidate_msg
+
     return {
         'timestamp_str': timestamp_str,
         'level': level,
         'service': svc,
-        'content': line
+        'content': line,
+        'conn': conn_str,
+        'user': user_str,
+        'logger': logger,
+        'msg': msg
     }
 
 
 def matches_filters(parsed, level_filter, search_query, time_from, time_to):
-    if level_filter and parsed['level'] != level_filter:
+    if not level_filter and not search_query and not time_from and not time_to:
+        return True
+
+    if level_filter and parsed.get('level') != level_filter:
         return False
         
-    if parsed['timestamp_str']:
-        try:
-            time_part = parsed['timestamp_str'].split(' ')[1]
-            if time_from and time_part < (time_from + ":00"):
-                return False
-            if time_to and time_part > (time_to + ":59"):
-                return False
-        except Exception:
-            pass
+    if time_from or time_to:
+        ts = parsed.get('timestamp_str')
+        if not ts:
+            return False
+
+        time_match = re.search(r'(\d{2}:\d{2}(?::\d{2})?)', str(ts))
+        if not time_match:
+            return False
+
+        time_part = time_match.group(1)
+        if len(time_part) == 5:
+            time_part += ":00"
+
+        tf = (time_from + ":00") if (time_from and len(time_from) == 5) else (time_from or "")
+        tt = (time_to + ":59") if (time_to and len(time_to) == 5) else (time_to or "")
+
+        if tf and time_part < tf:
+            return False
+        if tt and time_part > tt:
+            return False
             
     if search_query:
-        if search_query.lower() not in parsed['content'].lower():
+        content = parsed.get('content', '')
+        if search_query not in content.lower():
             return False
             
     return True
 
 
+def is_rotated_log_file(filepath):
+    """Determine if a file is an archived/rotated log file (e.g. ends with .1, .2, etc.)."""
+    return bool(re.search(r'\.(?:log|json)\.\d+(?:\.gz)?$', os.path.basename(filepath), re.IGNORECASE))
+
+
+def log_file_sort_key(file_entry):
+    """Sort log files chronologically: older rotated files first, active file last."""
+    filepath = file_entry[0] if isinstance(file_entry, tuple) else file_entry
+    fname = os.path.basename(filepath)
+    mtime = 0
+    try:
+        mtime = os.path.getmtime(filepath)
+    except OSError:
+        pass
+
+    rot_match = re.search(r'\.(?:log|json)\.(\d+)$', fname, re.IGNORECASE)
+    seq_match = re.search(r'[_\-](\d+)\.(?:log|json)', fname, re.IGNORECASE)
+
+    rot_num = int(rot_match.group(1)) if rot_match else 0
+    seq_num = int(seq_match.group(1)) if seq_match else 0
+
+    return (mtime, -rot_num, seq_num, filepath)
+
+
 def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, search_query=None, time_from=None, time_to=None):
-    timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+    timestamp_re = re.compile(r'(?:\d{4}[-_/]\d{2}[-_/]\d{2}[T\s])?\d{2}:\d{2}:\d{2}')
     entries_count = 0
     
     normalized = []
@@ -1560,6 +1833,8 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
             normalized.append((item, svc))
 
     all_entries = []
+
+    buffer_limit = max_entries + 100
 
     for log_path, default_svc in reversed(normalized):
         if not log_path or not os.path.exists(log_path):
@@ -1578,13 +1853,13 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                     all_entries.append(parsed)
                     file_entries_count += 1
                     entries_count += 1
-                    if entries_count >= max_entries * 2 or file_entries_count >= max_entries:
+                    if entries_count >= buffer_limit or file_entries_count >= max_entries:
                         break
         else:
             current_entry_lines = []
             
             for line in get_lines_backwards(log_path):
-                ts_match = timestamp_re.search(line[:30])
+                ts_match = timestamp_re.search(line[:35])
                 
                 if ts_match:
                     current_entry_lines.append(line)
@@ -1596,7 +1871,7 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                         all_entries.append(parsed)
                         file_entries_count += 1
                         entries_count += 1
-                        if entries_count >= max_entries * 2 or file_entries_count >= max_entries:
+                        if entries_count >= buffer_limit or file_entries_count >= max_entries:
                             break
                 else:
                     current_entry_lines.append(line)
@@ -1608,6 +1883,9 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
                     all_entries.append(parsed)
                     entries_count += 1
 
+        if entries_count >= buffer_limit:
+            break
+
     all_entries.sort(key=lambda x: x.get('timestamp_str') or '', reverse=True)
     for entry in all_entries[:max_entries]:
         yield entry
@@ -1615,7 +1893,8 @@ def get_log_entries_backwards(log_paths, max_entries=1000, level_filter=None, se
 
 def get_log_file_paths(instance, date_str, service="API"):
     base_logs_dir = f"/opt/heappe-deployment/{instance}/app/logs"
-    date_formatted = date_str.replace("-", "_")
+    date_formatted_us = date_str.replace("-", "_")
+    date_formatted_hy = date_str.replace("_", "-")
 
     if not os.path.exists(base_logs_dir):
         return []
@@ -1623,7 +1902,10 @@ def get_log_file_paths(instance, date_str, service="API"):
     service_upper = (service or "API").upper()
     matching_files = []
 
-    date_pattern = re.compile(rf"^(?:[a-zA-Z0-9_\-]*?_)?{re.escape(date_formatted)}\.(?:log|json)(?:\.\d+)?$", re.IGNORECASE)
+    date_pattern = re.compile(
+        rf"^(?:[a-zA-Z0-9_\-]*?_)?(?:{re.escape(date_formatted_us)}|{re.escape(date_formatted_hy)})(?:[_\-]\d+)?\.(?:log|json)(?:\.\d+)?$",
+        re.IGNORECASE
+    )
 
     def scan_dir(dir_path, svc_tag):
         if os.path.exists(dir_path):
@@ -1680,7 +1962,7 @@ def get_log_file_paths(instance, date_str, service="API"):
                 tag_name = entry.upper()
                 scan_dir(full_path, tag_name)
 
-    matching_files.sort(key=lambda x: os.path.getmtime(x[0]))
+    matching_files.sort(key=log_file_sort_key)
     return matching_files
 
 
@@ -1694,24 +1976,45 @@ def get_log_file_path(instance, date_str, service="API"):
 @login_required
 def log_viewer_view(request):
     instance = request.session.get('chosen_instance', 'develop')
-    today = datetime.now().strftime('%Y-%m-%d')
-    selected_date = request.GET.get('date', today)
-    time_from = request.GET.get('time_from', '')
-    time_to = request.GET.get('time_to', '')
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    selected_date = request.GET.get('date', today) or today
+    time_from = request.GET.get('time_from', '').strip()
+    time_to = request.GET.get('time_to', '').strip()
     search_query = request.GET.get('search', '').lower()
     level_filter = request.GET.get('level', '').upper()
     service_filter = request.GET.get('service', 'API').upper()
+
+    limit_param = request.GET.get('limit', '1000')
+    try:
+        limit = int(limit_param)
+        if limit not in [100, 300, 500, 1000, 2500, 5000]:
+            limit = 1000
+    except (ValueError, TypeError):
+        limit = 1000
+
+    effective_time_to = time_to
+    if time_from and not effective_time_to:
+        try:
+            parts = time_from.split(':')
+            h = int(parts[0]) + 1
+            m = int(parts[1])
+            if h >= 24:
+                effective_time_to = "23:59"
+            else:
+                effective_time_to = f"{h:02d}:{m:02d}"
+        except Exception:
+            effective_time_to = ""
 
     log_paths = get_log_file_paths(instance, selected_date, service=service_filter)
     
     try:
         entries = list(get_log_entries_backwards(
             log_paths=log_paths,
-            max_entries=1000,
+            max_entries=limit,
             level_filter=level_filter,
             search_query=search_query,
             time_from=time_from,
-            time_to=time_to
+            time_to=effective_time_to
         ))
         entries.reverse()
     except Exception as e:
@@ -1729,22 +2032,29 @@ def log_viewer_view(request):
         'logs_count': len(entries),
         'selected_date': selected_date,
         'time_from': time_from,
-        'time_to': time_to,
+        'time_to': time_to or effective_time_to,
         'search_query': search_query,
         'level_filter': level_filter,
         'service_filter': service_filter,
-        'instance': instance
+        'instance': instance,
+        'limit': limit
     })
+
+
+MAX_LOG_ENTRIES_PER_PULL = 300
+MAX_CHUNK_READ_BYTES = 512 * 1024  # 512 KB per file read chunk
 
 
 @login_required
 def fetch_new_logs(request):
     instance = request.session.get('chosen_instance', 'develop')
-    today = datetime.now().strftime('%Y-%m-%d')
+    today = datetime.utcnow().strftime('%Y-%m-%d')
     selected_date = request.GET.get('date', today) or today
     service_filter = request.GET.get('service', 'API').upper()
     level_filter = request.GET.get('level', '').upper()
     search_query = request.GET.get('search', '').lower()
+    time_from = request.GET.get('time_from', '').strip()
+    time_to = request.GET.get('time_to', '').strip()
 
     raw_offset = request.GET.get('offset', '0')
     is_dict_offset = False
@@ -1793,6 +2103,9 @@ def fetch_new_logs(request):
     updated_offsets = dict(offset_dict)
 
     for item in log_paths:
+        if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL:
+            break
+
         log_path = item[0] if isinstance(item, tuple) else item
         svc_tag = item[1] if isinstance(item, tuple) else 'API'
 
@@ -1800,7 +2113,18 @@ def fetch_new_logs(request):
             continue
 
         file_size = os.path.getsize(log_path)
-        cur_file_offset = offset_dict.get(log_path, num_offset if not is_dict_offset else 0)
+
+        if log_path in offset_dict:
+            cur_file_offset = offset_dict[log_path]
+        else:
+            if is_dict_offset:
+                # If offset_dict is active and a rotated file appears, do NOT read from 0!
+                if is_rotated_log_file(log_path):
+                    cur_file_offset = file_size
+                else:
+                    cur_file_offset = 0
+            else:
+                cur_file_offset = num_offset
 
         # File was truncated or rolled
         if cur_file_offset > file_size:
@@ -1810,9 +2134,11 @@ def fetch_new_logs(request):
             updated_offsets[log_path] = file_size
             continue
 
+        bytes_to_read = min(file_size - cur_file_offset, MAX_CHUNK_READ_BYTES)
+
         with open(log_path, 'rb') as f:
             f.seek(cur_file_offset)
-            chunk = f.read()
+            chunk = f.read(bytes_to_read)
 
         if not chunk:
             updated_offsets[log_path] = cur_file_offset
@@ -1824,7 +2150,7 @@ def fetch_new_logs(request):
         if is_json:
             lines = decoded.splitlines(keepends=True)
             processed_bytes = 0
-            for line in lines:
+            for idx, line in enumerate(lines):
                 line_stripped = line.strip()
                 if not line_stripped:
                     processed_bytes += len(line.encode('utf-8'))
@@ -1832,11 +2158,15 @@ def fetch_new_logs(request):
                 parsed = parse_json_log_line(line_stripped, service=svc_tag)
                 if parsed:
                     processed_bytes += len(line.encode('utf-8'))
-                    if matches_filters(parsed, level_filter, search_query, None, None):
+                    if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                         new_entries.append(parsed)
+                    if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL:
+                        break
                 else:
                     # Incomplete JSON line at boundary, leave for next read
-                    break
+                    if idx == len(lines) - 1 and not chunk.endswith(b'\n'):
+                        break
+                    processed_bytes += len(line.encode('utf-8'))
             updated_offsets[log_path] = cur_file_offset + processed_bytes
         else:
             last_newline = chunk.rfind(b'\n')
@@ -1849,26 +2179,31 @@ def fetch_new_logs(request):
                 decoded_lines = decoded.splitlines(keepends=True)
 
             current_entry_lines = []
-            timestamp_re = re.compile(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}')
+            timestamp_re = re.compile(r'(?:\d{4}[-_/]\d{2}[-_/]\d{2}[T\s])?\d{2}:\d{2}:\d{2}')
 
+            lines_consumed_bytes = 0
             for line in decoded_lines:
-                if timestamp_re.search(line[:30]):
+                line_len = len(line.encode('utf-8'))
+                if timestamp_re.search(line[:35]):
                     if current_entry_lines:
                         entry_text = "".join(current_entry_lines)
                         parsed = parse_log_line(entry_text, service=svc_tag)
-                        if matches_filters(parsed, level_filter, search_query, None, None):
+                        if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                             new_entries.append(parsed)
                     current_entry_lines = [line]
                 else:
                     current_entry_lines.append(line)
+                lines_consumed_bytes += line_len
+                if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL:
+                    break
 
-            if current_entry_lines:
+            if current_entry_lines and len(new_entries) < MAX_LOG_ENTRIES_PER_PULL:
                 entry_text = "".join(current_entry_lines)
                 parsed = parse_log_line(entry_text, service=svc_tag)
-                if matches_filters(parsed, level_filter, search_query, None, None):
+                if matches_filters(parsed, level_filter, search_query, time_from, time_to):
                     new_entries.append(parsed)
 
-            updated_offsets[log_path] = cur_file_offset + consumed_bytes
+            updated_offsets[log_path] = cur_file_offset + (lines_consumed_bytes if len(new_entries) >= MAX_LOG_ENTRIES_PER_PULL else consumed_bytes)
 
     new_entries.sort(key=lambda x: x.get('timestamp_str') or '')
 

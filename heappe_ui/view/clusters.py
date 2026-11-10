@@ -168,6 +168,14 @@ FALLBACK_CUSTOM_CONFIG_METADATA = [
     {
         "Id": 29, "Name": "ExpirioSecretName", "DefaultValue": "",
         "SupportedSchedulerTypes": [{"Id": 16, "Name": "FirecRestSlurm"}]
+    },
+    {
+        "Id": 30, "Name": "QSchedulerNotifyToken", "DefaultValue": "",
+        "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
+    },
+    {
+        "Id": 31, "Name": "QSchedulerNotifier", "DefaultValue": "",
+        "SupportedSchedulerTypes": [{"Id": 32, "Name": "QScheduler"}]
     }
 ]
 
@@ -520,6 +528,9 @@ def cluster_create(request: HttpRequest) -> HttpResponse:
                 else:
                     payload_data["CustomConfiguration"] = {}
 
+        if payload_data.get("SchedulerType") == 32 and clean_ver(deployed_version) < [6, 6, 0]:
+            messages.error(request, f"QScheduler clusters require HEAppE 6.6.0 or newer (instance runs {deployed_version or 'an unknown version'}).")
+            return redirect("cluster_create")
         payload = _create_payload(request.session_code, payload_data)
         result = _handle_api_call(
             request,

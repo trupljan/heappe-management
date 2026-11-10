@@ -1,0 +1,60 @@
+flowchart TD
+    A([Start: update QScheduler instance in place<br/>same container name, static IP, networks, aliases, ADMIN_TOKEN]) --> P1
+
+    subgraph PREP["1 · Prepare (no impact on running work)"]
+        P1["Build the new image from git ref<br/>or check that the chosen image exists"] --> P2["Collect every cluster on this instance<br/>(all assigned HEAppE instances, all machines)"]
+        P2 --> P3["Remember machines that are already suspended<br/>(they stay suspended after the update)"]
+    end
+
+    P3 --> D1
+
+    subgraph DRAIN["2 · Drain the whole instance"]
+        D1["POST /machine/{m}/suspension on every machine<br/>cancel = none, message = 'Update in progress'"] --> D2["HEAppE check for every cluster:<br/>ListDetailedJobsForAdmin (non-terminal jobs)<br/>ListSessions state=Open"]
+        D2 --> D3{"All tasks terminal,<br/>no open sessions?"}
+        D3 -- "no, wait / refresh" --> D2
+        D3 -- "force (warning: running tasks fail,<br/>charged estimated time)" --> D4["POST suspension again with cancel = all<br/>(re-suspend: DELETE + POST)"]
+        D4 --> D2
+        D3 -- "abort" --> R0["DELETE the suspensions set in step 2<br/>(nothing changed)"]
+    end
+
+    D3 -- yes --> B1
+
+    subgraph BACKUP["3 · Backup"]
+        B1["pg_dump -Fc of the instance database<br/>→ host directory shared with the VM<br/>/opt/heappe-deployment/qscheduler-backups/&lt;instance&gt;/&lt;timestamp&gt;.dump"] --> B2{"Dump OK<br/>(pg_restore --list)?"}
+    end
+
+    B2 -- no --> R0
+    B2 -- yes --> U1
+
+    subgraph UPDATE["4 · Replace the container"]
+        U1["Stop old container, rename it to &lt;name&gt;-old-&lt;id&gt;"] --> U2["Create the new container from the new image<br/>same env, labels, static IP, network aliases,<br/>extra hosts, restart policy, healthcheck"]
+        U2 --> U3["Start → schema migrations run automatically on connect"]
+    end
+
+    U3 --> V1
+
+    subgraph VERIFY["5 · Verify"]
+        V1["/health = 200 and version = expected"] --> V2["Admin API (admin proxy): machines and notifiers listed,<br/>suspensions still present"]
+        V2 --> V3{"OK?"}
+    end
+
+    V3 -- no --> RB1
+
+    subgraph ROLLBACK["Rollback (tasks created on the new version are discarded)"]
+        RB1["Stop and remove the new container"] --> RB2["pg_restore --clean --if-exists from the backup<br/>(the old binary cannot read a migrated schema)"]
+        RB2 --> RB3["Rename &lt;name&gt;-old-&lt;id&gt; back, start it, wait for /health"]
+        RB3 --> RB4["DELETE the suspensions set in step 2"]
+    end
+
+    V3 -- yes --> F1
+
+    subgraph FINISH["6 · Resume"]
+        F1["DELETE the suspensions set in step 2<br/>(machines suspended before the update stay suspended)"] --> F2["Check from each HEAppE container:<br/>GET http://&lt;alias&gt;:&lt;port&gt;/machine/{m}/about"]
+        F2 --> F3{"OK?"}
+        F3 -- no --> RB1
+        F3 -- yes --> F4["Remove &lt;name&gt;-old-&lt;id&gt; · keep the previous image and the backup<br/>(Rollback stays possible until the backup is deleted)"]
+    end
+
+    F4 --> Z([Done])
+    R0 --> Z0([Aborted, instance unchanged])
+    RB4 --> Z1([Rolled back to the previous version])

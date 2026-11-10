@@ -65,6 +65,7 @@ class HeappeSessionMiddleware:
             "/reconnect/",
             "/api/check-updates/",
             "/api/deploy-direct/",
+            "/api/system-update-status/",
             "/fetch-branches/",
         ]):
             return process_response(self.get_response(request))

@@ -1,0 +1,210 @@
+<!--
+Machine actions of a cluster's QScheduler machine: suspend / resume, allow / forbid pulse-level tasks.
+Opened with window.qsSuspend.open(clusterId, action, onDone); action: suspend | resume | pulse_on | pulse_off.
+A machine shared with other clusters needs an explicit confirmation.
+-->
+<div class="modal fade" id="qsSuspendModal" tabindex="-1" aria-labelledby="qs-sus-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content border-0 shadow-lg rounded-3" id="qsSuspendForm" novalidate>
+            <div class="modal-header bg-light border-bottom py-3 px-4">
+                <h5 class="modal-title h6 fw-bold mb-0" id="qs-sus-title">Suspend machine</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body px-4 py-3 small">
+                <div id="qs-sus-loading"><span class="spinner-border spinner-border-sm me-1" style="width: .7rem; height: .7rem;"></span>Checking which clusters use this machine...</div>
+                <div id="qs-sus-content" class="d-none">
+                    <p class="mb-2" id="qs-sus-target"></p>
+
+                    <div class="qs-sus-mode" data-mode="suspend">
+                        <p class="text-muted mb-3">While suspended, QScheduler rejects every new task and session on this machine with the message below, for <strong>every cluster that uses it</strong>. The suspension stays in place after QScheduler restarts.</p>
+                        <label class="form-label fw-semibold mb-1" for="qs-sus-message">Reason</label>
+                        <textarea class="form-control form-control-sm mb-1" id="qs-sus-message" name="message" rows="2" maxlength="512" placeholder="e.g. Calibration in progress"></textarea>
+                        <div class="form-text mt-0 mb-3">Shown to users whose jobs are rejected. At most 512 characters.</div>
+
+                        <div class="fw-semibold mb-1">Existing work on the machine</div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="cancel" id="qs-sus-cancel-none" value="none" checked>
+                            <label class="form-check-label" for="qs-sus-cancel-none"><strong>Let it finish</strong> &ndash; queued and running tasks and open sessions continue.</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="cancel" id="qs-sus-cancel-waiting" value="waiting">
+                            <label class="form-check-label" for="qs-sus-cancel-waiting"><strong>Cancel waiting work</strong> &ndash; tasks not yet sent to the backend fail and all sessions close; running tasks continue.</label>
+                        </div>
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="radio" name="cancel" id="qs-sus-cancel-all" value="all">
+                            <label class="form-check-label text-danger" for="qs-sus-cancel-all"><strong>Cancel everything</strong> &ndash; running tasks fail too and their cancellation is requested from the backend.</label>
+                        </div>
+                    </div>
+
+                    <div class="qs-sus-mode" data-mode="resume">
+                        <p class="mb-1" id="qs-sus-current"></p>
+                        <p class="text-muted mb-0">The machine accepts new tasks and sessions again. Work that failed or closed because of the suspension stays so.</p>
+                    </div>
+
+                    <div class="qs-sus-mode" data-mode="pulse_on pulse_off">
+                        <p class="mb-2" id="qs-sus-pulse-text"></p>
+                        <div class="alert alert-warning border-0 rounded-3 mb-2"><i class="bi bi-exclamation-triangle me-1"></i>QScheduler <strong>restarts the machine</strong> to apply the setting: queued tasks are kept and tasks on the backend re-attached, but an <strong>open session is closed</strong> (its unfinished tasks are cancelled) and new tasks are rejected for a moment. All other machine settings stay as they are.</div>
+                        <div class="d-none" id="qs-sus-iqm">
+                            <label class="form-label fw-semibold mb-1" for="qs-sus-iqm-token">IQM token</label>
+                            <input type="password" class="form-control form-control-sm mb-1" id="qs-sus-iqm-token" autocomplete="off" placeholder="token of the IQM server">
+                            <div class="form-text mt-0">QScheduler needs the backend token to save the machine's settings and never returns it, and HEAppE Management does not store it.</div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning border-warning-subtle rounded-3 mt-3 mb-0 d-none" id="qs-sus-shared">
+                        <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle me-1"></i><span id="qs-sus-shared-title"></span></div>
+                        <ul class="mb-2 ps-3" id="qs-sus-users"></ul>
+                        <div class="mb-2 d-none" id="qs-sus-unchecked"></div>
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" id="qs-sus-ack">
+                            <label class="form-check-label fw-semibold" for="qs-sus-ack" id="qs-sus-ack-label"></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-danger border-0 rounded-3 mt-3 mb-0 d-none" id="qs-sus-error"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-3 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qs-sus-submit" disabled>Suspend</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+window.qsSuspend = (function () {
+    const csrf = '{{ csrf_token }}';
+    const suspensionUrl = id => "{% url 'qscheduler_cluster_suspension' 0 %}".replace('/0/', '/' + id + '/');
+    const pulseUrl = id => "{% url 'qscheduler_cluster_pulse' 0 %}".replace('/0/', '/' + id + '/');
+    const esc = v => String(v ?? '-').replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
+    const $ = id => document.getElementById(id);
+    let ctx = null;
+
+    // title, button class, button html, busy text, verb (for the shared-machine warning)
+    const ACTIONS = {
+        suspend:   ['Suspend machine', 'btn-warning', '<i class="bi bi-pause-circle me-1"></i>Suspend', 'Suspending...', 'suspending'],
+        resume:    ['Resume machine', 'btn-success', '<i class="bi bi-play-circle me-1"></i>Resume', 'Resuming...', 'resuming'],
+        pulse_on:  ['Allow pulse-level tasks', 'btn-primary', '<i class="bi bi-activity me-1"></i>Allow pulse tasks', 'Applying...', 'changing'],
+        pulse_off: ['Forbid pulse-level tasks', 'btn-secondary', '<i class="bi bi-slash-circle me-1"></i>Forbid pulse tasks', 'Applying...', 'changing'],
+    };
+    const isPulse = () => ctx && ctx.action.startsWith('pulse_');
+
+    const parse = r => r.json().catch(() => ({ status: 'error', message: 'Server returned HTTP ' + r.status + '.' }));
+
+    function showError(text) {
+        $('qs-sus-error').textContent = text;
+        $('qs-sus-error').classList.toggle('d-none', !text);
+    }
+
+    function updateSubmit() {
+        const needsAck = !$('qs-sus-shared').classList.contains('d-none');
+        const needsToken = isPulse() && !$('qs-sus-iqm').classList.contains('d-none') && !$('qs-sus-iqm-token').value.trim();
+        $('qs-sus-submit').disabled = !ctx || !ctx.status || (needsAck && !$('qs-sus-ack').checked) || needsToken;
+    }
+
+    function showShared(s) {
+        const box = $('qs-sus-shared');
+        const users = s.users || [];
+        const unchecked = s.unchecked || [];
+        if (!s.shared) { box.classList.add('d-none'); updateSubmit(); return; }
+        const verb = ACTIONS[ctx.action][4];
+        $('qs-sus-shared-title').textContent = 'Machine "' + s.machine + '" is shared: ' + verb +
+            ' it affects every cluster below' + (unchecked.length ? ', and possibly more.' : '.');
+        $('qs-sus-users').innerHTML = users.map(u => '<li><code>' + esc(u.heappe) + '</code> &rsaquo; ' + esc(u.cluster) +
+            (u.cluster_id === ctx.clusterId && u.heappe === s.heappe ? ' <span class="text-muted">(this cluster)</span>' : '') + '</li>').join('');
+        const un = $('qs-sus-unchecked');
+        un.innerHTML = unchecked.length ? 'Could not be checked (their clusters may use the machine too): ' +
+            unchecked.map(u => '<code>' + esc(u.heappe) + '</code> <span class="text-muted">(' + esc(u.error) + ')</span>').join(', ') : '';
+        un.classList.toggle('d-none', !unchecked.length);
+        $('qs-sus-ack').checked = false;
+        $('qs-sus-ack-label').textContent = 'I understand that ' + verb + ' the machine affects all these clusters.';
+        box.classList.remove('d-none');
+        updateSubmit();
+    }
+
+    /** action: 'suspend' | 'resume' | 'pulse_on' | 'pulse_off'; onDone(result) is called after success. */
+    function open(clusterId, action, onDone) {
+        ctx = { clusterId, action, onDone, status: null };
+        const a = ACTIONS[action];
+        $('qs-sus-title').textContent = a[0];
+        const btn = $('qs-sus-submit');
+        btn.className = 'btn btn-sm fw-bold rounded-3 shadow-sm px-4 py-2 ' + a[1];
+        btn.innerHTML = a[2];
+        document.querySelectorAll('.qs-sus-mode').forEach(el => el.classList.toggle('d-none', !el.dataset.mode.split(' ').includes(action)));
+        $('qs-sus-message').value = '';
+        $('qs-sus-cancel-none').checked = true;
+        $('qs-sus-iqm-token').value = '';
+        $('qs-sus-iqm').classList.add('d-none');
+        $('qs-sus-shared').classList.add('d-none');
+        $('qs-sus-loading').classList.remove('d-none');
+        $('qs-sus-content').classList.add('d-none');
+        showError('');
+        updateSubmit();
+        bootstrap.Modal.getOrCreateInstance($('qsSuspendModal')).show();
+
+        fetch(suspensionUrl(clusterId)).then(parse).then(s => {
+            $('qs-sus-loading').classList.add('d-none');
+            if (s.status !== 'success') { showError(s.message || 'The machine cannot be checked.'); return; }
+            if (!s.can_act) { showError(s.error || 'This machine cannot be changed.'); return; }
+            if (isPulse() && s.pulse_access === null) { showError('Pulse-level tasks need QScheduler 0.2.2 or newer.'); return; }
+            ctx.status = s;
+            $('qs-sus-target').innerHTML = 'Machine <code>' + esc(s.machine) + '</code> (' + esc(s.backend || '?') + ' backend) on QScheduler <strong>' +
+                esc(s.instance && s.instance.name) + '</strong> (cluster ' + esc(s.cluster) + ').';
+            const sus = s.suspension;
+            $('qs-sus-current').innerHTML = sus ? 'Suspended since ' + esc(new Date(sus.suspended_at).toLocaleString()) +
+                ': <em>' + esc(sus.message) + '</em>' : 'The machine is not suspended.';
+            $('qs-sus-pulse-text').innerHTML = action === 'pulse_on'
+                ? 'The machine will accept <strong>pulse-level tasks</strong> (<code>kind=pulse</code>, e.g. IQM Pulla <code>RunDefinition</code>s) besides circuits.'
+                : 'The machine will accept <strong>circuits only</strong>; new pulse-level tasks are rejected (HTTP 422).';
+            $('qs-sus-iqm').classList.toggle('d-none', !(isPulse() && s.backend === 'iqm'));
+            $('qs-sus-content').classList.remove('d-none');
+            showShared(s);
+        }).catch(() => { $('qs-sus-loading').classList.add('d-none'); showError('Network error.'); });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        $('qs-sus-ack').addEventListener('change', updateSubmit);
+        $('qs-sus-iqm-token').addEventListener('input', updateSubmit);
+        $('qsSuspendForm').addEventListener('submit', e => {
+            e.preventDefault();
+            if (!ctx || !ctx.status) return;
+            const btn = $('qs-sus-submit');
+            const html = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>' + ACTIONS[ctx.action][3];
+            showError('');
+            const confirmShared = !$('qs-sus-shared').classList.contains('d-none') && $('qs-sus-ack').checked;
+            let url, data;
+            if (isPulse()) {
+                url = pulseUrl(ctx.clusterId);
+                data = { enabled: ctx.action === 'pulse_on', iqm_token: $('qs-sus-iqm-token').value.trim(), confirm_shared: confirmShared };
+            } else {
+                url = suspensionUrl(ctx.clusterId);
+                data = { action: ctx.action, confirm_shared: confirmShared };
+                if (ctx.action === 'suspend') {
+                    data.message = $('qs-sus-message').value.trim();
+                    data.cancel = document.querySelector('#qsSuspendForm input[name="cancel"]:checked').value;
+                }
+            }
+            fetch(url, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            }).then(parse).then(r => {
+                btn.innerHTML = html;
+                if (r.status === 'confirm') {          // shared since the dialog was opened: confirm first
+                    ctx.status = Object.assign(ctx.status, r, { shared: true });
+                    showShared(ctx.status);
+                    showError(r.message);
+                    return;
+                }
+                if (r.status !== 'success') { updateSubmit(); showError(r.message || 'Failed.'); return; }
+                bootstrap.Modal.getOrCreateInstance($('qsSuspendModal')).hide();
+                if (ctx.onDone) ctx.onDone(r);
+            }).catch(() => { btn.innerHTML = html; updateSubmit(); showError('Network error.'); });
+        });
+    });
+
+    return { open, esc };
+})();
+</script>

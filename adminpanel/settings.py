@@ -89,6 +89,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'django.middleware.gzip.GZipMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -204,6 +205,11 @@ LOGGING = {
 }
 
 # Email Configurations from environment variables
+# QScheduler: internal database networks get a small subnet from this private range (Docker's default address pools
+# hand out /16 or /20 subnets and can run out).
+QSCHEDULER_NETWORK_POOL = os.getenv('QSCHEDULER_NETWORK_POOL', '10.213.0.0/16')
+QSCHEDULER_NETWORK_PREFIX = int(os.getenv('QSCHEDULER_NETWORK_PREFIX', 29))   # /29: 6 addresses
+
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend')
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'localhost')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', 25))

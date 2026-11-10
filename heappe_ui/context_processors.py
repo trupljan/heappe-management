@@ -285,9 +285,11 @@ def middleware_update_renderer(request):
 
     is_v6_4_0_plus = False
     is_v6_5_0_plus = False
+    is_v6_6_0_plus = False   # QScheduler features
     if deployed_version:
         is_v6_4_0_plus = (clean_ver(deployed_version) >= [6, 4, 0])
         is_v6_5_0_plus = (clean_ver(deployed_version) >= [6, 5, 0])
+        is_v6_6_0_plus = (clean_ver(deployed_version) >= [6, 6, 0])
 
     last_failed_auth = request.session.get("heappe_last_failed_auth", 0)
     cooldown_remaining = 0
@@ -305,6 +307,7 @@ def middleware_update_renderer(request):
         'cache_status': cache_status,
         'is_v6_4_0_plus': is_v6_4_0_plus,
         'is_v6_5_0_plus': is_v6_5_0_plus,
+        'is_v6_6_0_plus': is_v6_6_0_plus,
         'jaeger_url': jaeger_url,
         'jaeger_port': jaeger_port,
         'otel_disabled': otel_disabled,

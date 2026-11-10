@@ -1,0 +1,249 @@
+<!-- QScheduler operation progress (shared by the QScheduler page and the Clusters page) -->
+<div class="modal fade" id="qsProgressModal" tabindex="-1" aria-labelledby="qsProgressLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3 overflow-hidden">
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="qsProgressLabel">
+                    <i class="bi bi-cpu"></i><span id="qs-progress-title">QScheduler operation</span>
+                </h5>
+            </div>
+            <div class="modal-body p-4">
+                <div class="text-center mb-3" id="qs-progress-spinner">
+                    <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                    <p class="text-muted mt-2 small" id="qs-progress-hint">Working... Image builds compile QScheduler from source and can take several minutes.</p>
+                </div>
+                <div id="qs-progress-success" class="alert alert-success border-0 rounded-3 small mb-3 d-none">
+                    <h6 class="alert-heading fw-bold d-flex align-items-center gap-2"><i class="bi bi-check-circle-fill"></i><span id="qs-progress-success-title">Done</span></h6>
+                    <div class="bg-white p-3 rounded border border-success-subtle font-monospace text-dark mt-2" id="qs-progress-success-details"></div>
+                </div>
+                <div id="qs-progress-error" class="alert alert-danger border-0 rounded-3 small mb-3 d-none">
+                    <h6 class="alert-heading fw-bold"><i class="bi bi-exclamation-octagon-fill me-1"></i>Operation failed</h6>
+                    <div id="qs-progress-error-text"></div>
+                    <button type="button" class="btn btn-sm btn-warning fw-bold mt-2 d-none" id="qs-progress-token-btn"><i class="bi bi-key me-1"></i>Fix admin token...</button>
+                </div>
+                <label class="form-label fw-bold text-secondary mb-2 small"><i class="bi bi-journal-text me-1"></i>Logs:</label>
+                <pre id="qs-progress-logs" class="p-3 mb-0 rounded text-light bg-dark font-monospace" style="height: 300px; overflow-y: auto; font-size: 12px; line-height: 1.5; white-space: pre-wrap; border: 1px solid #343a40;"></pre>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4 d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2 d-none" id="qs-progress-close" data-bs-dismiss="modal">Close</button>
+                <a href="#" class="btn btn-success btn-sm fw-bold rounded-3 shadow-sm px-3 py-2 d-none" id="qs-progress-link"></a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Admin token of a QScheduler instance (QScheduler >= 0.2.1 is managed only over its admin API) -->
+<div class="modal fade" id="qsAdminTokenModal" tabindex="-1" aria-labelledby="qsAdminTokenLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg rounded-3">
+            <div class="modal-header bg-light py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsAdminTokenLabel"><i class="bi bi-key me-2 text-primary"></i>Admin token &ndash; <span class="font-monospace" id="qs-tok-name"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="small text-muted mb-3">HEAppE Management manages machines and notifiers of QScheduler 0.2.1+ only over its admin API,
+                    through an admin proxy on <code>127.0.0.1</code>, using the service's <code>ADMIN_TOKEN</code>. The token is stored encrypted.</p>
+                <div id="qs-tok-problem" class="alert alert-warning border-0 rounded-3 small d-none"></div>
+                <div id="qs-tok-msg" class="alert border-0 rounded-3 small d-none"></div>
+
+                <div class="border rounded-3 p-3 mb-3">
+                    <div class="fw-bold small mb-1"><i class="bi bi-eye me-1"></i>Current token</div>
+                    <div class="form-text small mb-2">To manage the same QScheduler from another HEAppE Management, enter this token there (Register existing &rarr; Admin token).</div>
+                    <div class="input-group input-group-sm">
+                        <input type="text" class="form-control font-monospace" id="qs-tok-value" placeholder="hidden" readonly autocomplete="off">
+                        <button type="button" class="btn btn-outline-secondary" id="qs-tok-show"><i class="bi bi-eye me-1"></i>Show</button>
+                        <button type="button" class="btn btn-outline-secondary" id="qs-tok-copy" disabled><i class="bi bi-clipboard me-1"></i>Copy</button>
+                    </div>
+                </div>
+
+                <div class="border rounded-3 p-3 mb-3">
+                    <div class="fw-bold small mb-1"><i class="bi bi-pencil me-1"></i>Set token</div>
+                    <div class="form-text small mb-2">E.g. the token shown by another HEAppE Management that manages this QScheduler. It is checked against the service when the admin proxy exists.</div>
+                    <div class="input-group input-group-sm">
+                        <input type="password" class="form-control font-monospace" id="qs-tok-new" placeholder="ADMIN_TOKEN of the service" autocomplete="off">
+                        <button type="button" class="btn btn-primary fw-semibold" id="qs-tok-save">Save</button>
+                    </div>
+                </div>
+
+                <div class="border border-danger-subtle rounded-3 p-3" id="qs-tok-regen-box">
+                    <div class="fw-bold small mb-1 text-danger"><i class="bi bi-arrow-repeat me-1"></i>Regenerate token</div>
+                    <div class="small mb-2">Recreates the QScheduler container with a new <code>ADMIN_TOKEN</code> (short downtime).
+                        <strong>Other HEAppE Management instances that manage this QScheduler lose admin access</strong> until they get the new token.</div>
+                    <div class="form-check small mb-2">
+                        <input class="form-check-input" type="checkbox" id="qs-tok-regen-ack">
+                        <label class="form-check-label" for="qs-tok-regen-ack">I understand; other admin panels need the new token.</label>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-danger fw-semibold" id="qs-tok-regen" disabled>Regenerate</button>
+                </div>
+                <div class="small text-muted d-none" id="qs-tok-noregen">This instance is reached over SSH into the container: set <code>ADMIN_TOKEN</code> in the service yourself and store it with <strong>Set token</strong>.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+window.qsUtil = (function () {
+    const esc = v => String(v ?? '-').replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
+    const csrf = '{{ csrf_token }}';
+
+    function postJson(url, data) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf, 'Content-Type': 'application/json' },
+            body: JSON.stringify(data || {})
+        }).then(r => r.json().catch(() => ({ status: 'error', message: 'Server returned HTTP ' + r.status + '.' })));
+    }
+
+    function getJson(url) {
+        return fetch(url).then(r => r.json().catch(() => ({ status: 'error', message: 'Server returned HTTP ' + r.status + '.' })));
+    }
+
+    // Spinner inside a button while something loads; returns a restore function.
+    function setButtonLoading(btn, text) {
+        const html = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + text;
+        return () => { btn.disabled = false; btn.innerHTML = html; };
+    }
+
+    let pollTimer = null;
+    let modal = null;
+    let skipReload = false;
+
+    /**
+     * Shows the progress modal and polls the operation status.
+     * opts: { title, hint, successTitle, details(result) -> html, link(result) -> {href, text} | null, reloadOnClose }
+     */
+    function track(opts) {
+        const el = document.getElementById('qsProgressModal');
+        modal = modal || new bootstrap.Modal(el);
+        const $ = id => document.getElementById(id);
+        $('qs-progress-title').textContent = opts.title || 'QScheduler operation';
+        $('qs-progress-hint').textContent = opts.hint || 'Working...';
+        $('qs-progress-logs').textContent = 'Starting...';
+        $('qs-progress-spinner').classList.remove('d-none');
+        ['qs-progress-success', 'qs-progress-error', 'qs-progress-close', 'qs-progress-link'].forEach(id => $(id).classList.add('d-none'));
+        skipReload = false;
+        modal.show();
+        clearInterval(pollTimer);
+        pollTimer = setInterval(() => {
+            getJson("{% url 'qscheduler_operation_status' %}").then(d => {
+                const logEl = $('qs-progress-logs');
+                logEl.textContent = d.logs || 'Waiting for logs...';
+                logEl.scrollTop = logEl.scrollHeight;
+                if (d.is_running) return;
+                clearInterval(pollTimer);
+                $('qs-progress-spinner').classList.add('d-none');
+                $('qs-progress-close').classList.remove('d-none');
+                const r = d.result || {};
+                if (d.success) {
+                    $('qs-progress-success-title').textContent = opts.successTitle || 'Done';
+                    $('qs-progress-success-details').innerHTML = opts.details ? opts.details(r, esc) : '';
+                    $('qs-progress-success').classList.remove('d-none');
+                    const link = opts.link ? opts.link(r) : null;
+                    if (link) {
+                        $('qs-progress-link').href = link.href;
+                        $('qs-progress-link').textContent = link.text;
+                        $('qs-progress-link').classList.remove('d-none');
+                    }
+                } else {
+                    $('qs-progress-error-text').textContent = d.error || 'Operation failed. See the logs.';
+                    $('qs-progress-error').classList.remove('d-none');
+                    const tokErr = r.admin_token_error;
+                    const tokBtn = $('qs-progress-token-btn');
+                    tokBtn.classList.toggle('d-none', !tokErr);
+                    tokBtn.onclick = tokErr ? () => {
+                        skipReload = true;          // the token dialog opens instead (it reloads after a change)
+                        modal.hide();
+                        adminToken(tokErr.instance_id, tokErr.instance_name, tokErr.can_regenerate, tokErr.message, opts.reloadOnClose !== false);
+                    } : null;
+                }
+                if (opts.reloadOnClose !== false) {
+                    el.addEventListener('hidden.bs.modal', () => { if (!skipReload) location.reload(); }, { once: true });
+                }
+            }).catch(err => console.error('QScheduler status poll failed:', err));
+        }, 1500);
+    }
+
+    // ---- admin token dialog ----
+    const tokenUrl = id => "{% url 'qscheduler_admin_token' 0 %}".replace('/0/', '/' + id + '/');
+    let tokenInst = null;
+    let tokenChanged = false;
+    let reloadAfterToken = false;
+
+    function tokenMsg(ok, text) {
+        const el = document.getElementById('qs-tok-msg');
+        el.className = 'alert border-0 rounded-3 small ' + (ok ? 'alert-success' : 'alert-danger');
+        el.textContent = text;
+    }
+
+    /** Opens the admin token dialog of an instance; `problem` (text) explains why it was opened. */
+    function adminToken(id, name, canRegenerate, problem, reloadIfChanged) {
+        const $ = i => document.getElementById(i);
+        tokenInst = { id, name };
+        tokenChanged = false;
+        reloadAfterToken = reloadIfChanged !== false;
+        $('qs-tok-name').textContent = name || ('#' + id);
+        $('qs-tok-value').value = '';
+        $('qs-tok-copy').disabled = true;
+        $('qs-tok-new').value = '';
+        $('qs-tok-regen-ack').checked = false;
+        $('qs-tok-regen').disabled = true;
+        $('qs-tok-msg').classList.add('d-none');
+        $('qs-tok-problem').textContent = problem || '';
+        $('qs-tok-problem').classList.toggle('d-none', !problem);
+        $('qs-tok-regen-box').classList.toggle('d-none', !canRegenerate);
+        $('qs-tok-noregen').classList.toggle('d-none', !!canRegenerate);
+        bootstrap.Modal.getOrCreateInstance($('qsAdminTokenModal')).show();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const $ = i => document.getElementById(i);
+        if (!$('qsAdminTokenModal')) return;
+        $('qs-tok-show').addEventListener('click', ev => {
+            const done = setButtonLoading(ev.currentTarget, 'Loading');
+            postJson(tokenUrl(tokenInst.id), { action: 'show' }).then(d => {
+                done();
+                if (d.status === 'success') {
+                    $('qs-tok-value').value = d.token;
+                    $('qs-tok-copy').disabled = false;
+                } else {
+                    tokenMsg(false, d.message || 'The token could not be read.');
+                }
+            });
+        });
+        $('qs-tok-copy').addEventListener('click', () => {
+            navigator.clipboard.writeText($('qs-tok-value').value).then(() => tokenMsg(true, 'Token copied to the clipboard.'));
+        });
+        $('qs-tok-save').addEventListener('click', ev => {
+            const done = setButtonLoading(ev.currentTarget, 'Saving');
+            postJson(tokenUrl(tokenInst.id), { action: 'set', token: $('qs-tok-new').value }).then(d => {
+                done();
+                tokenMsg(d.status === 'success', d.message || 'Saving failed.');
+                if (d.status === 'success') {
+                    $('qs-tok-new').value = '';
+                    $('qs-tok-problem').classList.add('d-none');
+                    tokenChanged = true;
+                }
+            });
+        });
+        $('qsAdminTokenModal').addEventListener('hidden.bs.modal', () => {
+            if (tokenChanged && reloadAfterToken) location.reload();
+        });
+        $('qs-tok-regen-ack').addEventListener('change', ev => { $('qs-tok-regen').disabled = !ev.target.checked; });
+        $('qs-tok-regen').addEventListener('click', ev => {
+            const done = setButtonLoading(ev.currentTarget, 'Starting');
+            postJson(tokenUrl(tokenInst.id), { action: 'regenerate' }).then(d => {
+                done();
+                if (d.status !== 'success') { tokenMsg(false, d.message || 'Could not start.'); return; }
+                bootstrap.Modal.getOrCreateInstance($('qsAdminTokenModal')).hide();
+                track({ title: 'Regenerate admin token of ' + tokenInst.name, hint: 'Recreating the QScheduler container with a new ADMIN_TOKEN...',
+                        successTitle: 'Admin token regenerated',
+                        details: () => 'Give the new token (Admin token... &rarr; Show) to other HEAppE Management instances that manage this QScheduler.' });
+            });
+        });
+    });
+
+    return { esc, postJson, getJson, setButtonLoading, track, adminToken };
+})();
+</script>

@@ -10,3 +10,7 @@ __pycache__/
 py4heappe/heappe_v6/
 heappe_v6_temp/
 metadata_last_modified.txt
+# coverage.py data
+.coverage
+.coverage.*
+htmlcov/

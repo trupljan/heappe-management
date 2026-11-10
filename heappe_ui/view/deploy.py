@@ -8,10 +8,12 @@ RESTART_STATES_LOCK = threading.Lock()
 from .imports import *
 from .utils import _create_payload, _handle_api_call, login_view, login_required, clean_ver
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import render, redirect
+from django.contrib import messages
 from django.urls import reverse
 import docker
 import subprocess
+import shutil
 import os
 from ..DeployService import HEAppEDeployService, HEAppEConfig
 
@@ -136,6 +138,160 @@ def get_container_details(container):
         'started_at': container.attrs['State']['StartedAt'][:19] if container.attrs['State']['StartedAt'] else 'N/A'
     }
 
+# Log lines of HEAppE meaning it could not reach SQL Server while starting (e.g. it started before SQL Server was
+# ready after a restart of all containers, a Docker restart or an unpause). HEAppE does not retry after that, so
+# restarting the heappe container once SQL Server is healthy is the fix.
+HEAPPE_DB_STARTUP_ERRORS = (
+    "pre-login handshake",
+    "A network-related or instance-specific error occurred while establishing a connection to SQL Server",
+    "Server is in script upgrade mode",
+)
+
+
+def _health(container):
+    return ((container.attrs.get('State') or {}).get('Health') or {}).get('Status', '')
+
+
+def detect_heappe_db_startup_issue(project_containers):
+    """
+    {'container_id', 'container_name', 'mssql_ready', 'error'} when the heappe container runs, Docker reports it
+    unhealthy and its log since the last start shows it could not connect to SQL Server; otherwise None.
+    While HEAppE is still 'starting' nothing is reported: it retries for a while and may still come up.
+    """
+    by_service = {c.labels.get('com.docker.compose.service'): c for c in project_containers}
+    heappe, mssql = by_service.get('heappe'), by_service.get('mssql')
+    if not heappe or heappe.status != 'running' or _health(heappe) != 'unhealthy':
+        return None
+    started = (heappe.attrs.get('State') or {}).get('StartedAt') or ''
+    try:
+        from datetime import datetime
+        since = datetime.fromisoformat(started[:19]) if started else None
+        logs = heappe.logs(since=since, tail=3000) if since else heappe.logs(tail=3000)
+        logs = logs.decode('utf-8', 'replace')
+    except Exception:
+        return None
+    error = next((line.strip() for line in logs.splitlines()
+                  if any(p in line for p in HEAPPE_DB_STARTUP_ERRORS)), None)
+    if not error:
+        return None
+    mssql_ready = bool(mssql) and mssql.status == 'running' and _health(mssql) in ('healthy', '')
+    return {
+        'container_id': heappe.id,
+        'container_name': heappe.name,
+        'mssql_name': mssql.name if mssql else '',
+        'mssql_ready': mssql_ready,
+        'error': error[:300],
+    }
+
+
+# Container cards on the Containers tab, by compose service: (title, section, icon).
+CONTAINER_SERVICES = {
+    'heappe': ("HEAppE API", 'api', 'bi-hdd-network'),
+    'datastagingapi': ("Data Staging API", 'api', 'bi-cloud-arrow-up'),
+    'mssql': ("SQL Server", 'db', 'bi-database'),
+    'vault': ("Vault", 'infra', 'bi-safe'),
+    'vaultagent': ("Vault Agent", 'infra', 'bi-key'),
+    'sshagent': ("SSH Agent", 'infra', 'bi-shield-lock'),
+    'otel-collector': ("OpenTelemetry Collector", 'telemetry', 'bi-broadcast'),
+    'jaeger': ("Jaeger", 'telemetry', 'bi-activity'),
+    'heappe-init': ("HEAppE init", 'jobs', 'bi-file-earmark-check'),
+    'vault_init': ("Vault init", 'jobs', 'bi-safe2'),
+    'vault_unseal': ("Vault unseal", 'jobs', 'bi-unlock'),
+    'otel-collector-init': ("OpenTelemetry init", 'jobs', 'bi-folder-check'),
+}
+
+CONTAINER_SECTIONS = [
+    ('api', "API Services", 'bi-cpu text-primary', ""),
+    ('db', "Database Services", 'bi-database text-info', ""),
+    ('infra', "Infrastructure & Security", 'bi-shield-lock text-info', ""),
+    ('telemetry', "Telemetry & APM", 'bi-activity text-info', ""),
+    ('jobs', "Setup Jobs", 'bi-list-check text-secondary',
+     "One-shot jobs that prepare the services on start. Completed (exited with code 0) is their normal state."),
+    ('other', "Other Services", 'bi-server text-warning', ""),
+]
+
+
+def _unique_ports(container):
+    """Published ports, each once (Docker lists the IPv4 and the IPv6 binding separately)."""
+    out = []
+    for container_port, bindings in ((container.attrs.get('NetworkSettings') or {}).get('Ports') or {}).items():
+        if not bindings:
+            entry = f"{container_port} (internal)"
+            if entry not in out:
+                out.append(entry)
+            continue
+        for b in bindings:
+            ip = b.get('HostIp', '')
+            host = b.get('HostPort', '')
+            entry = (f"{host} → {container_port}" if ip in ('0.0.0.0', '::', '')
+                     else f"{ip}:{host} → {container_port}")
+            if entry not in out:
+                out.append(entry)
+    return out
+
+
+def describe_container(container, instance_name=""):
+    """What a container card shows: title, compose service, section, state badge and details."""
+    service = container.labels.get('com.docker.compose.service', '')
+    name = container.name
+    short = name[len(instance_name):].lstrip('_-') if instance_name and name.startswith(instance_name) else name
+    title, section, icon = CONTAINER_SERVICES.get(service, (service or short, 'other', 'bi-box'))
+    state = container.attrs.get('State') or {}
+    status = container.status
+    health = ((state.get('Health') or {}).get('Status')) or ''
+    exit_code = state.get('ExitCode')
+    restart_policy = ((container.attrs.get('HostConfig') or {}).get('RestartPolicy') or {}).get('Name') or 'no'
+    is_job = section == 'jobs'
+
+    if status == 'running':
+        badge, tone = {'healthy': ("Healthy", 'success'), 'unhealthy': ("Unhealthy", 'danger'),
+                       'starting': ("Starting", 'warning')}.get(health, ("Running", 'success'))
+    elif status == 'exited' and is_job and exit_code == 0:
+        badge, tone = "Completed", 'secondary'
+    elif status == 'exited':
+        badge, tone = ("Failed" if is_job else "Exited"), 'danger'
+    elif status in ('restarting', 'created', 'paused'):
+        badge, tone = status.capitalize(), 'warning'
+    else:
+        badge, tone = status.capitalize(), 'secondary'
+
+    started = (state.get('StartedAt') or '')[:19].replace('T', ' ')
+    finished = (state.get('FinishedAt') or '')[:19].replace('T', ' ')
+    return {
+        'service': service,
+        'title': title,
+        'section': section,
+        'icon': icon,
+        'name': name,
+        'badge': badge,
+        'tone': tone,
+        'pulse': status == 'running' or status in ('restarting', 'created'),
+        'ports': _unique_ports(container),
+        'started': started if not started.startswith('0001') else '',
+        'finished': finished if not finished.startswith('0001') else '',
+        'exit_code': exit_code if status == 'exited' else None,
+        'restart_policy': restart_policy,
+        'is_job': is_job,
+        'has_files': service in ('heappe', 'datastagingapi'),
+        'config_file': {'heappe': 'appsettings.json', 'datastagingapi': 'appsettings-data.json'}.get(service, ''),
+        'can_unseal': service == 'vault',
+        'can_delete': section == 'other',
+    }
+
+
+def build_container_sections(project_containers, instance_name=""):
+    """Sections of the Containers tab with their cards, in the order of CONTAINER_SERVICES; empty sections left out."""
+    order = {svc: i for i, svc in enumerate(CONTAINER_SERVICES)}
+    items = sorted(({'container': c, 'info': describe_container(c, instance_name)} for c in project_containers),
+                   key=lambda it: (order.get(it['info']['service'], len(order)), it['info']['name']))
+    sections = []
+    for key, title, icon, note in CONTAINER_SECTIONS:
+        cards = [it for it in items if it['info']['section'] == key]
+        if cards:
+            sections.append({'key': key, 'title': title, 'icon': icon, 'note': note, 'items': cards})
+    return sections
+
+
 import random
 
 
@@ -242,7 +398,7 @@ import secrets
 import string
 
 
-def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s6):
+def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s6, instance_identifier=None):
     """Handle the deployment process and return the result."""
     from datetime import datetime
     service = HEAppEDeployService(config)
@@ -272,6 +428,8 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
         log_message("Starting HEAppE deployment process...")
         log_message(f"Repository URL: {config.repo_url}")
         log_message(f"Repository branch/tag: {config.repo_branch}")
+        if instance_identifier:
+            log_message(f"HEAppE Identifier: {instance_identifier}")
 
         for s in [s1, s2, s3, s4, s5, s6]:
             if 's' in locals() and s:
@@ -297,7 +455,8 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
             ports=ports,
             overwrite_existing=True,
             deployed_ip='localhost',
-            version=clean_ver_str
+            version=clean_ver_str,
+            instance_identifier=instance_identifier
         )
         if init_result.get("status") == "error":
             raise RuntimeError(f"deploy_init failed: {init_result.get('message')}")
@@ -372,8 +531,8 @@ def handle_deployment_action(config, instance_name, ports, s1, s2, s3, s4, s5, s
         ]
 
         log_message("Waiting for heappe and mssql containers to be running...")
-        wait_for_container_running(f"{instance_name}_heappe", timeout=900, interval=10)
         wait_for_container_running(f"{instance_name}_mssql", timeout=900, interval=10)
+        wait_for_container_running(f"{instance_name}_heappe", timeout=900, interval=10)
 
         log_message("Restarting services to apply database and vault configs...")
         restart_result = execute_docker_compose(restart_command, compose_dir)
@@ -432,12 +591,27 @@ def is_port_open(host, port, timeout=1):
     except (socket.timeout, ConnectionRefusedError, OSError):
         return False
 
-def run_bg_restart_all(compose_dir, instance_name, command, mssql_port, env_path):
+# One-shot jobs of the compose file that only prepare something for `up` (they have restart "no"). Restarting their
+# exited containers is useless and fails when the network they last ran on was removed meanwhile
+# ("failed to set up container networking: network ... not found"), so Restart All skips them.
+ONE_SHOT_SERVICES = {"heappe-init", "otel-collector-init"}
+
+
+def restart_all_command(command, compose_dir):
+    """`docker compose ... restart <services>` without the one-shot jobs (plain `restart` if the list is unknown)."""
+    listed = execute_docker_compose(command + ["config", "--services"], compose_dir, timeout=60)
+    services = [s.strip() for s in (listed.stdout or "").splitlines() if s.strip()] if listed.returncode == 0 else []
+    services = [s for s in services if s not in ONE_SHOT_SERVICES]
+    return command + ["restart"] + services
+
+
+def run_bg_restart_all(compose_dir, instance_name, command, mssql_port, env_path, plain=False):
+    """plain: the real `docker compose restart` of every container, one-shot jobs included."""
     try:
         with RESTART_STATES_LOCK:
             RESTART_STATES[instance_name] = {'status': 'restarting', 'error': None}
 
-        restart_cmd = command + ["restart"]
+        restart_cmd = command + ["restart"] if plain else restart_all_command(command, compose_dir)
         restart_result = execute_docker_compose(restart_cmd, compose_dir)
         if restart_result.returncode != 0:
             raise Exception(f"Failed to restart containers: {restart_result.stderr}")
@@ -488,7 +662,7 @@ def handle_global_action(compose_dir, instance_name, action):
     if action == 'start_all':
         command.extend(["up", "-d"])
         message = "All containers started successfully."
-    elif action == 'restart_all':
+    elif action in ('restart_all', 'restart_all_plain'):
         with RESTART_STATES_LOCK:
             state = RESTART_STATES.get(instance_name)
             if state and state.get('status') == 'restarting':
@@ -499,6 +673,7 @@ def handle_global_action(compose_dir, instance_name, action):
         thread = threading.Thread(
             target=run_bg_restart_all,
             args=(compose_dir, instance_name, command, mssql_port, env_path),
+            kwargs={'plain': action == 'restart_all_plain'},
             daemon=True
         )
         thread.start()
@@ -524,6 +699,172 @@ def _set_updating_status(instance_name: str, status: bool):
             instance_service.save()
     except Exception as e:
         print(f"Error setting updating status for {instance_name}: {e}")
+
+
+def teardown_instance(
+    instance_name: str,
+    base_path: str = "/opt/heappe-deployment/",
+    stop_containers: bool = True,
+    delete_files: bool = True
+) -> dict:
+    """
+    Shuts down and removes all Docker containers, networks, volumes,
+    and optionally deletes deployment files on disk for a given instance.
+    """
+    results = {
+        "containers_stopped": 0,
+        "containers_removed": 0,
+        "compose_down_success": False,
+        "files_removed": False,
+        "errors": []
+    }
+
+    if not instance_name:
+        return results
+
+    # 1. Execute docker compose down if compose directory exists
+    if stop_containers:
+        candidate_compose_dirs = []
+        if base_path:
+            candidate_compose_dirs.append(os.path.join(base_path, instance_name, "heappe-core"))
+        for bp in ["/opt/heappe-deployment", "/opt/heappe"]:
+            p = os.path.join(bp, instance_name, "heappe-core")
+            if p not in candidate_compose_dirs:
+                candidate_compose_dirs.append(p)
+
+        for compose_dir in candidate_compose_dirs:
+            if os.path.isdir(compose_dir):
+                try:
+                    down_cmd = [
+                        "docker", "compose",
+                        "--profile", "db",
+                        "--profile", "heappe",
+                        "--profile", "initVault",
+                        "--profile", "vault",
+                        "--profile", "vaultagent",
+                        "--profile", "sshagent",
+                        "--profile", "staging",
+                        "--profile", "telemetry",
+                        "-p", instance_name,
+                        "down", "-v", "--remove-orphans"
+                    ]
+                    res = execute_docker_compose(down_cmd, compose_dir, timeout=120)
+                    if res.returncode == 0:
+                        results["compose_down_success"] = True
+                        break
+                    else:
+                        if res.stderr:
+                            results["errors"].append(f"Docker compose down note: {res.stderr.strip()}")
+                except Exception as e:
+                    results["errors"].append(f"Docker compose down error: {e}")
+
+        # 2. Sweep all containers using Docker SDK as a safeguard to ensure no lingering containers exist
+        try:
+            client = docker.from_env()
+            inst_lower = instance_name.lower()
+            for c in client.containers.list(all=True):
+                labels = getattr(c, 'labels', {}) or {}
+                proj = (labels.get('com.docker.compose.project') or '').lower()
+                c_name = (getattr(c, 'name', '') or '').lower()
+
+                # Match if container belongs to this project or has instance_name in container name
+                is_match = (
+                    proj == inst_lower or
+                    c_name.startswith(f"{inst_lower}_") or
+                    c_name.startswith(f"{inst_lower}-") or
+                    c_name.endswith(f"-{inst_lower}") or
+                    c_name.endswith(f"_{inst_lower}") or
+                    f"_{inst_lower}_" in c_name or
+                    f"-{inst_lower}-" in c_name
+                )
+                if is_match:
+                    try:
+                        if c.status == 'running':
+                            c.stop(timeout=10)
+                            results["containers_stopped"] += 1
+                    except Exception as e:
+                        results["errors"].append(f"Failed to stop container {getattr(c, 'name', 'unknown')}: {e}")
+                    try:
+                        c.remove(force=True, v=True)
+                        results["containers_removed"] += 1
+                    except Exception as e:
+                        results["errors"].append(f"Failed to remove container {getattr(c, 'name', 'unknown')}: {e}")
+        except Exception as e:
+            results["errors"].append(f"Docker SDK sweep note: {e}")
+
+    # 3. Safely delete filesystem directories if requested
+    if delete_files:
+        candidate_paths = []
+        if base_path:
+            candidate_paths.append((base_path, os.path.join(base_path, instance_name)))
+        for bp in ["/opt/heappe-deployment", "/opt/heappe"]:
+            p = (bp, os.path.join(bp, instance_name))
+            if p not in candidate_paths:
+                candidate_paths.append(p)
+
+        for b_root, inst_path in candidate_paths:
+            try:
+                real_root = os.path.realpath(b_root)
+                real_inst = os.path.realpath(inst_path)
+                if os.path.commonpath([real_root, real_inst]) == real_root and real_inst != real_root:
+                    if os.path.exists(real_inst):
+                        shutil.rmtree(real_inst, ignore_errors=True)
+                        results["files_removed"] = True
+            except Exception as e:
+                results["errors"].append(f"Failed to delete directory {inst_path}: {e}")
+
+    # 4. Clear internal memory states
+    try:
+        with RESTART_STATES_LOCK:
+            RESTART_STATES.pop(instance_name, None)
+    except Exception:
+        pass
+
+    return results
+
+
+@login_required
+def deploy_delete_instance(request, instance_name: str) -> HttpResponse:
+    """Delete an instance, stop and remove containers, clean up files and DB."""
+    if request.method == 'POST':
+        stop_containers = request.POST.get('stop_containers', 'true') in ['true', '1', 'on', True]
+        delete_files = request.POST.get('delete_files', 'true') in ['true', '1', 'on', True]
+
+        teardown_result = teardown_instance(
+            instance_name=instance_name,
+            stop_containers=stop_containers,
+            delete_files=delete_files
+        )
+
+        # Delete database record if exists
+        try:
+            from ..models import InstanceCredentials
+            InstanceCredentials.objects.filter(instance_name=instance_name).delete()
+        except Exception as e:
+            print(f"Error deleting instance credentials for {instance_name}: {e}")
+
+        # Clean session
+        if request.session.get("chosen_instance") == instance_name:
+            request.session.pop("chosen_instance", None)
+            request.session.pop("heappe_session_code", None)
+            request.session.pop("heappe_host", None)
+            request.session.pop("heappe_host_url", None)
+            request.session.pop("heappe_use_api_key", None)
+            request.session.pop("heappe_last_auth", None)
+            request.session.pop("heappe_last_failed_auth", None)
+
+        msg = f"Instance '{instance_name}' has been deleted and shut down successfully."
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'status': 'success',
+                'message': msg,
+                'redirect_url': reverse('instance_credentials_list')
+            })
+
+        messages.success(request, msg)
+        return redirect('instance_credentials_list')
+
+    return redirect('deploy_view', instance_name=instance_name)
 
 
 def handle_switch_branch_action(config, instance_name, no_cache=False, update_configs=True):
@@ -1037,10 +1378,11 @@ def get_current_git_ref(compose_dir: str) -> dict:
 
 import threading
 
-def deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6):
+def deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6, instance_identifier=None):
     thread = threading.Thread(
         target=handle_deployment_action,
         args=(config, instance_name, ports, s1, s2, s3, s4, s5, s6),
+        kwargs={'instance_identifier': instance_identifier},
         daemon=True
     )
     thread.start()
@@ -1086,6 +1428,9 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
     action_message = None
     action_status = None
     containers = []
+    container_sections = []
+    heappe_db_issue = None
+    heappe_health = ''
     instance_service = None
 
     # Try to fetch existing instance details if name provided
@@ -1150,7 +1495,8 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
 
             # If deploying new, get name from form, otherwise use URL param
             if action == 'deploy':
-                instance_name = request.POST.get('InstanceName', 'heappe-instance')
+                instance_name = request.POST.get('InstanceName', 'heappe-instance').strip()
+                instance_identifier = request.POST.get('InstanceIdentifier', '').strip() or instance_name
 
             # Form params
             input_repo = request.POST.get('Repository', repo_url)
@@ -1212,7 +1558,7 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                 request.session.pop("heappe_use_api_key", None)
                 request.session.pop("heappe_last_auth", None)
 
-                deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6)
+                deploy_background(config, instance_name, ports, s1, s2, s3, s4, s5, s6, instance_identifier=instance_identifier)
 
                 action_message = "Deployment started in the background."
                 action_status = 'info'
@@ -1287,22 +1633,53 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
                         'restart_status': restart_info.get('status'),
                         'restart_error': restart_info.get('error')
                     })
-                poll_containers = [
-                    get_container_details(c) for c in client.containers.list(all=True)
+                project_containers = [
+                    c for c in client.containers.list(all=True)
                     if c.labels.get('com.docker.compose.project') == instance_name
                 ]
+                poll_containers = [get_container_details(c) for c in project_containers]
                 with RESTART_STATES_LOCK:
                     restart_info = RESTART_STATES.get(instance_name, {'status': 'none', 'error': None})
                 return JsonResponse({
                     'status': 'ok',
                     'instance_name': instance_name,
                     'containers': poll_containers,
+                    'heappe_db_issue': detect_heappe_db_startup_issue(project_containers),
                     'restart_status': restart_info.get('status'),
                     'restart_error': restart_info.get('error')
                 })
 
-            elif action in ['start_all', 'restart_all', 'stop_all']:
+            elif action in ['start_all', 'restart_all', 'restart_all_plain', 'stop_all']:
                 action_message, action_status = handle_global_action(compose_dir, instance_name, action)
+
+            elif action in ['delete_instance', 'teardown']:
+                stop_containers = request.POST.get('stop_containers', 'true') in ['true', '1', 'on', True]
+                delete_files = request.POST.get('delete_files', 'true') in ['true', '1', 'on', True]
+                teardown_instance(instance_name, base_path=base_path, stop_containers=stop_containers, delete_files=delete_files)
+                try:
+                    InstanceCredentials.objects.filter(instance_name=instance_name).delete()
+                except Exception as e:
+                    print(f"Error deleting instance credentials: {e}")
+
+                if request.session.get("chosen_instance") == instance_name:
+                    request.session.pop("chosen_instance", None)
+                    request.session.pop("heappe_session_code", None)
+                    request.session.pop("heappe_host", None)
+                    request.session.pop("heappe_host_url", None)
+                    request.session.pop("heappe_use_api_key", None)
+                    request.session.pop("heappe_last_auth", None)
+                    request.session.pop("heappe_last_failed_auth", None)
+
+                messages.success(request, f"Instance '{instance_name}' has been deleted and shut down successfully.")
+                redirect_url = reverse('instance_credentials_list')
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': f"Instance '{instance_name}' deleted and shut down.",
+                        'redirect_url': redirect_url
+                    })
+                from django.http import HttpResponseRedirect
+                return HttpResponseRedirect(redirect_url)
 
             # Generic JSON response for non-deploy actions
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -1340,11 +1717,16 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
         # --- GET REQUEST / PAGE LOAD ---
         # Fetch containers only if we are looking at a specific instance
         if instance_name:
-            containers = [
-                {'container': c, 'ports': get_container_details(c)['ports']}
-                for c in client.containers.list(all=True)
+            project_containers = [
+                c for c in client.containers.list(all=True)
                 if c.labels.get('com.docker.compose.project') == instance_name
             ]
+            containers = [{'container': c, 'ports': get_container_details(c)['ports']} for c in project_containers]
+            heappe_db_issue = detect_heappe_db_startup_issue(project_containers)
+            heappe_health = next((_health(c) for c in project_containers
+                                  if c.labels.get('com.docker.compose.service') == 'heappe'
+                                  and c.status == 'running'), '')
+            container_sections = build_container_sections(project_containers, instance_name)
             def get_sort_weight(item):
                 name = item['container'].name.lower()
                 if 'heappe' in name and 'vault' not in name:
@@ -1377,8 +1759,37 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
     compose_dir = os.path.join(base_path, instance_name, "heappe-core") if instance_name else ""
     current_git_ref = get_current_git_ref(compose_dir) if compose_dir else {"branch": "", "commit": "", "description": "", "is_repo": False}
 
+    is_deployed = instance_service.is_deployed if instance_service else False
+    is_updating = instance_service.is_updating if instance_service else False
+
+    deployment_failed = False
+    deployment_error = ""
+    deploy_logs = ""
+
+    if instance_name and not is_deployed and not is_updating:
+        log_dir = os.path.join(base_path, instance_name, "app", "logs")
+        deploy_log = os.path.join(log_dir, "deploy.log")
+        if os.path.exists(deploy_log):
+            try:
+                with open(deploy_log, "r", encoding="utf-8") as f:
+                    deploy_logs = f.read()
+
+                has_success = ("SUCCESS:" in deploy_logs or "Deployment completed successfully" in deploy_logs)
+                if not has_success and deploy_logs.strip():
+                    deployment_failed = True
+                    for line in reversed(deploy_logs.splitlines()):
+                        line_s = line.strip()
+                        if "EXCEPTION:" in line_s or "Deployment error:" in line_s or "Error" in line_s or "failed" in line_s.lower():
+                            deployment_error = line_s
+                            break
+                    if not deployment_error:
+                        deployment_error = "Deployment process terminated unexpectedly. Review logs for details."
+            except Exception as e:
+                print(f"Error inspecting deploy.log: {e}")
+
     context = {
         "containers": containers,
+        "container_sections": container_sections,
         "instance_name": instance_name,
         "action_message": action_message,
         "action_status": action_status,
@@ -1389,12 +1800,17 @@ def deploy_view(request, instance_name: str = '') -> HttpResponse:
         "tag_list": tag_list,
         "current_git_ref": current_git_ref,
         "instance_service": instance_service,
-        "is_deployed": instance_service.is_deployed if instance_service else False,
-        "is_updating": instance_service.is_updating if instance_service else False,
+        "is_deployed": is_deployed,
+        "is_updating": is_updating,
+        "deployment_failed": deployment_failed,
+        "deployment_error": deployment_error,
+        "deploy_logs": deploy_logs,
         "deployed_version": deployed_version,
         "latest_version": latest_version,
         "update_available": update_available,
         "restart_status": restart_info.get('status'),
+        "heappe_db_issue": heappe_db_issue,
+        "heappe_health": heappe_health,
     }
     return render(request, "deploy.html", context)
 
@@ -1643,6 +2059,55 @@ def instance_config_view(request, instance_name):
                 'restart_status': restart_info.get('status'),
                 'restart_error': restart_info.get('error')
             })
+
+        elif action == 'test_oidc':
+            authority = (request.POST.get('authority') or '').strip()
+            if not authority:
+                return JsonResponse({'status': 'danger', 'message': 'Authority URL cannot be empty.'}, status=400)
+
+            well_known_url = authority.rstrip('/')
+            if not well_known_url.endswith('.well-known/openid-configuration'):
+                well_known_url += '/.well-known/openid-configuration'
+
+            import urllib.request
+            import urllib.error
+            import json as json_lib
+            import ssl
+
+            try:
+                allow_insecure = request.POST.get('allow_insecure', 'false').lower() == 'true'
+                ctx = ssl.create_default_context()
+                if allow_insecure:
+                    ctx.check_hostname = False
+                    ctx.verify_mode = ssl.CERT_NONE
+
+                req = urllib.request.Request(
+                    well_known_url,
+                    headers={'User-Agent': 'HEAppE-Management-Admin', 'Accept': 'application/json'}
+                )
+                with urllib.request.urlopen(req, timeout=6, context=ctx) as response:
+                    if response.status == 200:
+                        payload = json_lib.loads(response.read().decode('utf-8'))
+                        return JsonResponse({
+                            'status': 'success',
+                            'message': 'Successfully connected to OIDC discovery endpoint.',
+                            'details': {
+                                'issuer': payload.get('issuer', ''),
+                                'authorization_endpoint': payload.get('authorization_endpoint', ''),
+                                'token_endpoint': payload.get('token_endpoint', ''),
+                                'userinfo_endpoint': payload.get('userinfo_endpoint', ''),
+                                'introspection_endpoint': payload.get('introspection_endpoint', ''),
+                                'jwks_uri': payload.get('jwks_uri', ''),
+                            }
+                        })
+                    else:
+                        return JsonResponse({'status': 'danger', 'message': f'Server returned HTTP {response.status}'}, status=400)
+            except urllib.error.HTTPError as e:
+                return JsonResponse({'status': 'danger', 'message': f'HTTP Error {e.code}: {e.reason}'}, status=400)
+            except urllib.error.URLError as e:
+                return JsonResponse({'status': 'danger', 'message': f'Connection failed: {str(e.reason)}'}, status=400)
+            except Exception as e:
+                return JsonResponse({'status': 'danger', 'message': f'Error: {str(e)}'}, status=400)
 
     # GET request - read config content
     try:

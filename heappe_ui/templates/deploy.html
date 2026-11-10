@@ -21,28 +21,77 @@
     </div>
 
     <div class="row mb-4 align-items-center">
-        <div class="col-md-8">
+        <div class="col-md-7">
             {% if not instance_name %}
                 <h2 class="mb-0 fw-bold">Deploy New Instance</h2>
             {% else %}
                 <h2 class="mb-0 fw-bold">Management: <span class="text-primary">{{ instance_name }}</span></h2>
-                {% if not is_deployed %}
-                    <span class="badge bg-warning text-dark">Deployment in Progress / Not Active</span>
-                {% endif %}
+                <div class="mt-1 d-flex align-items-center gap-2 flex-wrap">
+                    {% if is_updating %}
+                        <span class="badge bg-primary text-white d-inline-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill shadow-xs">
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true" style="width: 8px; height: 8px;"></span>
+                            Deployment / Action in Progress...
+                        </span>
+                    {% elif deployment_failed %}
+                        <span class="badge bg-danger text-white d-inline-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill shadow-xs">
+                            <i class="bi bi-x-circle-fill"></i> Deployment Failed
+                        </span>
+                    {% elif not is_deployed %}
+                        <span class="badge bg-warning text-dark d-inline-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill shadow-xs">
+                            <i class="bi bi-exclamation-triangle"></i> Not Active / Standby
+                        </span>
+                    {% endif %}
+                </div>
             {% endif %}
         </div>
-        <div class="col-md-4 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end gap-2 flex-wrap">
+        <div class="col-md-5 text-md-end mt-3 mt-md-0 d-flex justify-content-md-end gap-2 flex-wrap">
             {% if not instance_name %}
-            {% elif is_deployed %}
-                <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
-                    <i class="bi bi-git me-1.5"></i>Switch Branch &amp; Build
-                </button>
-                <button type="button" class="btn btn-outline-secondary shadow-sm open-maintenance-tab-btn" data-action="update">
-                    <i class="bi bi-arrow-repeat me-1.5"></i>Update Instance
+            {% else %}
+                {% if is_deployed %}
+                    <button type="button" class="btn btn-outline-primary shadow-sm" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
+                        <i class="bi bi-git me-1.5"></i>Switch Branch &amp; Build
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary shadow-sm open-maintenance-tab-btn" data-action="update">
+                        <i class="bi bi-arrow-repeat me-1.5"></i>Update Instance
+                    </button>
+                {% elif deployment_failed %}
+                    <button type="button" class="btn btn-warning shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#retryDeployModal">
+                        <i class="bi bi-arrow-clockwise me-1.5"></i>Retry Deployment
+                    </button>
+                {% endif %}
+                <button type="button" class="btn btn-outline-danger shadow-sm fw-bold" data-bs-toggle="modal" data-bs-target="#deleteTeardownModal" title="Delete &amp; Shut Down Instance">
+                    <i class="bi bi-trash3-fill me-1.5"></i>Delete Instance
                 </button>
             {% endif %}
         </div>
     </div>
+
+    {% if instance_name and deployment_failed %}
+    <div class="alert alert-danger border-danger shadow-sm p-3 mb-4 rounded-3 animate-fade-in">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div class="d-flex align-items-center gap-2.5">
+                <div class="p-2 bg-danger bg-opacity-10 text-danger rounded-3 flex-shrink-0">
+                    <i class="bi bi-exclamation-octagon-fill fs-4 d-block"></i>
+                </div>
+                <div>
+                    <h6 class="alert-heading fw-bold mb-1 text-danger">Deployment Failed</h6>
+                    <div class="small text-danger-emphasis font-monospace">{{ deployment_error|default:"An error occurred during deployment. Review logs for details." }}</div>
+                </div>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-sm btn-outline-danger fw-semibold rounded-3 px-3 py-2" data-bs-toggle="modal" data-bs-target="#deployLogViewerModal">
+                    <i class="bi bi-terminal me-1"></i>View Error Logs
+                </button>
+                <button type="button" class="btn btn-sm btn-warning fw-bold rounded-3 px-3 py-2 shadow-xs" data-bs-toggle="modal" data-bs-target="#retryDeployModal">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Retry Deployment
+                </button>
+                <button type="button" class="btn btn-sm btn-danger fw-bold rounded-3 px-3 py-2 shadow-xs" data-bs-toggle="modal" data-bs-target="#deleteTeardownModal">
+                    <i class="bi bi-trash3-fill me-1"></i>Delete &amp; Shut Down
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
     {% if instance_name and is_deployed %}
         {% if update_available %}
@@ -86,6 +135,11 @@
             </button>
         </li>
         <li class="nav-item" role="presentation">
+            <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="extrahosts-tab" data-bs-toggle="tab" data-bs-target="#extrahosts-pane" type="button" role="tab" aria-controls="extrahosts-pane" aria-selected="false">
+                <i class="bi bi-hdd-network fs-5"></i>Extra Hosts
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
             <button class="nav-link fw-bold py-2.5 rounded-2 d-flex align-items-center justify-content-center gap-2 text-nowrap" id="maintenance-tab" data-bs-toggle="tab" data-bs-target="#maintenance-pane" type="button" role="tab" aria-controls="maintenance-pane" aria-selected="false">
                 <i class="bi bi-gear fs-5"></i>Maintenance &amp; Setup
             </button>
@@ -95,7 +149,7 @@
     <div class="tab-content" id="deployTabsContent">
         <!-- Containers Tab Pane -->
         <div class="tab-pane fade show active" id="containers-pane" role="tabpanel" aria-labelledby="containers-tab">
-            {% if is_deployed %}
+            {% if is_deployed or containers %}
             <!-- Global actions -->
             <div class="card mb-4 border-0 shadow-sm bg-light">
                 <div class="card-body">
@@ -120,7 +174,32 @@
                             {% csrf_token %}
                             <input type="hidden" name="InstanceName" value="{{ instance_name }}">
                             <input type="hidden" name="action" value="restart_all">
-                            <button type="submit" class="btn btn-info text-white w-100 px-4"><i class="bi bi-arrow-clockwise"></i> Restart All</button>
+                            <div class="btn-group w-100">
+                                <button type="submit" class="btn btn-info text-white px-4"
+                                        title="Restarts every service container. One-shot init jobs (heappe-init, otel-collector-init) are not run again: they only run on 'docker compose up' (Start All, Switch Branch &amp; Build).">
+                                    <i class="bi bi-arrow-clockwise"></i> Restart All
+                                </button>
+                                <button type="button" class="btn btn-info text-white dropdown-toggle dropdown-toggle-split"
+                                        data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="More restart options">
+                                    <span class="visually-hidden">More restart options</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end shadow-sm py-1" style="min-width: 17rem; max-width: 22rem;">
+                                    <li class="d-flex align-items-center pe-1">
+                                        <button type="button" class="dropdown-item text-nowrap restart-all-plain">
+                                            <i class="bi bi-arrow-repeat me-2"></i>docker compose restart
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-link text-secondary p-1 restart-plain-info"
+                                                title="What does it do?" aria-expanded="false" aria-controls="restart-plain-detail">
+                                            <i class="bi bi-info-circle"></i>
+                                        </button>
+                                    </li>
+                                    <li id="restart-plain-detail" class="small text-muted px-3 pb-2 pt-1 border-top" style="display:none; white-space: normal; line-height: 1.4;">
+                                        Restarts every container of the instance, including the exited one-shot init jobs
+                                        (<code>heappe-init</code>, <code>otel-collector-init</code>). It can report a failure
+                                        when an init job's network was removed meanwhile, even though all services are up.
+                                    </li>
+                                </ul>
+                            </div>
                         </form>
                         <form id="down-all-form" class="flex-grow-1 flex-md-grow-0 global-control-form">
                             {% csrf_token %}
@@ -130,6 +209,9 @@
                         </form>
                         <button type="button" class="btn btn-outline-primary px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#switchBranchModal">
                             <i class="bi bi-git me-1.5"></i> Switch Branch &amp; Build (Build &amp; Up)
+                        </button>
+                        <button type="button" class="btn btn-outline-danger px-3 shadow-xs" data-bs-toggle="modal" data-bs-target="#deleteTeardownModal">
+                            <i class="bi bi-trash3-fill me-1.5"></i> Delete &amp; Shut Down
                         </button>
                     </div>
                 </div>
@@ -149,332 +231,47 @@
                     </div>
                 </div>
             </div>
+
+            <!-- HEAppE could not reach SQL Server while starting (filled by showHeappeDbIssue) -->
+            <div id="heappe-db-issue-banner" style="display:none;" class="alert alert-warning border-0 shadow-sm mb-4" role="alert">
+                <div class="d-flex align-items-start gap-3 flex-wrap">
+                    <i class="bi bi-database-exclamation fs-4 text-warning-emphasis flex-shrink-0"></i>
+                    <div class="flex-grow-1" style="min-width: 240px;">
+                        <strong class="text-warning-emphasis">HEAppE started before SQL Server was ready</strong>
+                        <div class="small mt-1">
+                            <span class="font-monospace" data-field="container_name"></span> could not connect to the
+                            database while starting and does not retry by itself. This happens after <em>Restart All</em>,
+                            a Docker restart or unpausing the containers.
+                            <span data-when="ready">SQL Server is healthy now, so restarting only HEAppE fixes it; the other containers and the data stay as they are.</span>
+                            <span data-when="not-ready">SQL Server (<span class="font-monospace" data-field="mssql_name"></span>) is not healthy yet; restart HEAppE once it is.</span>
+                        </div>
+                        <details class="small mt-1">
+                            <summary class="text-muted">Error from the HEAppE log</summary>
+                            <code class="d-block text-break mt-1" data-field="error"></code>
+                        </details>
+                    </div>
+                    <form class="container-control-form flex-shrink-0" data-when="ready">
+                        {% csrf_token %}
+                        <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                        <input type="hidden" name="action" value="restart">
+                        <input type="hidden" name="container_id" value="">
+                        <button type="submit" class="btn btn-warning"><i class="bi bi-arrow-clockwise me-1"></i>Restart HEAppE</button>
+                    </form>
+                </div>
+            </div>
+            {{ heappe_db_issue|json_script:"heappe-db-issue-data" }}
             {% endif %}
 
-            <!-- API Services -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-2"><i class="bi bi-cpu text-primary"></i>API Services</h5>
+            <!-- Container cards, grouped by compose service (see CONTAINER_SERVICES in view/deploy.py) -->
+            {% for section in container_sections %}
+            <h5 class="fw-bold mb-1 text-secondary d-flex align-items-center gap-2 {% if forloop.first %}mt-2{% else %}mt-4{% endif %}"><i class="bi {{ section.icon }}"></i>{{ section.title }}</h5>
+            {% if section.note %}<p class="small text-muted mb-3">{{ section.note }}</p>{% else %}<div class="mb-3"></div>{% endif %}
             <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
-                {% for item in containers %}
-                {% if 'heappe' in item.container.name.lower or 'datastaging' in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col">
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-dark open-fm-tab-btn" data-container-id="{{ container.id }}" data-container-name="{{ container.name }}" title="File Manager"><i class="bi bi-files"></i></button>
-                                {% if 'heappe' in container.name.lower %}
-                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings.json" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center" title="Configure (appsettings.json)"><i class="bi bi-gear"></i></a>
-                                {% elif 'datastaging' in container.name.lower %}
-                                    <a href="{% url 'instance_config_view' instance_name %}?file=appsettings-data.json" class="btn btn-sm btn-outline-primary d-flex align-items-center justify-content-center" title="Configure (appsettings-data.json)"><i class="bi bi-gear"></i></a>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
+                {% for item in section.items %}
+                    {% include "partials/container_card.html" with container=item.container info=item.info %}
                 {% endfor %}
             </div>
-
-            <!-- Database Services -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-database text-info"></i>Database Services</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
-                {% for item in containers %}
-                {% if 'mssql' in item.container.name.lower or 'db' in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col">
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
-                {% endfor %}
-            </div>
-
-            <!-- Infrastructure & Security (Vault, SSH Agent) -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-shield-lock text-info"></i>Infrastructure &amp; Security (Vault, SSH Agent)</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-4">
-                {% for item in containers %}
-                {% if 'heappe' not in item.container.name.lower and 'datastaging' not in item.container.name.lower and 'mssql' not in item.container.name.lower and 'db' not in item.container.name.lower and 'otel' not in item.container.name.lower and 'jaeger' not in item.container.name.lower and 'slurm' not in item.container.name.lower and 'qscheduler' not in item.container.name.lower %}
-                {% if 'sshagent' not in item.container.name.lower and 'ssh-agent' not in item.container.name.lower or instance_name|add:"_" in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                                {% if 'vault' in container.name.lower and 'vaultagent' not in container.name.lower and 'init' not in container.name.lower and 'unseal' not in container.name.lower %}
-                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="openUnsealVaultModal();" title="Unlock / Unseal Vault without restart"><i class="bi bi-unlock-fill"></i></button>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
-                {% endif %}
-                {% endfor %}
-            </div>
-
-            <!-- Telemetry & APM (Jaeger, OpenTelemetry) -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-activity text-info"></i>Telemetry &amp; APM (Jaeger, OpenTelemetry)</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-5">
-                {% for item in containers %}
-                {% if 'otel' in item.container.name.lower or 'jaeger' in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col" {% if container.status == 'exited' and 'init' in container.name.lower or 'unseal' in container.name.lower %}style="opacity: 0.7;"{% endif %}>
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
-                {% endfor %}
-            </div>
-
-            <!-- Slurm Simulators & Test Services & QScheduler -->
-            <h5 class="fw-bold mb-3 text-secondary d-flex align-items-center gap-2 mt-4"><i class="bi bi-server text-warning"></i>Slurm Simulators, QScheduler &amp; Test Services</h5>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4 mb-5">
-                {% for item in containers %}
-                {% if 'slurm' in item.container.name.lower or 'qscheduler' in item.container.name.lower or 'sshagent' in item.container.name.lower or 'ssh-agent' in item.container.name.lower %}
-                {% if 'slurm' in item.container.name.lower or 'qscheduler' in item.container.name.lower or instance_name|add:"_" not in item.container.name.lower %}
-                {% with container=item.container ports=item.ports %}
-                <div class="col">
-                    <div class="card h-100 shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center bg-white border-bottom-0 pt-3">
-                            <h6 class="mb-0 fw-bold text-truncate" style="max-width: 65%;">{{ container.name }}</h6>
-                            <span class="badge d-flex align-items-center gap-1.5 {% if container.status == 'running' %}bg-success-subtle text-success border border-success-subtle{% elif container.status == 'exited' %}bg-danger-subtle text-danger border border-danger-subtle{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %} px-2.5 py-1 rounded-pill">
-                                {% if container.status == 'running' %}
-                                    <span class="spinner-grow spinner-grow-sm text-success" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% elif container.status == 'restarting' or container.status == 'created' %}
-                                    <span class="spinner-grow spinner-grow-sm text-warning" role="status" aria-hidden="true" style="width: 6px; height: 6px;"></span>
-                                {% else %}
-                                    <span class="d-inline-block rounded-circle" style="width: 6px; height: 6px; background-color: currentColor;"></span>
-                                {% endif %}
-                                <span class="fw-bold" style="font-size: 0.65rem;">{{ container.status|upper }}</span>
-                            </span>
-                        </div>
-                        <div class="card-body py-2">
-                            <div class="small text-muted mb-2">ID: <code>{{ container.short_id }}</code></div>
-                            <ul class="list-unstyled small mb-0">
-                                <li><strong>Service:</strong> {{ container.labels.com.docker.compose.service }}</li>
-                                <li class="text-truncate d-block" title="{{ ports|join:', '|default:'None' }}"><strong>Ports:</strong> {{ ports|join:", "|default:"None" }}</li>
-                            </ul>
-                        </div>
-                        <div class="card-footer bg-white border-top-0 pb-3 d-flex justify-content-center">
-                            <div class="btn-group shadow-sm">
-                                <form id="start-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="start">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" {% if container.status == 'running' %}disabled{% endif %} title="Start Container"><i class="bi bi-play-fill"></i></button>
-                                </form>
-                                <form id="stop-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="stop">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" {% if container.status != 'running' %}disabled{% endif %} title="Stop Container"><i class="bi bi-stop-fill"></i></button>
-                                </form>
-                                <form id="restart-form-{{ container.id }}" class="container-control-form">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="restart">
-                                    <button type="submit" class="btn btn-sm btn-outline-info" {% if container.status != 'running' %}disabled{% endif %} title="Restart Container"><i class="bi bi-arrow-clockwise"></i></button>
-                                </form>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#logsModal" data-container-id="{{ container.id }}" title="View Logs"><i class="bi bi-terminal"></i></button>
-                                <form id="delete-form-{{ container.id }}" class="container-control-form" onsubmit="return confirm('Are you sure you want to delete container {{ container.name }}?');">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
-                                    <input type="hidden" name="container_id" value="{{ container.id }}">
-                                    <input type="hidden" name="action" value="delete">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Container"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endwith %}
-                {% endif %}
-                {% endif %}
-                {% endfor %}
-            </div>
+            {% endfor %}
         </div>
 
         <!-- Configuration Explorer Tab Pane -->
@@ -629,11 +426,31 @@
             </div>
         </div>
 
+        <!-- Extra Hosts Tab Pane -->
+        <div class="tab-pane fade" id="extrahosts-pane" role="tabpanel" aria-labelledby="extrahosts-tab">
+            <div class="row justify-content-center">
+                <div class="col-lg-9">
+                    <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                        <p class="text-muted small mb-0">
+                            Static hostname mappings added to <code>/etc/hosts</code> of the instance containers (<code>extra_hosts</code> / <code>--add-host</code>).
+                            Compose services keep custom entries in <code>docker-compose.override.yml</code>, so they survive branch switches; QScheduler entries are stored on its instance record.
+                            Default entries (e.g. <code>host.docker.internal:host-gateway</code>) are read-only.
+                        </p>
+                        <button type="button" class="btn btn-sm btn-outline-secondary flex-shrink-0" id="extrahosts-reload-btn" title="Reload"><i class="bi bi-arrow-clockwise"></i></button>
+                    </div>
+                    <div id="extrahosts-feedback"></div>
+                    <div id="extrahosts-sections">
+                        <div class="text-center text-muted small py-4"><span class="spinner-border spinner-border-sm me-2"></span>Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Maintenance & Setup Tab Pane -->
         <div class="tab-pane fade" id="maintenance-pane" role="tabpanel" aria-labelledby="maintenance-tab">
             <div class="row g-4 mb-5">
                 <!-- Switch Branch & Build Panel -->
-                <div class="col-xl-4 col-md-6">
+                <div class="col-lg-6">
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 d-flex flex-column">
                             <h5 class="fw-bold text-dark mb-2"><i class="bi bi-git me-2 text-primary"></i>Switch Branch &amp; Build</h5>
@@ -646,7 +463,7 @@
                             </div>
                             {% endif %}
 
-                            <form id="update-form" class="instance-action-form mt-auto">
+                            <form id="update-form" class="instance-action-form d-flex flex-column flex-grow-1">
                                 {% csrf_token %}
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Instance Name</label>
@@ -719,13 +536,13 @@
                 </div>
 
                 <!-- Regenerate Configurations Panel -->
-                <div class="col-xl-4 col-md-6">
+                <div class="col-lg-6">
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 d-flex flex-column">
                             <h5 class="fw-bold text-dark mb-3"><i class="bi bi-gear-wide-connected me-2 text-danger"></i>Regenerate Configs</h5>
                             <p class="text-muted small mb-4">Regenerate and merge <code>.env</code> and <code>appsettings.json</code> with templates (e.g. to inject new configuration variables) and restart containers without pulling new code.</p>
                             
-                            <form id="regenerate-configs-form" class="instance-action-form mt-auto">
+                            <form id="regenerate-configs-form" class="instance-action-form d-flex flex-column flex-grow-1">
                                 {% csrf_token %}
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Instance Name</label>
@@ -751,18 +568,117 @@
                 </div>
 
                 <!-- Deploy New Instance Panel -->
-                <div class="col-xl-4 col-md-6">
+                <div class="col-lg-6">
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-body p-4 d-flex flex-column">
                             <h5 class="fw-bold text-dark mb-3"><i class="bi bi-rocket-takeoff me-2 text-primary"></i>Deploy New Instance</h5>
                             <p class="text-muted small mb-4">Deploy a separate, new HEAppE Middleware server instance. This will register a new configuration and provision fresh database schema.</p>
                             
-                            <form id="deploy-form" class="instance-action-form mt-auto">
+                            <form id="deploy-form" class="instance-action-form d-flex flex-column flex-grow-1">
                                 {% csrf_token %}
-                                <div class="mb-3">
-                                    <label class="form-label fw-semibold text-secondary small">New Instance Name</label>
-                                    <input type="text" name="InstanceName" class="form-control" placeholder="e.g. my_test_env" pattern="^[a-z0-9_]+$" required>
-                                    <div class="form-text small">Only lowercase letters, numbers, and underscores are allowed.</div>
+                                <!-- Interactive HEAppE Identifier Builder (Panel) -->
+                                <div class="heappe-identifier-builder-card card border border-primary border-opacity-25 bg-light bg-opacity-50 p-3 rounded-3 mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <label class="form-label fw-bold text-dark mb-0 small d-flex align-items-center gap-1.5">
+                                            <i class="bi bi-magic text-primary"></i>
+                                            <span>HEAppE Identifier Builder</span>
+                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size: 0.65rem;">Formula</span>
+                                        </label>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <input type="radio" class="btn-check ident-mode-toggle" name="ident_mode_panel" id="mode_formula_panel" value="formula" checked autocomplete="off">
+                                            <label class="btn btn-outline-primary btn-sm py-0.5 px-2" for="mode_formula_panel" style="font-size: 0.72rem;"><i class="bi bi-diagram-3 me-1"></i>Formula</label>
+
+                                            <input type="radio" class="btn-check ident-mode-toggle" name="ident_mode_panel" id="mode_manual_panel" value="manual" autocomplete="off">
+                                            <label class="btn btn-outline-secondary btn-sm py-0.5 px-2" for="mode_manual_panel" style="font-size: 0.72rem;"><i class="bi bi-pencil me-1"></i>Manual</label>
+                                        </div>
+                                    </div>
+
+                                    <div class="small text-muted mb-2 font-monospace" style="font-size: 0.72rem;">
+                                        <code>&lt;core/efp/..&gt;_&lt;environment&gt;_&lt;provider&gt;_&lt;instance_name&gt;</code>
+                                    </div>
+
+                                    <!-- Formula Fields Container -->
+                                    <div class="ident-formula-container">
+                                        <div class="row g-2 mb-2">
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Scope / Type</label>
+                                                <select class="form-select form-select-sm ident-f-scope font-monospace" style="font-size: 0.78rem;">
+                                                    <option value="core" selected>core</option>
+                                                    <option value="efp">efp</option>
+                                                    <option value="lexis">lexis</option>
+                                                    <option value="__custom__">custom...</option>
+                                                </select>
+                                                <input type="text" class="form-control form-control-sm ident-f-scope-custom mt-1 font-monospace d-none" placeholder="e.g. core" style="font-size: 0.78rem;">
+                                            </div>
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Environment</label>
+                                                <select class="form-select form-select-sm ident-f-env font-monospace" style="font-size: 0.78rem;">
+                                                    <option value="dev" selected>dev</option>
+                                                    <option value="test">test</option>
+                                                    <option value="stage">stage</option>
+                                                    <option value="prod">prod</option>
+                                                    <option value="inference">inference</option>
+                                                    <option value="__custom__">custom...</option>
+                                                </select>
+                                                <input type="text" class="form-control form-control-sm ident-f-env-custom mt-1 font-monospace d-none" placeholder="e.g. dev" style="font-size: 0.78rem;">
+                                            </div>
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Provider / HE</label>
+                                                <select class="form-select form-select-sm ident-f-provider font-monospace" style="font-size: 0.78rem;">
+                                                    <option value="it4i" selected>it4i</option>
+                                                    <option value="bsc">bsc</option>
+                                                    <option value="cineca">cineca</option>
+                                                    <option value="lumi">lumi</option>
+                                                    <option value="__custom__">custom...</option>
+                                                </select>
+                                                <input type="text" class="form-control form-control-sm ident-f-provider-custom mt-1 font-monospace d-none" placeholder="e.g. it4i" style="font-size: 0.78rem;">
+                                            </div>
+                                            <div class="col-6 col-sm-3">
+                                                <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Instance Name</label>
+                                                <input type="text" class="form-control form-control-sm ident-f-instance font-monospace" value="develop" placeholder="develop" style="font-size: 0.78rem;">
+                                            </div>
+                                        </div>
+
+                                        <!-- Quick Examples -->
+                                        <div class="d-flex align-items-center gap-1.5 flex-wrap mb-2">
+                                            <span class="text-secondary small" style="font-size: 0.7rem;"><i class="bi bi-lightning-charge me-0.5 text-warning"></i>Examples:</span>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">core_dev_it4i_develop</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="inference" style="font-size: 0.68rem;">core_dev_it4i_inference</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">efp_dev_it4i_develop</button>
+                                            <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="prod" data-provider="it4i" data-instance="prod" style="font-size: 0.68rem;">efp_prod_it4i_prod</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Final Synchronized Instance Name & Identifier Input -->
+                                    <div class="mt-2">
+                                        <label class="form-label fw-semibold text-secondary small mb-1" style="font-size: 0.75rem;">
+                                            HEAppE Instance Name &amp; Identifier
+                                        </label>
+                                        <div class="input-group">
+                                            <span class="input-group-text bg-white text-primary border-end-0"><i class="bi bi-tag-fill"></i></span>
+                                            <input type="text" name="InstanceName" class="form-control font-monospace fw-bold ident-final-input" value="core_dev_it4i_develop" placeholder="core_dev_it4i_develop" pattern="^[a-z0-9_]+$" required style="font-size: 0.85rem;">
+                                            <button type="button" class="btn btn-outline-secondary ident-copy-btn" title="Copy to clipboard"><i class="bi bi-clipboard"></i></button>
+                                        </div>
+                                        <input type="hidden" name="InstanceIdentifier" class="ident-hidden-identifier" value="core_dev_it4i_develop">
+                                        <div class="form-text text-muted" style="font-size: 0.7rem;">Only lowercase letters, numbers, and underscores are allowed.</div>
+                                    </div>
+
+                                    <!-- Accordion/Collapse: NEXUS & AAI Registration Process -->
+                                    <div class="mt-2.5 pt-2 border-top border-primary border-opacity-10">
+                                        <a class="small text-decoration-none d-flex align-items-center justify-content-between text-secondary" data-bs-toggle="collapse" href="#nexusProcessCollapse_panel" role="button" aria-expanded="false" style="font-size: 0.72rem;">
+                                            <span><i class="bi bi-info-circle me-1 text-primary"></i>NEXUS &amp; AAI Registration Workflow (5 steps)</span>
+                                            <i class="bi bi-chevron-down"></i>
+                                        </a>
+                                        <div class="collapse mt-2" id="nexusProcessCollapse_panel">
+                                            <ol class="small text-secondary mb-1 ps-3" style="font-size: 0.72rem; line-height: 1.55;">
+                                                <li><strong>[HEAppE]</strong> Vytvoření identifikátoru dle formule výše</li>
+                                                <li><strong>[HEAppE &rarr; AAI]</strong> Předat identifikátor AAI týmu</li>
+                                                <li><strong>[HEAppE &rarr; UserOrg]</strong> Předat identifikátor a Base URL UserOrg týmu</li>
+                                                <li><strong>[Keycloak]</strong> Vytvoření <code>Client_id</code> pro identifikátor a doplnění do NEXUS mapy</li>
+                                                <li><strong>[NEXUS API]</strong> Přidání mapování identifikátoru / URL do NEXUS API Proxy</li>
+                                            </ol>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Repository URL</label>
@@ -774,15 +690,50 @@
                                 <div class="mb-3">
                                     <label class="form-label fw-semibold text-secondary small">Deployment Tag/Branch</label>
                                     <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
-                                        {% for branch in branches %}
-                                            <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
-                                        {% endfor %}
+                                        {% if branch_list %}
+                                        <optgroup label="Branches">
+                                            {% for b in branch_list %}
+                                                <option value="{{ b }}" {% if b == repo_branch %}selected{% endif %}>{{ b }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        {% if tag_list %}
+                                        <optgroup label="Release Tags">
+                                            {% for t in tag_list %}
+                                                <option value="{{ t }}" {% if t == repo_branch %}selected{% endif %}>{{ t }}</option>
+                                            {% endfor %}
+                                        </optgroup>
+                                        {% endif %}
+                                        {% if not branch_list and not tag_list %}
+                                            {% for branch in branches %}
+                                                <option value="{{ branch }}" {% if branch == repo_branch %}selected{% endif %}>{{ branch }}</option>
+                                            {% endfor %}
+                                        {% endif %}
                                     </select>
                                     <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
                                 </div>
                                 <input type="hidden" name="action" value="deploy">
                                 <button type="submit" class="btn btn-primary w-100 py-2 fw-bold shadow-sm mt-auto"><i class="bi bi-rocket-takeoff me-1.5"></i>Start Deployment</button>
                             </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Delete & Teardown Instance Panel -->
+                <div class="col-lg-6">
+                    <div class="card border-danger border-opacity-25 shadow-sm h-100 bg-danger bg-opacity-10">
+                        <div class="card-body p-4 d-flex flex-column">
+                            <h5 class="fw-bold text-danger mb-2"><i class="bi bi-trash3-fill me-2"></i>Delete &amp; Teardown Instance</h5>
+                            <p class="text-secondary small mb-3">Permanently delete this instance from the system. Stops and removes all running Docker containers (<code>docker compose down -v</code>), frees up mapped ports, disconnects sessions, and cleans up configurations.</p>
+                            
+                            <div class="alert alert-danger bg-white border border-danger-subtle p-2.5 rounded-2 mb-3 mt-auto small">
+                                <i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>
+                                <span>Action is permanent and shuts down all active services.</span>
+                            </div>
+
+                            <button type="button" class="btn btn-danger w-100 py-2 fw-bold shadow-sm" data-bs-toggle="modal" data-bs-target="#deleteTeardownModal">
+                                <i class="bi bi-power me-1.5"></i>Delete &amp; Shut Down Instance
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -800,10 +751,109 @@
                     
                     <form id="deploy-form" class="instance-action-form">
                         {% csrf_token %}
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold text-secondary small">Instance Name</label>
-                            <input type="text" name="InstanceName" class="form-control" placeholder="e.g. dev" pattern="^[a-z0-9_]+$" required>
-                            <div class="form-text small">Only lowercase letters, numbers, and underscores are allowed.</div>
+                        <!-- Interactive HEAppE Identifier Builder (Standalone) -->
+                        <div class="heappe-identifier-builder-card card border border-primary border-opacity-25 bg-light bg-opacity-50 p-3 rounded-3 mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label fw-bold text-dark mb-0 small d-flex align-items-center gap-1.5">
+                                    <i class="bi bi-magic text-primary"></i>
+                                    <span>HEAppE Identifier Builder</span>
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace" style="font-size: 0.65rem;">Formula</span>
+                                </label>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <input type="radio" class="btn-check ident-mode-toggle" name="ident_mode_standalone" id="mode_formula_standalone" value="formula" checked autocomplete="off">
+                                    <label class="btn btn-outline-primary btn-sm py-0.5 px-2" for="mode_formula_standalone" style="font-size: 0.72rem;"><i class="bi bi-diagram-3 me-1"></i>Formula</label>
+
+                                    <input type="radio" class="btn-check ident-mode-toggle" name="ident_mode_standalone" id="mode_manual_standalone" value="manual" autocomplete="off">
+                                    <label class="btn btn-outline-secondary btn-sm py-0.5 px-2" for="mode_manual_standalone" style="font-size: 0.72rem;"><i class="bi bi-pencil me-1"></i>Manual</label>
+                                </div>
+                            </div>
+
+                            <div class="small text-muted mb-2 font-monospace" style="font-size: 0.72rem;">
+                                <code>&lt;core/efp/..&gt;_&lt;environment&gt;_&lt;provider&gt;_&lt;instance_name&gt;</code>
+                            </div>
+
+                            <!-- Formula Fields Container -->
+                            <div class="ident-formula-container">
+                                <div class="row g-2 mb-2">
+                                    <div class="col-6 col-sm-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Scope / Type</label>
+                                        <select class="form-select form-select-sm ident-f-scope font-monospace" style="font-size: 0.78rem;">
+                                            <option value="core" selected>core</option>
+                                            <option value="efp">efp</option>
+                                            <option value="lexis">lexis</option>
+                                            <option value="__custom__">custom...</option>
+                                        </select>
+                                        <input type="text" class="form-control form-control-sm ident-f-scope-custom mt-1 font-monospace d-none" placeholder="e.g. core" style="font-size: 0.78rem;">
+                                    </div>
+                                    <div class="col-6 col-sm-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Environment</label>
+                                        <select class="form-select form-select-sm ident-f-env font-monospace" style="font-size: 0.78rem;">
+                                            <option value="dev" selected>dev</option>
+                                            <option value="test">test</option>
+                                            <option value="stage">stage</option>
+                                            <option value="prod">prod</option>
+                                            <option value="inference">inference</option>
+                                            <option value="__custom__">custom...</option>
+                                        </select>
+                                        <input type="text" class="form-control form-control-sm ident-f-env-custom mt-1 font-monospace d-none" placeholder="e.g. dev" style="font-size: 0.78rem;">
+                                    </div>
+                                    <div class="col-6 col-sm-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Provider / HE</label>
+                                        <select class="form-select form-select-sm ident-f-provider font-monospace" style="font-size: 0.78rem;">
+                                            <option value="it4i" selected>it4i</option>
+                                            <option value="bsc">bsc</option>
+                                            <option value="cineca">cineca</option>
+                                            <option value="lumi">lumi</option>
+                                            <option value="__custom__">custom...</option>
+                                        </select>
+                                        <input type="text" class="form-control form-control-sm ident-f-provider-custom mt-1 font-monospace d-none" placeholder="e.g. it4i" style="font-size: 0.78rem;">
+                                    </div>
+                                    <div class="col-6 col-sm-3">
+                                        <label class="form-label small fw-semibold text-secondary mb-1" style="font-size: 0.7rem;">Instance Name</label>
+                                        <input type="text" class="form-control form-control-sm ident-f-instance font-monospace" value="develop" placeholder="develop" style="font-size: 0.78rem;">
+                                    </div>
+                                </div>
+
+                                <!-- Quick Examples -->
+                                <div class="d-flex align-items-center gap-1.5 flex-wrap mb-2">
+                                    <span class="text-secondary small" style="font-size: 0.7rem;"><i class="bi bi-lightning-charge me-0.5 text-warning"></i>Examples:</span>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">core_dev_it4i_develop</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="core" data-env="dev" data-provider="it4i" data-instance="inference" style="font-size: 0.68rem;">core_dev_it4i_inference</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="dev" data-provider="it4i" data-instance="develop" style="font-size: 0.68rem;">efp_dev_it4i_develop</button>
+                                    <button type="button" class="btn btn-xs btn-white border py-0 px-1.5 font-monospace ident-preset-btn" data-scope="efp" data-env="prod" data-provider="it4i" data-instance="prod" style="font-size: 0.68rem;">efp_prod_it4i_prod</button>
+                                </div>
+                            </div>
+
+                            <!-- Final Synchronized Instance Name & Identifier Input -->
+                            <div class="mt-2">
+                                <label class="form-label fw-semibold text-secondary small mb-1" style="font-size: 0.75rem;">
+                                    HEAppE Instance Name &amp; Identifier
+                                </label>
+                                <div class="input-group">
+                                    <span class="input-group-text bg-white text-primary border-end-0"><i class="bi bi-tag-fill"></i></span>
+                                    <input type="text" name="InstanceName" class="form-control font-monospace fw-bold ident-final-input" value="core_dev_it4i_develop" placeholder="core_dev_it4i_develop" pattern="^[a-z0-9_]+$" required style="font-size: 0.85rem;">
+                                    <button type="button" class="btn btn-outline-secondary ident-copy-btn" title="Copy to clipboard"><i class="bi bi-clipboard"></i></button>
+                                </div>
+                                <input type="hidden" name="InstanceIdentifier" class="ident-hidden-identifier" value="core_dev_it4i_develop">
+                                <div class="form-text text-muted" style="font-size: 0.7rem;">Only lowercase letters, numbers, and underscores are allowed.</div>
+                            </div>
+
+                            <!-- Accordion/Collapse: NEXUS & AAI Registration Process -->
+                            <div class="mt-2.5 pt-2 border-top border-primary border-opacity-10">
+                                <a class="small text-decoration-none d-flex align-items-center justify-content-between text-secondary" data-bs-toggle="collapse" href="#nexusProcessCollapse_standalone" role="button" aria-expanded="false" style="font-size: 0.72rem;">
+                                    <span><i class="bi bi-info-circle me-1 text-primary"></i>NEXUS &amp; AAI Registration Workflow (5 steps)</span>
+                                    <i class="bi bi-chevron-down"></i>
+                                </a>
+                                <div class="collapse mt-2" id="nexusProcessCollapse_standalone">
+                                    <ol class="small text-secondary mb-1 ps-3" style="font-size: 0.72rem; line-height: 1.55;">
+                                        <li><strong>[HEAppE]</strong> Vytvoření identifikátoru dle formule výše</li>
+                                        <li><strong>[HEAppE &rarr; AAI]</strong> Předat identifikátor AAI týmu</li>
+                                        <li><strong>[HEAppE &rarr; UserOrg]</strong> Předat identifikátor a Base URL UserOrg týmu</li>
+                                        <li><strong>[Keycloak]</strong> Vytvoření <code>Client_id</code> pro identifikátor a doplnění do NEXUS mapy</li>
+                                        <li><strong>[NEXUS API]</strong> Přidání mapování identifikátoru / URL do NEXUS API Proxy</li>
+                                    </ol>
+                                </div>
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold text-secondary small">Repository URL</label>
@@ -831,6 +881,153 @@
     {% endif %}
 
     <!-- Global Progress Modals -->
+
+    <!-- Delete & Teardown Instance Modal -->
+    <div class="modal fade" id="deleteTeardownModal" tabindex="-1" aria-labelledby="deleteTeardownModalLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-3">
+                <div class="modal-header bg-danger text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="deleteTeardownModalLabel">
+                        <i class="bi bi-exclamation-triangle-fill text-white"></i>
+                        <span>CONFIRM DELETE &amp; SHUTDOWN INSTANCE</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" action="{% if instance_name %}{% url 'deploy_delete_instance' instance_name %}{% else %}{% url 'instance_credentials_list' %}{% endif %}">
+                    {% csrf_token %}
+                    <div class="modal-body p-4 text-center">
+                        <p class="mb-1 text-secondary small">You are about to permanently delete and shut down HEAppE instance:</p>
+                        <h4 class="fw-bold text-dark my-3 font-monospace">{{ instance_name }}</h4>
+                        
+                        <div class="alert alert-danger border-0 rounded-3 small mb-3 text-start d-flex gap-2">
+                            <i class="bi bi-exclamation-octagon-fill text-danger fs-5 flex-shrink-0"></i>
+                            <div>
+                                <strong>Warning:</strong> This will terminate running services, release host ports, and disconnect active client sessions.
+                            </div>
+                        </div>
+                        
+                        <div class="form-check text-start mb-2 ps-4">
+                            <input class="form-check-input" type="checkbox" name="stop_containers" id="modalStopContainers" checked>
+                            <label class="form-check-label small fw-semibold text-dark" for="modalStopContainers">
+                                <i class="bi bi-power text-danger me-1"></i>Stop &amp; remove all Docker containers (docker compose down -v)
+                            </label>
+                        </div>
+                        <div class="form-check text-start mb-1 ps-4">
+                            <input class="form-check-input" type="checkbox" name="delete_files" id="modalDeleteFiles" checked>
+                            <label class="form-check-label small fw-semibold text-dark" for="modalDeleteFiles">
+                                <i class="bi bi-folder-x text-danger me-1"></i>Remove deployment files &amp; configurations from disk
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-danger btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                            <i class="bi bi-trash3-fill me-1"></i>Permanently Delete &amp; Shut Down
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Retry Deployment Modal -->
+    <div class="modal fade" id="retryDeployModal" tabindex="-1" aria-labelledby="retryDeployModalLabel" aria-hidden="true" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg rounded-3">
+                <div class="modal-header bg-dark text-white border-0 py-3 px-4">
+                    <h5 class="modal-title fs-6 fw-bold d-flex align-items-center gap-2" id="retryDeployModalLabel">
+                        <i class="bi bi-arrow-clockwise text-warning"></i>
+                        <span>Retry Deployment for {{ instance_name }}</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="retry-deploy-form" class="instance-action-form" method="post" action="{% if instance_name %}{% url 'deploy_view' instance_name %}{% else %}{% url 'deploy_view' %}{% endif %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="deploy">
+                    <input type="hidden" name="InstanceName" value="{{ instance_name }}">
+                    <div class="modal-body p-4">
+                        <div class="alert alert-info border-0 rounded-3 small mb-3 d-flex gap-2 text-start">
+                            <i class="bi bi-info-circle-fill text-info fs-5 flex-shrink-0"></i>
+                            <div>
+                                Retrying deployment will overwrite existing configurations, re-clone the repository branch, rebuild Docker images, and re-initialize the database.
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Instance Name</label>
+                            <input type="text" class="form-control bg-light font-monospace fw-bold" value="{{ instance_name }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Repository URL</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" name="Repository" class="form-control repo-url-input" value="{{ repo_url }}" required>
+                                <button class="btn btn-secondary fetch-branches-btn" type="button" title="Fetch Tags &amp; Branches"><i class="bi bi-arrow-clockwise"></i></button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold text-secondary small">Target Branch / Release Tag</label>
+                            <select name="RepositoryBranch" class="form-select branch-select font-monospace" required>
+                                {% if branch_list %}
+                                <optgroup label="Branches">
+                                    {% for b in branch_list %}
+                                        <option value="{{ b }}" {% if b == repo_branch %}selected{% endif %}>{{ b }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endif %}
+                                {% if tag_list %}
+                                <optgroup label="Release Tags">
+                                    {% for t in tag_list %}
+                                        <option value="{{ t }}" {% if t == repo_branch %}selected{% endif %}>{{ t }}</option>
+                                    {% endfor %}
+                                </optgroup>
+                                {% endif %}
+                                {% if not branch_list and not tag_list %}
+                                    {% for r in branches %}
+                                        <option value="{{ r }}" {% if r == repo_branch %}selected{% endif %}>{{ r }}</option>
+                                    {% endfor %}
+                                {% endif %}
+                            </select>
+                            <div class="branch-spinner spinner-border spinner-border-sm text-primary mt-2" style="display:none;"></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-top py-2.5 px-4 d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-warning btn-sm fw-bold rounded-3 shadow-sm px-4 py-2">
+                            <i class="bi bi-rocket-takeoff me-1"></i>Start Retry Deployment
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deployment Error Logs Modal -->
+    <div class="modal fade" id="deployLogViewerModal" tabindex="-1" aria-labelledby="deployLogViewerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content border-0 shadow-lg rounded-3" style="background:#0d1117;">
+                <div class="modal-header border-secondary py-2 px-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-terminal text-danger fs-5"></i>
+                        <h6 class="modal-title mb-0 text-light font-monospace" id="deployLogViewerModalLabel">Deployment Logs &mdash; <span class="text-danger">{{ instance_name }}</span></h6>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary text-light py-0 px-2" onclick="navigator.clipboard.writeText(document.getElementById('deploy-error-logs-content').innerText); alert('Logs copied to clipboard!');" title="Copy logs">
+                            <i class="bi bi-clipboard"></i> Copy
+                        </button>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div class="modal-body p-0">
+                    <pre id="deploy-error-logs-content" class="p-3 mb-0 text-light" style="max-height:72vh; overflow-y:auto; white-space:pre-wrap; font-family:'JetBrains Mono','Fira Mono',monospace; font-size:12px; background:#0d1117;">{{ deploy_logs|default:"No deployment logs available." }}</pre>
+                </div>
+                <div class="modal-footer border-secondary py-2 px-3 bg-dark d-flex justify-content-between">
+                    <span class="text-muted small">Log file: <code>/opt/heappe-deployment/{{ instance_name }}/app/logs/deploy.log</code></span>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-light" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Switch Branch Modal -->
     <div class="modal fade" id="switchBranchModal" tabindex="-1" aria-labelledby="switchBranchModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -1104,7 +1301,19 @@ function startUpdatePolling(actionType = 'update') {
                                 $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during update. See logs above.</span>');
                             } else {
                                 $('#update-status-title').text('Deployment Failed').removeClass('text-dark').addClass('text-danger');
-                                $('#update-in-progress-footer').html('<span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during deployment. See logs above.</span>');
+                                $('#update-in-progress-footer').html(`
+                                    <div class="d-flex flex-column gap-2 w-100">
+                                        <span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle-fill me-1"></i>An error occurred during deployment. See logs above.</span>
+                                        <div class="d-flex gap-2 justify-content-center mt-2 flex-wrap">
+                                            <button type="button" class="btn btn-sm btn-warning fw-bold shadow-xs" onclick="location.reload();">
+                                                <i class="bi bi-arrow-clockwise me-1"></i>View Failed State &amp; Retry
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-danger fw-bold shadow-xs" onclick="$('#updateProgressModal').modal('hide'); $('#deleteTeardownModal').modal('show');">
+                                                <i class="bi bi-trash3-fill me-1"></i>Delete &amp; Shut Down
+                                            </button>
+                                        </div>
+                                    </div>
+                                `);
                             }
                         }
                         
@@ -1122,6 +1331,266 @@ function startUpdatePolling(actionType = 'update') {
     poll();
     updatePollInterval = setInterval(poll, 2000);
 }
+
+{% if instance_name %}
+// --- EXTRA HOSTS MANAGEMENT ---
+(function() {
+    const url = "{% url 'instance_extra_hosts' instance_name %}";
+    const opStatusUrl = "{% url 'qscheduler_operation_status' %}";
+    const csrf = '{{ csrf_token }}';
+    let loaded = false;
+
+    function esc(v) {
+        return $('<div>').text(v == null ? '' : String(v)).html();
+    }
+
+    // Shown above the given card (or above all cards), and scrolled into view.
+    function feedback(status, message, $card) {
+        const ok = status === 'success';
+        const $box = $card && $card.length ? $card.find('.extrahosts-messages') : $('#extrahosts-feedback');
+        $box.find('.extrahosts-alert').remove();
+        $box.prepend(`
+            <div class="alert alert-${ok ? 'success' : 'danger'} alert-dismissible fade show border-0 shadow-sm rounded-3 p-3 mb-3 d-flex align-items-center gap-2 small extrahosts-alert" role="alert">
+                <i class="bi ${ok ? 'bi-check-circle-fill text-success' : 'bi-exclamation-octagon-fill text-danger'} fs-5"></i>
+                <div style="white-space: pre-line;">${esc(message)}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>`);
+        const el = $box.find('.extrahosts-alert')[0];
+        if (el) el.scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    }
+
+    const badges = {
+        'default': '<span class="badge bg-secondary-subtle text-secondary-emphasis border">default</span>',
+        'container': '<span class="badge bg-secondary-subtle text-secondary-emphasis border">default</span>',
+        'custom': '<span class="badge bg-primary-subtle text-primary-emphasis border">custom</span>'
+    };
+
+    function lockedRow(h) {
+        return $(`
+            <tr>
+                <td class="font-monospace small">${esc(h.hostname)}</td>
+                <td class="font-monospace small">${esc(h.ip)}</td>
+                <td>${badges[h.source] || esc(h.source)}</td>
+                <td class="text-end text-nowrap"><span class="text-muted small"><i class="bi bi-lock-fill"></i> read-only</span></td>
+            </tr>`);
+    }
+
+    function editRow(h) {
+        h = h || {hostname: '', ip: ''};
+        return $(`
+            <tr class="extrahost-edit-row">
+                <td><input type="text" class="form-control form-control-sm font-monospace eh-host" placeholder="e.g. login.cluster.local" value="${esc(h.hostname)}"></td>
+                <td><input type="text" class="form-control form-control-sm font-monospace eh-ip" placeholder="e.g. 10.0.0.5 or host-gateway" value="${esc(h.ip)}"></td>
+                <td>${badges.custom}</td>
+                <td class="text-end text-nowrap"><button type="button" class="btn btn-sm btn-outline-danger extrahost-remove" title="Remove row"><i class="bi bi-trash"></i></button></td>
+            </tr>`);
+    }
+
+    function sectionCard(sec) {
+        const icon = sec.kind === 'qscheduler' ? 'bi-cpu' : 'bi-box-seam';
+        const pending = sec.pending_apply
+            ? '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle ms-2" title="Saved entries differ from the running container">not applied</span>' : '';
+        const $card = $(`
+            <div class="card border-0 shadow-sm rounded-3 bg-white mb-4 extrahosts-section" style="border: 1px solid #dee2e6 !important;">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi ${icon} text-primary fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold text-dark">${esc(sec.title)}</h5>
+                    <code class="small">${esc(sec.name || '')}</code>${pending}
+                    <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-auto extrahosts-dirty" style="display:none;">unsaved changes</span>
+                </div>
+                <div class="card-body p-3">
+                    <div class="extrahosts-messages"></div>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="small text-secondary" style="width: 42%;">Hostname</th>
+                                    <th class="small text-secondary" style="width: 34%;">IP Address</th>
+                                    <th class="small text-secondary">Source</th>
+                                    <th class="small text-secondary text-end"></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="extrahosts-controls d-flex flex-wrap align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary fw-bold extrahosts-add-btn"><i class="bi bi-plus-lg me-1"></i>Add</button>
+                        <button type="button" class="btn btn-sm btn-warning fw-bold shadow-sm extrahosts-apply-btn"><i class="bi bi-arrow-repeat me-1"></i>Apply</button>
+                        <div class="form-text small m-0">
+                            <strong>Add</strong> inserts an empty row; edit or remove rows as needed. Nothing is saved until
+                            <strong>Apply</strong>, which saves the list and recreates the container. ${esc(sec.apply_note || '')}
+                        </div>
+                    </div>
+                </div>
+            </div>`);
+        $card.data('target', sec.key);
+        const $msgs = $card.find('.extrahosts-messages');
+        if (sec.error) {
+            $msgs.append(`<div class="alert alert-danger border-0 bg-danger bg-opacity-10 text-danger-emphasis p-2 small mb-3">${esc(sec.error)}</div>`);
+            $card.find('.extrahosts-controls').remove();
+        }
+        if (sec.warning) {
+            $msgs.append(`<div class="alert alert-warning border-0 bg-warning bg-opacity-10 text-warning-emphasis p-2 small mb-3">${esc(sec.warning)}</div>`);
+        }
+        const $tbody = $card.find('tbody');
+        (sec.hosts || []).forEach(h => $tbody.append(h.editable ? editRow(h) : lockedRow(h)));
+        updateEmpty($card);
+        return $card;
+    }
+
+    function updateEmpty($card) {
+        const $tbody = $card.find('tbody');
+        $tbody.find('.extrahosts-empty').remove();
+        if (!$tbody.children('tr').length) {
+            $tbody.append('<tr class="extrahosts-empty"><td colspan="4" class="text-center text-muted small py-3">No extra hosts defined. Click Add to create one.</td></tr>');
+        }
+    }
+
+    function markDirty($card) {
+        $card.find('.extrahosts-dirty').show();
+    }
+
+    // QScheduler aliases (read-only): how HEAppE resolves the aliases of its QScheduler instances
+    const aliasModes = {
+        dns: '<span class="badge bg-success-subtle text-success-emphasis border border-success-subtle">Docker DNS</span>',
+        pending: '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">not applied</span>',
+        manual: '<span class="badge bg-secondary-subtle text-secondary-emphasis border">manual &middot; to be automated</span>'
+    };
+
+    function aliasesCard(rows) {
+        const $card = $(`
+            <div class="card border-0 shadow-sm rounded-3 bg-white mb-4" style="border: 1px solid #dee2e6 !important;">
+                <div class="card-header bg-white py-3 border-bottom d-flex align-items-center gap-2">
+                    <i class="bi bi-signpost-split text-primary fs-5"></i>
+                    <h5 class="h6 mb-0 fw-bold text-dark">QScheduler aliases</h5>
+                    <span class="small text-muted ms-auto">read-only &middot; set on the QScheduler page</span>
+                </div>
+                <div class="card-body p-3">
+                    <p class="small text-muted mb-2">Host names HEAppE uses for its QScheduler instances. Local instances
+                    resolve them through Docker DNS (network aliases on the instance's QScheduler network). For a remote
+                    instance, add each alias with the QScheduler's IP as an extra host of HEAppE API below.</p>
+                    <div class="table-responsive"><table class="table table-sm align-middle mb-0">
+                        <thead class="table-light"><tr>
+                            <th class="small text-secondary">Alias</th><th class="small text-secondary">QScheduler</th>
+                            <th class="small text-secondary">Resolved by</th><th class="small text-secondary"></th>
+                        </tr></thead><tbody></tbody></table></div>
+                </div>
+            </div>`);
+        const $tbody = $card.find('tbody');
+        rows.forEach(r => {
+            const add = r.mode === 'manual' && !r.ip
+                ? `<button type="button" class="btn btn-sm btn-outline-primary alias-add-host" data-alias="${esc(r.alias)}"><i class="bi bi-plus-lg me-1"></i>Add extra host</button>` : '';
+            $tbody.append(`<tr>
+                <td class="font-monospace small">${esc(r.alias)}</td>
+                <td class="small">${esc(r.qscheduler)} <span class="text-muted">:${esc(r.port)}</span></td>
+                <td class="small">${aliasModes[r.mode] || esc(r.mode)} <div class="text-muted">${esc(r.detail)}</div></td>
+                <td class="text-end text-nowrap">${add}</td></tr>`);
+        });
+        return $card;
+    }
+
+    $(document).on('click', '.alias-add-host', function() {
+        const $card = cardFor('compose:heappe');
+        if (!$card.length) return;
+        const $row = editRow({hostname: $(this).data('alias'), ip: ''});
+        $card.find('tbody .extrahosts-empty').remove();
+        $card.find('tbody').append($row);
+        markDirty($card);
+        $card[0].scrollIntoView({behavior: 'smooth', block: 'center'});
+        $row.find('.eh-ip').trigger('focus');
+    });
+
+    function render(resp) {
+        const $wrap = $('#extrahosts-sections').empty();
+        if ((resp.qscheduler_aliases || []).length) $wrap.append(aliasesCard(resp.qscheduler_aliases));
+        (resp.sections || []).forEach(sec => $wrap.append(sectionCard(sec)));
+        if (!(resp.sections || []).length) {
+            $wrap.html('<div class="text-center text-muted small py-4">Nothing to manage for this instance.</div>');
+        }
+    }
+
+    function load() {
+        return $.get(url).done(function(resp) { loaded = true; render(resp); })
+            .fail(function(xhr) {
+                const msg = (xhr.responseJSON || {}).message || 'Failed to load extra hosts.';
+                $('#extrahosts-sections').html(`<div class="alert alert-danger small">${esc(msg)}</div>`);
+            });
+    }
+
+    function cardFor(target) {
+        return $('.extrahosts-section').filter(function() { return $(this).data('target') === target; });
+    }
+
+    function post(target, data) {
+        data.csrfmiddlewaretoken = csrf;
+        data.target = target;
+        return $.post(url, data).done(function(resp) {
+            if (resp.sections) render(resp);
+            if (resp.message && resp.status === 'success') feedback('success', resp.message, cardFor(target));
+        }).fail(function(xhr) {
+            const msg = (xhr.responseJSON || {}).message || 'Request failed.';
+            // Validation errors keep the edited rows; once saved (apply failed), reload the saved state first.
+            const reload = msg.startsWith('Extra hosts were saved') ? load() : $.Deferred().resolve();
+            reload.always(function() { feedback('danger', msg, cardFor(target)); });
+        });
+    }
+
+    // QScheduler apply runs as a background QScheduler operation: wait for it to finish.
+    function waitForQSchedulerOperation() {
+        const deferred = $.Deferred();
+        const timer = setInterval(function() {
+            $.get(opStatusUrl).done(function(st) {
+                if (st.is_running) return;
+                clearInterval(timer);
+                if (st.success) deferred.resolve(st);
+                else deferred.reject(st);
+            });
+        }, 2000);
+        return deferred.promise();
+    }
+
+    $(document).on('shown.bs.tab', '#extrahosts-tab', function() { if (!loaded) load(); });
+    $(document).on('click', '#extrahosts-reload-btn', load);
+
+    $(document).on('click', '.extrahosts-add-btn', function() {
+        const $card = $(this).closest('.extrahosts-section');
+        const $row = editRow();
+        $card.find('tbody').append($row);
+        updateEmpty($card);
+        markDirty($card);
+        $row.find('.eh-host').trigger('focus');
+    });
+
+    $(document).on('input', '.extrahosts-section .eh-host, .extrahosts-section .eh-ip', function() {
+        markDirty($(this).closest('.extrahosts-section'));
+    });
+
+    $(document).on('click', '.extrahost-remove', function() {
+        const $card = $(this).closest('.extrahosts-section');
+        $(this).closest('tr').remove();
+        updateEmpty($card);
+        markDirty($card);
+    });
+
+    $(document).on('click', '.extrahosts-apply-btn', function() {
+        const $card = $(this).closest('.extrahosts-section');
+        const title = $card.find('h5').text();
+        const hosts = $card.find('.extrahost-edit-row').map(function() {
+            return {hostname: $(this).find('.eh-host').val().trim(), ip: $(this).find('.eh-ip').val().trim()};
+        }).get().filter(h => h.hostname || h.ip);
+        if (!confirm(`Save ${hosts.length} custom extra host(s) and recreate ${title}? This causes a short downtime.`)) return;
+        showLoading('Applying extra hosts...', `Recreating ${title}...`);
+        post($card.data('target'), {action: 'apply', hosts: JSON.stringify(hosts)}).done(function(resp) {
+            if (resp.status !== 'started') { hideLoading(); return; }
+            const target = $card.data('target');
+            waitForQSchedulerOperation()
+                .done(function() { load().always(() => feedback('success', `Extra hosts applied. ${title} was recreated.`, cardFor(target))); })
+                .fail(function(st) { load().always(() => feedback('danger', (st && st.error) || 'Applying extra hosts failed.', cardFor(target))); })
+                .always(function() { hideLoading(); });
+        }).fail(function() { hideLoading(); });
+    });
+})();
+{% endif %}
 
 $(document).ready(function() {
     // --- OPENTELEMETRY TOGGLE SWITCH LOGIC ---
@@ -1422,6 +1891,12 @@ $(document).ready(function() {
                 },
                 success: function(data) {
                     if (!data || !data.containers) return;
+                    if (data.heappe_db_issue) {
+                        clearInterval(startupPollInterval);
+                        $('#startup-banner').hide();
+                        showHeappeDbIssue(data.heappe_db_issue);
+                        return;
+                    }
 
                     // If we have restart_status from backend, update the status phase
                     if (data.restart_status && data.restart_status !== 'none') {
@@ -1432,7 +1907,7 @@ $(document).ready(function() {
                         } else if (status === 'done') {
                             $('#startup-phase').text('Waiting for HEAppE to come online…');
 
-                            const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                            const heappe = data.containers.find(c => c.service === 'heappe');
                             const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                             if (heappe) {
                                 $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
@@ -1453,7 +1928,7 @@ $(document).ready(function() {
                     }
 
                     // Fallback to container-only polling
-                    const heappe = data.containers.find(c => c.name && c.name.toLowerCase().includes('heappe') && !c.name.toLowerCase().includes('vault'));
+                    const heappe = data.containers.find(c => c.service === 'heappe');
                     const allUp  = data.containers.every(c => c.status === 'running' || c.status === 'exited' || c.status === 'created');
                     if (heappe) {
                         $('#startup-phase').text('HEAppE: ' + (heappe.status || 'unknown').toUpperCase());
@@ -1470,12 +1945,64 @@ $(document).ready(function() {
         }, 3000);
     }
 
+    // --- HEAppE STARTED BEFORE SQL SERVER WAS READY ---
+    function showHeappeDbIssue(issue) {
+        const $b = $('#heappe-db-issue-banner');
+        if (!$b.length || !issue) return;
+        ['container_name', 'mssql_name', 'error'].forEach(f => $b.find(`[data-field="${f}"]`).text(issue[f] || ''));
+        $b.find('input[name="container_id"]').val(issue.container_id);
+        $b.find('[data-when="ready"]').toggle(!!issue.mssql_ready);
+        $b.find('[data-when="not-ready"]').toggle(!issue.mssql_ready);
+        $b.show();
+    }
+
+    (function watchHeappeStartup() {
+        const el = document.getElementById('heappe-db-issue-data');
+        const issue = el ? JSON.parse(el.textContent) : null;
+        if (issue) showHeappeDbIssue(issue);
+        // While HEAppE is starting or unhealthy (or waits for SQL Server), keep checking for a few minutes.
+        const health = '{{ heappe_health|escapejs }}';
+        if (!el || (health !== 'starting' && health !== 'unhealthy')) return;
+        let checks = 0;
+        const timer = setInterval(function() {
+            if (++checks > 30 || startupPollInterval) { clearInterval(timer); return; }
+            $.post(window.location.href, {
+                action: 'status_poll', InstanceName: instanceName,
+                csrfmiddlewaretoken: $('[name=csrfmiddlewaretoken]').first().val()
+            }).done(function(data) {
+                if (data && data.heappe_db_issue) {
+                    showHeappeDbIssue(data.heappe_db_issue);
+                } else if (data && data.containers) {
+                    $('#heappe-db-issue-banner').hide();
+                }
+            });
+        }, 10000);
+    })();
+
+    // Restart All dropdown: the real `docker compose restart` (one-shot init jobs included)
+    $(document).on('click', '.restart-plain-info', function(e) {
+        e.stopPropagation();
+        const $detail = $('#restart-plain-detail');
+        $detail.toggle();
+        $(this).attr('aria-expanded', $detail.is(':visible'));
+    });
+
+    $(document).on('click', '.restart-all-plain', function() {
+        const $form = $(this).closest('form');
+        const toggle = $form.find('.dropdown-toggle-split')[0];
+        if (toggle && window.bootstrap) bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+        const $action = $form.find('input[name="action"]');
+        $action.val('restart_all_plain');
+        $form.trigger('submit');
+        $action.val('restart_all');
+    });
+
     $(document).on('submit', '.container-control-form, .global-control-form', function(e) {
         e.preventDefault();
         const form   = $(this);
         const action = form.find('input[name="action"]').val();
 
-        if (action === 'restart_all') {
+        if (action === 'restart_all' || action === 'restart_all_plain') {
             showLoading('Initiating Restart…', 'Sending restart command to server…');
             runRestartPhases();
             $.ajax({
@@ -1554,6 +2081,134 @@ $(document).ready(function() {
             $customInput.hide().val('');
             $select.prop('disabled', false);
         }
+    });
+
+    // --- HEAppE IDENTIFIER BUILDER LOGIC ---
+    function initIdentifierBuilder($card) {
+        const $modeFormula = $card.find('.ident-mode-toggle[value="formula"]');
+        const $modeManual = $card.find('.ident-mode-toggle[value="manual"]');
+        const $formulaContainer = $card.find('.ident-formula-container');
+        const $fScope = $card.find('.ident-f-scope');
+        const $fScopeCustom = $card.find('.ident-f-scope-custom');
+        const $fEnv = $card.find('.ident-f-env');
+        const $fEnvCustom = $card.find('.ident-f-env-custom');
+        const $fProvider = $card.find('.ident-f-provider');
+        const $fProviderCustom = $card.find('.ident-f-provider-custom');
+        const $fInstance = $card.find('.ident-f-instance');
+        const $finalInput = $card.find('.ident-final-input');
+        const $hiddenIdent = $card.find('.ident-hidden-identifier');
+        const $copyBtn = $card.find('.ident-copy-btn');
+
+        function cleanPart(val) {
+            return (val || '').toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+        }
+
+        function computeIdentifier() {
+            if ($modeManual.is(':checked')) {
+                const cleaned = cleanPart($finalInput.val());
+                $hiddenIdent.val(cleaned);
+                return;
+            }
+
+            const scopeVal = $fScope.val() === '__custom__' ? $fScopeCustom.val() : $fScope.val();
+            const envVal = $fEnv.val() === '__custom__' ? $fEnvCustom.val() : $fEnv.val();
+            const providerVal = $fProvider.val() === '__custom__' ? $fProviderCustom.val() : $fProvider.val();
+            const instanceVal = $fInstance.val();
+
+            const parts = [
+                cleanPart(scopeVal) || 'core',
+                cleanPart(envVal) || 'dev',
+                cleanPart(providerVal) || 'it4i',
+                cleanPart(instanceVal) || 'develop'
+            ];
+            const assembled = parts.join('_');
+            $finalInput.val(assembled);
+            $hiddenIdent.val(assembled);
+        }
+
+        function checkCustom($select, $custom) {
+            if ($select.val() === '__custom__') {
+                $custom.removeClass('d-none').focus();
+            } else {
+                $custom.addClass('d-none');
+            }
+        }
+
+        $card.find('.ident-mode-toggle').on('change', function() {
+            if ($modeManual.is(':checked')) {
+                $formulaContainer.slideUp(150);
+                $finalInput.focus();
+            } else {
+                $formulaContainer.slideDown(150);
+                computeIdentifier();
+            }
+        });
+
+        $fScope.on('change', function() { checkCustom($fScope, $fScopeCustom); computeIdentifier(); });
+        $fEnv.on('change', function() { checkCustom($fEnv, $fEnvCustom); computeIdentifier(); });
+        $fProvider.on('change', function() { checkCustom($fProvider, $fProviderCustom); computeIdentifier(); });
+
+        $card.find('.ident-f-scope-custom, .ident-f-env-custom, .ident-f-provider-custom, .ident-f-instance').on('input', computeIdentifier);
+
+        $finalInput.on('input', function() {
+            const cleaned = cleanPart($(this).val());
+            $hiddenIdent.val(cleaned);
+        });
+
+        $card.find('.ident-preset-btn').on('click', function(e) {
+            e.preventDefault();
+            const sc = $(this).data('scope');
+            const en = $(this).data('env');
+            const pr = $(this).data('provider');
+            const inst = $(this).data('instance');
+
+            $modeFormula.prop('checked', true).trigger('change');
+
+            if ($fScope.find(`option[value="${sc}"]`).length) {
+                $fScope.val(sc);
+                $fScopeCustom.addClass('d-none').val('');
+            } else {
+                $fScope.val('__custom__');
+                $fScopeCustom.removeClass('d-none').val(sc);
+            }
+
+            if ($fEnv.find(`option[value="${en}"]`).length) {
+                $fEnv.val(en);
+                $fEnvCustom.addClass('d-none').val('');
+            } else {
+                $fEnv.val('__custom__');
+                $fEnvCustom.removeClass('d-none').val(en);
+            }
+
+            if ($fProvider.find(`option[value="${pr}"]`).length) {
+                $fProvider.val(pr);
+                $fProviderCustom.addClass('d-none').val('');
+            } else {
+                $fProvider.val('__custom__');
+                $fProviderCustom.removeClass('d-none').val(pr);
+            }
+
+            $fInstance.val(inst);
+            computeIdentifier();
+        });
+
+        $copyBtn.on('click', function() {
+            const val = $finalInput.val();
+            if (!val) return;
+            navigator.clipboard.writeText(val).then(() => {
+                const $icon = $(this).find('i');
+                $icon.removeClass('bi-clipboard').addClass('bi-check-lg text-success');
+                setTimeout(() => {
+                    $icon.removeClass('bi-check-lg text-success').addClass('bi-clipboard');
+                }, 1500);
+            });
+        });
+
+        computeIdentifier();
+    }
+
+    $('.heappe-identifier-builder-card').each(function() {
+        initIdentifierBuilder($(this));
     });
 
     // --- MAINTENANCE TAB ORCHESTRATION ---
@@ -1660,7 +2315,7 @@ $(document).ready(function() {
         // relatedTarget is null when modal re-shows after tab switch — keep last cid
         if (e.relatedTarget) {
             logsCurrentCid = $(e.relatedTarget).data('container-id');
-            const cname = $(e.relatedTarget).closest('.card').find('h6').first().text().trim();
+            const cname = $(e.relatedTarget).data('container-title') || $(e.relatedTarget).closest('.card').find('h6').first().text().trim();
             $('#logs-container-name').text(cname || logsCurrentCid.substring(0, 12));
             $logsContent.text('');
             logsAutoScroll = true;
@@ -1907,10 +2562,10 @@ $(document).ready(function() {
         $('.open-fm-tab-btn').each(function() {
             const cid = $(this).data('container-id');
             const name = $(this).data('container-name') || '';
-            const lowerName = name.toLowerCase();
+            const service = $(this).data('container-service') || '';
             
-            if (lowerName.includes('heappe') || lowerName.includes('datastaging')) {
-                const label = lowerName.includes('heappe') ? 'HEAppE API' : 'DataStaging API';
+            if (service === 'heappe' || service === 'datastagingapi') {
+                const label = service === 'heappe' ? 'HEAppE API' : 'DataStaging API';
                 const btnClass = cid === currentContainerId ? 'btn-primary' : 'btn-outline-primary';
                 const btn = $(`<button type="button" class="btn btn-sm ${btnClass} fm-switch-container-btn" data-container-id="${cid}" data-container-name="${name}">${label}</button>`);
                 switcher.append(btn);
@@ -1966,7 +2621,7 @@ $(document).ready(function() {
         if (!currentContainerId) {
             // Find container containing heappe in its name
             const heappeBtn = $('.open-fm-tab-btn').filter(function() {
-                return ($(this).data('container-name') || '').toLowerCase().includes('heappe');
+                return $(this).data('container-service') === 'heappe';
             }).first();
             
             if (heappeBtn.length) {
@@ -2258,6 +2913,14 @@ $(document).ready(function() {
 </script>
 
 <style>
+    /* Container cards */
+    .container-card-icon { width: 2.5rem; height: 2.5rem; font-size: 1.2rem; }
+    .container-card-title { font-size: 1.05rem; }
+    .container-card-details { display: grid; grid-template-columns: max-content minmax(0, 1fr); column-gap: .75rem; row-gap: .35rem; }
+    .container-card-details dt { font-weight: 600; color: var(--bs-secondary-color); }
+    .container-card-details dd { margin: 0; min-width: 0; }
+    .container-card-job { opacity: .85; }
+
     .spin-icon {
         display: inline-block;
         animation: spin-anim 2s linear infinite;
