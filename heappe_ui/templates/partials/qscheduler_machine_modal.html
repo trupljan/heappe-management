@@ -93,7 +93,15 @@
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-default_task_time_limit">Default task time limit</label>
-                                    <input type="text" class="form-control form-control-sm" id="qs-add-default_task_time_limit" name="default_task_time_limit" value="1h">
+                                    <input type="text" class="form-control form-control-sm" id="qs-add-default_task_time_limit" name="default_task_time_limit" value="15m">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-max_task_time_limit">Max task time limit</label>
+                                    <input type="text" class="form-control form-control-sm" id="qs-add-max_task_time_limit" name="max_task_time_limit" value="15m">
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-decay_half_time">Fair share decay half-time</label>
+                                    <input type="text" class="form-control form-control-sm" id="qs-add-decay_half_time" name="decay_half_time" value="90m">
                                 </div>
                                 <div class="col-md-4">
                                     <label class="form-label small text-muted fw-semibold mb-1" for="qs-add-limit_check_interval">Limit check interval</label>
@@ -104,6 +112,7 @@
                                     <input type="text" class="form-control form-control-sm" id="qs-add-max_clock_skew" name="max_clock_skew" value="4s">
                                 </div>
                             </div>
+                            <div class="form-text" style="font-size: 0.72rem;">QScheduler 0.3.0+: tasks asking for more than the <strong>max task time limit</strong> are rejected, and HEAppE sends the job walltime as the task time limit, so the queue's max walltime is set to it. The default limit must not exceed it. Users are scheduled by fair share: past usage counts half after the <strong>decay half-time</strong>. Older QScheduler versions ignore both.</div>
                         </div>
                         <div class="form-check form-switch mt-2">
                             <input class="form-check-input" type="checkbox" id="qs-add-pulse_access" name="pulse_access">

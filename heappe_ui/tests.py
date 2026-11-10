@@ -6403,7 +6403,7 @@ class QSchedulerRecoveryTests(TestCase):
         result = {}
         with mock.patch("heappe_ui.view.clusters.connect_heappe_management_api", return_value=(controller, "sc", None)), \
              mock.patch.object(core, "presence", return_value=(core.MISSING, "gone")), \
-             mock.patch.object(core, "heappe_identity", return_value=("6.6.0", "heappe-dev")), \
+             mock.patch.object(core, "heappe_identity", return_value=("6.7.0", "heappe-dev")), \
              mock.patch.object(core, "resolve_heappe_service_network", return_value=("dev_heappe", "dev_external")), \
              mock.patch.object(core, "restart_heappe"), mock.patch.object(core, "check_from_heappe"), \
              mock.patch.object(core, "find_heappe_api_container", return_value="dev_heappe"), \
@@ -8901,7 +8901,9 @@ class QSchedulerSuspensionTargetTests(TestCase):
                                     ("GET", "/machine/A/about"): (200, "{}"),
                                     ("GET", "/machine/B/about"): (502, "backend down")})
         states = t.machine_states()
-        self.assertEqual(states["A"], {"backend": "test", "suspension": None, "pulse_access": None})   # no field: < 0.2.2
+        self.assertEqual(states["A"], {"backend": "test", "suspension": None, "pulse_access": None,   # no field: < 0.2.2
+                                       "max_task_time_limit_ms": None, "default_task_time_limit_ms": None,
+                                       "decay_half_time_ms": None})                                    # < 0.3.0
         self.assertEqual(states["B"]["suspension"]["message"], "x")
         self.assertEqual(t.machine_online("A"), (True, ""))
         ok, reason = t.machine_online("B")
@@ -9462,3 +9464,504 @@ class QSchedulerDashboardPulseTests(_QsMachineViewFixtures, TestCase):
                 mock.patch("heappe_ui.view.qscheduler_core.target_for", return_value=target):
             rows = self.client.get("/dashboard/qscheduler-machines/").json()["machines"]
         self.assertIsNone(rows[0]["pulse_access"])
+
+
+class QSchedulerV030Tests(TestCase):
+    """QScheduler 0.3.0 and HEAppE 6.7.0: version rules, machine time limits, service limits, project prefix."""
+
+    def _opts(self, **kw):
+        return dict({"machine_name": "Sim", "backend": "test", "queue_size": 4, "limit_check_interval": "2s",
+                     "max_session_time": "2h", "default_task_time_limit": "15m", "max_task_time_limit": "15m",
+                     "max_clock_skew": "4s", "decay_half_time": "90m", "iqm_url": "", "iqm_token": "",
+                     "iqm_device": "", "iqm_poll_interval": "500ms"}, **kw)
+
+    def _target(self, version="qscheduler 0.3.0", responses=None):
+        from heappe_ui.view.qscheduler_core import QsTarget
+
+        class Fake(QsTarget):
+            def __init__(self):
+                self.port, self.requests = 4300, []
+
+            def version(self):
+                return version
+
+            def admin_request(self, method, path, body=None, timeout=60):
+                self.requests.append((method, path, body))
+                return (responses or {}).get((method, path), (200, "[]"))
+        return Fake()
+
+    # --- versions -----------------------------------------------------------
+
+    def test_heappe_release_ignores_prerelease(self):
+        from heappe_ui.view.qscheduler_core import heappe_release, supports_qscheduler, uses_project_prefix
+        self.assertEqual(heappe_release("v6.7.0a3"), (6, 7, 0))
+        self.assertEqual(heappe_release("V6.7.0"), (6, 7, 0))
+        self.assertEqual(heappe_release("6.6"), (6, 6, 0))
+        self.assertEqual(heappe_release(None), (0, 0, 0))
+        self.assertTrue(supports_qscheduler("6.6.0a1"))
+        self.assertTrue(uses_project_prefix("6.7.0a1"))
+        self.assertFalse(uses_project_prefix("6.6.3"))
+
+    def test_compatibility_rules(self):
+        from heappe_ui.view.qscheduler_core import compatibility_error, required_heappe_version
+        self.assertEqual(required_heappe_version("qscheduler 0.3.0"), (6, 7, 0))
+        self.assertEqual(required_heappe_version("qscheduler v0.2.2"), (6, 7, 0))
+        self.assertEqual(required_heappe_version("qscheduler v0.2.1"), (6, 6, 0))
+        self.assertEqual(required_heappe_version(None), (6, 6, 0))
+        self.assertEqual(compatibility_error("dev", "6.7.0a3", "qs", "qscheduler 0.3.0"), "")
+        self.assertEqual(compatibility_error("dev", "6.6.3", "qs", "qscheduler v0.2.1"), "")
+        err = compatibility_error("dev", "6.6.3", "qs", "qscheduler 0.3.0")
+        self.assertIn("needs HEAppE 6.7.0", err)
+        self.assertIn("6.7.0", compatibility_error("dev", "", "qs", "qscheduler v0.2.2"))
+
+    def test_upgrade_rules(self):
+        from heappe_ui.view.qscheduler_deploy import upgrade_errors, crosses_030
+        self.assertIn("one-way", upgrade_errors("qscheduler 0.3.0", "qscheduler 0.2.2"))
+        self.assertEqual(upgrade_errors("qscheduler 0.2.2", "qscheduler 0.3.0"), "")
+        self.assertEqual(upgrade_errors(None, "qscheduler 0.3.0"), "")
+        self.assertTrue(crosses_030("qscheduler v0.2.2", "qscheduler 0.3.0"))
+        self.assertFalse(crosses_030("qscheduler 0.3.0", "qscheduler 0.3.1"))
+
+    # --- machines -----------------------------------------------------------
+
+    def test_machine_request_and_args_by_version(self):
+        from heappe_ui.view.qscheduler_core import machine_request, machine_args
+        body = machine_request(self._opts(max_task_time_limit="1h", default_task_time_limit="30m"), "qscheduler 0.3.0")
+        self.assertEqual((body["max_task_time_limit_ms"], body["default_task_time_limit_ms"], body["decay_half_time_ms"]),
+                         (3600000, 1800000, 5400000))
+        self.assertIs(body["pulse_access"], False)
+        old = machine_request(self._opts(), "qscheduler v0.2.2")
+        self.assertNotIn("max_task_time_limit_ms", old)
+        self.assertNotIn("decay_half_time_ms", old)
+        self.assertNotIn("pulse_access", machine_request(self._opts(), "qscheduler v0.2.1"))
+        args = machine_args(dict(self._opts(), action="add"), "qscheduler 0.3.0")
+        self.assertIn("--max-task-time-limit", args)
+        self.assertLess(args.index("--decay-half-time"), args.index("test"))
+        self.assertNotIn("--max-task-time-limit", machine_args(dict(self._opts(), action="add"), "qscheduler v0.2.0"))
+
+    def test_time_limit_validation(self):
+        from heappe_ui.view.qscheduler_core import check_time_limits, format_duration, walltime_seconds
+        from heappe_ui.view.qscheduler_machines import parse_machine_options
+        self.assertEqual(check_time_limits(self._opts()), "")
+        self.assertIn("must not exceed", check_time_limits(self._opts(default_task_time_limit="1h")))
+        opts, errors = parse_machine_options({"qscheduler_id": "1", "machine_name": "Sim"}, "u")
+        self.assertEqual(errors, [])
+        self.assertEqual((opts["default_task_time_limit"], opts["max_task_time_limit"], opts["decay_half_time"]),
+                         ("15m", "15m", "90m"))
+        _, errors = parse_machine_options({"qscheduler_id": "1", "machine_name": "Sim",
+                                           "default_task_time_limit": "1h"}, "u")
+        self.assertTrue(any("must not exceed" in e for e in errors))
+        _, errors = parse_machine_options({"qscheduler_id": "1", "machine_name": "Sim", "decay_half_time": "soon"}, "u")
+        self.assertTrue(any("decay half-time" in e for e in errors))
+        self.assertEqual((format_duration(900000), format_duration(5400000), format_duration(1500)), ("15m", "90m", "1500ms"))
+        self.assertEqual((walltime_seconds("15m"), walltime_seconds(7200000)), (900, 7200))
+
+    def test_stored_machine_options_are_completed(self):
+        from heappe_ui.view.qscheduler_core import complete_machine_options
+        legacy = complete_machine_options({"default_task_time_limit": "1h", "queue_size": 8})
+        self.assertEqual((legacy["default_task_time_limit"], legacy["max_task_time_limit"], legacy["queue_size"]),
+                         ("1h", "1h", 8))
+        self.assertEqual(complete_machine_options({})["max_task_time_limit"], "15m")
+        self.assertEqual(complete_machine_options({"default_task_time_limit": "5m"})["max_task_time_limit"], "15m")
+
+    def test_add_machine_checks_limits_and_sends_max(self):
+        t = self._target(responses={("POST", "/machines"): (201, "{}")})
+        res = t.add_machine(self._opts(default_task_time_limit="1h"), lambda *_: None)
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("must not exceed", res.output)
+        self.assertEqual(t.requests, [])
+        self.assertEqual(t.add_machine(self._opts(max_task_time_limit="2h"), lambda *_: None).returncode, 0)
+        self.assertEqual(t.requests[0][2]["max_task_time_limit_ms"], 7200000)
+
+    def test_update_machine_settings(self):
+        import json as _json
+        cfg = {"name": "Sim", "queue_size": 4, "default_task_time_limit_ms": 900000, "max_task_time_limit_ms": 900000,
+               "pulse_access": False, "backend": {"type": "test"}, "suspension": None}
+        t = self._target(responses={("GET", "/machine/Sim"): (200, _json.dumps(cfg)), ("PUT", "/machine/Sim"): (200, "{}")})
+        t.update_machine_settings("Sim", {"max_task_time_limit_ms": 3600000}, lambda *_: None)
+        put = t.requests[-1]
+        self.assertEqual((put[0], put[2]["max_task_time_limit_ms"], put[2]["queue_size"]), ("PUT", 3600000, 4))
+        self.assertNotIn("suspension", put[2])
+        with self.assertRaises(RuntimeError):
+            t.update_machine_settings("Sim", {"decay_half_time_ms": 1}, lambda *_: None)
+        with self.assertRaises(RuntimeError):     # default above the max
+            t.update_machine_settings("Sim", {"max_task_time_limit_ms": 60000}, lambda *_: None)
+
+    def test_queue_walltime_problems(self):
+        from heappe_ui.view.qscheduler_cluster_health import queue_walltime_problems, _time_limit_status
+        cluster = {"node_types": [{"id": 1, "name": "Sim", "queue": "Sim", "max_walltime": 86400},
+                                  {"id": 2, "name": "Short", "queue": "Sim", "max_walltime": 600},
+                                  {"id": 3, "name": "Other", "queue": "Other", "max_walltime": 86400}]}
+        self.assertEqual([q["id"] for q in queue_walltime_problems(cluster, "Sim", 900000)], [1])
+        status = _time_limit_status(cluster, "Sim", {"max_task_time_limit_ms": 900000, "default_task_time_limit_ms": 900000})
+        self.assertEqual((status["max"], status["max_walltime"], len(status["problems"])), ("15m", 900, 1))
+        self.assertIsNone(_time_limit_status(cluster, "Sim", {"max_task_time_limit_ms": None}))
+
+    # --- service limits -----------------------------------------------------
+
+    def test_sizes_and_serve_options(self):
+        from heappe_ui.view import qscheduler_core as core
+        self.assertEqual((core.parse_size("200M"), core.parse_size("1g"), core.parse_size("512")),
+                         (200 << 20, 1 << 30, 512))
+        for bad in ("", "0", "1.5G", "1X"):
+            with self.assertRaises(ValueError):
+                core.parse_size(bad)
+        opts, errors = core.parse_serve_options({"max_payload": "64m", "max_user_active_items": "100",
+                                                 "task_retention": "", "max_user_active_payload": "1G"})
+        self.assertEqual(errors, [])
+        self.assertEqual(opts, {"max_payload": "64M", "max_user_active_items": 100, "max_user_active_payload": "1G"})
+        _, errors = core.parse_serve_options({"max_payload": "5G", "max_user_active_items": "0", "task_retention": "x"})
+        self.assertEqual(len(errors), 3)
+        self.assertEqual(core.serve_args(4300, opts), ["serve", "--port", "4300", "--max-payload", "64M",
+                                                       "--max-user-active-items", "100",
+                                                       "--max-user-active-payload", "1G"])
+        cmd = ["serve", "--port", "4300", "--max-payload", "8M", "--task-retention=5m"]
+        self.assertEqual(core.serve_options_of(cmd), {"max_payload": "8M", "task_retention": "5m"})
+        self.assertEqual(core.with_serve_options(cmd, {"max_user_active_items": 5}),
+                         ["serve", "--port", "4300", "--max-user-active-items", "5"])
+        self.assertEqual(core.parse_serve_port(core.with_serve_options(cmd, {})), 4300)
+
+    # --- project prefix -----------------------------------------------------
+
+    def _assignment(self, identifier="heappe.dev", prefix=""):
+        from heappe_ui.models import InstanceCredentials, QSchedulerInstance, QSchedulerAssignment
+        inst, _ = QSchedulerInstance.objects.get_or_create(name="qs-1", defaults=dict(
+            kind="managed", container_name="qs-1", service_host="qs-1", port=4300))
+        cred = InstanceCredentials.objects.create(instance_name=f"h-{identifier}", heappe_host="h", heappe_login="u",
+                                                  heappe_password="p", heappe_port="5000")
+        return QSchedulerAssignment.objects.create(qscheduler=inst, heappe_instance=cred, heappe_identifier=identifier,
+                                                   project_prefix=prefix)
+
+    def test_prefix_choice(self):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_prefix import ensure_assignment_prefix
+        self.assertEqual(core.project_prefix_for("heappe.dev/eu"), "heappe-dev-eu")
+        self.assertEqual(core.project_prefix_for("..."), "heappe")
+        a = self._assignment("heappe.dev")
+        self.assertEqual(ensure_assignment_prefix(a), "heappe-dev")
+        a.refresh_from_db()
+        self.assertEqual(a.project_prefix, "heappe-dev")
+        b = self._assignment("heappe-dev")                        # same proposal on the same QScheduler
+        self.assertEqual(ensure_assignment_prefix(b), "heappe-dev-2")
+        c = self._assignment("other")                             # an explicit prefix on the clusters is adopted
+        cluster = {"custom_configuration": {core.PREFIX_KEY: "lexis"}}
+        self.assertEqual(ensure_assignment_prefix(c, clusters=[cluster, cluster]), "lexis")
+        self.assertEqual(ensure_assignment_prefix(c, clusters=[]), "lexis")   # never changes once set
+
+    def test_new_cluster_configuration_has_prefix(self):
+        from heappe_ui.view import qscheduler_core as core
+        inst = mock.Mock(service_host="qs-1", port=4300)
+        cfg, _ = core.build_cluster_custom_configuration(inst, ("dev.Sim", "tok"), True, None, "dev")
+        self.assertEqual(cfg[core.PREFIX_KEY], "dev")
+        cfg, _ = core.build_cluster_custom_configuration(inst, None)
+        self.assertNotIn(core.PREFIX_KEY, cfg)
+
+    def test_build_plan(self):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_prefix import build_plan
+        clusters = [{"id": 1, "name": "Sim", "custom_configuration": {}, "node_types": [{"queue": "Sim"}]},
+                    {"id": 2, "name": "Garnet", "custom_configuration": {core.PREFIX_KEY: "lexis"},
+                     "node_types": [{"queue": "Garnet"}]}]
+        projects = {1: [{"name": "P-A", "accounting_string": "A"}, {"name": "P-B", "accounting_string": "B"},
+                        {"name": "P-C", "accounting_string": "C"}, {"name": "P-D", "accounting_string": "D"},
+                        {"name": "P-E", "accounting_string": "E"}],
+                    2: [{"name": "P-X", "accounting_string": "X"}]}
+        qs = {"A": {"consumed_ms": 5, "limit_ms": 10}, "dev.B": {}, "C": {}, "dev.C": {}, "heappe-legacy.E": {}}
+        plan = build_plan("dev", "heappe-legacy", clusters, projects, qs)
+        states = {r["accounting_string"]: (r["state"], r["old"]) for r in plan["rows"]}
+        self.assertEqual(states, {"A": ("rename", "A"), "B": ("done", None), "C": ("conflict", "C"),
+                                  "D": ("new", None), "E": ("rename", "heappe-legacy.E")})
+        self.assertEqual([c["set_prefix"] for c in plan["clusters"]], [True, False])
+        self.assertTrue(any("lexis" in p for p in plan["problems"]))
+        self.assertTrue(any("Both 'C' and 'dev.C'" in p for p in plan["problems"]))
+
+    def test_prefix_change_rules(self):
+        from datetime import datetime, timezone
+        from heappe_ui.view.qscheduler_prefix import prefix_change_error
+        a = self._assignment("dev", prefix="dev")
+        self._assignment("other", prefix="taken")
+        self.assertEqual(prefix_change_error(a, "lexis"), "")
+        self.assertEqual(prefix_change_error(a, "dev"), "")
+        self.assertIn("no '.'", prefix_change_error(a, "my.prefix"))
+        self.assertIn("used by HEAppE", prefix_change_error(a, "taken"))
+        a.projects_renamed_at = datetime(2026, 11, 1, tzinfo=timezone.utc)
+        self.assertIn("cannot change", prefix_change_error(a, "lexis"))
+        self.assertEqual(prefix_change_error(a, "dev"), "")          # keeping it is always fine
+
+    def test_build_plan_replaces_previous_prefix(self):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_prefix import build_plan
+        clusters = [{"id": 1, "name": "Sim", "custom_configuration": {core.PREFIX_KEY: "old"}},
+                    {"id": 2, "name": "Garnet", "custom_configuration": {core.PREFIX_KEY: "lexis"}}]
+        projects = {1: [{"name": "P-A", "accounting_string": "A"}, {"name": "P-B", "accounting_string": "B"}]}
+        plan = build_plan("new", "dev", clusters, projects, {"old.A": {"consumed_ms": 3}, "B": {}}, previous="old")
+        self.assertEqual([(c["set_prefix"], c["replace"], c["kept"]) for c in plan["clusters"]],
+                         [(True, True, False), (False, False, True)])
+        self.assertEqual({r["accounting_string"]: (r["state"], r["old"], r["new"]) for r in plan["rows"]},
+                         {"A": ("rename", "old.A", "new.A"), "B": ("rename", "B", "new.B")})
+
+    def test_set_cluster_prefixes_replaces_previous(self):
+        from heappe_ui.view import qscheduler_core as core
+        from heappe_ui.view.qscheduler_prefix import set_cluster_prefixes
+        clusters = [{"id": 1, "name": "Sim", "custom_configuration": {core.PREFIX_KEY: "old"}},
+                    {"id": 2, "name": "Garnet", "custom_configuration": {core.PREFIX_KEY: "lexis"}},
+                    {"id": 3, "name": "Q", "custom_configuration": {}}]
+        controller = mock.Mock()
+        with mock.patch.object(core, "_cluster_put_body", side_effect=lambda c, *a: a[3]):
+            done = set_cluster_prefixes(controller, "s", clusters, "new", lambda *_: None, replace="old")
+        self.assertEqual(done, [1, 3])
+        self.assertEqual([c["custom_configuration"].get(core.PREFIX_KEY) for c in clusters], ["new", "lexis", "new"])
+
+    def test_migration_saves_chosen_prefix(self):
+        from heappe_ui.view import qscheduler_prefix as px
+        a = self._assignment("dev", prefix="old")
+        plan = self._plan([])
+        plan[0].update(prefix="new", previous_prefix="old")
+        with mock.patch.object(px, "migration_plan", return_value=plan) as mp, \
+                mock.patch.object(px, "set_cluster_prefixes", return_value=[1]) as setp:
+            px.prefix_migration_worker(lambda *_: None, {}, a.id, {"prefix": "new"})
+        self.assertEqual(mp.call_args.args[2], "new")
+        self.assertEqual(setp.call_args.args[-1], "old")
+        a.refresh_from_db()
+        self.assertEqual(a.project_prefix, "new")
+        self.assertIsNotNone(a.projects_renamed_at)
+
+    def test_rename_sql(self):
+        from heappe_ui.view.qscheduler_prefix import rename_sql
+        sql = rename_sql([{"old": "O'Neil", "new": "dev.O'Neil"}])
+        self.assertIn("('O''Neil', 'dev.O''Neil')", sql)
+        self.assertTrue(sql.rstrip().endswith("COMMIT;"))
+        self.assertIn("RAISE EXCEPTION", sql)
+        self.assertTrue(rename_sql([{"old": "a", "new": "d.a"}], commit=False).rstrip().endswith("ROLLBACK;"))
+
+    def _plan(self, rows, can_rename=True, heappe="6.7.0", clusters=None):
+        return ({"prefix": "dev", "problems": [], "blocked": False, "heappe_supported": heappe >= "6.7.0",
+                 "heappe_instance": "h", "heappe_version": heappe, "qscheduler_version": "qscheduler 0.3.0",
+                 "heappe_identifier": "dev", "can_rename_here": can_rename, "rows": rows},
+                mock.Mock(), "sc", clusters if clusters is not None else [{"id": 1, "name": "Sim", "custom_configuration": {}}])
+
+    def test_migration_sets_prefix_without_renames(self):
+        from heappe_ui.view import qscheduler_prefix as px
+        a = self._assignment("dev")
+        with mock.patch.object(px, "migration_plan", return_value=self._plan([{"state": "new", "old": None, "new": "dev.A"}])), \
+                mock.patch.object(px, "set_cluster_prefixes", return_value=[1]) as setp, \
+                mock.patch.object(px, "run_instance_sql") as sql:
+            result = {}
+            px.prefix_migration_worker(lambda *_: None, result, a.id, {})
+        sql.assert_not_called()
+        setp.assert_called_once()
+        a.refresh_from_db()
+        self.assertEqual((a.project_prefix, result["clusters"]), ("dev", [1]))
+        self.assertIsNotNone(a.projects_renamed_at)
+
+    def test_migration_renames_with_qscheduler_stopped(self):
+        from heappe_ui.view import qscheduler_prefix as px
+        from heappe_ui.view import qscheduler_core as core
+        a = self._assignment("dev")
+        order = []
+        target = mock.Mock()
+        target.docker.run.side_effect = lambda args, *x, **k: order.append(args[0])
+        rows = [{"state": "rename", "old": "A", "new": "dev.A", "consumed_ms": 5}]
+        with mock.patch.object(px, "migration_plan", return_value=self._plan(rows)), \
+                mock.patch.object(px.shared_db, "backup_instance", side_effect=lambda *x, **k: order.append("backup")), \
+                mock.patch.object(core, "target_for", return_value=target), \
+                mock.patch.object(px, "run_instance_sql", side_effect=lambda *x: order.append("sql") or "RENAMED|1"), \
+                mock.patch.object(px, "set_cluster_prefixes", side_effect=lambda *x: order.append("prefix") or [1]):
+            px.prefix_migration_worker(lambda *_: None, {}, a.id, {})
+        self.assertEqual(order, ["backup", "stop", "sql", "prefix", "start"])
+
+    def test_migration_refusals(self):
+        from heappe_ui.view import qscheduler_prefix as px
+        a = self._assignment("dev")
+        rows = [{"state": "rename", "old": "A", "new": "dev.A"}]
+        with mock.patch.object(px, "migration_plan", return_value=self._plan(rows, can_rename=False)), \
+                mock.patch.object(px, "set_cluster_prefixes") as setp:
+            with self.assertRaisesRegex(RuntimeError, "renamed by hand"):
+                px.prefix_migration_worker(lambda *_: None, {}, a.id, {})
+            setp.assert_not_called()
+            px.prefix_migration_worker(lambda *_: None, {}, a.id, {"manual_done": True})
+            setp.assert_called_once()
+        with mock.patch.object(px, "migration_plan", return_value=self._plan(rows, heappe="6.6.3")):
+            with self.assertRaisesRegex(RuntimeError, "6.7.0"):
+                px.prefix_migration_worker(lambda *_: None, {}, a.id, {})
+
+
+class QSchedulerV030WorkerTests(_QsMachineViewFixtures, TestCase):
+    """Workers and views of QScheduler 0.3.0: fix time limits, update checks, users, service limits."""
+
+    def _qs_cluster(self, walltime=86400):
+        c = self._cluster(1, "Sim", "Sim")
+        c["node_types"] = [{"id": 7, "name": "Sim", "queue": "Sim", "max_walltime": walltime,
+                            "cluster_node_type_aggregation": {"id": 3}}]
+        return c
+
+    def _fix(self, opts, state, cluster):
+        from heappe_ui.view import qscheduler_cluster_health as health
+        from heappe_ui.view import qscheduler_core as core
+        controller = self._controller([cluster])
+        target = mock.Mock()
+        target.version.return_value = "qscheduler 0.3.0"
+        target.machine_states.return_value = {"Sim": state}
+        result = {}
+        with mock.patch.object(health, "_connect", return_value=(controller, "s")), \
+                mock.patch.object(core, "target_for", return_value=target):
+            health.fix_time_limits_worker(lambda *_: None, result, "dev", 1, opts)
+        return result, controller, target
+
+    def test_fix_lowers_queue_walltime(self):
+        result, controller, target = self._fix({"mode": "queues", "iqm_token": "", "max_task_time_limit": None},
+                                               {"max_task_time_limit_ms": 900000}, self._qs_cluster())
+        body = controller.heappe_management_cluster_node_type_put.call_args.kwargs["body"]
+        self.assertEqual((body["Id"], body["MaxWalltime"], body["ClusterNodeTypeAggregationId"]), (7, 900, 3))
+        self.assertEqual(result["queues"], [7])
+        target.update_machine_settings.assert_not_called()
+
+    def test_fix_raises_machine_limit(self):
+        from heappe_ui.models import QSchedulerMachine
+        QSchedulerMachine.objects.create(qscheduler=self.inst, name="Sim", options={"max_task_time_limit": "15m"})
+        result, controller, target = self._fix({"mode": "machine", "iqm_token": "t", "max_task_time_limit": None},
+                                               {"max_task_time_limit_ms": 900000}, self._qs_cluster(7200))
+        target.update_machine_settings.assert_called_once()
+        self.assertEqual(target.update_machine_settings.call_args.args[1], {"max_task_time_limit_ms": 7200000})
+        self.assertEqual(result["max_task_time_limit"], "2h")
+        self.assertEqual(QSchedulerMachine.objects.get(name="Sim").options["max_task_time_limit"], "2h")
+        controller.heappe_management_cluster_node_type_put.assert_not_called()
+
+    def test_edit_machine_limits(self):
+        from heappe_ui.models import QSchedulerMachine
+        QSchedulerMachine.objects.create(qscheduler=self.inst, name="Sim", options={"max_task_time_limit": "2h",
+                                                                                    "default_task_time_limit": "15m"})
+        opts = {"mode": "edit", "iqm_token": "", "max_task_time_limit": "30m", "default_task_time_limit": "10m",
+                "decay_half_time": "90m", "fit_queues": True}
+        state = {"max_task_time_limit_ms": 7200000, "default_task_time_limit_ms": 900000, "decay_half_time_ms": 5400000}
+        result, controller, target = self._fix(opts, state, self._qs_cluster(7200))
+        self.assertEqual(target.update_machine_settings.call_args.args[1],      # decay unchanged: not sent
+                         {"max_task_time_limit_ms": 1800000, "default_task_time_limit_ms": 600000})
+        self.assertEqual(controller.heappe_management_cluster_node_type_put.call_args.kwargs["body"]["MaxWalltime"], 1800)
+        self.assertEqual(result["changed"], {"max_task_time_limit_ms": "30m", "default_task_time_limit_ms": "10m"})
+        stored = QSchedulerMachine.objects.get(name="Sim").options
+        self.assertEqual((stored["max_task_time_limit"], stored["default_task_time_limit"]), ("30m", "10m"))
+
+    def test_edit_machine_limits_keeps_queues(self):
+        opts = {"mode": "edit", "iqm_token": "", "max_task_time_limit": "30m", "default_task_time_limit": None,
+                "decay_half_time": None, "fit_queues": False}
+        result, controller, target = self._fix(opts, {"max_task_time_limit_ms": 7200000}, self._qs_cluster(7200))
+        target.update_machine_settings.assert_called_once()
+        controller.heappe_management_cluster_node_type_put.assert_not_called()
+        self.assertEqual(result["queues"], [])
+
+    def test_edit_limit_options(self):
+        from heappe_ui.view.qscheduler_cluster_health import parse_time_limit_options
+        opts, errors = parse_time_limit_options({"mode": "edit", "decay_half_time": "1h"})
+        self.assertEqual((opts["decay_half_time"], opts["max_task_time_limit"], errors), ("1h", None, []))
+        self.assertTrue(parse_time_limit_options({"mode": "edit"})[1])                       # nothing to change
+        self.assertFalse(parse_time_limit_options({"mode": "edit", "fit_queues": True})[1])  # queues only
+        self.assertTrue(parse_time_limit_options({"mode": "edit", "max_task_time_limit": "10m",
+                                                  "default_task_time_limit": "1h"})[1])      # default above max
+
+    def test_prefix_plan_api_rejects_bad_prefix(self):
+        from heappe_ui.models import InstanceCredentials, QSchedulerAssignment
+        cred = InstanceCredentials.objects.create(instance_name="h-x", heappe_host="h", heappe_login="u",
+                                                  heappe_password="p", heappe_port="5000")
+        a = QSchedulerAssignment.objects.create(qscheduler=self.inst, heappe_instance=cred, heappe_identifier="x")
+        r = self.client.get(f"/qscheduler/assignment/{a.id}/prefix-plan/?prefix=a.b")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("no '.'", r.json()["message"])
+        r = self.client.post(f"/qscheduler/assignment/{a.id}/prefix-migrate/", {"prefix": "a.b"},
+                             content_type="application/json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_time_limit_options(self):
+        from heappe_ui.view.qscheduler_cluster_health import parse_time_limit_options
+        self.assertEqual(parse_time_limit_options({"mode": "machine", "max_task_time_limit": "2h"})[0]["max_task_time_limit"], "2h")
+        self.assertTrue(parse_time_limit_options({"mode": "machine", "max_task_time_limit": "2 hours"})[1])
+        self.assertTrue(parse_time_limit_options({"mode": "x"})[1])
+
+    def _update(self, old, new, heappe="6.7.0", opts=None, can_backup=False):
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_core as core
+        target = mock.Mock()
+        target.version.return_value = old
+        target.docker.inspect.return_value = {"Name": "/qs-1", "Config": {"Env": ["ADMIN_TOKEN=x"], "Cmd": ["serve"]}}
+        opts = dict({"source": "image", "repo": "", "ref": "", "image": "qscheduler:new", "no_cache": False}, **(opts or {}))
+        with mock.patch.object(core, "target_for", return_value=target), \
+                mock.patch.object(d, "_build_or_check_image"), \
+                mock.patch.object(core, "image_version", return_value=new), \
+                mock.patch.object(core, "heappe_identity", return_value=(heappe, "dev")), \
+                mock.patch.object(d.shared_db, "can_backup", return_value=can_backup), \
+                mock.patch.object(d.shared_db, "backup_instance", return_value="/b/20261110T000000Z.dump") as backup, \
+                mock.patch.object(d, "recreate_container") as recreate:
+            result = {}
+            d.update_worker(lambda *_: None, result, self.inst.id, opts, "u1")
+        return result, recreate, backup
+
+    def test_update_refuses_downgrade_and_old_heappe(self):
+        with self.assertRaisesRegex(RuntimeError, "one-way"):
+            self._update("qscheduler 0.3.0", "qscheduler 0.2.2")
+        with self.assertRaisesRegex(RuntimeError, "needs HEAppE 6.7.0"):
+            self._update("qscheduler 0.2.1", "qscheduler 0.3.0", heappe="6.6.3")
+        with self.assertRaisesRegex(RuntimeError, "I have a backup"):
+            self._update("qscheduler 0.2.2", "qscheduler 0.3.0")
+
+    def test_update_to_030_backs_up_first(self):
+        from heappe_ui.view import qscheduler_cluster_health as health
+        with mock.patch.object(health, "time_limit_report", return_value=[]):
+            result, recreate, backup = self._update("qscheduler 0.2.2", "qscheduler 0.3.0", can_backup=True)
+        backup.assert_called_once()
+        recreate.assert_called_once()
+        self.assertEqual(result["backup"], "20261110T000000Z.dump")
+        result, recreate, backup = self._update("qscheduler 0.2.1", "qscheduler 0.2.1", heappe="6.6.3",
+                                                opts={"ignore_compatibility": True})
+        backup.assert_not_called()
+
+    def test_users_view(self):
+        from heappe_ui.models import QSchedulerAssignment
+        from heappe_ui.view import qscheduler_core as core
+        QSchedulerAssignment.objects.filter(heappe_instance=self.dev).update(project_prefix="dev")
+        target = mock.Mock()
+        target.version.return_value = "qscheduler 0.3.0"
+        target.list_users.return_value = ["dev.alice", "bob"]
+        target.user_consumption.side_effect = lambda n: [{"project": "dev.A", "machine": "Sim", "consumed_ms": 1500}] \
+            if n == "dev.alice" else []
+        with mock.patch.object(core, "target_for", return_value=target):
+            d = self.client.get(f"/qscheduler/{self.inst.id}/users/").json()
+        users = {u["name"]: u for u in d["users"]}
+        self.assertEqual((users["dev.alice"]["heappe_instance"], users["dev.alice"]["total_ms"]), ("dev", 1500))
+        self.assertIsNone(users["bob"]["heappe_instance"])
+        target.version.return_value = "qscheduler v0.2.2"
+        with mock.patch.object(core, "target_for", return_value=target):
+            self.assertFalse(self.client.get(f"/qscheduler/{self.inst.id}/users/").json()["supported"])
+
+    def test_public_reads(self):
+        from heappe_ui.view.qscheduler_core import QsTarget, CommandResult
+
+        class Fake(QsTarget):
+            def http_get(self, path, timeout=30):
+                body = {"/users": '["dev.a"]', "/projects": '[{"name": "dev.A"}]'}.get(path)
+                return CommandResult(0, f"HTTP/1.1 200 OK\r\n\r\n{body}" if body else "HTTP/1.1 404 Not Found\r\n\r\nno", "")
+        t = Fake()
+        self.assertEqual(t.list_users(), ["dev.a"])
+        self.assertEqual(t.list_projects(), [{"name": "dev.A"}])
+        with self.assertRaisesRegex(RuntimeError, "404"):
+            t.user_consumption("x")
+
+    def test_serve_options_api_and_worker(self):
+        from heappe_ui.view import qscheduler_deploy as d
+        from heappe_ui.view import qscheduler_core as core
+        r = self.client.post(f"/qscheduler/{self.inst.id}/serve-options/", data='{"max_payload": "9G"}',
+                             content_type="application/json")
+        self.assertEqual(r.status_code, 400)
+        target = mock.Mock()
+        target.version.return_value = "qscheduler 0.3.0"
+        target.docker.inspect.return_value = {"Name": "/qs-1", "Config": {"Image": "qs:1", "Cmd": ["serve", "--port", "4300"]}}
+        with mock.patch.object(core, "target_for", return_value=target), \
+                mock.patch.object(d, "recreate_container") as recreate:
+            d.serve_options_worker(lambda *_: None, {}, self.inst.id, {"max_payload": "64M"}, "u1")
+        info = recreate.call_args.args[2]
+        self.assertEqual(info["Config"]["Cmd"], ["serve", "--port", "4300", "--max-payload", "64M"])
+        self.inst.refresh_from_db()
+        self.assertEqual(self.inst.serve_options, {"max_payload": "64M"})
+        target.version.return_value = "qscheduler v0.2.2"
+        with mock.patch.object(core, "target_for", return_value=target):
+            with self.assertRaisesRegex(RuntimeError, "0.3.0"):
+                d.serve_options_worker(lambda *_: None, {}, self.inst.id, {"max_payload": "64M"}, "u1")

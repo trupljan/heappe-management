@@ -74,6 +74,7 @@
                              data-cluster-id="{{ cluster.id }}"
                              data-suspension-url="{% url 'qscheduler_cluster_suspension' cluster.id %}"
                              data-rename-url="{% url 'qscheduler_cluster_rename' cluster.id %}"
+                             data-time-limits-url="{% url 'qscheduler_cluster_time_limits' cluster.id %}"
                              data-machines-url="{% url 'qscheduler_machine_list' 0 %}"
                              data-qs-page-url="{% url 'qscheduler_page' %}">
                             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1614,6 +1615,49 @@
         </form>
     </div>
 </div>
+<!-- Task time limits of the cluster's QScheduler machine (QScheduler 0.3.0+) -->
+<div class="modal fade" id="qsLimitsModal" tabindex="-1" aria-labelledby="qsLimitsLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content border-0 shadow-lg rounded-3" id="qsLimitsForm" novalidate>
+            <div class="modal-header bg-primary text-white border-0 py-3 px-4">
+                <h5 class="modal-title fs-6 fw-bold" id="qsLimitsLabel"><i class="bi bi-stopwatch me-2"></i>Time limits of machine <span id="qs-lim-machine"></span></h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4 small">
+                <div class="row g-2 mb-2">
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-lim-max">Max task time limit</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-lim-max" name="max_task_time_limit">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-lim-default">Default task time limit</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-lim-default" name="default_task_time_limit">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-lim-decay">Fair share decay half-time</label>
+                        <input type="text" class="form-control form-control-sm" id="qs-lim-decay" name="decay_half_time">
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label small text-muted fw-semibold mb-1" for="qs-lim-token">IQM token</label>
+                        <input type="password" class="form-control form-control-sm" id="qs-lim-token" name="iqm_token" autocomplete="off">
+                    </div>
+                </div>
+                <div class="form-text mt-0 mb-2">Durations with a unit, e.g. <code>15m</code>, <code>2h</code>. The default applies to tasks that ask for no limit and must not exceed the max; tasks asking for more than the max are rejected. The IQM token is needed for an IQM backend (QScheduler never returns it); leave it empty for the test backend.</div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="qs-lim-fit" name="fit_queues" checked>
+                    <label class="form-check-label small" for="qs-lim-fit">Lower the walltime of this cluster's queues that exceed the new max</label>
+                </div>
+                <div class="alert alert-warning border-0 rounded-3 py-2 mb-0"><i class="bi bi-exclamation-triangle me-1"></i>QScheduler restarts the machine: queued tasks are kept, an open session is closed. The machine may be shared by other HEAppE instances.</div>
+                <div id="qs-lim-error" class="alert alert-danger border-0 rounded-3 mt-3 mb-0 d-none"></div>
+            </div>
+            <div class="modal-footer bg-light border-top py-2 px-4">
+                <button type="button" class="btn btn-outline-secondary btn-sm fw-semibold rounded-3 px-3 py-2" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm fw-bold rounded-3 shadow-sm px-4 py-2" id="qsLimitsBtn"><i class="bi bi-check2 me-1"></i>Save limits</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 {% include 'partials/qscheduler_progress_modal.html' %}
 {% include 'partials/qscheduler_suspend_modal.html' %}
 <script>
@@ -1689,7 +1733,29 @@ document.addEventListener('DOMContentLoaded', function () {
             html += line('motherboard', 'text-danger', 'Machine <code>' + esc(d.machine) + '</code> does <strong>not exist</strong> in ' + esc(d.instance.name) + ': jobs on this cluster fail.');
             html += '<button type="button" class="btn btn-sm btn-outline-danger fw-semibold" id="qs-cs-recover"><i class="bi bi-wrench-adjustable me-1"></i>Recover machine...</button>';
         } else html += line('question-circle', 'text-warning', 'The machines of ' + esc(d.instance.name) + ' cannot be listed; machine <code>' + esc(d.machine) + '</code> is not verified.');
+
+        // Project prefix (HEAppE 6.7.0+ names projects and users "<prefix>.<name>")
+        const pr = d.prefix;
+        if (pr) {
+            if (pr.ok) html += line('tag-fill', 'text-success', 'Project prefix <code>' + esc(pr.configured) + '</code>: QScheduler projects and users are named <code>' + esc(pr.configured) + '.&lt;name&gt;</code>.');
+            else html += line('tag', pr.configured ? 'text-warning' : 'text-danger', 'Project prefix: ' + pr.problems.map(esc).join('; ') +
+                ' <a href="' + box.dataset.qsPageUrl + '" class="fw-semibold">QScheduler page</a>');
+        }
+        // Max task time limit of the machine vs. the walltime of the queues (QScheduler 0.3.0+)
+        const tl = d.time_limit;
+        if (tl) {
+            const editBtn = '<button type="button" class="btn btn-sm btn-outline-secondary fw-semibold qs-cs-tl" data-mode="edit"><i class="bi bi-sliders me-1"></i>Edit limits...</button>';
+            if (!tl.problems.length) html += line('stopwatch', 'text-success', 'Tasks may run up to <strong>' + esc(tl.max) + '</strong> (machine max task time limit; default ' + esc(tl.default) +
+                (tl.decay ? ', fair share decay half-time ' + esc(tl.decay) : '') + '); the queue walltime fits.') + '<div class="mb-2">' + editBtn + '</div>';
+            else {
+                html += line('stopwatch', 'text-danger', 'Task time limit: <ul class="mb-1 ps-3">' + tl.problems.map(p => '<li>' + esc(p) + '</li>').join('') + '</ul>');
+                html += '<div class="d-flex flex-wrap gap-2 mb-2">' +
+                    '<button type="button" class="btn btn-sm btn-outline-primary fw-semibold qs-cs-tl" data-mode="queues"><i class="bi bi-arrow-down-circle me-1"></i>Lower queue walltime to ' + tl.max_walltime + ' s</button>' +
+                    '<button type="button" class="btn btn-sm btn-outline-secondary fw-semibold qs-cs-tl" data-mode="machine"><i class="bi bi-arrow-up-circle me-1"></i>Raise machine limit...</button>' + editBtn + '</div>';
+            }
+        }
         body.innerHTML = html;
+        body.querySelectorAll('.qs-cs-tl').forEach(b => b.addEventListener('click', () => fixTimeLimits(b, b.dataset.mode)));
 
         const rc = document.getElementById('qs-cs-recreate');
         if (rc) rc.addEventListener('click', () => {
@@ -1736,6 +1802,57 @@ document.addEventListener('DOMContentLoaded', function () {
                 window.qsSuspend.open(Number(box.dataset.clusterId), ev.currentTarget.dataset.action, loadSuspension)));
         }).catch(() => { el.innerHTML = line('question-circle', 'text-secondary', 'The machine state is unknown.'); });
     }
+    function fixTimeLimits(btn, mode) {
+        const tl = status.time_limit;
+        if (mode !== 'queues') { openLimits(mode); return; }
+        if (!confirm('Set the max walltime of the queues of this cluster on machine "' + status.machine + '" to ' + tl.max_walltime + ' s (' + tl.max + ')? Jobs asking for more are then refused by HEAppE.')) return;
+        const restore = U.setButtonLoading(btn, 'Starting...');
+        U.postJson(box.dataset.timeLimitsUrl, { mode: 'queues' }).then(r => {
+            restore();
+            if (r.status !== 'success') { alert(r.message || 'Failed.'); return; }
+            trackLimits();
+        }).catch(err => { restore(); alert(err.message || 'Network error.'); });
+    }
+    function trackLimits() {
+        U.track({ title: 'Time limits of ' + status.machine, successTitle: 'Done',
+                  details: (res, e) => 'Cluster: ' + e(res.cluster) + '<br>Machine: ' + e(res.machine) + '<br>Max task time limit: ' + e(res.max_task_time_limit) +
+                      (res.queues && res.queues.length ? '<br>Queues lowered: ' + e(res.queues.length) : '') });
+    }
+    // Edit dialog; 'machine' (Raise machine limit) prefills the max with the longest queue walltime.
+    const limForm = document.getElementById('qsLimitsForm');
+    function openLimits(mode) {
+        const tl = status.time_limit;
+        document.getElementById('qs-lim-machine').textContent = status.machine;
+        document.getElementById('qs-lim-error').classList.add('d-none');
+        const longest = Math.max.apply(null, [0].concat(tl.queues.map(q => Number(q.max_walltime) || 0)));
+        limForm.max_task_time_limit.value = mode === 'machine' && longest ? Math.ceil(longest / 60) + 'm' : tl.max;
+        limForm.default_task_time_limit.value = tl.default || '';
+        limForm.decay_half_time.value = tl.decay || '';
+        limForm.decay_half_time.closest('.col-sm-6').classList.toggle('d-none', !tl.decay);
+        limForm.iqm_token.value = '';
+        limForm.fit_queues.checked = mode !== 'machine';
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('qsLimitsModal')).show();
+    }
+    limForm.addEventListener('submit', ev => {
+        ev.preventDefault();
+        const tl = status.time_limit, data = { mode: 'edit', iqm_token: limForm.iqm_token.value.trim(), fit_queues: limForm.fit_queues.checked };
+        [['max_task_time_limit', tl.max], ['default_task_time_limit', tl.default], ['decay_half_time', tl.decay]].forEach(([k, was]) => {
+            const v = limForm[k].value.trim();
+            if (v && v !== was) data[k] = v;
+        });
+        const errEl = document.getElementById('qs-lim-error');
+        if (!data.max_task_time_limit && !data.default_task_time_limit && !data.decay_half_time && !data.fit_queues) {
+            errEl.textContent = 'Nothing changed.'; errEl.classList.remove('d-none'); return;
+        }
+        const btn = document.getElementById('qsLimitsBtn');
+        const restore = U.setButtonLoading(btn, 'Starting...');
+        U.postJson(box.dataset.timeLimitsUrl, data).then(r => {
+            restore();
+            if (r.status !== 'success') { errEl.textContent = r.message || 'Failed.'; errEl.classList.remove('d-none'); return; }
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('qsLimitsModal')).hide();
+            trackLimits();
+        }).catch(err => { restore(); errEl.textContent = err.message || 'Network error.'; errEl.classList.remove('d-none'); });
+    });
     function bindMove() {
         body.querySelectorAll('.qs-cs-move').forEach(b => b.addEventListener('click', () => openRecover('move')));
     }

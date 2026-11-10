@@ -11,13 +11,15 @@ from heappe_ui.view.qscheduler_deploy import (qscheduler_page, qscheduler_local_
                                               qscheduler_shared_db_api, qscheduler_backups_api,
                                               qscheduler_migrate_to_shared_api, qscheduler_network_proposal_api,
                                               qscheduler_migrate_network_api, qscheduler_aliases_api,
-                                              qscheduler_log_level_api)
+                                              qscheduler_log_level_api, qscheduler_serve_options_api,
+                                              qscheduler_users_api)
+from heappe_ui.view.qscheduler_prefix import qscheduler_prefix_plan_api, qscheduler_prefix_migrate_api
 from heappe_ui.view.qscheduler_recovery import (qscheduler_archive_api, qscheduler_unarchive_api,
                                                 qscheduler_cascade_preview_api, qscheduler_cascade_delete_api,
                                                 qscheduler_restore_info_api, qscheduler_restore_api)
 from heappe_ui.view.qscheduler_cluster_health import (qscheduler_cluster_status_api, qscheduler_cluster_recreate_notifier_api,
                                                       qscheduler_cluster_recover_machine_api, qscheduler_cluster_move_api,
-                                                      qscheduler_cluster_rename_api)
+                                                      qscheduler_cluster_rename_api, qscheduler_cluster_time_limits_api)
 from heappe_ui.view.qscheduler_machines import (qscheduler_machine_defaults_api, qscheduler_machine_list_api,
                                                 qscheduler_machine_add_api, qscheduler_machine_remove_api)
 from heappe_ui.view.qscheduler_suspension import (dashboard_qscheduler_machines_api, qscheduler_cluster_suspension_api,

@@ -9,7 +9,12 @@ Instances
   * Register  - an existing QScheduler: local container, remote container over SSH to its VM, or over SSH
                 directly into the container.
   * Update    - rebuild from git / switch image and recreate the container (Docker-based instances). A container
-                without ADMIN_TOKEN gets one, so QScheduler >= 0.2.1 is managed over its admin API.
+                without ADMIN_TOKEN gets one, so QScheduler >= 0.2.1 is managed over its admin API. Refused when an
+                assigned HEAppE is too old for the new version (QScheduler 0.2.2+ needs HEAppE 6.7.0+) and for
+                downgrades (QScheduler's database migrations are one-way). Crossing to 0.3.0 backs the database up
+                first and restores it when the new container does not start.
+  * Service options - `qscheduler serve` limits of QScheduler >= 0.3.0 (max request size, task retention, active
+                items and payload per user); set at deploy or later (recreates the container).
   * Admin token - QScheduler >= 0.2.1 is managed only over its admin API, through the admin proxy (see
                 qscheduler_admin); the token is stored encrypted on the record. It can be shown (to use it in another
                 HEAppE Management), set by hand, or regenerated (Docker-based instances; recreates the container).
@@ -22,6 +27,7 @@ Assignments (HEAppE instance <-> QScheduler instance)
     the token is set as QSchedulerNotifyToken and always kept in HEAppE Vault.
 """
 import json
+import os
 import re
 import secrets
 import uuid
@@ -50,6 +56,8 @@ NAME_PREFIX_MAX = 54          # + "-<8 hex>" = 63, the maximum instance name
 ARCHIVED_MESSAGE = "QScheduler instance '{name}' is archived: restore it or delete it with its clusters."
 LOCAL_KINDS = (Q.KIND_MANAGED, Q.KIND_LOCAL)
 ADMIN_TOKEN_RE = re.compile(r"^[!-~]{8,512}$")
+SERVE_OPTIONS_UNSUPPORTED = ("Service options can be changed only for Docker-based instances (they are arguments of "
+                             "`qscheduler serve`). Over SSH into the container, set them in the service yourself.")
 
 
 # ---------------------------------------------------------------------------
@@ -149,6 +157,8 @@ def parse_deploy_options(data: dict, uid: str) -> tuple:
     opts['log_level'], err = core.parse_log_level(r.s('log_level'))
     if err:
         r.errors.append(err)
+    opts['serve_options'], serve_errors = core.parse_serve_options(data)
+    r.errors += serve_errors
     if not NAME_RE.match(base) or len(base) > NAME_PREFIX_MAX:
         r.errors.append(f"Name may contain only letters, digits, '_', '.', '-' and must start with a letter or digit "
                         f"(max {NAME_PREFIX_MAX} chars; '-<random id>' is appended).")
@@ -222,7 +232,11 @@ def parse_update_options(data: dict) -> tuple:
     r = _Reader(data)
     opts = {'source': r.s('source', 'git').lower(), 'repo': r.s('repo', DEFAULT_QSCHEDULER_REPO),
             'ref': r.s('ref', DEFAULT_QSCHEDULER_REF), 'image': r.s('image', DEFAULT_QSCHEDULER_IMAGE),
-            'no_cache': r.b('no_cache')}
+            'no_cache': r.b('no_cache'),
+            # the database cannot be backed up here (external database): the admin confirms having a backup
+            'confirm_backup': r.b('confirm_backup'),
+            # update although an assigned HEAppE is too old for the new QScheduler version
+            'ignore_compatibility': r.b('ignore_compatibility')}
     _validate_source(r, opts)
     return opts, r.errors
 
@@ -396,6 +410,12 @@ def deploy_service(docker, opts, log):
     try:
         _build_or_check_image(docker, opts['source'], opts['repo'], opts['ref'], opts['image'], opts['rebuild_image'], log,
                               no_cache=opts.get('no_cache', False))
+        if opts.get('serve_options'):
+            image_ver = core.image_version(docker, opts['image'], log)
+            if not core.supports_030(image_ver):
+                log(f"WARNING: service options (max request size, per-user limits, task retention) need QScheduler "
+                    f"0.3.0+; the image is {image_ver or 'of an unknown version'}: they are not set.")
+                opts['serve_options'] = {}
 
         lay = qnet.existing_layout(docker, qs_net)
         if lay:
@@ -454,7 +474,7 @@ def deploy_service(docker, opts, log):
         for h, ip in extra_hosts_as_list(opts.get('extra_hosts')):
             run_cmd += ["--add-host", format_extra_host(h, ip)]
         run_cmd += core.qscheduler_healthcheck_args(opts['port'])
-        run_cmd += [opts['image'], "serve", "--port", str(opts['port'])]
+        run_cmd += [opts['image']] + core.serve_args(opts['port'], opts.get('serve_options'))
         docker.run(run_cmd, log)
         created.append(("container", name))
         for net in db_networks:
@@ -518,7 +538,7 @@ def deploy_worker(log, result, opts):
                             db_schema=info.get('db_schema') or "", shared_database=info.get('shared_database'),
                             qs_network=info.get('qs_network') or "", qs_subnet=info.get('qs_subnet') or "",
                             qs_ip=info.get('qs_ip') or "", aliases=opts.get('aliases') or [],
-                            log_level=opts.get('log_level') or "")
+                            log_level=opts.get('log_level') or "", serve_options=opts.get('serve_options') or {})
     inst.admin_token = info.get('admin_token', "")
     inst.save(update_fields=["admin_token_encrypted", "updated_at"])
     result['id'] = inst.id
@@ -606,6 +626,34 @@ def register_worker(log, result, opts):
     log(f"SUCCESS: QScheduler instance '{inst.name}' registered (HEAppE reaches it at {inst.service_host}:{inst.port}).")
 
 
+def upgrade_errors(old_version, new_version):
+    """Error text when updating QScheduler from old_version to new_version is not possible, else ""."""
+    old, new = core.parse_version(old_version), core.parse_version(new_version)
+    if old and new and new < old:
+        return (f"The image is QScheduler {'.'.join(map(str, new))}, the instance runs {'.'.join(map(str, old))}: "
+                f"QScheduler's database migrations are one-way, an older version does not start on the migrated "
+                f"database. To go back, restore a backup taken with the older version (Restore).")
+    return ""
+
+
+def crosses_030(old_version, new_version):
+    """True when an update moves the instance from QScheduler < 0.3.0 to >= 0.3.0 (one-way database migration)."""
+    return not core.supports_030(old_version) and core.supports_030(new_version)
+
+
+def heappe_compatibility_errors(inst, qs_version, log=None):
+    """Errors of the HEAppE instances assigned to `inst` that are too old for QScheduler `qs_version`."""
+    errors = []
+    for a in inst.assignments.select_related("heappe_instance"):
+        version, _ = core.heappe_identity(a.heappe_instance)
+        error = core.compatibility_error(a.heappe_instance.instance_name, version, inst.name, qs_version)
+        if error:
+            errors.append(error)
+        elif log:
+            log(f"HEAppE '{a.heappe_instance.instance_name}' {version}: compatible.")
+    return errors
+
+
 def update_worker(log, result, inst_id, opts, uid):
     inst = Q.objects.get(pk=inst_id)
     if inst.kind not in DOCKER_KINDS:
@@ -613,19 +661,56 @@ def update_worker(log, result, inst_id, opts, uid):
     target = core.target_for(inst)
     docker = target.docker
     name = inst.container_name
+    backup_file = None
     log(f"=== QSCHEDULER: UPDATE INSTANCE '{inst.name}'{docker.where} ===")
     try:
         info = docker.inspect(name)
         if not info:
             raise RuntimeError(f"Container '{name}' not found{docker.where}.")
+        old_version = target.version()
         _build_or_check_image(docker, opts['source'], opts['repo'], opts['ref'], opts['image'], True, log,
                               no_cache=opts.get('no_cache', False))
+        new_version = core.image_version(docker, opts['image'], log)
+        log(f"Running: {old_version or 'version unknown'}; new image: {new_version or 'version unknown'}.")
+        error = upgrade_errors(old_version, new_version)
+        if error:
+            raise RuntimeError(error + " Nothing was changed.")
+        errors = heappe_compatibility_errors(inst, new_version, log)
+        if errors and not opts.get('ignore_compatibility'):
+            raise RuntimeError(" ".join(errors) + " Upgrade those HEAppE instances first (or tick 'Update anyway'). "
+                               "Nothing was changed.")
+        for e in errors:
+            log(f"WARNING: {e} (updating anyway).")
+        if crosses_030(old_version, new_version):
+            log("QScheduler 0.3.0 migrates the database one-way (users, per-user consumption, session owners) and "
+                "rewrites the machine configurations: their default task time limit becomes 15m, and tasks asking "
+                "for more than the machine's max task time limit (15m unless set) are rejected.")
+            if shared_db.can_backup(inst):
+                backup_file = os.path.basename(shared_db.backup_instance(inst, log, old_version))
+            elif not opts.get('confirm_backup'):
+                raise RuntimeError("This instance's database cannot be backed up here. Back it up yourself, then tick "
+                                   "'I have a backup of the database'. Nothing was changed.")
+            else:
+                log("Database backup confirmed by the administrator (not taken here).")
         labels = {LABEL_INSTANCE: name}
         if opts['source'] == 'git':
             labels.update({LABEL_REPO: opts['repo'], LABEL_BRANCH: opts['ref']})
         extra_hosts = qscheduler_container_extra_hosts((info.get("HostConfig") or {}).get("ExtraHosts"), inst.extra_hosts)
         extra_env = admin_token_env(info, log)
-        recreate_container(docker, target, info, opts['image'], labels, log, uid, "Update", extra_hosts, extra_env)
+        if inst.serve_options and not core.supports_030(new_version):
+            log("Service options are dropped: they need QScheduler 0.3.0+.")
+            info = _with_cmd(info, core.with_serve_options((info.get("Config") or {}).get("Cmd"), {}))
+        try:
+            recreate_container(docker, target, info, opts['image'], labels, log, uid, "Update", extra_hosts, extra_env)
+        except RuntimeError:
+            if backup_file:
+                log(f"Restoring the database from {backup_file}: the new version may have migrated it before it "
+                    f"failed, and the previous version does not start on a migrated database.")
+                docker.run(["stop", name], log, check=False)
+                shared_db.restore_instance(inst, backup_file, log)
+                docker.run(["start", name], log, check=False)
+                target.wait_healthy(log)
+            raise
         token = (extra_env or {}).get("ADMIN_TOKEN") or qadmin.container_admin_token(info)
         if token and token != inst.admin_token:
             inst.admin_token = token
@@ -637,12 +722,57 @@ def update_worker(log, result, inst_id, opts, uid):
     inst.repo = opts['repo'] if opts['source'] == 'git' else ""
     inst.ref = opts['ref'] if opts['source'] == 'git' else ""
     inst.restart_pending = False
+    if not core.supports_030(version):
+        inst.serve_options = {}
     inst.save()
-    result.update({'name': inst.name, 'version': version, 'image': inst.image})
+    result.update({'name': inst.name, 'version': version, 'image': inst.image, 'backup': backup_file})
     log(f"SUCCESS: '{inst.name}' updated ({version or 'version unknown'}). Machines, notifiers and projects are kept in PostgreSQL.")
     if not core.supports_admin_api(version):
         log(f"Note: QScheduler {'.'.join(map(str, core.ADMIN_API_MIN_VERSION))}+ manages machines and notifiers over "
             f"its admin API; this version uses the CLI (changes need a restart).")
+    if core.supports_030(version):
+        from .qscheduler_cluster_health import time_limit_report
+        try:
+            result['time_limit_problems'] = time_limit_report(inst, log)
+        except Exception as e:
+            log(f"WARNING: queue walltimes could not be checked: {str(e).splitlines()[0][:300]}")
+
+
+def _with_cmd(info, cmd):
+    """Copy of docker inspect output with another container command."""
+    out = dict(info)
+    out["Config"] = dict(info.get("Config") or {}, Cmd=list(cmd))
+    return out
+
+
+def serve_options_worker(log, result, inst_id, serve_options, uid):
+    """New `qscheduler serve` options (QScheduler >= 0.3.0): recreate the container with them; rolled back on failure."""
+    inst = Q.objects.get(pk=inst_id)
+    if inst.kind not in DOCKER_KINDS:
+        raise RuntimeError(SERVE_OPTIONS_UNSUPPORTED)
+    target = core.target_for(inst)
+    docker = target.docker
+    name = inst.container_name
+    log(f"=== QSCHEDULER: SERVICE OPTIONS OF '{inst.name}'{docker.where} ===")
+    try:
+        version = target.version()
+        if not core.supports_030(version):
+            raise RuntimeError(f"Service options need QScheduler 0.3.0+; '{inst.name}' runs "
+                               f"{version or 'an unknown version'}.")
+        info = docker.inspect(name)
+        if not info:
+            raise RuntimeError(f"Container '{name}' not found{docker.where}.")
+        cmd = core.with_serve_options((info.get("Config") or {}).get("Cmd") or core.serve_args(inst.port), serve_options)
+        shown = ", ".join(f"{k}={v}" for k, v in serve_options.items()) or "QScheduler defaults"
+        log(f"QScheduler reads these options only at startup: the container is recreated ({shown}).")
+        image = (info.get("Config") or {}).get("Image") or inst.image
+        recreate_container(docker, target, _with_cmd(info, cmd), image, None, log, uid, "Changing service options")
+    finally:
+        target.close()
+    inst.serve_options = serve_options
+    inst.save(update_fields=["serve_options", "updated_at"])
+    result.update({'name': inst.name, 'serve_options': serve_options})
+    log(f"SUCCESS: '{inst.name}' runs with {shown}.")
 
 
 def admin_token_env(info, log):
@@ -862,6 +992,10 @@ def assign_worker(log, result, inst_id, opts):
     target = core.target_for(inst)
     updates = []      # (cluster, notifier or None) to apply in HEAppE after QScheduler has the notifiers
     try:
+        qs_version = target.version()
+        error = core.compatibility_error(cred.instance_name, version, inst.name, qs_version)
+        if error:
+            raise RuntimeError(error)
         # 1. Network: the HEAppE container joins the instance's QScheduler network (local instances that have one);
         #    otherwise local instances join the HEAppE API network (instances not migrated yet)
         network = asg.network if asg else ""
@@ -940,7 +1074,14 @@ def assign_worker(log, result, inst_id, opts):
     asg.notifications_enabled = want
     asg.callback_url = callback_url
     asg.save()
-    result.update({'assignment_id': asg.id, 'heappe_instance': cred.instance_name, 'notifications': want})
+    from .qscheduler_prefix import ensure_assignment_prefix
+    prefix = ensure_assignment_prefix(asg, identifier, clusters)
+    missing = [c.get('name') for c in clusters if not core.cluster_project_prefix(c)]
+    log(f"QScheduler project prefix of this HEAppE: '{prefix}'."
+        + (f" Clusters without it: {', '.join(missing)}; run 'Project prefix...' on the assignment (HEAppE 6.7.0+ "
+           f"refuses to submit there until then)." if missing else ""))
+    result.update({'assignment_id': asg.id, 'heappe_instance': cred.instance_name, 'notifications': want,
+                   'project_prefix': prefix})
 
     # 4. Apply the new tokens / disabled callbacks to the HEAppE clusters (tokens go to Vault)
     try:
@@ -1075,7 +1216,7 @@ def instance_summary(inst):
         'ssh': f"{inst.ssh_user}@{inst.ssh_host}:{inst.ssh_port}" if inst.is_remote else "",
         'source': inst.source, 'repo': inst.repo, 'ref': inst.ref, 'image': inst.image,
         'restart_pending': inst.restart_pending, 'can_update': inst.kind in DOCKER_KINDS,
-        'log_level': inst.log_level,
+        'log_level': inst.log_level, 'serve_options': dict(inst.serve_options or {}),
         'manual_restart': inst.kind == Q.KIND_SSH_CONTAINER and not inst.restart_command,
         'archived': inst.is_archived,
         'archived_at': inst.archived_at.strftime("%Y-%m-%d %H:%M UTC") if inst.archived_at else "",
@@ -1092,7 +1233,8 @@ def instance_summary(inst):
         'assignments': [{
             'id': a.id, 'heappe_instance_id': a.heappe_instance_id, 'heappe_instance': a.heappe_instance.instance_name,
             'notifications_enabled': a.notifications_enabled, 'heappe_identifier': a.heappe_identifier,
-            'callback_url': a.callback_url, 'network': a.network,
+            'callback_url': a.callback_url, 'network': a.network, 'project_prefix': a.project_prefix,
+            'projects_renamed_at': a.projects_renamed_at.strftime("%Y-%m-%d %H:%M UTC") if a.projects_renamed_at else "",
             'heappe_local': qnet.heappe_override_path(a.heappe_instance.instance_name) is not None,
         } for a in inst.assignments.select_related("heappe_instance").order_by("heappe_instance__instance_name")],
     }
@@ -1428,6 +1570,88 @@ def qscheduler_log_level_api(request: HttpRequest, inst_id: int) -> HttpResponse
     if err:
         return _error(err)
     return _started(*core.start_operation("log level", log_level_worker, inst.id, level, str(uuid.uuid4())[:8]))
+
+
+@login_required
+def qscheduler_serve_options_api(request: HttpRequest, inst_id: int) -> HttpResponse:
+    """
+    GET: the `qscheduler serve` options of an instance (container command; stored values when it cannot be read).
+    POST {max_payload, task_retention, max_user_active_items, max_user_active_payload}: sets them (empty: QScheduler
+    default), recreating the container (background operation, rolled back on failure). QScheduler >= 0.3.0.
+    """
+    inst = _instance_or_404(inst_id)
+    if not inst:
+        return _error("QScheduler instance not found.", 404)
+    supported = inst.kind in DOCKER_KINDS
+    if request.method == "GET":
+        current, error, version = dict(inst.serve_options or {}), None, None
+        if supported and not inst.is_archived:
+            target = None
+            try:
+                target = core.target_for(inst)
+                version = target.version()
+                info = target.docker.inspect(inst.container_name)
+                if info:
+                    current = core.serve_options_of((info.get("Config") or {}).get("Cmd"))
+            except Exception as e:
+                error = f"The container cannot be read: {str(e).splitlines()[0][:200]}"
+            finally:
+                if target:
+                    target.close()
+        return JsonResponse({'status': 'success', 'supported': supported, 'serve_options': current,
+                             'defaults': core.SERVE_OPTION_DEFAULTS, 'version': version,
+                             'version_supported': core.supports_030(version), 'error': error,
+                             'message': None if supported else SERVE_OPTIONS_UNSUPPORTED})
+    if request.method != "POST":
+        return _error('Only GET and POST are allowed', 405)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
+    if not supported:
+        return _error(SERVE_OPTIONS_UNSUPPORTED)
+    serve_options, errors = core.parse_serve_options(_json_body(request))
+    if errors:
+        return _error(" ".join(errors))
+    return _started(*core.start_operation("service options", serve_options_worker, inst.id, serve_options,
+                                          str(uuid.uuid4())[:8]))
+
+
+USERS_LIMIT = 200
+
+
+@login_required
+def qscheduler_users_api(request: HttpRequest, inst_id: int) -> HttpResponse:
+    """
+    Users of an instance (QScheduler >= 0.3.0) with their consumed time per project and machine, grouped by the HEAppE
+    whose project prefix they carry ("<prefix>.<username>"); other names are listed as "other".
+    """
+    inst = _instance_or_404(inst_id)
+    if not inst:
+        return _error("QScheduler instance not found.", 404)
+    if inst.is_archived:
+        return _error(ARCHIVED_MESSAGE.format(name=inst.name))
+    prefixes = {a.project_prefix: a.heappe_instance.instance_name
+                for a in inst.assignments.select_related("heappe_instance").exclude(project_prefix="")}
+    target = None
+    try:
+        target = core.target_for(inst)
+        version = target.version()
+        if not core.supports_030(version):
+            return JsonResponse({'status': 'success', 'supported': False, 'version': version, 'users': [],
+                                 'message': f"Users need QScheduler 0.3.0+ ({version or 'version unknown'})."})
+        names = sorted(target.list_users())
+        users = []
+        for name in names[:USERS_LIMIT]:
+            rows = target.user_consumption(name) or []
+            prefix = name.split(".", 1)[0] if "." in name else ""
+            users.append({'name': name, 'heappe_instance': prefixes.get(prefix), 'consumption': rows,
+                          'total_ms': sum(int(r.get('consumed_ms') or 0) for r in rows)})
+    except Exception as e:
+        return _error(f"Users of '{inst.name}' cannot be read: {str(e).splitlines()[0][:300]}", 502)
+    finally:
+        if target:
+            target.close()
+    return JsonResponse({'status': 'success', 'supported': True, 'version': version, 'users': users,
+                         'truncated': len(names) > USERS_LIMIT, 'total_users': len(names)})
 
 
 @login_required

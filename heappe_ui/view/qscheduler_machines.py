@@ -10,9 +10,13 @@ QScheduler notifier "<HEAppE identifier>.<machine>" with a freshly generated tok
 EnableCallback=true, QSchedulerNotifier=<name> and QSchedulerNotifyToken=<token>, always stored in HEAppE Vault.
 Removing the cluster removes its notifier.
 
-HEAppE itself registers the project in QScheduler (POST /projects) on the first job submission, using
-AccountingString as the name and the summed QPU allocation as the limit. QScheduler project names are global
-per QScheduler instance, so HEAppEs sharing a machine must not reuse each other's accounting strings.
+HEAppE itself registers the project in QScheduler (POST /projects) on the first job submission, with the summed
+QPU allocation as the limit. HEAppE >= 6.7.0 names it "<QSchedulerProjectPrefix>.<AccountingString>" (users
+likewise): every new cluster gets the prefix of its HEAppE on this QScheduler (see qscheduler_prefix), so HEAppEs
+sharing a QScheduler never share projects. QScheduler 0.2.2+ needs HEAppE 6.7.0+.
+
+QScheduler 0.3.0 rejects tasks asking for more than the machine's max task time limit (default 15m), and HEAppE
+sends the job walltime as the task time limit: the queue's MaxWalltime is the machine's max task time limit.
 """
 import json
 import re
@@ -30,6 +34,10 @@ from .qscheduler_core import (CONNECTION_PROTOCOL_HTTP, DEFAULT_ACCOUNTING_FORMU
                               FILE_TRANSFER_PROTOCOL_HTTP, MACHINE_RE, MIN_HEAPPE_VERSION, NAME_RE,
                               SCHEDULER_TYPE_QSCHEDULER, USAGE_TYPE_QPU_SECONDS)
 from .utils import clean_ver
+
+
+# MaxWalltime of the queue of a machine on QScheduler < 0.3.0 (no maximum task time limit there)
+LEGACY_QUEUE_WALLTIME = 86400
 
 
 def parse_machine_options(data: dict, uid: str) -> tuple:
@@ -68,8 +76,10 @@ def parse_machine_options(data: dict, uid: str) -> tuple:
         'queue_size': i('queue_size', 4, 1, 100000, "Queue size"),
         'limit_check_interval': s('limit_check_interval', '2s'),
         'max_session_time': s('max_session_time', '2h'),
-        'default_task_time_limit': s('default_task_time_limit', '1h'),
+        'default_task_time_limit': s('default_task_time_limit', core.DEFAULT_TASK_TIME_LIMIT_030),
+        'max_task_time_limit': s('max_task_time_limit', core.DEFAULT_MAX_TASK_TIME_LIMIT),   # QScheduler 0.3.0+
         'max_clock_skew': s('max_clock_skew', '4s'),
+        'decay_half_time': s('decay_half_time', core.DEFAULT_DECAY_HALF_TIME),               # QScheduler 0.3.0+
         'pulse_access': b('pulse_access', False),   # pulse-level tasks (kind=pulse), QScheduler 0.2.2+
         'iqm_url': s('iqm_url'),
         'iqm_token': s('iqm_token'),
@@ -101,10 +111,20 @@ def parse_machine_options(data: dict, uid: str) -> tuple:
     if opts['machine_mode'] != 'new':
         opts['pulse_access'] = False          # an existing machine keeps its own setting
     if opts['machine_mode'] == 'new':
+        bad = []
         for key, label in (('limit_check_interval', "Limit check interval"), ('max_session_time', "Max session time"),
-                           ('default_task_time_limit', "Default task time limit"), ('max_clock_skew', "Max clock skew")):
+                           ('default_task_time_limit', "Default task time limit"),
+                           ('max_task_time_limit', "Max task time limit"), ('max_clock_skew', "Max clock skew"),
+                           ('decay_half_time', "Fair share decay half-time")):
             if not DURATION_RE.match(opts[key]):
                 errors.append(f"{label} must be a duration with a unit, e.g. 2s, 30m, 2h.")
+                bad.append(key)
+        if not bad:
+            if core.duration_ms(opts['decay_half_time']) < 1:
+                errors.append("Fair share decay half-time must be at least 1ms.")
+            limit_error = core.check_time_limits(opts)
+            if limit_error:
+                errors.append(limit_error)
         if opts['backend'] not in ('test', 'iqm'):
             errors.append("Backend must be 'test' or 'iqm'.")
         if opts['backend'] == 'iqm':
@@ -164,6 +184,10 @@ def add_machine_worker(log, result, instance_name, opts, uid):
     version, identifier = core.heappe_identity(asg.heappe_instance)
     if not core.supports_qscheduler(version):
         raise RuntimeError(core.unsupported_version_message(instance_name, version))
+    # Project prefix of this HEAppE on this QScheduler (HEAppE >= 6.7.0 names projects and users "<prefix>.<name>")
+    from .qscheduler_prefix import ensure_assignment_prefix
+    prefix = ensure_assignment_prefix(asg, identifier, core.qscheduler_clusters(controller, session_code, inst))
+    log(f"QScheduler project prefix of this HEAppE: '{prefix}' (projects and users '{prefix}.<name>').")
     if asg.notifications_enabled:
         if not asg.callback_url:
             raise RuntimeError("The assignment has notifications on but no callback URL. Edit the assignment on the "
@@ -180,6 +204,11 @@ def add_machine_worker(log, result, instance_name, opts, uid):
     loaded = True
     cli_changed = False
     try:
+        qs_version = target.version()
+        error = core.compatibility_error(instance_name, version, inst.name, qs_version)
+        if error:
+            raise RuntimeError(error)
+        result['qscheduler_version'] = qs_version
         machines = target.list_machines(log)
         names = {m['name'] for m in machines} if machines is not None else None
         if opts['machine_mode'] == 'new':
@@ -203,6 +232,11 @@ def add_machine_worker(log, result, instance_name, opts, uid):
             if names is None:
                 log("Note: machines of this instance cannot be listed; the machine is verified over the REST API.")
             log(f"Using existing machine '{machine}' (shared with other HEAppE instances).")
+            if core.supports_030(qs_version):
+                cfg = target.machine_config(machine) or {}
+                if cfg.get('max_task_time_limit_ms'):
+                    opts['max_task_time_limit'] = core.format_duration(cfg['max_task_time_limit_ms'])
+                    log(f"Machine '{machine}' accepts tasks of at most {opts['max_task_time_limit']}.")
         if notifier:
             current = {n['name']: n for n in target.list_notifiers(log)}
             if notifier[0] in current:
@@ -226,7 +260,11 @@ def add_machine_worker(log, result, instance_name, opts, uid):
         log(f"WARNING: '{inst.name}' must be restarted before the machine is available.")
 
     # HEAppE registration
-    custom_config, vault_toggles = core.build_cluster_custom_configuration(inst, notifier, opts['use_sessions'], host)
+    custom_config, vault_toggles = core.build_cluster_custom_configuration(inst, notifier, opts['use_sessions'], host,
+                                                                           prefix)
+    opts['queue_walltime'] = (core.walltime_seconds(opts['max_task_time_limit']) if core.supports_030(qs_version)
+                              else LEGACY_QUEUE_WALLTIME)
+    opts['project_prefix'] = prefix
     log("Creating QScheduler Cluster in HEAppE (protocol HTTP, direct REST calls)...")
     try:
         cluster_id = _create_cluster(controller, session_code, inst, machine, opts, custom_config, vault_toggles)
@@ -291,10 +329,11 @@ def _register_cluster_resources(log, result, controller, session_code, inst, mac
     queue_id = core.id_of(controller.heappe_management_cluster_node_type_post(body={
         "Name": machine[:50], "Description": f"QScheduler machine {machine}",
         "NumberOfNodes": 1, "CoresPerNode": 1, "Queue": machine, "QualityOfService": None,
-        "MaxWalltime": 86400, "ClusterAllocationName": None, "ClusterId": cluster_id,
-        "FileTransferMethodId": ftm_id, "ClusterNodeTypeAggregationId": group_id,
+        "MaxWalltime": opts.get('queue_walltime') or LEGACY_QUEUE_WALLTIME, "ClusterAllocationName": None,
+        "ClusterId": cluster_id, "FileTransferMethodId": ftm_id, "ClusterNodeTypeAggregationId": group_id,
         "SessionCode": session_code}))
-    log(f"Queue '{machine}' created (ID: {queue_id}).")
+    log(f"Queue '{machine}' created (ID: {queue_id}, max walltime {opts.get('queue_walltime') or LEGACY_QUEUE_WALLTIME} s"
+        f"{': the machine max task time limit' if opts.get('queue_walltime') else ''}).")
 
     project_id = None
     if opts['create_project']:
@@ -304,7 +343,9 @@ def _register_cluster_resources(log, result, controller, session_code, inst, mac
             "EndDate": valid_to.strftime(fmt), "UsageType": USAGE_TYPE_QPU_SECONDS,
             "UseAccountingStringForScheduler": True, "IsOneToOneMapping": False, "PIEmail": "",
             "SessionCode": session_code}))
-        log(f"Project created (ID: {project_id}, QScheduler project name '{opts['project_name']}').")
+        qs_name = f"{opts['project_prefix']}.{opts['project_name']}" if opts.get('project_prefix') else opts['project_name']
+        log(f"Project created (ID: {project_id}, QScheduler project name '{qs_name}', registered by HEAppE on the "
+            f"first job).")
         controller.heappe_management_project_assignment_to_cluster_post(body={
             "ProjectId": project_id, "ClusterId": cluster_id, "ScratchStoragePath": "/tmp",
             "PermanentStoragePath": "/tmp", "ProjectStoragePath": "/tmp", "SessionCode": session_code})

@@ -8,6 +8,11 @@ QScheduler panel of a HEAppE QScheduler cluster (cluster detail, Cluster Configu
     otherwise "Recreate notifier" (new notifier + token, or callbacks disabled when notifications are off),
   * whether the cluster's machine (the queue of its node type) exists in QScheduler; otherwise "Recover machine":
     register a new machine with that name, or switch the cluster to an existing machine,
+  * whether the cluster has the project prefix of its HEAppE (QSchedulerProjectPrefix; HEAppE 6.7.0+ refuses to
+    submit without it when callbacks are on). It is set by the prefix migration on the QScheduler page,
+  * QScheduler 0.3.0+: whether the walltime of the cluster's queues fits the machine's max task time limit (HEAppE
+    sends the walltime as the task time limit; more is rejected). "Fix time limits" lowers the queues' MaxWalltime
+    or raises the machine's limit,
   * when its QScheduler instance is not registered, archived or cannot be reached: "Move to another QScheduler" -
     the cluster (with its queues, projects and job history) is kept and pointed to another healthy instance assigned
     to this HEAppE, with a new or existing machine there and a new notifier and token.
@@ -45,7 +50,61 @@ def _identifier(asg):
 # Status
 # ---------------------------------------------------------------------------
 
-def cluster_status(instance_name, cluster):
+def queue_walltime_problems(cluster, machine, max_ms):
+    """Queues of `cluster` on `machine` whose MaxWalltime (seconds) is above the machine max task time limit (ms)."""
+    out = []
+    for nt in cluster.get('node_types') or []:
+        walltime = nt.get('max_walltime')
+        if nt.get('queue') == machine and max_ms and (walltime is None or int(walltime) * 1000 > int(max_ms)):
+            out.append({'id': nt.get('id'), 'name': nt.get('name'), 'max_walltime': walltime})
+    return out
+
+
+def _time_limit_status(cluster, machine, state):
+    """{'max_ms', 'max', 'queues', 'problems'} of a cluster for the machine state of QScheduler >= 0.3.0."""
+    max_ms = (state or {}).get('max_task_time_limit_ms')
+    if not max_ms:
+        return None
+    queues = queue_walltime_problems(cluster, machine, max_ms)
+    return {'max_ms': max_ms, 'max': core.format_duration(max_ms), 'max_walltime': max_ms // 1000,
+            'default': core.format_duration((state or {}).get('default_task_time_limit_ms') or 0),
+            'decay': core.format_duration((state or {}).get('decay_half_time_ms') or 0)
+            if (state or {}).get('decay_half_time_ms') else None,
+            'queues': queues,
+            'problems': [f"queue '{q['name']}' allows {q['max_walltime'] or 'unlimited'} s, the machine accepts tasks "
+                         f"of at most {core.format_duration(max_ms)} ({max_ms // 1000} s): longer jobs are rejected"
+                         for q in queues]}
+
+
+def time_limit_report(inst, log):
+    """Logs and returns the queues of all assigned HEAppEs whose walltime is above their machine's max task time limit."""
+    target = core.target_for(inst)
+    try:
+        states = target.machine_states(log)
+    finally:
+        target.close()
+    problems = []
+    for a in inst.assignments.select_related("heappe_instance"):
+        name = a.heappe_instance.instance_name
+        try:
+            controller, session_code = _connect(name, lambda *_: None)
+            clusters = core.qscheduler_clusters(controller, session_code, inst)
+        except Exception as e:
+            log(f"WARNING: clusters of HEAppE '{name}' cannot be read: {str(e).splitlines()[0][:200]}")
+            continue
+        for c in clusters:
+            machine = core.cluster_machine(c)
+            status = _time_limit_status(c, machine, states.get(machine))
+            for text in (status or {}).get('problems', []):
+                log(f"WARNING: HEAppE '{name}', cluster '{c.get('name')}': {text}. Fix it in the cluster's "
+                    f"QScheduler panel (Fix time limits).")
+                problems.append({'heappe_instance': name, 'cluster_id': c.get('id'), 'problem': text})
+    if not problems:
+        log("Queue walltimes fit the machines' max task time limits.")
+    return problems
+
+
+def cluster_status(instance_name, cluster, heappe_version=None):
     """Status of one QScheduler cluster of HEAppE `instance_name` (dict for the cluster detail panel)."""
     cfg = cluster.get('custom_configuration') or {}
     machine = core.cluster_machine(cluster)
@@ -53,7 +112,7 @@ def cluster_status(instance_name, cluster):
     out = {'cluster_id': cluster.get('id'), 'cluster_name': cluster.get('name'),
            'name_matches': core.cluster_name_matches(cluster), 'machine': machine, 'endpoint': endpoint, 'instance': None,
            'assigned': False, 'notifications': None, 'machine_status': None, 'error': None,
-           'move_candidates': [], 'can_move': False}
+           'move_candidates': [], 'can_move': False, 'prefix': None, 'time_limit': None}
     inst = _instance_of_cluster(cluster)
     out['move_candidates'] = [{'id': a.qscheduler.id, 'name': a.qscheduler.name,
                                'endpoint': f"{a.qscheduler.service_host}:{a.qscheduler.port}"}
@@ -79,6 +138,21 @@ def cluster_status(instance_name, cluster):
          'token_set': token_set, 'registered': None, 'url': None, 'callback_url': asg.callback_url, 'problems': []}
     out['notifications'] = n
 
+    configured_prefix = core.cluster_project_prefix(cluster)
+    pr = {'expected': asg.project_prefix, 'configured': configured_prefix, 'assignment_id': asg.id,
+          'heappe_uses_prefix': core.uses_project_prefix(heappe_version) if heappe_version else None, 'problems': []}
+    if not configured_prefix:
+        pr['problems'].append(
+            f"{core.PREFIX_KEY} is not set: HEAppE 6.7.0+ "
+            + ("refuses to submit (it falls back to the notifier name, which contains '.')" if callbacks
+               else "falls back to its InstanceIdentifierPath")
+            + ". Run 'Project prefix...' on this HEAppE's assignment (QScheduler page).")
+    elif asg.project_prefix and configured_prefix != asg.project_prefix:
+        pr['problems'].append(f"{core.PREFIX_KEY} is '{configured_prefix}', the other clusters of this HEAppE use "
+                              f"'{asg.project_prefix}' (kept: a prefix must never change)")
+    pr['ok'] = not pr['problems']
+    out['prefix'] = pr
+
     target = None
     names = None
     try:
@@ -88,6 +162,8 @@ def cluster_status(instance_name, cluster):
             n['registered'] = expected in notifiers
             n['url'] = (notifiers.get(expected) or {}).get('url')
         names = target.list_machines()
+        if names is not None and core.supports_030(target.version()):
+            out['time_limit'] = _time_limit_status(cluster, machine, target.machine_states().get(machine))
     except Exception as e:
         out['error'] = f"QScheduler '{inst.name}' cannot be checked: {str(e).splitlines()[0][:300]}"
         out['can_move'] = True          # unreachable or gone: the cluster can be moved to a healthy instance
@@ -395,7 +471,11 @@ def move_cluster_worker(log, result, instance_name, cluster_id, opts):
         _set_queue(controller, session_code, cluster, old_machine, new_machine, log)
     _name_after_machine(cluster, new_machine, log)
     location = (inst.service_host, inst.port)
-    core.update_cluster_notifications(controller, session_code, cluster, notifier, log, location=location)
+    # On another QScheduler the cluster's projects start anew: it takes the prefix of its HEAppE there.
+    from .qscheduler_prefix import ensure_assignment_prefix
+    prefix = ensure_assignment_prefix(asg, None, core.qscheduler_clusters(controller, session_code, inst))
+    core.update_cluster_notifications(controller, session_code, cluster, notifier, log, location=location,
+                                      prefix=prefix)
     core.repoint_file_transfer_methods(controller, session_code, cluster, inst.service_host, inst.port, log)
     result.update({'cluster': cluster.get('name'), 'machine': new_machine, 'mode': opts['mode'],
                    'notifier': notifier[0] if notifier else None, 'qscheduler': inst.name,
@@ -403,6 +483,134 @@ def move_cluster_worker(log, result, instance_name, cluster_id, opts):
     log(f"SUCCESS: cluster '{cluster.get('name')}' moved to '{inst.name}' (machine '{new_machine}'"
         f"{', notifier ' + repr(notifier[0]) + ' with a new token' if notifier else ''}); its queues, projects and "
         f"job history are kept.")
+
+
+# ---------------------------------------------------------------------------
+# Fix queue walltimes vs. the machine max task time limit (QScheduler >= 0.3.0)
+# ---------------------------------------------------------------------------
+
+LIMIT_FIELDS = (('max_task_time_limit', 'max_task_time_limit_ms', "Max task time limit"),
+                ('default_task_time_limit', 'default_task_time_limit_ms', "Default task time limit"),
+                ('decay_half_time', 'decay_half_time_ms', "Fair share decay half-time"))
+
+
+def parse_time_limit_options(data):
+    """
+    mode 'queues' (lower the queue walltime), 'machine' (raise the max task time limit) or 'edit' (set any of the
+    machine's time limits; fit_queues also lowers queue walltimes above the new max).
+    """
+    data = data or {}
+    flag = lambda v: v if isinstance(v, bool) else str(v or "").strip().lower() in ("1", "true", "on", "yes")
+    mode = str(data.get('mode') or 'queues').strip().lower()
+    if mode not in ('queues', 'machine', 'edit'):
+        return None, ["Mode must be 'queues', 'machine' or 'edit'."]
+    opts = {'mode': mode, 'iqm_token': str(data.get('iqm_token') or "").strip(), 'max_task_time_limit': None,
+            'default_task_time_limit': None, 'decay_half_time': None, 'fit_queues': flag(data.get('fit_queues'))}
+    keys = [f for f, _, _ in LIMIT_FIELDS] if mode == 'edit' else ['max_task_time_limit'] if mode == 'machine' else []
+    errors = []
+    for key, _, label in LIMIT_FIELDS:
+        if key not in keys:
+            continue
+        raw = str(data.get(key) or "").strip()
+        if raw and not core.DURATION_RE.match(raw):
+            errors.append(f"{label} must be a duration with a unit, e.g. 30m or 2h.")
+        elif raw and core.duration_ms(raw) < 1:
+            errors.append(f"{label} must be at least 1ms.")
+        opts[key] = raw or None
+    if mode == 'edit' and not errors and not any(opts[k] for k in keys) and not opts['fit_queues']:
+        errors.append("Enter at least one limit to change.")
+    if mode == 'edit' and not errors and opts['max_task_time_limit'] and opts['default_task_time_limit']:
+        err = core.check_time_limits(opts)
+        if err:
+            errors.append(err)
+    return (None, errors) if errors else (opts, [])
+
+
+def _put_queue_walltime(controller, session_code, cluster, nt, walltime, log):
+    group = nt.get('cluster_node_type_aggregation') or {}
+    controller.heappe_management_cluster_node_type_put(body={
+        "Id": nt.get('id'), "Name": nt.get('name'), "Description": nt.get('description'),
+        "NumberOfNodes": nt.get('number_of_nodes'), "CoresPerNode": nt.get('cores_per_node'), "Queue": nt.get('queue'),
+        "QualityOfService": nt.get('quality_of_service'), "MaxWalltime": walltime,
+        "ClusterAllocationName": nt.get('cluster_allocation_name'), "ClusterId": cluster.get('id'),
+        "FileTransferMethodId": nt.get('file_transfer_method_id'),
+        "ClusterNodeTypeAggregationId": group.get('id') if isinstance(group, dict) else None,
+        "SessionCode": session_code})
+    log(f"Queue '{nt.get('name')}' (ID {nt.get('id')}): MaxWalltime {nt.get('max_walltime')} -> {walltime} s.")
+
+
+def _store_machine_limits(inst, machine, changes_ms):
+    """Keeps the stored machine definition (used by Restore) in line with the changed limits."""
+    stored = QSchedulerMachine.objects.filter(qscheduler=inst, name=machine).first()
+    if stored:
+        options = dict(stored.options or {})
+        for key, field, _ in LIMIT_FIELDS:
+            if field in changes_ms:
+                options[key] = core.format_duration(changes_ms[field])
+        stored.options = options
+        stored.save(update_fields=["options", "updated_at"])
+
+
+def fix_time_limits_worker(log, result, instance_name, cluster_id, opts):
+    """
+    mode 'queues': lower the MaxWalltime of the cluster's queues to the machine max task time limit.
+    mode 'machine': raise the machine max task time limit to max_task_time_limit (default: the longest queue
+    walltime). mode 'edit': set the given time limits of the machine (raise or lower); with fit_queues the queues
+    above the new max are lowered too. The machine may be shared by other HEAppE instances.
+    """
+    controller, session_code, cluster, inst, asg = _context(instance_name, cluster_id, log)
+    machine = core.cluster_machine(cluster)
+    log(f"=== QSCHEDULER: TIME LIMITS OF CLUSTER '{cluster.get('name')}' (machine '{machine}', '{inst.name}') ===")
+    target = core.target_for(inst)
+    try:
+        if not core.supports_030(target.version()):
+            raise RuntimeError("Task time limit maximums need QScheduler 0.3.0 or newer.")
+        state = target.machine_states(log).get(machine)
+        if not state:
+            raise RuntimeError(f"Machine '{machine}' is not registered in '{inst.name}'.")
+        max_ms = state.get('max_task_time_limit_ms')
+        too_long = queue_walltime_problems(cluster, machine, max_ms)
+        changes = {}
+        if opts['mode'] == 'machine':
+            wanted = (core.duration_ms(opts['max_task_time_limit']) if opts['max_task_time_limit'] else
+                      max([int(q['max_walltime'] or 0) * 1000 for q in too_long] or [max_ms]))
+            if wanted <= max_ms:
+                log(f"The machine already accepts tasks of {core.format_duration(max_ms)}; nothing to change.")
+            else:
+                changes['max_task_time_limit_ms'] = wanted
+        elif opts['mode'] == 'edit':
+            for key, field, label in LIMIT_FIELDS:
+                if opts.get(key) and core.duration_ms(opts[key]) != state.get(field):
+                    changes[field] = core.duration_ms(opts[key])
+                    log(f"{label}: {core.format_duration(state.get(field) or 0)} -> {opts[key]}.")
+            if not changes:
+                log("The machine already has these limits; nothing to change.")
+        if changes:
+            target.update_machine_settings(machine, changes, log, opts['iqm_token'],
+                                           what="Changing the task time limits")
+            _store_machine_limits(inst, machine, changes)
+            max_ms = changes.get('max_task_time_limit_ms', max_ms)
+            log(f"Machine '{machine}' updated; QScheduler restarted it (an open session was closed). Other HEAppE "
+                f"instances using it are affected too.")
+        too_long = queue_walltime_problems(cluster, machine, max_ms)
+    finally:
+        target.close()
+    changed = []
+    if opts['mode'] == 'queues' or (opts['mode'] == 'edit' and opts.get('fit_queues')):
+        for nt in cluster.get('node_types') or []:
+            if nt.get('id') in {q['id'] for q in too_long}:
+                _put_queue_walltime(controller, session_code, cluster, nt, max_ms // 1000, log)
+                changed.append(nt.get('id'))
+        if not changed:
+            log("All queues already fit the machine's max task time limit.")
+    elif too_long:
+        log(f"WARNING: {len(too_long)} queue(s) allow longer jobs than {core.format_duration(max_ms)}: QScheduler "
+            f"rejects them. Lower the queue walltime on the cluster page.")
+    result.update({'cluster': cluster.get('name'), 'machine': machine, 'mode': opts['mode'],
+                   'max_task_time_limit': core.format_duration(max_ms), 'queues': changed,
+                   'changed': {k: core.format_duration(v) for k, v in changes.items()} if opts['mode'] != 'queues'
+                   else {}})
+    log(f"SUCCESS: jobs of cluster '{cluster.get('name')}' may run up to {core.format_duration(max_ms)}.")
 
 
 # ---------------------------------------------------------------------------
@@ -421,7 +629,8 @@ def qscheduler_cluster_status_api(request: HttpRequest, cluster_id: int) -> Http
     instance_name = request.session.get("chosen_instance")
     try:
         controller, session_code = _connect(instance_name, lambda *_: None)
-        status = cluster_status(instance_name, _qs_cluster(controller, session_code, cluster_id))
+        status = cluster_status(instance_name, _qs_cluster(controller, session_code, cluster_id),
+                                request.session.get("middleware_deployed_version", "") or None)
     except Exception as e:
         return _error(f"Cannot read cluster {cluster_id}: {str(e).splitlines()[0][:300]}", 500)
     return JsonResponse(dict(status, status='success'))
@@ -469,6 +678,22 @@ def qscheduler_cluster_move_api(request: HttpRequest, cluster_id: int) -> HttpRe
     if not _assignment_for(request.session.get("chosen_instance"), opts['qscheduler_id']):
         return _error("This HEAppE instance is not assigned to the selected QScheduler instance.")
     ok, msg = core.start_operation("move_cluster", move_cluster_worker, request.session.get("chosen_instance"),
+                                   cluster_id, opts)
+    return JsonResponse({'status': 'success' if ok else 'error', 'message': msg}, status=200 if ok else 409)
+
+
+@login_required
+def qscheduler_cluster_time_limits_api(request: HttpRequest, cluster_id: int) -> HttpResponse:
+    """Changes the machine task time limits or fixes queue walltimes above the max task time limit."""
+    if request.method != "POST":
+        return _error('Only POST method is allowed', 405)
+    err = _version_error(request)
+    if err:
+        return _error(err)
+    opts, errors = parse_time_limit_options(_json_body(request))
+    if errors:
+        return _error(" ".join(errors))
+    ok, msg = core.start_operation("fix_time_limits", fix_time_limits_worker, request.session.get("chosen_instance"),
                                    cluster_id, opts)
     return JsonResponse({'status': 'success' if ok else 'error', 'message': msg}, status=200 if ok else 409)
 

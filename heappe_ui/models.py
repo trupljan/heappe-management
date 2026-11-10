@@ -148,6 +148,9 @@ class QSchedulerInstance(models.Model):
     # Log level of the service (RUST_LOG, e.g. "debug" or "info,qscheduler=debug"), set when the container is
     # created; "" = not managed here (QScheduler logs at info unless the container sets RUST_LOG itself).
     log_level = models.CharField(max_length=200, blank=True, default="")
+    # Options of `qscheduler serve` (QScheduler >= 0.3.0) set when the container is created: max_payload,
+    # task_retention, max_user_active_items, max_user_active_payload. Missing keys: QScheduler's defaults.
+    serve_options = models.JSONField(default=dict, blank=True)
     # ADMIN_TOKEN of the service (bearer token of the admin API, QScheduler >= 0.2.1), encrypted with a key derived
     # from SECRET_KEY. Use the admin_token property.
     admin_token_encrypted = models.TextField(blank=True, default="")
@@ -231,6 +234,11 @@ class QSchedulerAssignment(models.Model):
     qscheduler = models.ForeignKey(QSchedulerInstance, on_delete=models.CASCADE, related_name="assignments")
     heappe_instance = models.ForeignKey(InstanceCredentials, on_delete=models.CASCADE, related_name="qscheduler_assignments")
     heappe_identifier = models.CharField(max_length=255, blank=True, default="")   # prefix of its notifier names
+    # QSchedulerProjectPrefix of this HEAppE's clusters on this QScheduler (HEAppE >= 6.7.0 names projects and users
+    # "<prefix>.<name>"). Set once and never changed: a new prefix points HEAppE to new, empty projects.
+    project_prefix = models.CharField(max_length=64, blank=True, default="")
+    # When the projects of this HEAppE were renamed to the prefixed names in QScheduler (prefix migration).
+    projects_renamed_at = models.DateTimeField(null=True, blank=True)
     network = models.CharField(max_length=255, blank=True, default="")   # Docker network joined for this HEAppE
     notifications_enabled = models.BooleanField(default=False)
     callback_url = models.CharField(max_length=1024, blank=True, default="")

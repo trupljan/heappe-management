@@ -70,6 +70,11 @@ Where things are managed:
   An unknown version (the HEAppE health API does not answer) counts as older.
 - A QScheduler version with notifier support (the `qscheduler notifier` command). Registering an older QScheduler
   fails with a message about `notifier list`.
+- **QScheduler 0.2.2 or newer (including 0.3.0) needs HEAppE 6.7.0 or newer.** Only major.minor.patch of HEAppE counts:
+  a pre-release such as `6.7.0a3` counts as 6.7.0. Older QScheduler versions work with HEAppE 6.6.0+. The rule is
+  checked when a HEAppE is assigned, when a quantum machine is added, before an instance is updated (override:
+  *Update anyway*) and after a restore (warning). HEAppE 6.7.0 pre-releases before `a3` do not send the session owner
+  QScheduler 0.3.0 requires: upgrade them. See [QScheduler 0.3.0 and HEAppE 6.7.0](#qscheduler-030-and-heappe-670).
 - After upgrading HEAppE Management, run the database migration once:
 
   ```bash
@@ -216,6 +221,18 @@ The container is recreated with the same configuration (environment, database, n
 policy). Machines, notifiers and projects are kept in PostgreSQL. If the new container does not become healthy, the
 previous one is restored.
 
+Before anything is changed, the version of the new image (`qscheduler --version`) is compared with the running one:
+
+- **Downgrades are refused**: QScheduler's database migrations are one-way and an older version does not start on a
+  migrated database. To go back, restore a backup taken with the older version.
+- **Assigned HEAppE instances too old** for the new version (QScheduler 0.2.2+ needs HEAppE 6.7.0+) stop the update,
+  unless *Update anyway when an assigned HEAppE is too old* is ticked.
+- **Crossing to 0.3.0** first backs up the database (deployed instances with a shared or dedicated database) and
+  restores it when the new container fails. For other databases, tick *I have a backup of the database*. Afterwards
+  the queue walltimes of all assigned HEAppE instances are checked against the machines' max task time limit (see
+  [Task time limits](#task-time-limits)), and mismatches are listed in the log.
+- Service limits are kept; they are dropped when the new image is older than 0.3.0.
+
 ### Restart
 
 **Actions → Restart** stops QScheduler gracefully (pending state, including running session time, is written to the
@@ -349,7 +366,7 @@ Only QScheduler instances **assigned** to the current HEAppE instance are offere
 | | *Use existing machine (shared)* | Uses a machine that is already registered (for example by another HEAppE instance). The machine itself is not changed. It is checked over the REST API. |
 | | Machine name | Up to 30 characters (letters, digits, `_`, `.`, `-`). Becomes the HEAppE queue. With *Use existing machine*, a dropdown lists the machines registered in the selected instance (with their backend); *Other (type manually)...* or an instance whose machines cannot be listed falls back to a text field. For a new machine, registered names are suggested. |
 | | Backend | `test` (in-process simulator) or `iqm`. For `iqm`: server URL, device name (for example `star24`), token and poll interval (for example `500ms`). |
-| | Machine limits | Queue size (`4`), max session time (`2h`), default task time limit (`1h`), limit check interval (`2s`), max clock skew (`4s`). Durations need a unit. |
+| | Machine limits | Queue size (`4`), max session time (`2h`), default task time limit (`15m`), max task time limit (`15m`, QScheduler 0.3.0+), fair share decay half-time (`90m`, QScheduler 0.3.0+), limit check interval (`2s`), max clock skew (`4s`). Durations need a unit. The default task time limit must not exceed the max. |
 | | Allow pulse-level tasks | Off by default. The machine also accepts `kind=pulse` tasks (e.g. IQM Pulla `RunDefinition`s), not only circuits. Needs QScheduler 0.2.2+; change it later with [Pulse-level tasks](#pulse-level-tasks). |
 | HEAppE cluster | Cluster name | Always the machine name (read-only): HEAppE uses the cluster name as the QScheduler machine, so a cluster named differently fails its jobs. Refused when this HEAppE already has a cluster of that name. |
 | | Accounting formula | Default `exectime_ms/1000` (QPU seconds). |
@@ -357,7 +374,9 @@ Only QScheduler instances **assigned** to the current HEAppE instance are offere
 | | Create HEAppE project | Creates a project (usage type QPU seconds) assigned to the cluster, and a service credential. Optional *custom project name* and *QPU allocation (seconds)*. Without an allocation, HEAppE rejects jobs for the project until one is added. |
 
 Created in HEAppE: cluster, file transfer method (HTTP), QPU queue group with the accounting formula, queue,
-optionally project + allocation + credential.
+optionally project + allocation + credential. The cluster gets `QSchedulerProjectPrefix` (the
+[project prefix](#project-prefix) of this HEAppE on the instance). The queue's *MaxWalltime* is the machine's max task
+time limit on QScheduler 0.3.0+ (for a shared machine, the limit it already has), and 24 hours on older versions.
 
 **Notifier of the cluster** (when the assignment has notifications on): a new notifier
 `<HEAppE identifier>.<machine>` with a new token is registered in QScheduler, and the cluster is created with
@@ -367,9 +386,9 @@ and to shared machines alike: a shared machine gets an additional notifier for t
 QScheduler restarts once when anything was registered (new machine and/or notifier). If creating the cluster fails,
 the notifier is removed again.
 
-> QScheduler project names are global within a QScheduler instance and are shared by all HEAppE instances using it.
-> HEAppE registers the project in QScheduler on the first job, using the project's accounting string. Do not reuse
-> an accounting string of another HEAppE instance on the same QScheduler unless you want them to share the budget.
+> HEAppE registers the project in QScheduler on the first job. HEAppE 6.7.0+ names it
+> `<QSchedulerProjectPrefix>.<AccountingString>`, so HEAppE instances sharing a QScheduler never share projects. Older
+> HEAppE versions use the plain accounting string, which is global within a QScheduler instance.
 
 ### Cluster detail of a QScheduler cluster
 
@@ -381,6 +400,13 @@ panel at the top of it (checked when the page opens; the arrow checks again):
   instances and instances this HEAppE is not assigned to are reported and nothing else is checked.
 - **Notifications**: whether the cluster's notifier and callbacks match the assignment.
 - **Machine**: whether the cluster's machine (the queue of its node type) exists in QScheduler.
+- **Project prefix**: whether `QSchedulerProjectPrefix` is set (and matches the other clusters of this HEAppE). Without
+  it HEAppE 6.7.0+ refuses to submit when callbacks are on. Fixed with *Project prefix...* on the QScheduler page.
+- **Task time limit** (QScheduler 0.3.0+): the machine's max task time limit and whether the queues' *MaxWalltime*
+  fits it. Otherwise **Lower queue walltime** (sets the queues to the machine limit) or **Raise machine limit...**
+  (changes the machine; it may be shared, an IQM machine needs its token, an open session is closed). **Edit
+  limits...** changes the machine's max and default task time limit and fair share decay half-time at any time, and
+  can lower the queues that exceed the new max.
 - **Cluster name**: whether it equals the machine name. HEAppE uses the cluster name as the QScheduler machine, so a
   cluster named differently (e.g. created before this check, or renamed by hand) fails its jobs. **Rename cluster to
   &lt;machine&gt;** fixes it; queues, projects, settings, Vault values and job history are kept. The dashboard's Quantum
@@ -477,6 +503,96 @@ lets the machine accept new work again; work failed or closed by the suspension 
 asks every HEAppE instance assigned to the QScheduler which of its clusters use the machine. When another cluster uses
 it, or an assigned HEAppE instance cannot be asked, the dialog lists them and the action needs the confirmation
 *I understand that ... affects all these clusters*. The server refuses an unconfirmed action on a shared machine.
+
+---
+
+## QScheduler 0.3.0 and HEAppE 6.7.0
+
+QScheduler 0.3.0 adds users (fair share, per-user limits, per-user consumption), a maximum task time limit per machine
+and session owners. HEAppE 6.7.0 sends the session owner and names its projects and users with a prefix. HEAppE
+Management supports both, and still works with older versions.
+
+| Topic | QScheduler 0.3.0 | What HEAppE Management does |
+|---|---|---|
+| Session owner | `POST /sessions` requires `owner` | Requires HEAppE 6.7.0+ for QScheduler 0.2.2+ (version rule above). |
+| Task time limit | Machine `max_task_time_limit_ms` (default 15m); tasks asking for more get `422`; default limit 15m | New machines: *Max task time limit*; queue walltime = that limit; cluster check and fix; check after updating to 0.3.0. |
+| Fair share | Machine `decay_half_time_ms` (default 90m) | *Fair share decay half-time* on new machines. |
+| Per-user limits | `--max-user-active-items` (2000), `--max-user-active-payload` (200M), `--max-payload` replaces `--max-payload-mb` | [Service limits](#service-limits). |
+| Users and consumption | `GET /users`, `GET /users/{name}/consumption` | *Users and consumption...* on the instance. |
+| Database | One-way migration, machine configurations rewritten | Backup before updating, restore on failure, downgrades refused. |
+
+### Project prefix
+
+HEAppE 6.7.0 names its QScheduler projects `<prefix>.<AccountingString>` and its users `<prefix>.<username>`. The
+prefix is the cluster setting `QSchedulerProjectPrefix`. Without it HEAppE falls back to `QSchedulerNotifier`, which is
+always `<identifier>.<machine>` here; the prefix must not contain `.`, so **HEAppE refuses to submit** on such clusters.
+
+- **One prefix per HEAppE instance and QScheduler instance**, shown in the assignments table. It is chosen when the
+  HEAppE is assigned (or on first use): an explicit prefix already set on all its clusters is adopted, otherwise the
+  HEAppE identifier with `.` replaced by `-`, made unique on the instance.
+- **Choosing your own prefix**: the *Project prefix...* dialog has a *Prefix* field until the first migration has
+  run. Enter a value and **Check** to see the plan for it; *Migrate* saves it, replaces the old prefix on the clusters
+  and renames projects named `<old prefix>.<AccountingString>` too. Letters, digits, `-` and `_` only, unique on the
+  QScheduler instance. After the migration the prefix **never changes**: a new prefix would point HEAppE to new,
+  empty projects, and QScheduler users keep the names they were created with.
+- **New clusters** (Add quantum machine) get it. A cluster moved to another QScheduler gets the prefix of its HEAppE
+  there.
+- **Existing clusters** get it with **Assignments table → Project prefix...**. The dialog shows the clusters, the QPU
+  projects of these clusters and what happens to each in QScheduler:
+
+  | State | Meaning |
+  |---|---|
+  | rename | The project exists under its old name (`<AccountingString>`, or `<InstanceIdentifierPath>.<AccountingString>` written by 6.7.0 pre-releases): it is renamed and keeps its consumption history. |
+  | already prefixed | Nothing to do. |
+  | created by HEAppE on first use | Not in QScheduler yet. |
+  | conflict | Both the old and the prefixed project exist (HEAppE already created the prefixed one), or two old names: only one can keep its history. Merge or remove one in QScheduler first; the migration is blocked. |
+
+  **Migrate** (deployed instances with a shared or dedicated database): backup, QScheduler **stopped** (it caches
+  projects by name), projects renamed in one transaction (refused if a target name exists), the prefix set on the
+  clusters, QScheduler started again. **Dry run** renames and rolls back. Other instances: the dialog shows the SQL;
+  stop QScheduler, run it against its database, start it, then tick *Projects renamed by hand* and Migrate. Needs
+  HEAppE 6.7.0+ (older versions keep using the plain names). This replaces the manual scripts of HEAppE
+  (`QSchedulerScripts/ProjectPrefixMigration`).
+- **Users are not renamed**: a user's history before the prefix stays under the old name.
+- Clusters that already have a different explicit prefix are left alone (reported).
+
+> HEAppE sends each project's limit as the sum of *all* its allocations, including non-quantum ones. Keep only QPU
+> allocations on projects used with QScheduler.
+
+### Task time limits
+
+HEAppE sends the job walltime as the task's `time_limit_ms`. QScheduler 0.3.0 rejects a task asking for more than the
+machine's max task time limit (`422`), so a queue's *MaxWalltime* must not exceed it. When updating to 0.3.0,
+QScheduler resets every machine's default task time limit to 15 minutes, and machines without a max accept tasks of at
+most 15 minutes, while queues created earlier allow 24 hours. Fix each cluster on its QScheduler panel (lower the
+queue walltime or raise the machine limit); the update log lists them.
+
+The limits are set when adding a machine (*Default task time limit*, *Max task time limit*, *Fair share decay
+half-time*) and changed later with **Cluster detail → QScheduler → Edit limits...**. QScheduler restarts the machine
+(queued tasks are kept, an open session is closed); the stored machine definition used by *Restore* follows. *Restore* registers a machine stored before
+this version with max = max(default, 15m).
+
+### Service limits
+
+**Actions → Service limits...** (Docker-based instances, QScheduler 0.3.0+), and *Service limits* in the deploy
+dialog. Options of `qscheduler serve`; empty means QScheduler's default:
+
+| Field | Option | Default |
+|---|---|---|
+| Max request size | `--max-payload` (at most `4G`) | `32M` |
+| Active payload per user | `--max-user-active-payload` | `200M` |
+| Active items per user | `--max-user-active-items` (unfinished tasks + open sessions) | `2000` |
+| Task retention in memory | `--task-retention` | `10m` |
+
+Sizes are whole numbers with `K`, `M`, `G` or `T` (powers of 1024). QScheduler answers `429` over a per-user limit and
+`413` for a payload above the limit; HEAppE 6.7.0 passes both on to the API caller. QScheduler reads the options only
+at startup: the container is recreated as for *Log level*. They are kept by *Update* and *Restore*.
+
+### Users and consumption
+
+**Actions → Users and consumption...** (QScheduler 0.3.0+) lists the users known to the instance with their consumed
+time per project and machine, and the HEAppE instance whose prefix they carry. A user is charged the sessions it owns
+and its tasks outside a session. At most 200 users are shown.
 
 ---
 
@@ -787,6 +903,12 @@ restart pending) are described in [QScheduler_Recovery_README.md](QScheduler_Rec
 | *Assignment saved, but updating the HEAppE clusters failed* | The HEAppE API was unavailable. Open the assignment and save it again. |
 | Jobs stay in *Submitted* with notifications on | QScheduler cannot reach the callback URL. Check the callback URL from the QScheduler host, or edit the assignment and turn notifications off (HEAppE then polls). |
 | *Removing machine … failed … has N task(s)* | The machine is still in use. Wait, or tick *Force* (deletes its tasks and sessions). |
+| *QScheduler '…' (0.3.0) needs HEAppE 6.7.0 or newer* | Upgrade HEAppE before assigning, adding machines or updating QScheduler (or tick *Update anyway*). |
+| *Invalid machine configuration … default task time limit* | The default task time limit is above the max task time limit (QScheduler 0.3.0). |
+| Jobs fail with HTTP 422 after updating to QScheduler 0.3.0 | The job walltime is above the machine's max task time limit. Fix it on the cluster's QScheduler panel. |
+| HEAppE 6.7.0: *QScheduler project prefix '….…' must not contain '.'* | The cluster has no `QSchedulerProjectPrefix`. Run *Project prefix...* on the assignment. |
+| Project prefix migration *blocked* | Both the old and the prefixed project exist in QScheduler. Merge or remove one, then run it again. |
+| *The image is QScheduler 0.2.x, the instance runs 0.3.0* | Downgrades are refused. Restore a backup taken with the older version. |
 
 ---
 
@@ -803,6 +925,11 @@ restart pending) are described in [QScheduler_Recovery_README.md](QScheduler_Rec
 | Instance → Actions | Backups... | deployed (shared or dedicated database) | List, create and delete database dumps (see [Backups](#backups)). |
 | Instance → Actions | Update | deployed, local, SSH to VM | New image (git build or existing image), container recreated, rollback on failure. |
 | Instance → Actions | Log level... | deployed, local, SSH to VM | Sets `RUST_LOG` (preset or custom filter); container recreated, rollback on failure. |
+| Instance → Actions | Service limits... | deployed, local, SSH to VM (QScheduler 0.3.0+) | Sets the `qscheduler serve` limits; container recreated, rollback on failure. |
+| Instance → Actions | Users and consumption... | not archived (QScheduler 0.3.0+) | Users with their consumed time per project and machine. |
+| Assignments table | Project prefix... | not archived | Shows the prefix and the project plan; the prefix can be edited until the first migration; Migrate renames the projects in QScheduler (backup, service stopped) and sets the prefix on the clusters; Dry run. |
+| Cluster detail → QScheduler | Lower queue walltime / Raise machine limit | QScheduler 0.3.0+ clusters whose queue walltime exceeds the machine limit | Sets the queues' MaxWalltime to the machine limit, or raises the machine's max task time limit. |
+| Cluster detail → QScheduler | Edit limits... | QScheduler 0.3.0+ | Changes the machine's max / default task time limit and fair share decay half-time; optionally lowers queues above the new max. |
 | Instance → Actions | Restart | all | Graceful restart. SSH into container without a restart command: *Confirm manual restart* (health check only). |
 | Instance → Actions | Undeploy | deployed | Removes containers and network, optionally the database volume. Requires no assignments. |
 | Instance → Actions | Unregister | local, SSH to VM, SSH into container | Removes the instance from HEAppE Management only. Requires no assignments. |
