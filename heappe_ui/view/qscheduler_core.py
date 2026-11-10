@@ -50,6 +50,13 @@ DEFAULT_RESTART_COMMAND = "kill -TERM 1"
 MIN_HEAPPE_VERSION = [6, 6, 0]
 MIN_HEAPPE_VERSION_TEXT = "6.6.0"
 MIN_HEAPPE_NOTIFIER_VERSION = MIN_HEAPPE_VERSION
+# HEAppE version needed per QScheduler version (newest first). Only major.minor.patch of HEAppE counts: a
+# pre-release suffix (6.7.0a3) is ignored. HEAppE 6.7.0 sends the session owner QScheduler 0.3.0 requires and
+# names projects and users "<QSchedulerProjectPrefix>.<name>".
+HEAPPE_FOR_QSCHEDULER = (((0, 2, 2), (6, 7, 0)),
+                         ((0, 0, 0), (6, 6, 0)))
+# HEAppE >= 6.7.0 names its QScheduler projects and users "<prefix>.<name>" (cluster QSchedulerProjectPrefix).
+HEAPPE_PREFIX_VERSION = (6, 7, 0)
 
 SCHEDULER_TYPE_QSCHEDULER = 32
 CONNECTION_PROTOCOL_HTTP = 8
@@ -83,6 +90,17 @@ SUSPENSION_MESSAGE_MAX_LEN = 512
 # Pulse-level tasks (kind=pulse) are allowed per machine (pulse_access, default off) from this version.
 PULSE_MIN_VERSION = (0, 2, 2)
 PULSE_UNSUPPORTED = "Pulse-level tasks need QScheduler 0.2.2 or newer."
+# QScheduler 0.3.0: per-machine maximum task time limit (default 15m; the default limit must not exceed it), fair
+# share (decay_half_time), users and per-user limits, session owners; the database migration is one-way.
+V030 = (0, 3, 0)
+DEFAULT_TASK_TIME_LIMIT_030 = "15m"
+DEFAULT_MAX_TASK_TIME_LIMIT = "15m"
+DEFAULT_DECAY_HALF_TIME = "90m"
+# Options of `qscheduler serve` managed here (QScheduler >= 0.3.0), with QScheduler's defaults.
+SERVE_OPTION_DEFAULTS = {"max_payload": "32M", "task_retention": "10m", "max_user_active_items": 2000,
+                         "max_user_active_payload": "200M"}
+SIZE_RE = re.compile(r"^\s*(\d+)\s*([KMGT]?)(i?B)?\s*$", re.I)
+MAX_PAYLOAD_BYTES = 4 << 30
 # Log level of the service: RUST_LOG (tracing EnvFilter), read only at startup; QScheduler's default is "info".
 LOG_LEVEL_PRESETS = ("error", "warn", "info", "debug", "trace")
 DEFAULT_LOG_LEVEL = "info"
@@ -165,10 +183,12 @@ def parse_notifier_list(output: str) -> list:
     return out
 
 
-def machine_args(opts: dict) -> list:
+def machine_args(opts: dict, version=None) -> list:
     """
     qscheduler CLI: machine add|update <NAME> [OPTIONS] <BACKEND> [BACKEND OPTIONS]
     (machine options must come before the backend sub-command). Notifications are not part of a machine.
+    version: QScheduler version text; the 0.3.0 options (max task time limit, decay half-time) are passed only to
+    QScheduler >= 0.3.0.
     """
     args = ["machine", opts.get('action', 'add'), opts['machine_name'],
             "--queue-size", str(opts['queue_size']),
@@ -176,6 +196,9 @@ def machine_args(opts: dict) -> list:
             "--max-session-time", opts['max_session_time'],
             "--default-task-time-limit", opts['default_task_time_limit'],
             "--max-clock-skew", opts['max_clock_skew']]
+    if supports_030(version):
+        args += ["--max-task-time-limit", opts.get('max_task_time_limit') or DEFAULT_MAX_TASK_TIME_LIMIT,
+                 "--decay-half-time", opts.get('decay_half_time') or DEFAULT_DECAY_HALF_TIME]
     if opts.get('pulse_access'):
         args.append("--pulse-access")
     if opts['backend'] == 'iqm':
@@ -209,7 +232,9 @@ def notifier_add_args(name, url, token=None) -> list:
 
 def parse_version(text):
     """(major, minor, patch) from a version string such as 'qscheduler v0.2.1', or None."""
-    m = re.search(r"(\d+)\.(\d+)\.(\d+)", text or "")
+    if not isinstance(text, str):
+        return None
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", text)
     return tuple(int(x) for x in m.groups()) if m else None
 
 
@@ -250,16 +275,22 @@ def duration_ms(text) -> int:
     return int(m.group(1)) * _DURATION_MS[m.group(2)]
 
 
-def machine_request(opts: dict) -> dict:
-    """Body of POST /machines: the same settings as machine_args(), durations in milliseconds."""
+def machine_request(opts: dict, version=None) -> dict:
+    """
+    Body of POST /machines: the same settings as machine_args(), durations in milliseconds. Fields of newer
+    QScheduler versions are sent only to those versions (version: QScheduler version text).
+    """
     body = {"name": opts['machine_name'],
             "queue_size": int(opts['queue_size']),
             "limit_check_interval_ms": duration_ms(opts['limit_check_interval']),
             "max_session_time_ms": duration_ms(opts['max_session_time']),
             "default_task_time_limit_ms": duration_ms(opts['default_task_time_limit']),
             "max_clock_skew_ms": duration_ms(opts['max_clock_skew'])}
-    if opts.get('pulse_access'):           # sent only when on: QScheduler < 0.2.2 does not know the field
-        body["pulse_access"] = True
+    if supports_030(version):
+        body["max_task_time_limit_ms"] = duration_ms(opts.get('max_task_time_limit') or DEFAULT_MAX_TASK_TIME_LIMIT)
+        body["decay_half_time_ms"] = duration_ms(opts.get('decay_half_time') or DEFAULT_DECAY_HALF_TIME)
+    if opts.get('pulse_access') or supports_pulse(version):   # QScheduler < 0.2.2 does not know the field
+        body["pulse_access"] = bool(opts.get('pulse_access'))
     if opts['backend'] == 'iqm':
         body["backend"] = {"type": "iqm", "url": opts['iqm_url'], "token": opts['iqm_token'],
                            "machine_name": opts['iqm_device'],
@@ -272,6 +303,161 @@ def machine_request(opts: dict) -> dict:
 def supports_pulse(version_text):
     v = parse_version(version_text)
     return bool(v) and v >= PULSE_MIN_VERSION
+
+
+def supports_030(version_text):
+    """QScheduler >= 0.3.0: max task time limit, fair share, users, per-user limits, session owners."""
+    v = parse_version(version_text)
+    return bool(v) and v >= V030
+
+
+def image_version(docker, image, log=None):
+    """'qscheduler 0.3.0' of a QScheduler image (`qscheduler --version`, no database needed), or None."""
+    res = docker.run(["run", "--rm", "--network", "none", image, "--version"], log, check=False, quiet=True,
+                     timeout=120)
+    text = (res.stdout or "").strip()
+    return text if res.returncode == 0 and parse_version(text) else None
+
+
+def check_time_limits(opts) -> str:
+    """Error text when the default task time limit is above the maximum one (QScheduler 0.3.0 rejects it), else ""."""
+    try:
+        default = duration_ms(opts.get('default_task_time_limit') or DEFAULT_TASK_TIME_LIMIT_030)
+        maximum = duration_ms(opts.get('max_task_time_limit') or DEFAULT_MAX_TASK_TIME_LIMIT)
+    except ValueError as e:
+        return str(e)
+    if default > maximum:
+        return (f"Default task time limit ({opts.get('default_task_time_limit')}) must not exceed the max task time "
+                f"limit ({opts.get('max_task_time_limit') or DEFAULT_MAX_TASK_TIME_LIMIT}).")
+    return ""
+
+
+def format_duration(ms) -> str:
+    """Milliseconds -> the shortest exact CLI duration ('15m', '2h', '500ms')."""
+    ms = int(ms or 0)
+    for unit in ("d", "h", "m", "s"):
+        if ms and ms % _DURATION_MS[unit] == 0:
+            return f"{ms // _DURATION_MS[unit]}{unit}"
+    return f"{ms}ms"
+
+
+def parse_size(text):
+    """'200M' / '1G' / '512' (bytes, K/M/G/T = powers of 1024, as QScheduler parses them) -> bytes; ValueError."""
+    m = SIZE_RE.match(str(text or ""))
+    if not m:
+        raise ValueError(f"Invalid size '{text}' (a whole number with an optional K, M, G or T suffix, e.g. 200M).")
+    size = int(m.group(1)) * (1 << (10 * " KMGT".index((m.group(2) or " ").upper())))
+    if size <= 0:
+        raise ValueError(f"Size '{text}' must be positive.")
+    return size
+
+
+def parse_serve_options(data) -> tuple:
+    """
+    ({option: value}, errors) of the `qscheduler serve` options managed here; empty values are left out (QScheduler
+    defaults). Keys: max_payload, task_retention, max_user_active_items, max_user_active_payload.
+    """
+    data, out, errors = data or {}, {}, []
+    for key in ("max_payload", "max_user_active_payload"):
+        val = str(data.get(key) or "").strip()
+        if not val:
+            continue
+        try:
+            size = parse_size(val)
+            if key == "max_payload" and size > MAX_PAYLOAD_BYTES:
+                errors.append("Max request size must be at most 4G.")
+            out[key] = val.upper().replace(" ", "")
+        except ValueError as e:
+            errors.append(str(e))
+    val = str(data.get("task_retention") or "").strip()
+    if val:
+        if DURATION_RE.match(val):
+            out["task_retention"] = val
+        else:
+            errors.append("Task retention must be a duration with a unit, e.g. 10m or 1h.")
+    val = str(data.get("max_user_active_items") or "").strip()
+    if val:
+        if val.isdigit() and int(val) >= 1:
+            out["max_user_active_items"] = int(val)
+        else:
+            errors.append("Max active items per user must be a whole number of at least 1.")
+    return out, errors
+
+
+SERVE_FLAGS = {"max_payload": "--max-payload", "task_retention": "--task-retention",
+               "max_user_active_items": "--max-user-active-items", "max_user_active_payload": "--max-user-active-payload"}
+
+
+def serve_args(port, serve_options=None) -> list:
+    """`qscheduler serve` arguments; serve_options (parse_serve_options) need QScheduler >= 0.3.0."""
+    args = ["serve", "--port", str(port)]
+    for key, flag in SERVE_FLAGS.items():
+        if (serve_options or {}).get(key) not in (None, ""):
+            args += [flag, str(serve_options[key])]
+    return args
+
+
+def serve_options_of(cmd) -> dict:
+    """The managed serve options found in a container command (docker inspect Config.Cmd)."""
+    cmd, out = list(cmd or []), {}
+    flags = {v: k for k, v in SERVE_FLAGS.items()}
+    for i, part in enumerate(cmd):
+        key, val = None, None
+        if part in flags and i + 1 < len(cmd):
+            key, val = flags[part], cmd[i + 1]
+        elif "=" in part and part.split("=", 1)[0] in flags:
+            key, val = flags[part.split("=", 1)[0]], part.split("=", 1)[1]
+        if key:
+            out[key] = int(val) if key == "max_user_active_items" and str(val).isdigit() else val
+    return out
+
+
+def with_serve_options(cmd, serve_options) -> list:
+    """Container command with the managed serve options replaced by `serve_options` (other arguments kept)."""
+    cmd, out, skip = list(cmd or []), [], False
+    for i, part in enumerate(cmd):
+        if skip:
+            skip = False
+            continue
+        if part in SERVE_FLAGS.values():
+            skip = True
+            continue
+        if "=" in part and part.split("=", 1)[0] in SERVE_FLAGS.values():
+            continue
+        out.append(part)
+    for key, flag in SERVE_FLAGS.items():
+        if (serve_options or {}).get(key) not in (None, ""):
+            out += [flag, str(serve_options[key])]
+    return out
+
+
+def heappe_release(version):
+    """(major, minor, patch) of a HEAppE version; a pre-release suffix is ignored ('v6.7.0a3' -> (6, 7, 0))."""
+    m = re.search(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?", str(version or ""))
+    return tuple(int(x or 0) for x in m.groups()) if m else (0, 0, 0)
+
+
+def required_heappe_version(qs_version_text):
+    """HEAppE (major, minor, patch) needed for a QScheduler version (unknown QScheduler version: the base minimum)."""
+    v = parse_version(qs_version_text) or (0, 0, 0)
+    for qs_min, heappe_min in HEAPPE_FOR_QSCHEDULER:
+        if v >= qs_min:
+            return heappe_min
+    return tuple(MIN_HEAPPE_VERSION)
+
+
+def compatibility_error(heappe_name, heappe_version, qs_name, qs_version_text) -> str:
+    """Error text when HEAppE `heappe_version` cannot work with QScheduler `qs_version_text`, else ""."""
+    need = required_heappe_version(qs_version_text)
+    if heappe_version and heappe_release(heappe_version) >= need:
+        return ""
+    return (f"HEAppE '{heappe_name}' runs version {heappe_version or 'unknown'}; QScheduler '{qs_name}' "
+            f"({qs_version_text or 'version unknown'}) needs HEAppE {'.'.join(map(str, need))} or newer.")
+
+
+def uses_project_prefix(heappe_version):
+    """HEAppE >= 6.7.0 names its QScheduler projects and users "<QSchedulerProjectPrefix>.<name>"."""
+    return bool(heappe_version) and heappe_release(heappe_version) >= HEAPPE_PREFIX_VERSION
 
 
 def machine_settings_from_config(cfg: dict, iqm_token=""):
@@ -577,13 +763,19 @@ class QsTarget:
         if not self.uses_admin_api(log):
             if opts.get('pulse_access'):
                 return CommandResult(1, "", PULSE_UNSUPPORTED)
-            return self._cli_write(machine_args(dict(opts, action='add')), log)
+            return self._cli_write(machine_args(dict(opts, action='add'), self.version()), log)
         name = opts['machine_name']
-        if opts.get('pulse_access') and not supports_pulse(self.version()):
+        version = self.version()
+        if opts.get('pulse_access') and not supports_pulse(version):
             return CommandResult(1, "", PULSE_UNSUPPORTED)
+        if supports_030(version):
+            error = check_time_limits(opts)
+            if error:
+                return CommandResult(1, "", error)
         log(f"Admin API: POST /machines '{name}' ({opts['backend']} backend"
-            f"{', pulse-level tasks allowed' if opts.get('pulse_access') else ''})")
-        status, text = self.admin_request("POST", "/machines", machine_request(opts))
+            f"{', pulse-level tasks allowed' if opts.get('pulse_access') else ''}"
+            f"{', max task time limit ' + (opts.get('max_task_time_limit') or DEFAULT_MAX_TASK_TIME_LIMIT) if supports_030(version) else ''})")
+        status, text = self.admin_request("POST", "/machines", machine_request(opts, version))
         return self._api_result(status, text, (200, 201), {409: f"Machine '{name}' already exists",
                                                            422: "Invalid machine configuration"})
 
@@ -615,7 +807,10 @@ class QsTarget:
         if not self.uses_admin_api(log):
             raise RuntimeError(SUSPENSION_UNSUPPORTED)
         return {m['name']: {'backend': (m.get('backend') or {}).get('type', ''), 'suspension': m.get('suspension'),
-                            'pulse_access': m.get('pulse_access')}       # None: QScheduler < 0.2.2
+                            'pulse_access': m.get('pulse_access'),       # None: QScheduler < 0.2.2
+                            'max_task_time_limit_ms': m.get('max_task_time_limit_ms'),   # None: QScheduler < 0.3.0
+                            'default_task_time_limit_ms': m.get('default_task_time_limit_ms'),
+                            'decay_half_time_ms': m.get('decay_half_time_ms')}
                 for m in self._admin_json("GET", "/machines") or []}
 
     def machine_online(self, name, timeout=10):
@@ -652,19 +847,59 @@ class QsTarget:
         """
         if not self.uses_admin_api(log):
             raise RuntimeError(PULSE_UNSUPPORTED)
+        return self.update_machine_settings(name, {'pulse_access': bool(enabled)}, log, iqm_token,
+                                            unsupported=PULSE_UNSUPPORTED, what="Changing pulse access")
+
+    def update_machine_settings(self, name, changes, log, iqm_token="", unsupported=None, what="Changing settings"):
+        """
+        Changes some settings of a machine (MachineSettings fields, e.g. max_task_time_limit_ms) over the admin API.
+        PUT /machine/{name} replaces the whole configuration, so the current one is sent back with only `changes`
+        applied; an IQM backend needs its token again. A field the service does not know raises `unsupported`.
+        QScheduler restarts the machine: queued tasks are kept, an open session is closed.
+        """
+        if not self.uses_admin_api(log):
+            raise RuntimeError(unsupported or "Changing machine settings needs QScheduler 0.2.1 or newer (admin API).")
         cfg = self.machine_config(name) or {}
-        if 'pulse_access' not in cfg:
-            raise RuntimeError(PULSE_UNSUPPORTED)
+        unknown = [k for k in changes if k not in cfg]
+        if unknown:
+            raise RuntimeError(unsupported or f"QScheduler {self.version() or ''} does not know {', '.join(unknown)}.")
         body = machine_settings_from_config(cfg, iqm_token)
-        body['pulse_access'] = bool(enabled)
+        body.update(changes)
+        if body.get('default_task_time_limit_ms', 0) > body.get('max_task_time_limit_ms', float('inf')):
+            raise RuntimeError(f"Default task time limit ({format_duration(body['default_task_time_limit_ms'])}) must "
+                               f"not exceed the max task time limit ({format_duration(body['max_task_time_limit_ms'])}).")
         path = f"/machine/{quote(name, safe='')}"
-        log(f"Admin API: PUT {path} (pulse_access={str(bool(enabled)).lower()}, other settings unchanged)")
+        shown = ", ".join(f"{k}={str(v).lower() if isinstance(v, bool) else v}" for k, v in changes.items())
+        log(f"Admin API: PUT {path} ({shown}, other settings unchanged)")
         status, text = self.admin_request("PUT", path, body)
         if status != 200:
             prefix = {404: f"Machine '{name}' not found", 409: f"Machine '{name}' is restarting",
-                      422: "Invalid machine configuration"}.get(status, "Changing pulse access failed")
+                      422: "Invalid machine configuration"}.get(status, f"{what} failed")
             raise RuntimeError(f"{prefix}: {api_error_text(status, text)}")
         return json.loads(text) if text.strip() else {}
+
+    # --- users and projects (public API, QScheduler >= 0.3.0 for users) -----
+
+    def _public_json(self, path):
+        res = self.http_get(path)
+        status = status_of(res.stdout)
+        if status != 200:
+            raise RuntimeError(f"QScheduler GET {path} failed: {api_error_text(status, http_body(res.stdout))}")
+        text = http_body(res.stdout)
+        return json.loads(text) if text.strip() else None
+
+    def list_users(self):
+        """Names of all users known to QScheduler (>= 0.3.0)."""
+        data = self._public_json("/users") or []
+        return [u if isinstance(u, str) else u.get('name') for u in data]
+
+    def user_consumption(self, name):
+        """A user's consumed time per project and machine (QScheduler >= 0.3.0)."""
+        return self._public_json(f"/users/{quote(name, safe='')}/consumption")
+
+    def list_projects(self):
+        """All QScheduler projects ([{'name', 'limit_ms', 'consumed_ms', 'active', ...}])."""
+        return self._public_json("/projects") or []
 
     def resume_machine(self, name, log):
         """Ends a machine's suspension; work failed or closed by it stays so."""
@@ -1040,7 +1275,7 @@ def heappe_identity(cred, timeout=5):
 
 def supports_qscheduler(version):
     """True when a HEAppE version (e.g. "v6.6.0") supports QScheduler; an unknown version does not."""
-    return bool(version) and clean_ver(version) >= MIN_HEAPPE_VERSION
+    return bool(version) and heappe_release(version) >= tuple(MIN_HEAPPE_VERSION)
 
 
 supports_notifiers = supports_qscheduler
@@ -1087,6 +1322,23 @@ def cluster_machine(cluster: dict):
 
 NOTIFY_TOKEN_KEY = "QSchedulerNotifyToken"
 NOTIFIER_KEY = "QSchedulerNotifier"
+# HEAppE >= 6.7.0 names this instance's QScheduler projects and users "<prefix>.<name>". The prefix must not contain
+# '.' and must never change (a new prefix points HEAppE to new, empty projects). Without it HEAppE falls back to
+# QSchedulerNotifier, which always contains '.' here ("<identifier>.<machine>"), and refuses to submit.
+PREFIX_KEY = "QSchedulerProjectPrefix"
+PREFIX_MAX_LEN = 64
+PREFIX_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def project_prefix_for(identifier) -> str:
+    """Project prefix proposed for a HEAppE instance identifier: '.' and other characters replaced by '-'."""
+    prefix = re.sub(r"[^A-Za-z0-9_-]+", "-", str(identifier or "")).strip("-")[:PREFIX_MAX_LEN].rstrip("-")
+    return prefix or "heappe"
+
+
+def cluster_project_prefix(cluster: dict):
+    """QSchedulerProjectPrefix set on a cluster, or None."""
+    return ((cluster.get('custom_configuration') or {}).get(PREFIX_KEY) or "").strip() or None
 
 
 def cluster_notifier_name(heappe_identifier, machine):
@@ -1123,16 +1375,18 @@ def cluster_host(cluster: dict):
     return (cluster.get('custom_configuration') or {}).get("QSchedulerHost") or cluster.get('master_node_name')
 
 
-def build_cluster_custom_configuration(inst, notifier=None, use_sessions=True, host=None):
+def build_cluster_custom_configuration(inst, notifier=None, use_sessions=True, host=None, prefix=None):
     """
     CustomConfiguration + vault toggles for a new QScheduler cluster on `inst` (notifier: (name, token) or None;
-    host: service host or one of the instance's aliases).
+    host: service host or one of the instance's aliases; prefix: QSchedulerProjectPrefix of the HEAppE instance).
     """
     config = {
         "QSchedulerHost": host or inst.service_host,
         "QSchedulerPort": str(inst.port),
         "QSchedulerUseSessions": "true" if use_sessions else "false",
     }
+    if prefix:
+        config[PREFIX_KEY] = prefix
     if not notifier:
         config["EnableCallback"] = "false"
         return config, {}
@@ -1141,12 +1395,16 @@ def build_cluster_custom_configuration(inst, notifier=None, use_sessions=True, h
     return config, toggles
 
 
-def update_cluster_notifications(controller, session_code, cluster: dict, notifier, log, location=None):
+def update_cluster_notifications(controller, session_code, cluster: dict, notifier, log, location=None, prefix=None):
     """
     PUT the cluster back with callbacks via `notifier` ((name, token)) or disabled (None); other settings unchanged.
     location: (host, port) to point the cluster to another QScheduler endpoint (restore), or None to keep it.
+    prefix: QSchedulerProjectPrefix to set (cluster moved to another QScheduler: the prefix of its HEAppE there).
     """
     cfg = dict(cluster.get('custom_configuration') or {})
+    if prefix and cfg.get(PREFIX_KEY) != prefix:
+        log(f"Cluster '{cluster.get('name')}': {PREFIX_KEY} '{cfg.get(PREFIX_KEY) or 'not set'}' -> '{prefix}'.")
+        cfg[PREFIX_KEY] = prefix
     master, port = cluster.get('master_node_name'), cluster.get('port')
     if location:
         master, port = location[0], int(location[1])
@@ -1377,15 +1635,40 @@ def presence(inst):
 
 
 MACHINE_OPTION_KEYS = ("queue_size", "limit_check_interval", "max_session_time", "default_task_time_limit",
-                       "max_clock_skew", "iqm_url", "iqm_device", "iqm_poll_interval", "pulse_access")
+                       "max_task_time_limit", "max_clock_skew", "decay_half_time", "iqm_url", "iqm_device",
+                       "iqm_poll_interval", "pulse_access")
 MACHINE_DEFAULTS = {"queue_size": 4, "limit_check_interval": "2s", "max_session_time": "2h",
-                    "default_task_time_limit": "1h", "max_clock_skew": "4s", "iqm_url": "", "iqm_device": "",
+                    "default_task_time_limit": DEFAULT_TASK_TIME_LIMIT_030,
+                    "max_task_time_limit": DEFAULT_MAX_TASK_TIME_LIMIT, "max_clock_skew": "4s",
+                    "decay_half_time": DEFAULT_DECAY_HALF_TIME, "iqm_url": "", "iqm_device": "",
                     "iqm_poll_interval": "500ms", "pulse_access": False}
 
 
 def machine_definition(opts):
     """(backend, options) of a machine to store in QSchedulerMachine: everything but the IQM token."""
     return opts['backend'], {k: opts.get(k, MACHINE_DEFAULTS[k]) for k in MACHINE_OPTION_KEYS}
+
+
+def complete_machine_options(options):
+    """
+    Stored machine options with the keys added later filled in. A machine stored before the max task time limit
+    existed keeps its default limit; the max becomes max(default, 15m), so it is valid on QScheduler 0.3.0.
+    """
+    out = dict(MACHINE_DEFAULTS)
+    out.update({k: v for k, v in (options or {}).items() if v not in (None, "")})
+    if not (options or {}).get('max_task_time_limit'):
+        try:
+            if duration_ms(out['default_task_time_limit']) > duration_ms(DEFAULT_MAX_TASK_TIME_LIMIT):
+                out['max_task_time_limit'] = out['default_task_time_limit']
+        except ValueError:
+            pass
+    return out
+
+
+def walltime_seconds(max_task_time_limit) -> int:
+    """MaxWalltime (seconds) of a HEAppE queue for a machine max task time limit ('15m' or milliseconds)."""
+    ms = max_task_time_limit if isinstance(max_task_time_limit, int) else duration_ms(max_task_time_limit)
+    return max(1, ms // 1000)
 
 
 # ---------------------------------------------------------------------------

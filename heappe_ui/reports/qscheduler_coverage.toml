@@ -34,6 +34,7 @@ admin = "heappe_ui/view/qscheduler_admin.py"
 shareddb = "heappe_ui/view/qscheduler_shared_db.py"
 network = "heappe_ui/view/qscheduler_network.py"
 suspension = "heappe_ui/view/qscheduler_suspension.py"
+prefix = "heappe_ui/view/qscheduler_prefix.py"
 
 [file_descriptions]
 core = "Docker/SSH runners, targets, HEAppE and git helpers"
@@ -45,6 +46,7 @@ admin = "admin API proxy, client and admin token"
 shareddb = "shared PostgreSQL, instance schemas, backups"
 network = "QScheduler network, static IP, aliases, migration"
 suspension = "machine suspension, dashboard quantum machines"
+prefix = "project prefix and project rename (HEAppE 6.7.0)"
 
 [tests]
 module = "heappe_ui.tests"
@@ -394,6 +396,51 @@ verified = "Options default to the old name, port and source; reuse only for man
 not_tested = "The restore info API, removing leftovers for a new database, HEAppE restart after joining networks."
 
 # ---------------------------------------------------------------------------------------------------------------------
+
+[[sections]]
+title = "QScheduler 0.3.0 and HEAppE 6.7.0"
+note = "HEAppE 6.7.0 (pre-release suffix ignored) is needed for QScheduler 0.2.2+; projects and users are named `<QSchedulerProjectPrefix>.<name>`."
+
+[[sections.features]]
+name = "Version rules (QScheduler 0.2.2+ needs HEAppE 6.7.0+)"
+code = ["core:heappe_release", "core:required_heappe_version", "core:compatibility_error", "core:uses_project_prefix",
+        "core:supports_030", "core:image_version", "deploy:upgrade_errors", "deploy:crosses_030",
+        "deploy:heappe_compatibility_errors"]
+verified = "Pre-release suffixes ignored (6.7.0a3 = 6.7.0); HEAppE needed per QScheduler version, unknown QScheduler version = base minimum; error texts; downgrades refused, crossing to 0.3.0 detected; assign, add machine and restore check the pair (fixtures updated to 6.7.0)."
+not_tested = "`qscheduler --version` of a real image; restoring the backup when the new container fails. The update worker is tested with mocks: downgrade, too old HEAppE and missing backup refused before anything changes, backup taken when crossing to 0.3.0, override for old HEAppE."
+
+[[sections.features]]
+name = "Machine time limits and fair share (QScheduler 0.3.0)"
+code = ["core:check_time_limits", "core:format_duration", "core:walltime_seconds", "core:complete_machine_options",
+        "core:QsTarget.update_machine_settings", "health:queue_walltime_problems", "health:_time_limit_status",
+        "health:time_limit_report", "health:parse_time_limit_options", "health:_put_queue_walltime",
+        "health:fix_time_limits_worker", "health:qscheduler_cluster_time_limits_api"]
+verified = "max_task_time_limit and decay_half_time sent (API body and CLI flags) only to QScheduler 0.3.0+; default above the max refused in the form and before any request; 15m defaults; stored legacy machines completed with max = max(default, 15m); settings PUT with only the changes, unknown fields and default > max refused; queues above the machine limit detected."
+not_tested = "time_limit_report against HEAppE and QScheduler; the panel buttons in the browser. The fix worker is tested with mocks: queues lowered to the machine limit, or the machine limit raised to the longest queue walltime (stored definition follows)."
+
+[[sections.features]]
+name = "Service limits (qscheduler serve options)"
+code = ["core:parse_size", "core:parse_serve_options", "core:serve_args", "core:serve_options_of",
+        "core:with_serve_options", "deploy:serve_options_worker", "deploy:qscheduler_serve_options_api", "deploy:_with_cmd"]
+verified = "Sizes with K/M/G/T, 4G maximum request size, positive item limit, duration retention; serve arguments built, read back from and replaced in a container command (port kept)."
+not_tested = "Recreating a real container; the dialog in the browser. The worker is tested with mocks (command rebuilt, options stored, refused before 0.3.0)."
+
+[[sections.features]]
+name = "Project prefix and project rename"
+code = ["core:project_prefix_for", "core:cluster_project_prefix", "prefix:ensure_assignment_prefix",
+        "prefix:qpu_projects_by_cluster", "prefix:build_plan", "prefix:rename_sql", "prefix:migration_plan",
+        "prefix:run_instance_sql", "prefix:set_cluster_prefixes", "prefix:prefix_migration_worker",
+        "prefix:qscheduler_prefix_plan_api", "prefix:qscheduler_prefix_migrate_api", "prefix:can_rename_here",
+        "prefix:_log_sql_output", "prefix:_sql_literal", "prefix:_get", "prefix:_error"]
+verified = "Prefix proposed from the identifier ('.' replaced), unique per QScheduler, explicit cluster prefix adopted, never changed; new clusters get it; plan states rename / already prefixed / new / conflict incl. names written by 6.7.0 pre-releases; SQL quoting, commit / rollback; migration order backup, stop, rename, prefixes, start; refusals without HEAppE 6.7.0 and without the manual rename."
+not_tested = "migration_plan and qpu_projects_by_cluster against HEAppE; the rename SQL against PostgreSQL; the dialog in the browser."
+
+[[sections.features]]
+name = "Users and consumption"
+code = ["core:QsTarget._public_json", "core:QsTarget.list_users", "core:QsTarget.user_consumption",
+        "core:QsTarget.list_projects", "deploy:qscheduler_users_api"]
+verified = "Users, projects and consumption read over the public API (404 raised); the view groups users by the prefix of the assigned HEAppE, sums their time and reports QScheduler < 0.3.0 as unsupported."
+not_tested = "Against a running QScheduler 0.3.0; the dialog in the browser."
 
 [[sections]]
 title = "Remote access and helpers"

@@ -440,6 +440,7 @@ def restore_worker(log, result, inst_id, opts):
     deploy_opts = dict(opts)
     deploy_opts['extra_hosts'] = inst.extra_hosts or []
     deploy_opts['log_level'] = inst.log_level or ""       # the restored service logs as before
+    deploy_opts['serve_options'] = dict(inst.serve_options or {})   # and keeps its limits (QScheduler >= 0.3.0)
     if opts['db_mode'] == 'reuse':
         url, net = _prepare_reused_database(docker, inst, log, prefix=opts.get('network_prefix'))
         deploy_opts.update(db_mode='existing', database_url=url, db_network=net,
@@ -472,9 +473,16 @@ def restore_worker(log, result, inst_id, opts):
     inst.ssh_port, inst.docker_command, inst.restart_command = 22, "docker", ""
     inst.restart_pending = False
     inst.archived_at, inst.archived_reason = None, ""
+    inst.serve_options = deploy_opts.get('serve_options') or {}
     inst.save()
     log(f"Instance record updated: endpoint {name}:{port} (was {old_host}:{old_port}).")
     target = DockerTarget(docker, name, port)
+    for p in plan:
+        error = core.compatibility_error(p['cred'].instance_name, core.heappe_identity(p['cred'])[0], inst.name,
+                                         info.get('version'))
+        if error:
+            log(f"WARNING: {error}")
+            result['problems'].append(error)
 
     # 4. Machines used by the clusters
     changed = False
@@ -662,7 +670,8 @@ def qscheduler_restore_info_api(request: HttpRequest, inst_id: int) -> HttpRespo
     inst = _instance_or_404(inst_id)
     if not inst:
         return _error("QScheduler instance not found.", 404)
-    stored = {m.name: {'backend': m.backend, 'options': m.options} for m in inst.machines.all()}
+    stored = {m.name: {'backend': m.backend, 'options': core.complete_machine_options(m.options)}
+              for m in inst.machines.all()}
     machines, heappes = {}, []
     for p in _heappe_plan(inst, lambda *_: None, skip_unreachable=True)[0]:
         clusters = []
