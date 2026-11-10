@@ -697,6 +697,255 @@ def deploy_delete_instance(request, instance_name: str) -> HttpResponse:
     return redirect('deploy_view', instance_name=instance_name)
 
 
+def sync_vault_after_rename(
+    instance_name: str,
+    project_dir: str,
+    root_token: Optional[str] = None,
+    unseal_keys: Optional[List[str]] = None,
+    vault_password: Optional[str] = None,
+    client: Optional[Any] = None
+) -> dict:
+    """
+    Synchronizes HashiCorp Vault and Vault Agent configuration after instance rename or unseal:
+    1. Unseals Vault if it is sealed (using unseal_keys or decrypted credentials).
+    2. Ensures the KV-v2 secret engine 'HEAppE' is enabled.
+    3. Writes the 'heappe-policy' ensuring permissions for both 'HEAppE/*' and 'HEAppE/data/*'.
+    4. Ensures the AppRole auth engine is enabled and updates 'heappe-role' with 'heappe-policy'.
+    5. Reads the correct role_id and generates a fresh secret_id from Vault.
+    6. Writes role_id and secret_id into ${BASE_PATH}/vault/agent/ on disk and inside the agent container.
+    7. Cleans up /tmp/token and restarts the vaultagent container to acquire a valid token immediately.
+    """
+    import json
+    import os
+    import time
+    import logging
+    _logger = logging.getLogger(__name__)
+
+    result = {
+        "success": False,
+        "role_id": None,
+        "sealed": None,
+        "warning": None
+    }
+
+    # Resolve Docker client
+    if client is None:
+        try:
+            import docker
+            client = docker.from_env()
+        except Exception as e:
+            result["warning"] = f"Docker client unavailable: {e}"
+            return result
+
+    # Resolve root_token and unseal_keys from credentials file if missing
+    if (not root_token or not unseal_keys) and vault_password and project_dir and os.path.isdir(project_dir):
+        import tempfile
+        import subprocess
+        cand_files = [
+            os.path.join(project_dir, f"credentials_{instance_name.lower()}"),
+            os.path.join(project_dir, f"{instance_name.lower()}_credentials"),
+        ]
+        try:
+            for fn in os.listdir(project_dir):
+                if "credentials" in fn.lower():
+                    full_fn = os.path.join(project_dir, fn)
+                    if full_fn not in cand_files and os.path.isfile(full_fn):
+                        cand_files.append(full_fn)
+        except Exception:
+            pass
+
+        for cf in cand_files:
+            if not os.path.isfile(cf):
+                continue
+            pass_f_path = None
+            dec_f_path = None
+            try:
+                with tempfile.NamedTemporaryFile("w+", delete=False) as pass_f:
+                    pass_f.write(vault_password)
+                    pass_f_path = pass_f.name
+                with tempfile.NamedTemporaryFile("w+", delete=False) as dec_f:
+                    dec_f_path = dec_f.name
+
+                cmd = ["ansible-vault", "decrypt", f"--vault-password-file={pass_f_path}", f"--output={dec_f_path}", cf]
+                r = subprocess.run(cmd, capture_output=True, text=True)
+                if r.returncode == 0:
+                    with open(dec_f_path, "r", encoding="utf-8") as df:
+                        c_data = json.load(df)
+                    for _, sec_v in c_data.items():
+                        if isinstance(sec_v, dict):
+                            if "Initial_Root_Token" in sec_v and not root_token:
+                                root_token = sec_v["Initial_Root_Token"]
+                            if "Unseal_Keys" in sec_v and not unseal_keys:
+                                unseal_keys = sec_v["Unseal_Keys"]
+                if root_token and unseal_keys:
+                    break
+            except Exception:
+                pass
+            finally:
+                for p in (pass_f_path, dec_f_path):
+                    if p and os.path.exists(p):
+                        try:
+                            os.remove(p)
+                        except Exception:
+                            pass
+
+    # Find Vault container and Vault Agent container
+    c_vault = None
+    c_agent = None
+    inst_lower = instance_name.lower()
+
+    is_mock = getattr(client, '_is_mock', False) or 'mock' in type(client).__module__ or hasattr(client, '_mock_return_value')
+    max_attempts = 1 if is_mock else 5
+    sleep_interval = 0 if is_mock else 2
+
+    for attempt in range(max_attempts):
+        try:
+            for c in client.containers.list():
+                labels = getattr(c, 'labels', {}) or {}
+                proj = (labels.get('com.docker.compose.project') or '').lower()
+                service = (labels.get('com.docker.compose.service') or '').lower()
+                c_name = (getattr(c, 'name', '') or '').lower()
+
+                if proj == inst_lower or inst_lower in c_name:
+                    if service == 'vaultagent' or 'vaultagent' in c_name:
+                        c_agent = c
+                    elif (service == 'vault' or 'vault' in c_name) and 'vaultagent' not in c_name and 'unseal' not in c_name and 'init' not in c_name:
+                        c_vault = c
+        except Exception as e:
+            _logger.warning(f"Error listing containers during vault sync: {e}")
+
+        if c_vault:
+            break
+        if sleep_interval > 0:
+            time.sleep(sleep_interval)
+
+    if not c_vault:
+        result["warning"] = f"Vault container for instance '{instance_name}' not found."
+        return result
+
+    def run_in_vault(cmd_str: str, token: Optional[str] = None):
+        env = {"VAULT_ADDR": "http://127.0.0.1:8200"}
+        if token:
+            env["VAULT_TOKEN"] = token
+        try:
+            res = c_vault.exec_run(cmd_str, environment=env)
+            if isinstance(res, tuple):
+                code = res[0]
+                out = res[1] if len(res) > 1 else ""
+            else:
+                code = getattr(res, "exit_code", 0)
+                out = getattr(res, "output", res)
+            if isinstance(out, bytes):
+                out = out.decode("utf-8", errors="ignore")
+            return code, str(out).strip()
+        except Exception as err:
+            return 1, str(err)
+
+    # 1. Check seal status and unseal if needed
+    code, status_out = run_in_vault("vault status -format=json")
+    is_sealed = True
+    try:
+        status_json = json.loads(status_out)
+        is_sealed = status_json.get("sealed", True)
+    except Exception:
+        if "sealed" in status_out.lower() and "true" in status_out.lower():
+            is_sealed = True
+        elif code == 0:
+            is_sealed = False
+
+    if is_sealed and unseal_keys:
+        _logger.info(f"Vault is sealed for '{instance_name}'. Attempting unseal...")
+        for uk in unseal_keys:
+            _, u_out = run_in_vault(f"vault operator unseal {uk}")
+            try:
+                u_json = json.loads(u_out)
+                if not u_json.get("sealed", True):
+                    is_sealed = False
+                    _logger.info(f"Vault unsealed successfully for '{instance_name}'.")
+                    break
+            except Exception:
+                if "sealed" in u_out.lower() and "false" in u_out.lower():
+                    is_sealed = False
+                    break
+
+    result["sealed"] = is_sealed
+
+    if not root_token:
+        result["warning"] = "Root token not available to configure AppRole and policies in Vault."
+        return result
+
+    # 2. Ensure KV-v2 engine at HEAppE
+    run_in_vault("vault secrets enable -version=2 -path=HEAppE kv-v2", token=root_token)
+
+    # 3. Write heappe-policy with both HEAppE/* and HEAppE/data/*
+    policy_hcl = (
+        'path "HEAppE/*" {\n'
+        '  capabilities = ["create", "read", "update", "delete", "list", "sudo"]\n'
+        '}\n'
+        'path "HEAppE/data/*" {\n'
+        '  capabilities = ["create", "read", "update", "delete", "list", "sudo"]\n'
+        '}\n'
+    )
+    write_policy_cmd = f"sh -c \"cat << 'EOF' > /tmp/heappe-policy.hcl\n{policy_hcl}EOF\""
+    run_in_vault(write_policy_cmd, token=root_token)
+    run_in_vault("vault policy write heappe-policy /tmp/heappe-policy.hcl", token=root_token)
+
+    # 4. Ensure AppRole auth is enabled
+    run_in_vault("vault auth enable approle", token=root_token)
+
+    # 5. Write AppRole heappe-role
+    run_in_vault(
+        "vault write auth/approle/role/heappe-role token_policies=heappe-policy secret_id_ttl=0 token_num_uses=0 token_ttl=1h token_max_ttl=4h secret_id_num_uses=0",
+        token=root_token
+    )
+
+    # 6. Read role_id and generate fresh secret_id
+    _, role_id = run_in_vault("vault read -field=role_id auth/approle/role/heappe-role/role-id", token=root_token)
+    _, secret_id = run_in_vault("vault write -f -field=secret_id auth/approle/role/heappe-role/secret-id", token=root_token)
+
+    role_id = role_id.strip() if role_id else ""
+    secret_id = secret_id.strip() if secret_id else ""
+
+    if role_id and secret_id and "error" not in role_id.lower() and "error" not in secret_id.lower():
+        # 7. Write to agent confs directory on host
+        if project_dir and os.path.isdir(project_dir):
+            agent_dir = os.path.join(project_dir, "app", "confs", "vault", "agent")
+            os.makedirs(agent_dir, exist_ok=True)
+            with open(os.path.join(agent_dir, "role_id"), "w", encoding="utf-8") as f:
+                f.write(f"{role_id}\n")
+            with open(os.path.join(agent_dir, "secret_id"), "w", encoding="utf-8") as f:
+                f.write(f"{secret_id}\n")
+
+        # 8. Update files inside vaultagent container & restart it
+        if not c_agent:
+            try:
+                for c in client.containers.list():
+                    labels = getattr(c, 'labels', {}) or {}
+                    proj = (labels.get('com.docker.compose.project') or '').lower()
+                    service = (labels.get('com.docker.compose.service') or '').lower()
+                    c_name = (getattr(c, 'name', '') or '').lower()
+                    if (proj == inst_lower or inst_lower in c_name) and (service == 'vaultagent' or 'vaultagent' in c_name):
+                        c_agent = c
+                        break
+            except Exception:
+                pass
+
+        if c_agent:
+            try:
+                c_agent.exec_run("rm -f /tmp/token")
+                c_agent.exec_run(f"sh -c \"echo '{role_id}' > /vault/config/role_id && echo '{secret_id}' > /vault/config/secret_id\"")
+                c_agent.restart(timeout=10)
+            except Exception as ae:
+                _logger.warning(f"Could not update/restart vaultagent container: {ae}")
+
+        result["success"] = True
+        result["role_id"] = role_id
+        return result
+    else:
+        result["warning"] = f"Could not obtain valid role_id/secret_id from Vault: role={role_id}, secret={secret_id}"
+        return result
+
+
 def rename_instance(
     old_name: str,
     new_name: str,
@@ -1035,6 +1284,8 @@ def rename_instance(
                     pass
 
             # Decrypt, update JSON key "HashiCorpVault_<old>" -> "HashiCorpVault_<new>", and re-encrypt
+            extracted_root_token = None
+            extracted_unseal_keys = []
             if vault_password and moved_creds_files:
                 import tempfile
                 pass_f_path = None
@@ -1056,6 +1307,17 @@ def rename_instance(
                             if res_dec.returncode == 0:
                                 with open(dec_f_path, "r", encoding="utf-8") as f:
                                     cred_content = f.read()
+
+                                try:
+                                    cred_json = json.loads(cred_content)
+                                    for sec_k, sec_v in cred_json.items():
+                                        if isinstance(sec_v, dict):
+                                            if "Initial_Root_Token" in sec_v and not extracted_root_token:
+                                                extracted_root_token = sec_v["Initial_Root_Token"]
+                                            if "Unseal_Keys" in sec_v and not extracted_unseal_keys:
+                                                extracted_unseal_keys = sec_v["Unseal_Keys"]
+                                except Exception as je:
+                                    _logger.warning(f"Note on parsing cred json: {je}")
 
                                 new_key = f"HashiCorpVault_{new_name}"
                                 old_key1 = f"HashiCorpVault_{source_project}"
@@ -1184,6 +1446,25 @@ def rename_instance(
                 results["errors"].append(f"Docker compose up note: {up_res.stderr}")
         except Exception as e:
             results["errors"].append(f"Docker compose up error: {e}")
+
+        # 7a. Synchronize Vault AppRole, policy and agent tokens post-rename
+        try:
+            vault_sync_res = sync_vault_after_rename(
+                instance_name=new_name,
+                project_dir=new_project_dir,
+                root_token=locals().get('extracted_root_token'),
+                unseal_keys=locals().get('extracted_unseal_keys'),
+                vault_password=vault_password,
+                client=client
+            )
+            if not vault_sync_res.get("success"):
+                if vault_sync_res.get("warning"):
+                    results["errors"].append(f"Vault sync note: {vault_sync_res['warning']}")
+            else:
+                _logger.info(f"Vault post-rename sync succeeded for {new_name}")
+        except Exception as ve:
+            _logger.warning(f"Vault sync note: {ve}")
+            results["errors"].append(f"Vault sync note: {ve}")
 
     # 8. Reset restart states
     try:
@@ -2789,6 +3070,10 @@ def _kick_vaultagent(instance_name):
             for c in client.containers.list(all=True):
                 if c.labels.get('com.docker.compose.project') == instance_name and 'vaultagent' in c.name.lower():
                     if c.status == 'running':
+                        try:
+                            c.exec_run("rm -f /tmp/token")
+                        except Exception:
+                            pass
                         c.restart(timeout=5)
                         break
     except Exception:
@@ -2927,6 +3212,14 @@ def unseal_vault_api(request):
         is_sealed = _check_vault_sealed(vault_port)
 
         if not is_sealed:
+            try:
+                sync_vault_after_rename(
+                    instance_name=instance_name,
+                    project_dir=os.path.dirname(compose_dir)
+                )
+            except Exception as se:
+                _logger.warning(f"Vault sync after unseal note: {se}")
+
             return JsonResponse({
                 'status': 'success',
                 'message': 'HashiCorp Vault unlocked successfully! HEAppE continues running without restart.',

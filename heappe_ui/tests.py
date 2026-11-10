@@ -5544,6 +5544,76 @@ class InstanceTeardownAndDeploymentFailureTests(TestCase):
         self.assertEqual(data["redirect_url"], "/deploy/core_dev_it4i_develop/")
         self.assertEqual(req.session["chosen_instance"], "core_dev_it4i_develop")
 
+    def test_sync_vault_after_rename_full_flow(self):
+        import tempfile
+        import json
+        from heappe_ui.view.deploy import sync_vault_after_rename
+
+        mock_client = mock.MagicMock()
+        mock_vault = mock.MagicMock()
+        mock_vault.name = "core_dev_it4i_develop_vault"
+        mock_vault.labels = {"com.docker.compose.project": "core_dev_it4i_develop", "com.docker.compose.service": "vault"}
+
+        mock_agent = mock.MagicMock()
+        mock_agent.name = "core_dev_it4i_develop_vaultagent"
+        mock_agent.labels = {"com.docker.compose.project": "core_dev_it4i_develop", "com.docker.compose.service": "vaultagent"}
+
+        mock_client.containers.list.return_value = [mock_vault, mock_agent]
+
+        def vault_exec(cmd, environment=None):
+            if "vault status" in cmd:
+                return (2, b'{"sealed": true}')
+            elif "vault operator unseal" in cmd:
+                return (0, b'{"sealed": false}')
+            elif "vault read -field=role_id" in cmd:
+                return (0, b'test-role-id-123\n')
+            elif "vault write -f -field=secret_id" in cmd:
+                return (0, b'test-secret-id-456\n')
+            return (0, b'Success')
+
+        mock_vault.exec_run.side_effect = vault_exec
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            res = sync_vault_after_rename(
+                instance_name="core_dev_it4i_develop",
+                project_dir=temp_dir,
+                root_token="hvs.testroottoken",
+                unseal_keys=["key1", "key2", "key3"],
+                client=mock_client
+            )
+
+            self.assertTrue(res["success"])
+            self.assertEqual(res["role_id"], "test-role-id-123")
+            self.assertFalse(res["sealed"])
+
+            # Verify files written
+            role_file = os.path.join(temp_dir, "app", "confs", "vault", "agent", "role_id")
+            secret_file = os.path.join(temp_dir, "app", "confs", "vault", "agent", "secret_id")
+            self.assertTrue(os.path.exists(role_file))
+            self.assertTrue(os.path.exists(secret_file))
+            with open(role_file, "r") as f:
+                self.assertEqual(f.read().strip(), "test-role-id-123")
+            with open(secret_file, "r") as f:
+                self.assertEqual(f.read().strip(), "test-secret-id-456")
+
+            # Verify agent exec_run and restart called
+            mock_agent.restart.assert_called_once_with(timeout=10)
+
+    def test_sync_vault_after_rename_no_vault_container(self):
+        from heappe_ui.view.deploy import sync_vault_after_rename
+
+        mock_client = mock.MagicMock()
+        mock_client.containers.list.return_value = []
+
+        res = sync_vault_after_rename(
+            instance_name="nonexistent_instance",
+            project_dir="/tmp",
+            root_token="token",
+            client=mock_client
+        )
+        self.assertFalse(res["success"])
+        self.assertIn("not found", res["warning"])
+
 
 
 
