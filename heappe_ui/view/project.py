@@ -127,7 +127,11 @@ def project_detail(request: HttpRequest, project_id: int, _tab: str = None) -> H
     sub_projects = []
 
     # Always fetch core project details
-    project_data = controller.heappe_management_project_get(Id=project_id, SessionCode=session_code).to_dict()
+    try:
+        project_data = controller.heappe_management_project_get(Id=project_id, SessionCode=session_code).to_dict()
+    except Exception as e:
+        messages.error(request, f"Failed to retrieve project #{project_id}: {extract_heappe_error(e)}")
+        return redirect("project_list")
     # Retrieve raw project data to extract PIEmail, which is discarded by the Swagger model
     try:
         raw_resp = controller.heappe_management_project_get(

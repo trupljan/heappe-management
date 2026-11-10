@@ -2898,14 +2898,30 @@ class ApiSessionCodePatchingTests(TestCase):
                     raise ValueError("SessionCode must be present!")
                 return kwargs
 
+            def test_method_accepts_snake_session_code(self, **kwargs):
+                # Simulates swagger client: accepts session_code in snake_case
+                if "SessionCode" in kwargs:
+                    raise TypeError("Got an unexpected keyword argument 'SessionCode' to method test_method_accepts_snake_session_code")
+                if "session_code" not in kwargs:
+                    raise ValueError("session_code must be present!")
+                return kwargs
+
             def test_method_rejects_session_code(self, **kwargs):
-                # Simulates new generated client: raises TypeError on SessionCode
+                # Simulates endpoint without session code parameter: rejects both
                 if "SessionCode" in kwargs:
                     raise TypeError("Got an unexpected keyword argument 'SessionCode' to method test_method_rejects_session_code")
+                if "session_code" in kwargs:
+                    raise TypeError("Got an unexpected keyword argument 'session_code' to method test_method_rejects_session_code")
                 return kwargs
 
         # Re-declare wrapper logic to match apps.py
         import functools
+        import re
+
+        def pascal_to_snake(name):
+            s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+            return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+
         def wrap_api_method(original_method):
             @functools.wraps(original_method)
             def method_wrapper(self, *args, **kwargs):
@@ -2914,52 +2930,82 @@ class ApiSessionCodePatchingTests(TestCase):
                     return original_method(self, *args, **kwargs)
                 except TypeError as e:
                     err_msg = str(e)
-                    if "unexpected keyword argument" in err_msg and ("SessionCode" in err_msg or "session_code" in err_msg):
-                        kwargs.pop('SessionCode', None)
-                        kwargs.pop('session_code', None)
-                        if session_code and getattr(self, 'api_client', None):
-                            client = self.api_client
-                            client.set_default_header("X-Api-token", session_code)
-                            if getattr(client, 'configuration', None):
-                                cfg = client.configuration
-                                if not hasattr(cfg, 'api_key') or not isinstance(cfg.api_key, dict):
-                                    cfg.api_key = {}
-                                cfg.api_key['X-Api-token'] = session_code
-                                if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
-                                    cfg.api_key_prefix = {}
-                                cfg.api_key_prefix['X-Api-token'] = ''
-                        return original_method(self, *args, **kwargs)
-                    else:
-                        raise
+                    if "unexpected keyword argument" in err_msg:
+                        m = re.search(r"unexpected keyword argument '([^']+)'", err_msg)
+                        if m:
+                            rejected_arg = m.group(1)
+                            # Convert PascalCase to snake_case first
+                            snake_arg = pascal_to_snake(rejected_arg)
+                            if snake_arg != rejected_arg and rejected_arg in kwargs:
+                                val = kwargs.pop(rejected_arg)
+                                if snake_arg not in kwargs:
+                                    kwargs[snake_arg] = val
+                                return method_wrapper(self, *args, **kwargs)
+
+                            # Handle session code: if snake_case session_code is also rejected,
+                            # remove it from kwargs and fallback to setting the header on api_client
+                            if rejected_arg in ('session_code', 'SessionCode'):
+                                kwargs.pop('SessionCode', None)
+                                kwargs.pop('session_code', None)
+                                if session_code and getattr(self, 'api_client', None):
+                                    client = self.api_client
+                                    client.set_default_header("X-Api-token", session_code)
+                                    if getattr(client, 'configuration', None):
+                                        cfg = client.configuration
+                                        if not hasattr(cfg, 'api_key') or not isinstance(cfg.api_key, dict):
+                                            cfg.api_key = {}
+                                        cfg.api_key['X-Api-token'] = session_code
+                                        if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
+                                            cfg.api_key_prefix = {}
+                                        cfg.api_key_prefix['X-Api-token'] = ''
+                                return method_wrapper(self, *args, **kwargs)
+                    raise
             return method_wrapper
 
-        # Wrap both methods
+        # Wrap methods
         MockApiClass.test_method_accepts_session_code = wrap_api_method(MockApiClass.test_method_accepts_session_code)
+        MockApiClass.test_method_accepts_snake_session_code = wrap_api_method(MockApiClass.test_method_accepts_snake_session_code)
         MockApiClass.test_method_rejects_session_code = wrap_api_method(MockApiClass.test_method_rejects_session_code)
 
-        # CASE 1: Simulating PIP client behavior (SessionCode is accepted)
+        # CASE 1: Simulating PIP client behavior (SessionCode is accepted directly)
         client1 = MockApiClient()
         instance1 = MockApiClass(client1)
         res1 = instance1.test_method_accepts_session_code(SessionCode="token_xyz", other_arg="val")
-        
-        # Verify SessionCode was passed in kwargs (for old servers / pip packages)
         self.assertEqual(res1.get("SessionCode"), "token_xyz")
         self.assertEqual(res1.get("other_arg"), "val")
-        # Header was not modified
         self.assertNotIn("X-Api-token", client1.default_headers)
 
-        # CASE 2: Simulating new generated client behavior (SessionCode is rejected)
+        # CASE 2: Simulating swagger client behavior (caller passes SessionCode, method accepts snake_case session_code)
         client2 = MockApiClient()
         instance2 = MockApiClass(client2)
-        res2 = instance2.test_method_rejects_session_code(SessionCode="token_xyz", other_arg="val")
-        
-        # Verify SessionCode was popped from kwargs to prevent TypeError in actual clients
+        res2 = instance2.test_method_accepts_snake_session_code(SessionCode="token_xyz", other_arg="val")
         self.assertNotIn("SessionCode", res2)
+        self.assertEqual(res2.get("session_code"), "token_xyz")
         self.assertEqual(res2.get("other_arg"), "val")
-        # Verify X-Api-token headers and config were set on the client
-        self.assertEqual(client2.default_headers.get("X-Api-token"), "token_xyz")
-        self.assertEqual(client2.configuration.api_key.get("X-Api-token"), "token_xyz")
-        self.assertEqual(client2.configuration.api_key_prefix.get("X-Api-token"), "")
+        self.assertNotIn("X-Api-token", client2.default_headers)
+
+        # CASE 3: Simulating client behavior where method has no session code parameter at all
+        client3 = MockApiClient()
+        instance3 = MockApiClass(client3)
+        res3 = instance3.test_method_rejects_session_code(SessionCode="token_xyz", other_arg="val")
+        self.assertNotIn("SessionCode", res3)
+        self.assertNotIn("session_code", res3)
+        self.assertEqual(res3.get("other_arg"), "val")
+        self.assertEqual(client3.default_headers.get("X-Api-token"), "token_xyz")
+        self.assertEqual(client3.configuration.api_key.get("X-Api-token"), "token_xyz")
+        self.assertEqual(client3.configuration.api_key_prefix.get("X-Api-token"), "")
+
+    def test_real_management_api_heappe_management_project_get_preserves_session_code(self):
+        import py4heappe.heappe_v6.core as hp
+        client = hp.ApiClient()
+        mgmt = hp.ManagementApi(client)
+        called = []
+        client.call_api = lambda *args, **kwargs: (called.append((args, kwargs)), ("ok", 200, {}))[1]
+        mgmt.heappe_management_project_get(Id=42, SessionCode="test_sc")
+        self.assertEqual(len(called), 1)
+        query_params = dict(called[0][0][3])
+        self.assertEqual(query_params.get("Id"), 42)
+        self.assertEqual(query_params.get("SessionCode"), "test_sc")
 
 
 class LogViewerJsonTests(TestCase):

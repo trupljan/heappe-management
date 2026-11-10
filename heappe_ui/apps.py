@@ -181,9 +181,19 @@ class HeappeUiConfig(AppConfig):
                         m = re.search(r"unexpected keyword argument '([^']+)'", err_msg)
                         if m:
                             rejected_arg = m.group(1)
-                            # Handle session code
-                            if rejected_arg == 'session_code' or rejected_arg == 'SessionCode':
-                                kwargs.pop(rejected_arg, None)
+                            # Convert PascalCase to snake_case first
+                            snake_arg = pascal_to_snake(rejected_arg)
+                            if snake_arg != rejected_arg and rejected_arg in kwargs:
+                                val = kwargs.pop(rejected_arg)
+                                if snake_arg not in kwargs:
+                                    kwargs[snake_arg] = val
+                                return method_wrapper(self, *args, **kwargs)
+
+                            # Handle session code: if snake_case session_code is also rejected (or method doesn't take it),
+                            # remove it from kwargs and fallback to setting the header on api_client
+                            if rejected_arg in ('session_code', 'SessionCode'):
+                                kwargs.pop('SessionCode', None)
+                                kwargs.pop('session_code', None)
                                 if session_code and getattr(self, 'api_client', None):
                                     client = self.api_client
                                     client.set_default_header("X-Api-token", session_code)
@@ -195,13 +205,6 @@ class HeappeUiConfig(AppConfig):
                                         if not hasattr(cfg, 'api_key_prefix') or not isinstance(cfg.api_key_prefix, dict):
                                             cfg.api_key_prefix = {}
                                         cfg.api_key_prefix['X-Api-token'] = ''
-                                return method_wrapper(self, *args, **kwargs)
-                            
-                            # Convert PascalCase to snake_case
-                            snake_arg = pascal_to_snake(rejected_arg)
-                            if snake_arg != rejected_arg and rejected_arg in kwargs:
-                                val = kwargs.pop(rejected_arg)
-                                kwargs[snake_arg] = val
                                 return method_wrapper(self, *args, **kwargs)
                     raise
             return method_wrapper
